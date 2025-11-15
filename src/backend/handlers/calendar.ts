@@ -120,12 +120,24 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
  *
  * @function
  */
-function onLoopFinish() {
+async function onLoopFinish() {
   Engine.Runtime.Instance.log.info(
     'Running %s middleware...',
     Engine.MiddlewareType.LOOP_FINISH.toUpperCase(),
   );
 
+  // Fetch current profile
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    include: { player: true, team: true },
+  });
+
+  //Player career - skip transfer/worldgen team logic
+  if (profile.careerMode === 'PLAYER') {
+    Engine.Runtime.Instance.log.info('[calendar/onLoopFinish] Player mode detected — skipping team-based worldgen.');
+    return Promise.resolve();
+  }
+
+  // 🟠 Manager career — normal flow
   return Worldgen.sendUserTransferOffer();
 }
 
@@ -259,10 +271,10 @@ export default function () {
         },
       ];
       await DatabaseClient.prisma.$transaction(
-        Bot.Exp.trainAll(profile.team.players, bonuses).map((player) =>
+        Bot.Exp.trainAll(profile.team.players).map((player) =>
           DatabaseClient.prisma.player.update({
             where: { id: player.id },
-            data: player.xp,
+            data: { xp: player.xp }
           }),
         ),
       );

@@ -68,8 +68,8 @@ const routes = createMemoryRouter([
             path: '/create/2',
             children: [
               {
-                element: <Routes.Landing.Create.Team />,
-                index: true,
+                path: '/create/2',
+                element: <Routes.Landing.Create.Role />,
               },
               {
                 path: '/create/2/gallery',

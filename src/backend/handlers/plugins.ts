@@ -16,7 +16,7 @@ export default function () {
   ipcMain.on(Constants.IPCRoute.PLUGINS_START, (event) => {
     // start checking for updates
     // @todo: do not hardcode the url
-    const plugins = new Plugins.Manager('https://github.com/playliga/plugins.git');
+    const plugins = new Plugins.Manager('https://github.com/rxpev/LIGA-Plugins.git');
     plugins.checkForUpdates();
 
     // register plugin manager event handlers

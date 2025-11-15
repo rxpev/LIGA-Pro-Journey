@@ -272,7 +272,6 @@ export class Server {
   private serverConfigFile: string;
   private settings: typeof Constants.Settings;
   private spectating?: boolean;
-  private weaponPbxWeight: Record<string, number>;
   public competitors: Server['match']['competitors'];
   public log: log.LogFunctions;
   public match: Prisma.MatchGetPayload<typeof Eagers.match>;
@@ -378,12 +377,6 @@ export class Server {
         ),
       },
     }));
-
-    // set up weapon preference weights
-    this.weaponPbxWeight = {
-      [Constants.WeaponTemplate.RIFLE]: Constants.GameSettings.BOT_WEAPONPREFS_PROBABILITY_RIFLE,
-      [Constants.WeaponTemplate.SNIPER]: Constants.GameSettings.BOT_WEAPONPREFS_PROBABILITY_SNIPER,
-    };
   }
 
   /**
@@ -512,7 +505,7 @@ export class Server {
         const xp = new Bot.Exp(player);
         const difficulty = xp.getBotTemplate().name;
 
-        if (difficulty !== Constants.BotDifficulty.ELITE) {
+        if (difficulty !== Constants.BotDifficulty.STAR) {
           return;
         }
 
@@ -542,13 +535,14 @@ export class Server {
    */
   private async generateBotConfig() {
     const original = path.join(
-      this.settings.general.gamePath,
-      this.baseDir,
+      this.settings.general.dedicatedServerPath,
       this.gameDir,
       this.botConfigFile,
     );
     const template = await fs.promises.readFile(original, 'utf8');
     const [home, away] = this.competitors;
+    const allPlayers = [...home.team.players, ...away.team.players];
+    await this.exportBotTemplatesJSON(allPlayers);
     return fs.promises.writeFile(
       original,
       Sqrl.render(
@@ -565,54 +559,83 @@ export class Server {
   }
 
   /**
-   * Generates the bot profile template
-   * for the provided player object.
-   *
-   * @note  The bot profile template uses 8-width tab indentation.
-   * @param player The player object.
-   * @function
-   */
+ * Generates a single bot profile block (used in botprofile.db)
+ * Includes LookAngle tuning values based on difficulty template.
+ */
   private generateBotDifficulty(player: Server['competitors'][number]['team']['players'][number]) {
     const xp = new Bot.Exp(player);
-    const difficulty = xp.getBotTemplate().name;
-    const weapon = player.weapon as Constants.WeaponTemplate;
+    const template = xp.getBotTemplate();
+    const difficulty = template.name;
     const voice = random(
       Constants.GameSettings.BOT_VOICEPITCH_MIN,
       Constants.GameSettings.BOT_VOICEPITCH_MAX,
     );
 
-    // if no weapon template was selected we pick one for them
-    if (!weapon || weapon === Constants.WeaponTemplate.AUTO) {
-      return Dedent.dedent`
-        ${difficulty}+${Chance.roll(this.weaponPbxWeight)} "${player.name}"
-                Skill = ${Math.floor(xp.stats.skill)}
-                Aggression = ${Math.floor(xp.stats.aggression)}
-                ReactionTime = ${xp.stats.reactionTime.toFixed(2)}
-                AttackDelay = ${xp.stats.attackDelay.toFixed(2)}
-                VoicePitch = ${voice}
-        End\n
-      `;
+    // Determine weapon template based on role
+    const weapon =
+      player.role === Constants.PlayerRole.SNIPER
+        ? Constants.WeaponTemplate.SNIPER
+        : Constants.WeaponTemplate.RIFLE;
+
+    // Determine personality (fallback for missing values)
+    const personality = player.personality || Constants.PersonalityTemplate.RIFLE;
+
+    // Lookup for LookAngle params by difficulty
+    const lookAngleMap: Record<string, { normal: number; attack: number; stiff: number; damp: number }> = {
+      [Constants.BotDifficulty.ABYSMAL]: { normal: 20000, attack: 9500, stiff: 600, damp: 27.5 },
+      [Constants.BotDifficulty.NOTGOOD]: { normal: 20000, attack: 10500, stiff: 625, damp: 30.0 },
+      [Constants.BotDifficulty.WORSE]: { normal: 20000, attack: 11500, stiff: 650, damp: 30.0 },
+      [Constants.BotDifficulty.REALLYBAD]: { normal: 20000, attack: 11500, stiff: 675, damp: 32.5 },
+      [Constants.BotDifficulty.POOR]: { normal: 20000, attack: 12500, stiff: 700, damp: 35.0 },
+      [Constants.BotDifficulty.BAD]: { normal: 20000, attack: 12500, stiff: 700, damp: 35.0 },
+      [Constants.BotDifficulty.LOW]: { normal: 20000, attack: 13500, stiff: 725, damp: 37.5 },
+      [Constants.BotDifficulty.AVG]: { normal: 20000, attack: 14500, stiff: 775, damp: 40.0 },
+      [Constants.BotDifficulty.MEDIUM]: { normal: 20000, attack: 15500, stiff: 800, damp: 42.5 },
+      [Constants.BotDifficulty.SOLID]: { normal: 20000, attack: 16500, stiff: 825, damp: 45.0 },
+      [Constants.BotDifficulty.FRAGGER]: { normal: 20000, attack: 17500, stiff: 850, damp: 47.5 },
+      [Constants.BotDifficulty.STAR]: { normal: 20000, attack: 20000, stiff: 900, damp: 50.0 },
+    };
+
+    const look = lookAngleMap[difficulty] || lookAngleMap[Constants.BotDifficulty.ABYSMAL];
+
+    // Build bot profile string (with dynamic LookAngle values)
+    return Dedent.dedent`
+${difficulty}+${weapon}+${personality} "${player.name}"
+        VoicePitch = ${voice}
+        LookAngleMaxAccelNormal = ${look.normal.toFixed(1)}
+        LookAngleMaxAccelAttacking = ${look.attack.toFixed(1)}
+        LookAngleStiffnessAttacking = ${look.stiff.toFixed(1)}
+        LookAngleDampingAttacking = ${look.damp.toFixed(1)}
+End\n
+`;
+  }
+
+  private async exportBotTemplatesJSON(players: any[]) {
+    const exportData: Record<string, string> = {};
+
+    for (const player of players) {
+      const xp = new Bot.Exp(player);
+      const difficulty = xp.getBotTemplate().name;
+      exportData[player.name] = difficulty;
     }
 
-    // otherwise, generate their weapon preferences on the fly
-    //
-    // we have to first build the base string and then insert the
-    // array of weapons using string format otherwise dedent will
-    // strip the newline and tab characters from the string.
-    const base = Dedent.dedent`
-      ${difficulty} "${player.name}"
-              Skill = ${Math.floor(xp.stats.skill)}
-              Aggression = ${Math.floor(xp.stats.aggression)}
-              ReactionTime = ${xp.stats.reactionTime.toFixed(2)}
-              AttackDelay = ${xp.stats.attackDelay.toFixed(2)}
-              VoicePitch = ${voice}
-              %s
-      End\n
-    `;
-    const weaponPrefs = Constants.WeaponTemplates[this.settings.general.game][weapon]
-      .map((template) => `WeaponPreference = ${template}`)
-      .join('\n\t');
-    return util.format(base, weaponPrefs);
+    // Build the export path inside LIGA's local server directory
+    const exportDir = path.join(
+      process.env.APPDATA || "",
+      "LIGA Esports Manager",
+      "plugins",
+      "csgo",
+      "addons",
+      "sourcemod",
+      "configs"
+    );
+
+    await fs.promises.mkdir(exportDir, { recursive: true });
+
+    const exportFile = path.join(exportDir, "bot_templates.json");
+    await fs.promises.writeFile(exportFile, JSON.stringify(exportData, null, 2), "utf8");
+
+    console.log(` Exported ${Object.keys(exportData).length} bot templates to ${exportFile}`);
   }
 
   /**
@@ -703,6 +726,44 @@ export class Server {
   }
 
   /**
+  * Generates a SourceMod-compatible AWPers list file.
+  * Stored under LIGA's plugin configs so it's auto-copied to the server.
+  */
+  private async generateAWPersFile() {
+    const awpers = this.competitors
+      .flatMap(c => c.team.players)
+      .filter(p => p.role === Constants.PlayerRole.SNIPER);
+
+    // Build VDF structure
+    const lines = ['"AWPers"', '{'];
+    for (const p of awpers) {
+      lines.push(`    "${p.name}" {}`);
+    }
+    lines.push('}');
+
+    // Ensure correct directory:
+    // %AppData%\LIGA Esports Manager\plugins\csgo\addons\sourcemod\configs
+    const exportDir = path.join(
+      process.env.APPDATA || '',
+      'LIGA Esports Manager',
+      'plugins',
+      'csgo',
+      'addons',
+      'sourcemod',
+      'configs'
+    );
+
+    // Make sure it exists
+    fs.mkdirSync(exportDir, { recursive: true });
+
+    const targetPath = path.join(exportDir, 'AWPers.txt');
+
+    // Write the file
+    fs.writeFileSync(targetPath, lines.join('\n'), 'utf-8');
+    this.log.info(`[AWPers] File written to: ${targetPath}`);
+  }
+
+  /**
    * Patches the scoreboard so that it doesn't show BOT
    * in the prefix or ping column for the players.
    *
@@ -743,8 +804,7 @@ export class Server {
 
     // set up the bot command config paths
     const botCommandOriginal = path.join(
-      this.settings.general.gamePath,
-      this.baseDir,
+      this.settings.general.dedicatedServerPath,
       this.gameDir,
       this.botCommandFile,
     );
@@ -767,11 +827,12 @@ export class Server {
             this.settings.general.botDifficulty &&
             (competitor.teamId !== this.profile.teamId || this.spectating)
           ) {
-            player.stats = JSON.stringify(
-              Bot.Templates.find(
-                (template) => template.name === this.settings.general.botDifficulty,
-              ).stats,
+            const template = Bot.Templates.find(
+              (t) => t.name === this.settings.general.botDifficulty
             );
+            if (template) {
+              player.xp = template.baseXP;
+            }
           }
 
           const xp = new Bot.Exp(player);
@@ -942,46 +1003,51 @@ export class Server {
    * @function
    */
   private async getTeamLogo(uri: string, useBase64 = true) {
-    const { protocol, filePath } = /^(?<protocol>.+):\/\/(?<filePath>.+)/g.exec(uri).groups;
+const { protocol, filePath } = /^(?<protocol>.+):\/\/(?<filePath>.+)/g.exec(uri).groups;
 
-    if (!protocol || !filePath) {
-      return '';
-    }
 
-    // custom logos are not supported in cli mode
-    if (process.env['NODE_ENV'] === 'cli' && protocol === 'custom') {
-      return '';
-    }
+if (!protocol || !filePath) {
+return '';
+}
 
-    // figure out the path to the file
-    let logoPath = '';
 
-    switch (protocol) {
-      case 'resources':
-        logoPath = path.join(this.resourcesPath, filePath);
-        break;
-      case 'custom':
-      case 'uploads':
-        logoPath = path.join(app.getPath('userData'), protocol, filePath);
-        break;
-    }
+if (process.env['NODE_ENV'] === 'cli' && protocol === 'custom') {
+return '';
+}
 
-    if (useBase64) {
-      const MIME_TYPES: Record<string, string> = {
-        '.svg': 'image/svg+xml',
-        '.jpg': 'image/jpeg',
-        '.png': 'image/png',
-      };
-      const ext = path.extname(logoPath);
-      const base64 = await fs.promises.readFile(logoPath, {
-        encoding: 'base64',
-      });
-      const mime = MIME_TYPES[ext.toLowerCase()];
-      return `data:${mime};base64,${base64}`;
-    }
 
-    return logoPath;
-  }
+let logoPath = '';
+
+
+switch (protocol) {
+case 'resources':
+logoPath = path.join(this.resourcesPath, filePath);
+break;
+case 'custom':
+case 'uploads':
+logoPath =
+process.env['NODE_ENV'] === 'cli'
+? path.join(process.env.APPDATA as string, 'LIGA Esports Manager', protocol, filePath)
+: path.join(app.getPath('userData'), protocol, filePath);
+break;
+}
+
+
+if (useBase64) {
+const MIME_TYPES: Record<string, string> = {
+'.svg': 'image/svg+xml',
+'.jpg': 'image/jpeg',
+'.png': 'image/png',
+};
+const ext = path.extname(logoPath);
+const base64 = await fs.promises.readFile(logoPath, { encoding: 'base64' });
+const mime = MIME_TYPES[ext.toLowerCase()];
+return `data:${mime};base64,${base64}`;
+}
+
+
+return logoPath;
+}
 
   /**
    * This is only needed because cs2 will sometimes
@@ -1077,50 +1143,79 @@ export class Server {
    * @function
    */
   private launchClientCSGO() {
-    // build default launch args
     const defaultArgs = [
-      '+map',
-      Util.convertMapPool(this.map, this.settings.general.game),
-      '+game_mode',
-      '1',
       '-novid',
-      '-usercon',
-      '-maxplayers_override',
-      '12',
-      '+exec',
-      Constants.GameSettings.CSGO_SERVER_CONFIG_FILE,
+      '+connect', `${this.getLocalIP()}:${Constants.GameSettings.RCON_PORT}`
     ];
 
-    // this is a temporary workaround until cs2 fully supports custom bot names
-    // and proper logging output like being able to specify log
-    // location and dumping end of match statistics
-    const fixedSteamPath = path.join(
-      this.settings.general.gamePath,
-      Constants.GameSettings.CSGO_BASEDIR,
+
+const fixedSteamPath = path.join(
+this.settings.general.gamePath,
+Constants.GameSettings.CSGO_BASEDIR,
+);
+
+
+defaultArgs.unshift('-insecure');
+
+
+if (is.osx()) {
+gameClientProcess = spawn(
+'open',
+[`steam://rungameid/${Constants.GameSettings.CSGO_APPID}//'${defaultArgs.join(' ')}'`],
+{ shell: true },
+);
+} else {
+gameClientProcess = spawn(
+Constants.GameSettings.CSGO_EXE,
+['-applaunch', Constants.GameSettings.CSGO_APPID.toString(), ...defaultArgs, ...this.userArgs],
+{ cwd: fixedSteamPath },
+);
+}
+
+
+gameClientProcess.on('close', this.cleanup.bind(this));
+this.log.debug(gameClientProcess.spawnargs);
+return Promise.resolve();
+}
+
+  private launchServerCSGO() {
+    const serverRoot =
+      this.settings.general.dedicatedServerPath
+    const serverExe = path.join(serverRoot, 'srcds.exe');
+    const serverCfg = 'server.cfg';
+
+    const args = [
+      '-console',
+      '-usercon',
+      '-insecure',
+      '-tickrate 128',
+      '-maxplayers_override', '12',
+      '-game', 'csgo',
+      '-port', Constants.GameSettings.RCON_PORT.toString(),
+      '+exec', serverCfg,
+      '+map', Util.convertMapPool(this.map, this.settings.general.game),
+      '+rcon_password', Constants.GameSettings.RCON_PASSWORD
+    ];
+
+    const srcdsCommand = `"${serverExe}" ${args.join(' ')}`;
+
+    // Escape quotes so cmd.exe interprets correctly
+    const cmdString = `E: && cd /d "${path.join(serverRoot, 'csgo')}" && ${srcdsCommand}`;
+
+    spawn(
+      'cmd.exe',
+      [
+        '/c',
+        'start', '""',
+        'cmd', '/c',
+        cmdString
+      ],
+      {
+        detached: true,
+        windowsHide: false,
+        shell: true
+      }
     );
-    defaultArgs.unshift('-insecure');
-
-    if (is.osx()) {
-      gameClientProcess = spawn(
-        'open',
-        [`steam://rungameid/${Constants.GameSettings.CSGO_APPID}//'${defaultArgs.join(' ')}'`],
-        { shell: true },
-      );
-    } else {
-      gameClientProcess = spawn(
-        Constants.GameSettings.CSGO_EXE,
-        [
-          '-applaunch',
-          Constants.GameSettings.CSGO_APPID.toString(),
-          ...defaultArgs,
-          ...this.userArgs,
-        ],
-        { cwd: fixedSteamPath },
-      );
-    }
-
-    gameClientProcess.on('close', this.cleanup.bind(this));
-    return Promise.resolve();
   }
 
   /**
@@ -1197,14 +1292,13 @@ export class Server {
   }
 
   /**
-   * Sets up and configures the files that are
-   * necessary for the game server to run.
-   *
-   * @function
-   */
+ * Sets up and configures the files that are
+ * necessary for the game server to run.
+ *
+ * @function
+ */
   private async prepare() {
-    // certain games have a different dirname from their game name
-    // so we must make sure to alias them correctly below
+    // determine the correct game directory name
     const localGameDir = (() => {
       switch (this.settings.general.game) {
         case Constants.Game.CS2:
@@ -1215,8 +1309,30 @@ export class Server {
           return this.gameDir;
       }
     })();
+
+    // source: LIGA's plugin files (e.g. %APPDATA%\LIGA Esports Manager\plugins\csgo)
     const from = path.join(PluginManager.getPath(), localGameDir);
-    const to = path.join(this.settings.general.gamePath, this.baseDir, this.gameDir);
+
+    // decide where to copy files to
+    // if game is CS:GO, use dedicated server path instead of client path
+    const isDedicated = this.settings.general.game === Constants.Game.CSGO;
+    const dedicatedServerPath =
+      this.settings.general.dedicatedServerPath ||
+      'E:/steamcmd/csgo-ds'; // fallback
+
+    const to = isDedicated
+      ? path.join(dedicatedServerPath, 'csgo')
+      : path.join(this.settings.general.gamePath, this.baseDir, this.gameDir);
+
+    this.log.info(`Preparing server files from: ${from}`);
+    this.log.info(`Copying to: ${to}`);
+
+    if (this.settings.general.game === Constants.Game.CSGO) {
+      const [home, away] = this.competitors;
+      const allPlayers = [...home.team.players, ...away.team.players];
+      await this.exportBotTemplatesJSON(allPlayers);
+      await this.generateAWPersFile();
+    }
 
     // find and extract zip files
     const zipFiles = await glob('**/*.zip', { cwd: from });
@@ -1242,11 +1358,14 @@ export class Server {
         await this.initLogsDir();
         break;
       default:
+        // CSGO and others
         await this.generateInventoryConfig();
         await this.generateScoreboardConfig();
         await this.generateBetterBotsConfig();
         break;
     }
+
+    this.log.info('Server preparation complete.');
   }
 
   /**
@@ -1257,138 +1376,43 @@ export class Server {
    * @function
    */
   public async start(): Promise<void> {
-    // prep files
-    await this.prepare();
+  await this.prepare();
 
-    // launch clients
-    switch (this.settings.general.game) {
-      case Constants.Game.CS16:
-        await this.launchClientCS16();
-        break;
-      case Constants.Game.CS2:
-        await this.launchClientCS2();
-        break;
-      case Constants.Game.CSS:
-        await this.launchClientCSS();
-        break;
-      case Constants.Game.CZERO:
-        await this.launchClientCZERO();
-        break;
-      default:
-        await this.launchClientCSGO();
-        break;
-    }
-
-    // attach client process event handlers
-    //
-    // @todo: better error handling here
-    gameClientProcess.on('error', (error) => {
-      this.log.error(error);
-    });
-
-    // connect to rcon
-    this.rcon = new RCON.Client(
-      this.getLocalIP(),
-      Constants.GameSettings.RCON_PORT,
-      Constants.GameSettings.RCON_PASSWORD,
-      {
-        tcp:
-          this.settings.general.game !== Constants.Game.CS16 &&
-          this.settings.general.game !== Constants.Game.CZERO,
-        retryMax: Constants.GameSettings.RCON_MAX_ATTEMPTS,
-      },
-    );
-
-    try {
-      await this.rcon.init();
-    } catch (error) {
-      this.log.warn(error);
-    }
-
-    // start the scorebot
-    this.scorebot = new Scorebot.Watcher(
-      await getGameLogFile(this.settings.general.game, this.settings.general.gamePath),
-    );
-
-    try {
-      await this.scorebot.start();
-    } catch (error) {
-      this.log.error(error);
-      throw error;
-    }
-
-    // set up game event handlers
-    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ASSISTED, (payload) =>
-      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_ASSISTED, payload }),
-    );
-    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_KILLED, (payload) =>
-      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_KILLED, payload }),
-    );
-    this.scorebot.on(Scorebot.EventIdentifier.ROUND_OVER, (payload) =>
-      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.ROUND_OVER, payload }),
-    );
-
-    // @todo: remove when metamod/cssharp are fixed post cs2 july update
-    this.scorebot.on(Scorebot.EventIdentifier.SAY, async (payload) => {
-      if (payload === '.ready' && this.settings.general.game === Constants.Game.CS2) {
-        this.rcon.send('mp_warmup_end');
-      }
-    });
-    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ENTERED, async () => {
-      if (this.settings.general.game === Constants.Game.CS2) {
-        await Util.sleep(Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY * 500);
-        this.rcon.send('exec liga-bots');
-      }
-    });
-
-    // scorebot game over handler resolves our promise
-    return new Promise((resolve) => {
-      this.scorebot.on(Scorebot.EventIdentifier.GAME_OVER, async (payload) => {
-        // in csgo and cs2 we delay the game over event because
-        // it gets printed too quickly in their game logs
-        if (
-          this.settings.general.game === Constants.Game.CS2 ||
-          this.settings.general.game === Constants.Game.CSGO
-        ) {
-          await Util.sleep(Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY * 1000);
-        }
-
-        // @todo: remove when metamod/cssharp are fixed post cs2 july update
-        if (this.settings.general.game === Constants.Game.CS2) {
-          await this.rcon.send('quit');
-        }
-
-        // in csgo and cs2, overtimes affect the order of the final
-        // scores reported so we must swap them accordingly
-        if (
-          this.settings.general.game === Constants.Game.CS2 ||
-          this.settings.general.game === Constants.Game.CSGO
-        ) {
-          const totalRoundsPlayed = payload.score.reduce((a, b) => a + b, 0);
-
-          if (totalRoundsPlayed > this.settings.matchRules.maxRounds) {
-            const totalRoundsOvertime = totalRoundsPlayed - this.settings.matchRules.maxRounds;
-            const overtimeCount = Math.ceil(
-              totalRoundsOvertime / this.settings.matchRules.maxRoundsOvertime,
-            );
-
-            // swap score if overtime count is odd
-            //
-            // [  /  ] [  /  ] [  /  ]
-            //  ^           ^   ^
-            //
-            // when an overtime starts, the sides are not swapped, so
-            // every odd-numbered overtime means teams have swapped
-            if (overtimeCount % 2 === 1) {
-              payload.score.reverse();
-            }
-          }
-        }
-
-        this.log.info('Final result: %O', payload);
-        this.result = payload;
-        resolve();
-      });
-    });
+  switch (this.settings.general.game) {
+    case Constants.Game.CS16:
+      await this.launchClientCS16();
+      break;
+    case Constants.Game.CS2:
+      await this.launchClientCS2();
+      break;
+    case Constants.Game.CSS:
+      await this.launchClientCSS();
+      break;
+    case Constants.Game.CZERO:
+      await this.launchClientCZERO();
+      break;
+    default:
+      this.launchServerCSGO();
+      break;
   }
+
+  this.rcon = new RCON.Client(
+    this.getLocalIP(),
+    Constants.GameSettings.RCON_PORT,
+    Constants.GameSettings.RCON_PASSWORD,
+    {
+      tcp:
+        this.settings.general.game !== Constants.Game.CS16 &&
+        this.settings.general.game !== Constants.Game.CZERO,
+      retryMax: Constants.GameSettings.RCON_MAX_ATTEMPTS,
+    },
+  );
+
+  try {
+    await this.rcon.init();
+    await this.launchClientCSGO(); 
+  } catch (error) {
+    this.log.warn(error);
+  }
+}
 }

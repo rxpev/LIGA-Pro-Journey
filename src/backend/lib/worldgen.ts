@@ -951,9 +951,7 @@ export async function recordMatchResults() {
  */
 async function resetTrainingGains() {
   return DatabaseClient.prisma.player.updateMany({
-    data: {
-      gains: null,
-    },
+    data: {},
   });
 }
 
@@ -1139,9 +1137,7 @@ export async function sendUserTransferOffer() {
   // build the player pool
   const players = to.players
     .filter((player) => player.id !== profile.playerId)
-    .sort(
-      (a, b) => Bot.Exp.getTotalXP(JSON.parse(b.stats)) - Bot.Exp.getTotalXP(JSON.parse(a.stats)),
-    );
+    .sort((a, b) => Bot.Exp.getTotalXP(b.xp) - Bot.Exp.getTotalXP(a.xp))
   const transferPool = players.filter((player) => player.transferListed);
 
   // bail early if user does not have any players to spare

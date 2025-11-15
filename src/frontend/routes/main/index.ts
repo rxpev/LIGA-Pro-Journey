@@ -11,6 +11,7 @@ import Players from './players';
 import Sponsors from './sponsors';
 import Squad from './squad';
 import Teams from './teams';
+import Faceit from "./faceit";
 
 /**
  * Exports this module.
@@ -24,6 +25,7 @@ export default {
   Inbox,
   Players,
   Squad,
+  Faceit,
 
   // composite routes
   Competitions,

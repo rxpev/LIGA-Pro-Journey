@@ -130,13 +130,20 @@ function createProbabilityArray(obj: ProbabilityConfigGen<number>): ProbabilityA
 function getRandomElementWithProbability(arr: ProbabilityArray): ProbabilityArrayElement {
   const num = Math.random() * 100;
   const el = arr.find((el: ProbabilityArrayElement) => el.start <= num && el.end > num);
-  // retry
+
+  // If nothing matched (rounding error or bad data), pick a random element directly
   if (!el) {
-    return getRandomElementWithProbability(arr);
+    const fallback = arr[Math.floor(Math.random() * arr.length)];
+    return fallback;
   }
+
+  // If the element's value is another probability array, handle that recursively
   if (Array.isArray(el.value)) {
+    // guard: prevent infinite recursion if nested arrays are malformed
+    if (el.value.length === 0) return el;
     return getRandomElementWithProbability(el.value);
   }
+
   return el;
 }
 

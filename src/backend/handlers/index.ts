@@ -18,7 +18,7 @@ import {
 } from '@liga/backend/lib';
 
 export { default as IPCDatabaseHandler } from './database';
-export { default as IPCWIndowHandler } from './window';
+export { default as IPCWindowHandler } from './window';
 export { default as IPCBlazonryHandler } from './blazonry';
 export { default as IPCUpdaterHandler } from './updater';
 export { default as IPCCalendarHandler } from './calendar';
@@ -32,6 +32,7 @@ export { default as IPCModsHandler } from './mods';
 export { default as IPCSponsorsHandler } from './sponsors';
 export { default as IPCMapPool } from './map-pool';
 export { default as IPCShortlist } from './shortlist';
+export { default as IPCFaceitHandler } from "./faceit";
 
 /**
  * Gets application information such as name and

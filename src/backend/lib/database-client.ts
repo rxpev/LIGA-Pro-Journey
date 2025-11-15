@@ -329,16 +329,49 @@ export default class DatabaseClient {
 
     // load up migration files
     const migrationsBasePath = path.join(path.dirname(DatabaseClient.localBasePath), 'migrations');
-    const migrationsAll = await glob('*_*', {
-      cwd: path.normalize(migrationsBasePath),
-      withFileTypes: true,
-      stat: true,
+    const migrationsAll: Array<{ name: string; isDirectory: () => boolean; relative: () => string }> =
+      await glob('*_*', {
+        cwd: path.normalize(migrationsBasePath),
+        withFileTypes: true,
+        stat: true,
+      }).catch((err): Array<{ name: string; isDirectory: () => boolean; relative: () => string }> => {
+        DatabaseClient.log.error('Failed to read migrations directory:', err);
+        return [];
+      });
+
+    // defensive guard: ensure we have an array
+    if (!migrationsAll || migrationsAll.length === 0) {
+      DatabaseClient.log.warn(
+        'No migration files found in %s. Skipping migration.',
+        migrationsBasePath,
+      );
+      cnx.close();
+      return Promise.resolve(false);
+    }
+
+    // filter out anything that isn’t a folder named like "20241109123456_some_migration"
+    const validMigrations = migrationsAll.filter((entry) => {
+      const match = entry.name.match(/^\d+_.+/);
+      return match && entry.isDirectory();
     });
-    const migrationsNew = migrationsAll.sort((a, b) => {
-      const re = new RegExp(/^(\d+)_/);
-      const [, timestampA] = a.name.match(re);
-      const [, timestampB] = b.name.match(re);
-      return Number(timestampA) - Number(timestampB);
+
+    if (validMigrations.length === 0) {
+      DatabaseClient.log.warn(
+        'No valid migration folders found in %s. Skipping migration.',
+        migrationsBasePath,
+      );
+      cnx.close();
+      return Promise.resolve(false);
+    }
+
+    // sort only valid folders
+    const migrationsNew = validMigrations.sort((a, b) => {
+      const re = /^(\d+)_/;
+      const matchA = a.name.match(re);
+      const matchB = b.name.match(re);
+      const timestampA = matchA ? Number(matchA[1]) : 0;
+      const timestampB = matchB ? Number(matchB[1]) : 0;
+      return timestampA - timestampB;
     });
 
     // run through the migrations

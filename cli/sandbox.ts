@@ -307,7 +307,7 @@ async function sandboxTraining() {
     const xp = new Bot.Exp(player);
     const totalSessions = 5;
     for (let i = 0; i < totalSessions; i++) {
-      xp.train();
+      xp.simulateXpChangeForExternal();
     }
     break;
   }

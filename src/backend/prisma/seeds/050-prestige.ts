@@ -79,7 +79,7 @@ export default async function (prisma: PrismaClient) {
                       prestige: chunk.prestige,
                       stats: JSON.stringify(
                         Bot.Templates.find((template) => template.prestige === chunk.prestige)
-                          ?.stats || null,
+                           || null,
                       ),
                     },
                   })),

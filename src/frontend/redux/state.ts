@@ -12,6 +12,11 @@ export interface AppAction<T> {
   type: number;
   payload?: T;
 }
+export interface PlayerCareerUser {
+  name: string;
+  countryId: number;
+  avatar?: string;
+}
 
 /** @interface */
 export interface AppState {
@@ -27,7 +32,11 @@ export interface AppState {
   profiles: Array<AppState['profile']>;
   shortlist: Awaited<ReturnType<typeof api.shortlist.all<typeof Eagers.shortlist>>>;
   windowData: Partial<{
-    [Constants.WindowIdentifier.Landing]: Parameters<typeof api.profiles.create>[0];
+    [Constants.WindowIdentifier.Landing]: {
+      user?: PlayerCareerUser;
+      role?: { selectedRole: string };
+      today: Date;
+    };
     [Constants.WindowIdentifier.Modal]: Pick<
       Parameters<typeof api.profiles.create>[0]['team'],
       'name' | 'blazon'
@@ -61,8 +70,10 @@ export const InitialState: AppState = {
       today: new Date(
         new Date().getFullYear(),
         Constants.Application.SEASON_START_MONTH,
-        Constants.Application.SEASON_START_DAY,
+        Constants.Application.SEASON_START_DAY
       ),
+      user: undefined,
+      role: undefined,
     },
     modal: {},
   },

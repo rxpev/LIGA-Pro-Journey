@@ -267,6 +267,37 @@ export default function () {
             </section>
             <section>
               <header>
+                <p>Dedicated Server Path</p>
+                <p>Path to your CS:GO Dedicated Server (srcds) installation.</p>
+              </header>
+              <article className="join">
+                <input
+                  readOnly
+                  type="text"
+                  className="input join-item bg-base-200 cursor-default text-sm"
+                  value={settings.general.dedicatedServerPath || ''}
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Modal, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('general.dedicatedServerPath', dialogData.filePaths[0]),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </article>
+            </section>
+            <section>
+              <header>
                 <p>{t('settings.launchOptionsTitle')}</p>
                 <p>{t('settings.launchOptionsSubtitle')}</p>
               </header>

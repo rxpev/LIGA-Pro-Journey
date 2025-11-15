@@ -9,6 +9,8 @@ import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaFolderOpen, FaShoppingBag, FaStar, FaUserSlash } from 'react-icons/fa';
+import ak47Icon from '@liga/frontend/assets/ak47.png';
+import awpIcon from '@liga/frontend/assets/awp.png';
 
 /** @type {Player} */
 type Player = Awaited<ReturnType<typeof api.players.all<typeof Eagers.player>>>[number];
@@ -36,7 +38,7 @@ interface PlayerCardProps extends React.ComponentProps<'article'> {
   onClickTransferListed?: () => void;
   onClickViewOffers?: () => void;
   onClickRelease?: () => void;
-  onChangeWeapon?: (weapon: Constants.WeaponTemplate) => void;
+
 }
 
 /**
@@ -89,22 +91,6 @@ export function XPBar(props: XPBarProps) {
  */
 export default function (props: PlayerCardProps) {
   const t = useTranslation('components');
-  const weapons = React.useMemo(() => Constants.WeaponTemplates[props.game], [props.game]);
-  const xp = React.useMemo(() => {
-    if (!props.player) {
-      return;
-    }
-
-    return new Bot.Exp(props.player, null);
-  }, [props.player]);
-  const gainsTotal = React.useMemo(
-    () =>
-      Object.keys(xp.gains)
-        .map((key) => xp.gains[key])
-        .reduce((total, current) => total + current, 0),
-    [xp.gains],
-  );
-
   if (props.compact) {
     return (
       <article
@@ -140,17 +126,7 @@ export default function (props: PlayerCardProps) {
         <aside className="stack-y center gap-0">
           <p className="text-muted">{t('playerCard.totalXP')}</p>
           <p className="text-2xl! font-black">
-            {props.noStats ? '-' : Math.floor(Bot.Exp.getTotalXP(xp.stats))}
-          </p>
-          <p
-            className={cx(
-              'before:pr-px',
-              gainsTotal <= 0
-                ? 'text-muted before:content-["▸"]'
-                : 'text-success before:content-["▴"]',
-            )}
-          >
-            {Util.toOptionalDecimal(gainsTotal)}
+            {props.noStats ? '-' : Math.floor(props.player.xp ?? 0)}
           </p>
         </aside>
       </article>
@@ -196,53 +172,35 @@ export default function (props: PlayerCardProps) {
       </aside>
       <aside className="px-10 py-4">
         <label className="fieldset p-0 text-xs">
-          <p>{t('shared.weaponPreference')}</p>
-          <select
-            className="select select-sm bg-base-300 mt-2"
-            value={props.player.weapon || Constants.WeaponTemplate.AUTO}
-            onChange={(event) =>
-              props.onChangeWeapon(event.target.value as Constants.WeaponTemplate)
-            }
-          >
-            {Object.keys(Constants.WeaponTemplate).map(
-              (template: keyof typeof Constants.WeaponTemplate) => (
-                <option
-                  key={template + props.player.name}
-                  value={Constants.WeaponTemplate[template]}
-                  title={
-                    props.player.weapon && weapons[Constants.WeaponTemplate[template]]?.join(', ')
-                  }
-                >
-                  {Constants.WeaponTemplate[template]}
-                </option>
-              ),
-            )}
-          </select>
+          <p>Role</p>
+          <div className="mt-2 flex items-center justify-between">
+            <span
+              className={cx(
+                'text-sm font-semibold',
+                props.player.role === Constants.PlayerRole.SNIPER
+                  ? 'text-purple-300'
+                  : 'text-blue-300'
+              )}
+            >
+              {props.player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
+            </span>
+
+            <img
+              src={props.player.role === Constants.PlayerRole.SNIPER ? awpIcon : ak47Icon}
+              alt={props.player.role === Constants.PlayerRole.SNIPER ? 'AWP icon' : 'AK-47 icon'}
+              className="h-4 w-auto opacity-80"
+            />
+          </div>
         </label>
       </aside>
       <aside className="px-10 py-4">
         <XPBar
           title={t('playerCard.totalXP')}
-          subtitle={`${Math.floor(Bot.Exp.getTotalXP(xp.stats))}/${Math.floor(Bot.Exp.getMaximumXP())}`}
-          value={Bot.Exp.getTotalXP(xp.stats)}
-          max={Bot.Exp.getMaximumXP()}
+          subtitle={`${Math.floor(props.player.xp ?? 0)}/100`}
+          value={props.player.xp ?? 0}
+          max={100}
         />
       </aside>
-      {Object.keys(xp.stats).map((stat) => {
-        const { gain, value, max } = xp.normalize(stat);
-
-        return (
-          <aside key={`xp__${props.player.name}_${stat}`} className="px-10 py-4">
-            <XPBar
-              title={`${startCase(stat)}`}
-              gains={gain}
-              subtitle={`${value}/${max}`}
-              value={value}
-              max={Number(max)}
-            />
-          </aside>
-        );
-      })}
       <aside className="grid grid-cols-4">
         <button
           title={t('playerCard.setAsStarter')}

@@ -336,21 +336,11 @@ export default function () {
             </tr>
           </thead>
           <tbody>
-            <tr className="border-base-content/10 border-l">
-              {Object.keys(xp.stats).map((stat) => {
-                const { value, max } = xp.normalize(stat);
-                return (
-                  <td key={`xp__${player.name}_${stat}_value`}>
-                    <XPBar
-                      title={`${startCase(stat)}`}
-                      subtitle={`${value}/${max}`}
-                      value={value}
-                      max={Number(max)}
-                    />
-                  </td>
-                );
-              })}
-            </tr>
+            <XPBar
+              title="Total XP"
+              value={Bot.Exp.getTotalXP(player.xp)}
+              max={100}
+            />
           </tbody>
         </table>
       </section>

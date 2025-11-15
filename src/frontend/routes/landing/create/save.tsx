@@ -1,5 +1,5 @@
 /**
- * Saves the provided form data as a new career.
+ * Saves the provided form data as a new PLAYER career.
  *
  * @module
  */
@@ -7,48 +7,69 @@ import React from 'react';
 import { Constants } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
+import { useLocation } from 'react-router-dom';
+
+interface RoleLocationState {
+  role?: 'RIFLER' | 'AWPER' | 'IGL';
+}
 
 /**
  * Exports this module.
  *
  * @exports
  */
-export default function () {
+export default function Save() {
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
   const [status, setStatus] = React.useState('');
-  const windowData = state.windowData[Constants.WindowIdentifier.Landing];
+  const location = useLocation() as unknown as { state?: RoleLocationState };
 
-  // get the latest profile id and
-  // increment its id by one
+  const selectedRole = location.state?.role || 'RIFLER';
+
+  // extract user + role data
+  const windowData = state.windowData[Constants.WindowIdentifier.Landing];
+  const playerName = windowData?.user?.name;
+  const countryId = windowData?.user?.countryId;
+
+  // compute new save ID
   const latestProfile = Math.max(...state.profiles.map((profile) => profile.id));
   const newSaveId = (isFinite(latestProfile) ? latestProfile : 0) + 1;
 
+
+
   React.useEffect(() => {
-    Promise.resolve(setStatus(t('shared.connectingToDatabase')))
-      // create new save and connect to it
-      .then(() => api.database.connect(String(newSaveId)))
+    const createPlayerCareer = async () => {
+      try {
+        setStatus(t('shared.connectingToDatabase'));
+        await api.database.connect(String(newSaveId));
 
-      // create the user's new profile
-      .then(() => Promise.resolve(setStatus(t('landing.create.statusSaving'))))
-      .then(() => api.profiles.create(windowData, state.profile.settings))
+        // Create PLAYER profile instead of manager
+        setStatus(t('landing.create.statusSaving'));
+        await api.profiles.createPlayerCareer({
+          playerName: windowData?.user?.name!,
+          countryId: windowData?.user?.countryId!,
+          role: selectedRole || 'RIFLER', // fallback
+        });
 
-      // create calendar entry to start the season and
-      // advance by one day to generate the world
-      .then(() => Promise.resolve(setStatus(t('landing.create.statusWorldgen'))))
-      .then(() =>
-        api.calendar.create({
+        // Skip team-based season init (since teamless)
+        setStatus(t('landing.create.statusWorldgen'));
+        await api.calendar.create({
           date: windowData.today.toISOString(),
           type: Constants.CalendarEntry.SEASON_START,
-        }),
-      )
-      .then(() => api.calendar.start())
+        });
 
-      // open up the main window and close this one
-      .then(() => {
+        await api.calendar.start();
+
+        // Open main game window
         api.window.open(Constants.WindowIdentifier.Main);
         api.window.close(Constants.WindowIdentifier.Landing);
-      });
+      } catch (err) {
+        console.error(err);
+        setStatus('Error creating save.');
+      }
+    };
+
+    createPlayerCareer();
   }, []);
 
   return (

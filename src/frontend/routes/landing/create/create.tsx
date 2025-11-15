@@ -34,18 +34,8 @@ export default function () {
   // the steps for creating a new career.
   const steps = React.useMemo(
     () => [
-      {
-        id: 'user-info',
-        title: t('landing.create.userInfo'),
-      },
-      {
-        id: 'team-info',
-        title: t('landing.create.teamInfo'),
-      },
-      {
-        id: 'finish',
-        title: t('shared.finish'),
-      },
+      { id: 'player-info', title: 'Player Info' },
+      { id: 'role', title: 'Role' },
     ],
     [t],
   );
@@ -68,7 +58,7 @@ export default function () {
               idx < currentStep && 'step-primary',
               idx <= 1 && 'cursor-pointer',
             )}
-            onClick={() => idx <= 1 && navigate(idx ? `/create/${idx + 1}` : '/create')}
+            onClick={() => navigate(idx === 0 ? '/create' : '/create/2')}
           >
             <span className="text-sm italic">{step.title}</span>
           </li>

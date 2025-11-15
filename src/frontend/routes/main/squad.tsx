@@ -76,13 +76,13 @@ function BonusSummaryLabel(props: BonusSummaryLabelProps) {
     return null;
   }
 
-  const stats = React.useMemo(() => JSON.parse(props.data.stats), [props.data]);
+  const { xpBoost, cost } = props.data;
 
   return (
     <p className="italic">
-      {Object.keys(stats)
-        .map((stat) => `${stats[stat]}x ${stat.replace(/(delay|time)/i, 'speed')}`)
-        .join(', ')}
+      {xpBoost
+        ? `${xpBoost}× XP gain${xpBoost > 1 ? 's' : ''}${cost ? ` — Cost: $${cost.toLocaleString()}` : ''}`
+        : 'No XP boost'}
     </p>
   );
 }
@@ -114,12 +114,18 @@ export default function () {
   // fetch data on first load
   React.useEffect(() => {
     api.bonus.all().then(setTrainingBonuses);
+
+    // Skip all team related fetches if player is teamless
+    if (!state.profile?.team) return;
+
     api.squad.all().then(setSquad);
+
     api.ipc.on(Constants.IPCRoute.TRANSFER_UPDATE, () =>
       fetchTransfers(state.profile.team.id).then(setTransfers),
     );
+    
     fetchTransfers(state.profile.team.id).then(setTransfers);
-  }, []);
+  }, [state.profile?.team]);
 
   // load settings
   React.useEffect(() => {
@@ -202,6 +208,40 @@ export default function () {
     }
   }, [trainingFacilities]);
 
+  // Teamless Player Career view
+  if (!state.profile?.team) {
+    const player = state.profile?.player;
+
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 text-center">
+        {/* Teamless blazonry */}
+        <div className="relative">
+          <Image
+            src="resources://blazonry/009399.svg"
+            className="h-40 w-40 rounded-full border-4 border-base-300 shadow-md object-contain bg-base-100 p-4"
+          />
+        </div>
+
+        {/* Player info card */}
+        <article className="card bg-base-200/40 p-6 w-80 text-center shadow-md rounded-2xl">
+          <h2 className="text-2xl font-semibold mb-2">{player?.name || "Unnamed Player"}</h2>
+          <p className="uppercase tracking-wide text-sm text-primary font-medium">
+            {player?.role || "Unassigned Role"}
+          </p>
+          <p className="text-base text-muted mb-3">{player?.country?.name || "Unknown Country"}</p>
+
+          <div className="divider my-3 before:h-px after:h-px" />
+
+          <p className="text-warning font-semibold">You are currently teamless</p>
+          <p className="text-sm text-muted mt-1">
+            Compete on FACEIT or await offers from teams.
+          </p>
+        </article>
+      </div>
+    );
+  }
+
+
   return (
     <div className="dashboard">
       <header>
@@ -240,7 +280,7 @@ export default function () {
                     <thead>
                       <tr>
                         <th>{t('shared.name')}</th>
-                        <th>{t('main.squad.weapon')}</th>
+                        <th>Role</th>
                         <th className="text-center">{t('main.squad.remove')}</th>
                       </tr>
                     </thead>
@@ -250,8 +290,8 @@ export default function () {
                           <td className="truncate" title={player.name}>
                             {player.name}
                           </td>
-                          <td title={player.weapon || Constants.WeaponTemplate.AUTO}>
-                            {player.weapon || Constants.WeaponTemplate.AUTO}
+                          <td title={player.role}>
+                            {player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
                           </td>
                           <td className="text-center">
                             <button
@@ -747,14 +787,6 @@ export default function () {
                       );
                   })
                 }
-                onChangeWeapon={(weapon) => {
-                  api.squad
-                    .update({
-                      where: { id: player.id },
-                      data: { weapon },
-                    })
-                    .then(setSquad);
-                }}
               />
             ))}
         </section>

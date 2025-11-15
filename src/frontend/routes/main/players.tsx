@@ -11,6 +11,8 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaSortAmountDown, FaSortAmountDownAlt } from 'react-icons/fa';
 import { Pagination } from '@liga/frontend/components';
+import ak47Icon from '@liga/frontend/assets/ak47.png';
+import awpIcon from '@liga/frontend/assets/awp.png';
 import {
   CountrySelect,
   findCountryOptionByValue,
@@ -47,14 +49,14 @@ function buildPlayerQuery(
   orderBy?: ExtractBaseType<Parameters<typeof api.players.all>[number]['orderBy']>,
   playerName?: string,
   prestige?: number,
-  weapon?: string,
+  role?: string,
 ): Parameters<typeof api.players.all>[number] {
   return {
     ...(orderBy ? { orderBy } : {}),
     where: {
       ...(transferListed ? { transferListed } : {}),
       ...(prestige ? { prestige } : {}),
-      ...(weapon ? { weapon } : {}),
+      ...(role ? { role } : {}),
       ...(playerName !== ''
         ? {
             name: {
@@ -103,8 +105,7 @@ export default function () {
     React.useState<ReturnType<typeof findCountryOptionByValue>>();
   const [selectedPlayerName, setSelectedPlayerName] = React.useState('');
   const [selectedPlayerPrestige, setSelectedPlayerPrestige] = React.useState<number>();
-  const [selectedPlayerWeapon, setSelectedPlayerWeapon] =
-    React.useState<Constants.WeaponTemplate>();
+  const [selectedPlayerRole, setSelectedPlayerRole] = React.useState<Constants.PlayerRole | ''>('');
   const [selectedTierId, setSelectedTierId] = React.useState<number>();
   const [selectedTransferStatus, setSelectedTransferStatus] = React.useState<boolean>();
   const [selectedTeam, setSelectedTeam] =
@@ -130,7 +131,7 @@ export default function () {
         selectedPlayerOrderBy,
         selectedPlayerName,
         selectedPlayerPrestige,
-        selectedPlayerWeapon,
+        selectedPlayerRole
       ),
     [
       selectedFederationId,
@@ -141,7 +142,7 @@ export default function () {
       selectedPlayerOrderBy,
       selectedPlayerName,
       selectedPlayerPrestige,
-      selectedPlayerWeapon,
+      selectedPlayerRole
     ],
   );
 
@@ -332,28 +333,23 @@ export default function () {
             </section>
             <section>
               <header>
-                <p>{t('shared.weaponPreference')}</p>
+                <p>Role</p>
               </header>
               <article>
                 <select
                   className="select"
-                  value={selectedPlayerWeapon}
+                  value={selectedPlayerRole}
                   onChange={(event) =>
-                    setSelectedPlayerWeapon(
+                    setSelectedPlayerRole(
                       event.target.value === ''
-                        ? ('' as Constants.WeaponTemplate)
-                        : (event.target.value as Constants.WeaponTemplate),
+                        ? ('' as Constants.PlayerRole)
+                        : (event.target.value as Constants.PlayerRole),
                     )
                   }
                 >
-                  <option value="">Any</option>
-                  {Object.keys(Constants.WeaponTemplate).map(
-                    (template: keyof typeof Constants.WeaponTemplate) => (
-                      <option key={template} value={Constants.WeaponTemplate[template]}>
-                        {Constants.WeaponTemplate[template]}
-                      </option>
-                    ),
-                  )}
+                  <option value="">{t('shared.any')}</option>
+                  <option value={Constants.PlayerRole.RIFLER}>Rifler</option>
+                  <option value={Constants.PlayerRole.SNIPER}>AWPer</option>
                 </select>
               </article>
             </section>
@@ -420,7 +416,7 @@ export default function () {
                   setSelectedFederationId('' as unknown as number);
                   setSelectedPlayerName('');
                   setSelectedPlayerPrestige('' as unknown as number);
-                  setSelectedPlayerWeapon('' as Constants.WeaponTemplate);
+                  setSelectedPlayerRole('' as Constants.PlayerRole);
                   setSelectedTierId('' as unknown as number);
                   setSelectedTransferStatus(null);
                   setSelectedTeam(null);
@@ -517,9 +513,34 @@ export default function () {
                       })
                     }
                   >
-                    <td>
-                      <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
-                      <span>{player.name}</span>
+                    <td className="relative">
+                      {/* Player name + flag */}
+                      <div className="flex items-center">
+                        <span className={cx('fp', player.country.code.toLowerCase())} />
+                        <span className="ml-2">{player.name}</span>
+                      </div>
+
+                      {/* Role icon on the right */}
+                      <img
+                        src={player.role === Constants.PlayerRole.SNIPER ? awpIcon : ak47Icon}
+                        alt={player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
+                        className={cx(
+                          'absolute top-1/2 -translate-y-1/2 h-2.5 w-auto opacity-90',
+                          player.role === Constants.PlayerRole.SNIPER ? 'right-2' : 'right-[12px]'
+                        )}
+                        style={
+                          player.role === Constants.PlayerRole.SNIPER
+                            ? {
+                              filter:
+                                'invert(68%) sepia(52%) saturate(740%) hue-rotate(260deg) brightness(105%) contrast(98%)',
+                            }
+                            : {
+                              filter:
+                                'invert(63%) sepia(37%) saturate(1200%) hue-rotate(190deg) brightness(102%) contrast(96%)',
+                            }
+                        }
+                        title={player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
+                      />
                     </td>
                     <td>
                       {!!player.team && (

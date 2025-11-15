@@ -26,9 +26,9 @@ model Bonus {
   id                  Int                 @id @default(autoincrement())
   type                Int
   name                String              @unique
-  stats               String?
   cost                Int?
-  active              Boolean?            @default(false)
+  xpBoost             Int?                @default(0)
+  active              Boolean             @default(false)
 
   // belongs to
   profile             Profile?            @relation(fields: [profileId], references: [id])
@@ -212,22 +212,35 @@ model MapPool {
 }
 
 model Match {
-  id                  Int                 @id @default(autoincrement())
-  date                DateTime
-  payload             String
-  round               Int
-  status              Int
-  totalRounds         Int?
+  id              Int           @id @default(autoincrement())
 
-  // has many
-  events              MatchEvent[]
-  games               Game[]
-  competitors         MatchToTeam[]
+  matchType       String        @default("LEAGUE") // "LEAGUE" | "TOURNAMENT" | "FACEIT_PUG"
 
-  // belongs to
-  competition         Competition         @relation(fields: [competitionId], references: [id])
-  competitionId       Int
-  players             Player[]
+  date            DateTime      @default(now())
+  payload         String
+  round           Int?
+  status          Int
+  totalRounds     Int?
+
+  faceitEloDelta   Int?
+  faceitRating     Float?
+  faceitIsWin      Boolean?
+  faceitTeammates  String?
+  faceitOpponents  String?
+
+  // LEAGUE / TOURNAMENT relationships
+  competitionId   Int?
+  competition     Competition?  @relation(fields: [competitionId], references: [id])
+
+  // PLAYER CAREER relationship
+  profileId       Int?
+  profile         Profile?      @relation(fields: [profileId], references: [id])
+
+  // Relations
+  events          MatchEvent[]
+  games           Game[]
+  competitors     MatchToTeam[]
+  players         Player[]
 }
 
 model MatchEvent {
@@ -284,55 +297,64 @@ model Persona {
   teamId              Int?
 }
 
-model Player {
-  id                  Int                 @id @default(autoincrement())
-  name                String
-  gains               String?
-  stats               String?
-  cost                Int?                @default(0)
-  wages               Int?                @default(0)
-  weapon              String?
-  starter             Boolean             @default(false)
-  transferListed      Boolean             @default(false)
-  avatar              String?
-  prestige            Int?
+model Profile {
+  id            Int       @id @default(autoincrement())
+  name          String    @unique
+  date          DateTime
+  issues        String?
+  season        Int?      @default(0)
+  settings      String?
+  trainedAt     DateTime?
+  updatedAt     DateTime? @default(now())
+  faceitElo   Int         @default(1200)
+
+  careerMode    String    @default("MANAGER") // "MANAGER" | "PLAYER"
 
   // has many
-  matches             Match[]
-  shortlist           Shortlist[]
-  transfers           Transfer[]
-  assists             MatchEvent[]        @relation("assist")
-  kills               MatchEvent[]        @relation("attacker")
-  deaths              MatchEvent[]        @relation("victim")
-
-  // has one
-  profile             Profile?
+  bonuses       Bonus[]
 
   // belongs to
-  country             Country             @relation(fields: [countryId], references: [id])
-  countryId           Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  team          Team?     @relation(fields: [teamId], references: [id])
+  teamId        Int?      @unique
+
+  player        Player?   @relation(fields: [playerId], references: [id])
+  playerId      Int?      @unique
+
+  matches Match[]
 }
 
-model Profile {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  date                DateTime
-  issues              String?
-  season              Int?                @default(0)
-  settings            String?
-  trainedAt           DateTime?
-  updatedAt           DateTime?           @default(now())
+model Player {
+  id            Int       @id @default(autoincrement())
+  name          String
+  cost          Int?      @default(0)
+  wages         Int?      @default(0)
+  starter       Boolean   @default(false)
+  transferListed Boolean  @default(false)
+  avatar        String?
+  prestige      Int?
+  personality   String?
+  role          String?
+  xp            Int       @default(0)
+  elo           Int       @default(0)
+
+  userControlled Boolean  @default(false)
 
   // has many
-  bonuses             Bonus[]
+  matches       Match[]
+  shortlist     Shortlist[]
+  transfers     Transfer[]
+  assists       MatchEvent[] @relation("assist")
+  kills         MatchEvent[] @relation("attacker")
+  deaths        MatchEvent[] @relation("victim")
+
+  // has one
+  profile       Profile?
 
   // belongs to
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?                @unique
-  player              Player?             @relation(fields: [playerId], references: [id])
-  playerId            Int?                @unique
+  country       Country    @relation(fields: [countryId], references: [id])
+  countryId     Int
+  team          Team?      @relation(fields: [teamId], references: [id])
+  teamId        Int?
 }
 
 model Shortlist {

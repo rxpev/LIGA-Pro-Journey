@@ -5,3 +5,4 @@ export * as Dedent from './dedent';
 export * as Eagers from './eagers';
 export * as is from './is';
 export * as Util from './util';
+export * from './constants';

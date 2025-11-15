@@ -389,9 +389,6 @@ export class Application {
     );
     return request<Array<ReleaseResponse>>(endpoint.href, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${await this.getToken()}`,
-      },
     });
   }
 }

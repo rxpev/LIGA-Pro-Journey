@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "Profile" ADD COLUMN "careerState" TEXT;
+ALTER TABLE "Profile" ADD COLUMN "contractEndDay" INTEGER;
+ALTER TABLE "Profile" ADD COLUMN "faceitElo" INTEGER DEFAULT 1000;
+ALTER TABLE "Profile" ADD COLUMN "faceitLevel" INTEGER DEFAULT 1;
+ALTER TABLE "Profile" ADD COLUMN "region" TEXT;
+ALTER TABLE "Profile" ADD COLUMN "reputation" INTEGER DEFAULT 0;
+ALTER TABLE "Profile" ADD COLUMN "salary" INTEGER;

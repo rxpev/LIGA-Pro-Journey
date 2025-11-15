@@ -79,6 +79,7 @@ export default function () {
     // save data to redux
     const data = {
       [Constants.WindowIdentifier.Landing]: {
+        ...windowData,
         user: { ...windowData.user, avatar },
       },
     };
@@ -90,6 +91,7 @@ export default function () {
     // save data to redux
     const data = {
       [Constants.WindowIdentifier.Landing]: {
+        ...windowData,
         user: { ...user, avatar },
       },
     };
@@ -129,7 +131,7 @@ export default function () {
       <form className="stack-y">
         <section className="fieldset w-full">
           <label className="label">
-            <span className="label-text">{t('shared.alias')}</span>
+            <span className="label-text text-lg font-semibold">{t('shared.alias')}</span>
           </label>
           <input
             {...register('name', { required: true, pattern: /^[\w]+$/, maxLength: 15 })}
@@ -145,7 +147,8 @@ export default function () {
         </section>
         <section className="fieldset w-full">
           <label className="label">
-            <span className="label-text">{t('shared.country')}</span>
+            <span className="label-text text-lg font-semibold">{t('shared.country')}</span>
+            <span className="label-text-alt italic opacity-80 ml-2">(This affects your starting region!)</span>
           </label>
           <Controller
             name="countryId"

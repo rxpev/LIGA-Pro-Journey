@@ -34,6 +34,15 @@ import {
 } from 'react-router-dom';
 import '@liga/frontend/assets/styles.css';
 
+
+
+/** @constant */
+const ROLE_LABELS: Record<string, string> = {
+  RIFLER: 'Rifler',
+  AWPER: 'AWPer',
+  IGL: 'In-Game Leader',
+};
+
 /** @constant */
 const SETTINGS_VALIDATE_FREQUENCY = 5000;
 
@@ -67,6 +76,10 @@ const routes = createMemoryRouter([
       {
         path: '/calendar',
         element: <Routes.Main.Calendar />,
+      },
+      {
+        path: '/faceit',
+        element: <Routes.Main.Faceit />,
       },
 
       // composite routes
@@ -218,6 +231,7 @@ function Root() {
     ['/', t('navigation.dashboard')],
     ['/inbox', t('navigation.inbox')],
     ['/squad', t('navigation.squadHub')],
+    ['/faceit', 'FACEIT'],
     ['/teams', t('navigation.teams'), useMatch('/teams/*')],
     ['/players', t('navigation.players')],
     ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
@@ -283,56 +297,112 @@ function Root() {
         {/* TEAM INFO DROPDOWN FOR ALL RESOLUTIONS */}
         <section className="dropdown dropdown-end p-2">
           <article tabIndex={0} role="button" className="btn btn-ghost">
-            <Image src={state.profile?.team.blazon || ''} className="h-full w-auto" />
+            <Image
+              src={
+                state.profile?.team?.blazon
+                  ? state.profile.team.blazon
+                  : 'resources://blazonry/009399.svg' // 🟧 teamless fallback
+              }
+              className="h-full w-auto"
+            />
             <FaCaretDown />
           </article>
+
           <ul
             tabIndex={-1}
             className="menu dropdown-content bg-base-100 rounded-box w-64 shadow-sm"
           >
-            <li className="menu-title">{state.profile?.team.name}</li>
-            <li>
-              <a
-                onClick={() =>
-                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                    target: '/team/edit',
-                  })
-                }
-              >
-                Edit Team Details
-              </a>
-            </li>
-            <li>
-              <a
-                onClick={() =>
-                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                    target: '/user',
-                  })
-                }
-              >
-                Edit User Details
-              </a>
-            </li>
-            <li>
-              <a
-                onClick={() =>
-                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                    target: '/settings',
-                  })
-                }
-              >
-                {t('shared.settings')}
-              </a>
-            </li>
-            <div className="divider mt-2 mb-0 before:h-px after:h-px" />
-            <li className="menu-disabled text-muted! italic">
-              <p>
-                Earnings:&nbsp;
-                {Util.formatCurrency(state.profile?.team.earnings || 0, { notation: 'compact' })}
-              </p>
-              <p>{Constants.IdiomaticTier[Constants.Prestige[state.profile?.team.tier]]}</p>
-              <p>Season {state.profile?.season}</p>
-            </li>
+            {state.profile?.team ? (
+              <>
+                {/* Manager / has team */}
+                <li className="menu-title">{state.profile.team.name}</li>
+                <li>
+                  <a
+                    onClick={() =>
+                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                        target: '/team/edit',
+                      })
+                    }
+                  >
+                    Edit Team Details
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                        target: '/user',
+                      })
+                    }
+                  >
+                    Edit User Details
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                        target: '/settings',
+                      })
+                    }
+                  >
+                    {t('shared.settings')}
+                  </a>
+                </li>
+                <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+                <li className="menu-disabled text-muted! italic">
+                  <p>
+                    Earnings:&nbsp;
+                    {Util.formatCurrency(state.profile.team.earnings || 0, { notation: 'compact' })}
+                  </p>
+                  <p>{Constants.IdiomaticTier[Constants.Prestige[state.profile.team.tier]]}</p>
+                  <p>Season {state.profile?.season}</p>
+                </li>
+              </>
+            ) : (
+              <>
+                  {/* Player Career / teamless */}
+                  <li className="menu-title">{state.profile?.player?.name || 'Free Agent'}</li>
+
+                  <li className="px-4 py-2">
+                    <p className="font-medium">
+                      {ROLE_LABELS[state.profile?.player?.role ?? ''] || 'Rifler'}
+                    </p>
+                    <p className="font-medium">{state.profile?.player?.country?.name || 'Unknown Country'}</p>
+                  </li>
+
+                  <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+
+                  <li className="px-4 py-2 text-sm text-warning font-semibold">
+                    You are currently teamless
+                  </li>
+
+                  <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+
+                  <li>
+                    <a
+                      onClick={() =>
+                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                          target: '/user',
+                        })
+                      }
+                    >
+                      Edit Player Profile
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      onClick={() =>
+                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                          target: '/settings',
+                        })
+                      }
+                    >
+                      {t('shared.settings')}
+                    </a>
+                  </li>
+              </>
+            )}
           </ul>
         </section>
       </header>

@@ -129,7 +129,7 @@ export class Score {
 
     // generate the win probability per player
     const totalXp = players
-      .map((player) => Bot.Exp.getTotalXP(JSON.parse(player.stats)))
+      .map((player) => Bot.Exp.getTotalXP(player.xp))
       .reduce((a, b) => a + b);
     return totalXp + team.prestige + team.tier;
   }

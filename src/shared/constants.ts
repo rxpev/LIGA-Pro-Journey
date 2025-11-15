@@ -67,14 +67,34 @@ export enum BotChatter {
  * @enum
  */
 export enum BotDifficulty {
-  EASY = 'Easy',
-  FAIR = 'Fair',
-  NORMAL = 'Normal',
-  TOUGH = 'Tough',
-  HARD = 'Hard',
-  VERY_HARD = 'VeryHard',
-  EXPERT = 'Expert',
-  ELITE = 'Elite',
+  ABYSMAL = 'Abysmal',
+  NOTGOOD = 'NotGood',
+  WORSE = 'Worse',
+  REALLYBAD = 'ReallyBad',
+  POOR = 'Poor',
+  BAD = 'Bad',
+  LOW = 'Low',
+  AVG = 'Avg',
+  MEDIUM = 'Medium',
+  SOLID = 'Solid',
+  FRAGGER = 'Fragger',
+  STAR = 'Star',
+}
+export enum PlayerRole {
+  RIFLER = 'RIFLER',
+  SNIPER = 'SNIPER',
+}
+export enum PersonalityTemplate {
+  LURK = 'LurkPersonality',
+  ALURK = 'ALurkPersonality',
+  PLURK = 'PLurkPersonality',
+  ASNIPER = 'ASniperPersonality',
+  SNIPER = 'SniperPersonality',
+  PSNIPER = 'PSniperPersonality',
+  ARIFLE = 'ARiflePersonality',
+  RIFLE = 'RiflePersonality',
+  PRIFLE = 'PRiflePersonality',
+  ENTRY = 'EntryPersonality',
 }
 
 /**
@@ -559,13 +579,8 @@ export enum TransferStatus {
 
 /** @enum */
 export enum WeaponTemplate {
-  AUTO = 'Auto',
   RIFLE = 'Rifle',
-  PUNCH = 'Punch',
   SNIPER = 'Sniper',
-  POWER = 'Power',
-  SHOTGUN = 'Shotgun',
-  SPRAY = 'Spray',
 }
 
 /**
@@ -830,13 +845,11 @@ export const GameSettings = {
   // general settings
   BOT_VOICEPITCH_MAX: 125,
   BOT_VOICEPITCH_MIN: 80,
-  BOT_WEAPONPREFS_PROBABILITY_RIFLE: 3,
-  BOT_WEAPONPREFS_PROBABILITY_SNIPER: 1,
   LOGS_DIR: 'logs',
   SERVER_CVAR_GAMEOVER_DELAY: 5,
-  SERVER_CVAR_MAXROUNDS: 30,
+  SERVER_CVAR_MAXROUNDS: 24,
   SERVER_CVAR_MAXROUNDS_OT: 6,
-  SERVER_CVAR_FREEZETIME: 15,
+  SERVER_CVAR_FREEZETIME: 10,
   SQUAD_STARTERS_NUM: 5,
   STEAM_EXE: 'steam.exe',
   STEAM_LIBRARIES_FILE: 'steamapps/libraryfolders.vdf',
@@ -909,8 +922,8 @@ export const GameSettings = {
 
   // rcon settings
   RCON_MAX_ATTEMPTS: 10,
-  RCON_PASSWORD: 'liga',
-  RCON_PORT: 27015,
+  RCON_PASSWORD: 'rxpev45',
+  RCON_PORT: 27016,
 };
 
 /**
@@ -1203,6 +1216,7 @@ export const Settings = {
     simulationMode: SimulationMode.DEFAULT,
     steamPath: null as string,
     gamePath: null as string,
+    dedicatedServerPath: null as string,
     botChatter: BotChatter.RADIO,
     gameLaunchOptions: null as string,
     theme: ThemeType.SYSTEM,
@@ -1767,48 +1781,23 @@ export const TransferSettings = {
  */
 export const WeaponTemplates = {
   [Game.CS16]: {
-    [WeaponTemplate.AUTO]: [] as Array<string>,
     [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.PUNCH]: ['aug', 'sg552', 'famas', 'galil', 'mp5'],
     [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.POWER]: ['m249', 'xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SHOTGUN]: ['xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SPRAY]: ['p90', 'tmp', 'mac10', 'mp5'],
   },
   [Game.CS2]: {
-    [WeaponTemplate.AUTO]: [] as Array<string>,
     [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.PUNCH]: ['aug', 'sg556', 'famas', 'galilar', 'mp7'],
     [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.POWER]: ['m249', 'xm1014', 'nova', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SHOTGUN]: ['xm1014', 'nova', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SPRAY]: ['p90', 'mp9', 'mac10', 'mp7'],
   },
   [Game.CSGO]: {
-    [WeaponTemplate.AUTO]: [] as Array<string>,
-    [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.PUNCH]: ['aug', 'sg556', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.POWER]: ['m249', 'xm1014', 'nova', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SHOTGUN]: ['xm1014', 'nova', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SPRAY]: ['p90', 'mp9', 'mac10', 'mp7'],
+    [WeaponTemplate.RIFLE]: ['ak47', 'aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas','mp9', 'mac10', 'ump45', 'mp7'],
+    [WeaponTemplate.SNIPER]: ['awp', 'ak47','aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas', 'ssg08', 'mp9', 'mac10', 'ump45', 'mp7'],
   },
   [Game.CSS]: {
-    [WeaponTemplate.AUTO]: [] as Array<string>,
     [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.PUNCH]: ['aug', 'sg552', 'famas', 'galil', 'mp5'],
     [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.POWER]: ['m249', 'xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SHOTGUN]: ['xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SPRAY]: ['p90', 'tmp', 'mac10', 'mp5'],
   },
   [Game.CZERO]: {
-    [WeaponTemplate.AUTO]: [] as Array<string>,
     [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.PUNCH]: ['aug', 'sg552', 'famas', 'galil', 'mp5'],
     [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.POWER]: ['m249', 'xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SHOTGUN]: ['xm1014', 'm3', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SPRAY]: ['p90', 'tmp', 'mac10', 'mp5'],
   },
 };

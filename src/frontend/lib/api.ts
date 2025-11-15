@@ -113,6 +113,19 @@ export default {
         Array<Prisma.FederationGetPayload<T>>
       >,
   },
+  faceit: {
+    profile: () =>
+      ipcRenderer.invoke('faceit:getProfile') as Promise<{
+        faceitElo: number;
+        faceitLevel: number;
+        recent: any[];
+      }>,
+
+    queue: () =>
+      ipcRenderer.invoke('faceit:queuePug') as Promise<{
+        pugId: string | number;
+      }>,
+  },
   ipc: {
     invoke: (route: string, payload: unknown) =>
       ipcRenderer.invoke(route, payload) as Promise<unknown>,
@@ -206,9 +219,19 @@ export default {
         user?: Partial<Prisma.PlayerGetPayload<unknown>>;
         team?: Partial<Prisma.TeamGetPayload<unknown>>;
         today?: Date;
+        faceitElo: 1200,
+        faceitLevel: 4,
       },
       settings?: string,
     ) => ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CREATE, data, settings) as Promise<Profile>,
+
+    createPlayerCareer: (data: {
+      playerName: string;
+      countryId: number;
+      role: string;
+    }) =>
+      ipcRenderer.invoke('profiles:createPlayerCareer', data) as Promise<Profile>,
+
     current: <T = typeof Eagers.profile>() =>
       ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CURRENT) as Promise<
         Prisma.ProfileGetPayload<T>

@@ -9,38 +9,40 @@
  * @see https://www.prisma.io/docs/guides/database/seed-database
  * @module
  */
-import 'dotenv/config';
-import fs from 'fs';
-import path from 'path';
-import log from 'electron-log';
-import { PrismaClient } from '@prisma/client';
-import { program } from 'commander';
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import log from "electron-log";
+import { PrismaClient } from "@prisma/client";
+import { program } from "commander";
 
 /**
  * Initialize the local prisma client.
- *
- * @function
  */
 const prisma = new PrismaClient();
 
 /**
  * Configure known args for seeders.
- *
- * @constant
  */
-const argParser = program
-  .argument('[seeder]', 'The name of a specific seeder to run')
-  .option('-t --token <token>', 'Pandascore Access Token');
+program
+  .argument("[seeder]", "Run a specific seeder (optional)")
+  .option("-t, --token <token>", "Pandascore Access Token")
+  // 👇 our new CLI options
+  .option("--mode <mode>", "Career mode: MANAGER or PLAYER", "MANAGER")
+  .option("--playerName <name>", "Player name")
+  .option("--countryId <id>", "Country ID", (v) => parseInt(v, 10))
+  .option("--role <role>", "Player role (RIFLER | AWPER | IGL)");
+
+program.parse(process.argv);
+const opts = program.opts();
+const args = program.args;   
+const [seederOverride] = args;
 
 /**
- * Runs all of the known seeder functions
- * sorted by creation date.
- *
- * @function
+ * Runs all of the known seeder functions sorted by creation date.
  */
 async function main() {
-  const args = argParser.parse();
-  const [seederOverride] = args.processedArgs;
+  log.info("Seeder options: %O", opts);
 
   // collect seed files
   const seeders = fs
@@ -48,29 +50,31 @@ async function main() {
     .filter((seeder) =>
       fs.statSync(path.join(__dirname, seeder)).isFile() && seederOverride
         ? seeder === seederOverride
-        : seeder !== path.basename(__filename),
+        : seeder !== path.basename(__filename)
     )
     .map((seeder) => ({
       name: seeder,
-      func: require('./' + seeder),
+      func: require("./" + seeder),
     }));
 
-  // sequentially run seeders since some may
-  // rely on data existing before running
   for (const seeder of seeders) {
-    const name = seeder.name.replace(/(?:\d+)-(.+)\.ts/, '$1');
-    log.info('Running Seeder: %s', name);
-    await seeder.func.default(prisma, args.opts());
+    const name = seeder.name.replace(/(?:\d+)-(.+)\.ts/, "$1");
+
+    // Skip unwanted seeders
+    if (["prestige", "game-versions", "game-maps", "game-map-pool"].includes(name)) {
+      log.warn(`Skipping Seeder: ${name} (disabled for now)`);
+      continue;
+    }
+
+    log.info("Running Seeder: %s", name);
+    await seeder.func.default(prisma, opts);
   }
 
-  // finish up
   return Promise.resolve();
 }
 
 /**
  * Self-invoking bootstrapping logic.
- *
- * @function anonymous
  */
 (async () => {
   try {
