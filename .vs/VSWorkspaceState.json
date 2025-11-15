@@ -3,7 +3,11 @@
     "",
     "\\src",
     "\\src\\backend",
-    "\\src\\frontend"
+    "\\src\\frontend",
+    "\\src\\frontend\\routes",
+    "\\src\\frontend\\routes\\main",
+    "\\src\\frontend\\routes\\main\\faceit"
   ],
+  "SelectedNode": "\\src\\frontend\\routes\\main\\index.ts",
   "PreviewInSolutionExplorer": false
 }
