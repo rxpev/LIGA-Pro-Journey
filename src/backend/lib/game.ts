@@ -179,6 +179,7 @@ export function getGameExecutable(game: string, rootPath: string | null) {
  * @function
  */
 export async function getGameLogFile(game: string, rootPath: string) {
+  // Decide base log directory based only on game + rootPath
   const basePath = (() => {
     switch (game) {
       case Constants.Game.CS16:
@@ -209,21 +210,42 @@ export async function getGameLogFile(game: string, rootPath: string) {
           Constants.GameSettings.CZERO_GAMEDIR,
           Constants.GameSettings.LOGS_DIR,
         );
-      default:
+      default: {
+        // CSGO
+        // rootPath for CS:GO will be either:
+        // - steam client folder (…\common\Counter-Strike Global Offensive)
+        // - dedicated server root (…\csgo-ds)
+        const basename = path.basename(rootPath).toLowerCase();
+
+        if (basename === 'csgo') {
+          // already at the game folder ...\csgo
+          return path.join(rootPath, Constants.GameSettings.LOGS_DIR);
+        }
+
+        if (basename === 'csgo-ds') {
+          // dedicated server root ...\csgo-ds -> ...\csgo\logs
+          return path.join(rootPath, 'csgo', Constants.GameSettings.LOGS_DIR);
+        }
+
+        // fallback: treat rootPath like the original gamePath
         return path.join(
           rootPath,
           Constants.GameSettings.CSGO_BASEDIR,
           Constants.GameSettings.CSGO_GAMEDIR,
           Constants.GameSettings.LOGS_DIR,
         );
+      }
     }
   })();
+
+  log.info(`[getGameLogFile] game=${game}, rootPath=${rootPath}, basePath=${basePath}`);
 
   // bail early if the logs path does not exist
   try {
     await fs.promises.access(basePath, fs.constants.F_OK);
   } catch (_) {
-    return Promise.resolve('');
+    log.warn(`[getGameLogFile] logs path does not exist: ${basePath}`);
+    return '';
   }
 
   // grab log files and sort by newest
@@ -231,11 +253,15 @@ export async function getGameLogFile(game: string, rootPath: string) {
   files.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   if (!files.length) {
+    log.warn(`[getGameLogFile] no log files in ${basePath}`);
     return '';
   }
 
-  return files[0].fullpath();
+  const full = files[0].fullpath();
+  log.info(`[getGameLogFile] picked log: ${full}`);
+  return full;
 }
+
 
 /**
  * Throws an exception if the specified game is running.
@@ -525,7 +551,9 @@ export class Server {
 
     // clean up connections to processes and/or files
     try {
-      await this.scorebot.quit();
+      if (this.scorebot) {
+        await this.scorebot.quit();
+      }
       gameClientProcess = null;
     } catch (error) {
       this.log.warn(error);
@@ -536,6 +564,7 @@ export class Server {
       path.join(this.settings.general.gamePath, this.baseDir, this.gameDir),
     );
   }
+
 
   /**
    * Patches the `configs/bot_names.txt` file for the CSGOBetterBots plugin to
@@ -1608,8 +1637,10 @@ End\n
    * @function
    */
   public async start(): Promise<void> {
+    // 1) Prepare files / plugins / cfgs
     await this.prepare();
 
+    // 2) Launch server / initial client depending on game
     switch (this.settings.general.game) {
       case Constants.Game.CS16:
         await this.launchClientCS16();
@@ -1624,10 +1655,12 @@ End\n
         await this.launchClientCZERO();
         break;
       default:
+        // CSGO: dedicated server first, client later
         this.launchServerCSGO();
         break;
     }
 
+    // 3) Connect to RCON (server)
     this.rcon = new RCON.Client(
       this.getLocalIP(),
       Constants.GameSettings.RCON_PORT,
@@ -1642,9 +1675,100 @@ End\n
 
     try {
       await this.rcon.init();
-      await this.launchClientCSGO();
     } catch (error) {
       this.log.warn(error);
     }
+
+    // 4) For CSGO: now launch the client (after server is up)
+    if (this.settings.general.game === Constants.Game.CSGO) {
+      await this.launchClientCSGO();
+    }
+
+    // 5) Attach client process handlers (all games with a client)
+    if (gameClientProcess) {
+      gameClientProcess.on('error', (error) => {
+        this.log.error(error);
+      });
+
+      gameClientProcess.on('close', this.cleanup.bind(this));
+    }
+
+    // 6) Start scorebot on the correct log file (dedicated-aware)
+    const logRoot =
+      this.settings.general.game === Constants.Game.CSGO
+        ? (this.settings.general.dedicatedServerPath || this.settings.general.gamePath)
+        : this.settings.general.gamePath;
+
+    const logFile = await getGameLogFile(
+      this.settings.general.game,
+      logRoot,
+    );
+
+    this.log.info(`Scorebot watching log file: ${logFile}`);
+
+
+    this.scorebot = new Scorebot.Watcher(logFile);
+
+    try {
+      await this.scorebot.start();
+    } catch (error) {
+      this.log.error(error);
+      throw error;
+    }
+
+    // 7) Push events into in-memory buffer
+    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ASSISTED, (payload) =>
+      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_ASSISTED, payload }),
+    );
+    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_KILLED, (payload) =>
+      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_KILLED, payload }),
+    );
+    this.scorebot.on(Scorebot.EventIdentifier.ROUND_OVER, (payload) =>
+      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.ROUND_OVER, payload }),
+    );
+
+    // Small CS2 helper hooks you had before (optional; keep if they exist in your version)
+    this.scorebot.on(Scorebot.EventIdentifier.SAY, async (payload) => {
+      if (payload === '.ready' && this.settings.general.game === Constants.Game.CS2) {
+        this.rcon.send('mp_warmup_end');
+      }
+    });
+    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ENTERED, async () => {
+      if (this.settings.general.game === Constants.Game.CS2) {
+        await Util.sleep(Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY * 500);
+        this.rcon.send('exec liga-bots');
+      }
+    });
+
+    // 8) Resolve when GAME_OVER fires – like original LIGA
+    return new Promise((resolve) => {
+      this.scorebot.on(Scorebot.EventIdentifier.GAME_OVER, async (payload) => {
+        // In CS:GO/CS2 we delay + adjust score ordering for OT
+        if (
+          this.settings.general.game === Constants.Game.CS2 ||
+          this.settings.general.game === Constants.Game.CSGO
+        ) {
+          await Util.sleep(Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY * 1000);
+
+          const totalRoundsPlayed = payload.score.reduce((a, b) => a + b, 0);
+          if (totalRoundsPlayed > this.settings.matchRules.maxRounds) {
+            const totalRoundsOvertime =
+              totalRoundsPlayed - this.settings.matchRules.maxRounds;
+            const overtimeCount = Math.ceil(
+              totalRoundsOvertime / this.settings.matchRules.maxRoundsOvertime,
+            );
+
+            // odd overtime segments → swap reported scores
+            if (overtimeCount % 2 === 1) {
+              payload.score.reverse();
+            }
+          }
+        }
+
+        this.log.info('Final result: %O', payload);
+        this.result = payload;
+        resolve();
+      });
+    });
   }
 }

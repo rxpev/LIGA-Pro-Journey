@@ -8,6 +8,7 @@ import log from 'electron-log';
 import { ipcMain } from 'electron';
 import { flatten, merge, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
+import { saveFaceitResult } from "@liga/backend/lib/save-result";
 import {
   DatabaseClient,
   Game,
@@ -149,8 +150,6 @@ export default function () {
     // start the server and play the match
     const gameServer = new Game.Server(profile, match, null, spectating);
     await gameServer.start();
-
-    // game over; collect postgame info
     const [homeScore, awayScore] = gameServer.result.score;
     const [home, away] = match.competitors;
     const gameScore = {

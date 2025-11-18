@@ -124,6 +124,8 @@ export default {
       ipcRenderer.invoke('faceit:queuePug') as Promise<any>,
     startMatch: (room: any) =>
       ipcRenderer.invoke('faceit:startMatch', room),
+    getMatchData: (id: number | string) =>
+      ipcRenderer.invoke("faceit:getMatchData", id),
   },
   ipc: {
     invoke: (route: string, payload: unknown) =>

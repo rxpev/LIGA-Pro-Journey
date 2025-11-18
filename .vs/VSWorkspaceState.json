@@ -5,10 +5,7 @@
     "\\src\\backend",
     "\\src\\frontend",
     "\\src\\frontend\\routes",
-    "\\src\\frontend\\routes\\main",
-    "\\src\\frontend\\routes\\main\\faceit",
     "\\src\\shared"
   ],
-  "SelectedNode": "\\src\\shared\\bot.ts",
   "PreviewInSolutionExplorer": false
 }
