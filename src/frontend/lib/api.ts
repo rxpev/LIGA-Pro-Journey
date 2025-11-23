@@ -115,10 +115,21 @@ export default {
   },
   faceit: {
     profile: () =>
-      ipcRenderer.invoke('faceit:getProfile') as Promise<{
+      ipcRenderer.invoke("faceit:getProfile") as Promise<{
         faceitElo: number;
         faceitLevel: number;
         recent: any[];
+        lifetime: {
+          matchesPlayed: number;
+          wins: number;
+          losses: number;
+          winRate: number;
+          kills: number;
+          deaths: number;
+          assists: number;
+          kdRatio: number;
+          hsPercent: number;
+        };
       }>,
     queue: () =>
       ipcRenderer.invoke('faceit:queuePug') as Promise<any>,
@@ -136,6 +147,18 @@ export default {
     ) => ipcRenderer.invoke("faceit:startMatch", room),
     getMatchData: (id: number | string) =>
       ipcRenderer.invoke("faceit:getMatchData", id),
+    last20Stats: () =>
+      ipcRenderer.invoke("faceit:getLast20Stats") as Promise<{
+        matchesPlayed: number;
+        wins: number;
+        losses: number;
+        winRate: number;
+        kills: number;
+        deaths: number;
+        assists: number;
+        kdRatio: number;
+        hsPercent: number;
+      }>,
   },
   ipc: {
     invoke: (route: string, payload: unknown) =>

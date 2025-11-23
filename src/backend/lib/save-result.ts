@@ -20,7 +20,7 @@ export async function saveFaceitResult(
   const maxRoundsOT = settings.matchRules.maxRoundsOvertime;
 
   // ---------------------------------------------------------------------------
-  // SCORE CALCULATION WITH HALFTIME + OVERTIME SWITCH LOGIC
+  // SCORE CALCULATION
   // ---------------------------------------------------------------------------
 
   const roundEvents = (gameServer.scorebotEvents || []).filter(
@@ -31,8 +31,6 @@ export async function saveFaceitResult(
   let scoreB = 0;
   let half = 0;
   let rounds = 1;
-
-  const teamCount = gameServer.competitors?.length ?? 2;
 
   const computeWinner = (eventWinner: number, half: number, rounds: number) => {
     let invert = half % 2 === 1;
@@ -64,7 +62,8 @@ export async function saveFaceitResult(
     if (rounds > maxRounds) {
       const roundsOT = rounds - maxRounds;
       const otRound = ((roundsOT - 1) % maxRoundsOT) + 1;
-      if (otRound === maxRoundsOT / 2 || otRound === maxRoundsOT) half++;
+      if (otRound === maxRoundsOT / 2 || otRound === maxRoundsOT)
+        half++;
     } else {
       if (rounds === maxRounds / 2 || rounds === maxRounds) half++;
     }
@@ -107,7 +106,7 @@ export async function saveFaceitResult(
   if (!players.find((p) => p.id === userPlayer.id)) players.push(userPlayer);
 
   // ---------------------------------------------------------------------------
-  // PLAYER ID RESOLUTION
+  // PLAYER ID MAPPING
   // ---------------------------------------------------------------------------
 
   const resolvePlayerId = (
@@ -131,7 +130,7 @@ export async function saveFaceitResult(
   };
 
   // ---------------------------------------------------------------------------
-  // EVENT MAPPING (no halves for FACEIT)
+  // EVENT MAPPING
   // ---------------------------------------------------------------------------
 
   const events = Array.isArray(gameServer.scorebotEvents)
@@ -162,8 +161,14 @@ export async function saveFaceitResult(
     );
 
     return {
-      payload: JSON.stringify(event),
-      timestamp: event.payload.timestamp,
+      payload: JSON.stringify({
+        type: event.type,
+        payload: {
+          ...event.payload,
+          timestamp: event.payload.timestamp ?? new Date(),
+        },
+      }),
+      timestamp: event.payload.timestamp ?? new Date(),
       half: 0,
       attackerId,
       victimId,
@@ -174,13 +179,15 @@ export async function saveFaceitResult(
   });
 
   // ---------------------------------------------------------------------------
-  // WRITE MATCH DATA TO DB
+  // WRITE MATCH DATA
   // ---------------------------------------------------------------------------
 
   await prisma.match.update({
     where: { id: dbMatchId },
     data: {
       status: Constants.MatchStatus.COMPLETED,
+
+      date: new Date(), // update match finish timestamp
 
       players: {
         connect: players.map((p) => ({ id: p.id })),
@@ -253,6 +260,7 @@ export async function saveFaceitResult(
     data: { faceitElo: profile.faceitElo + deltaA },
   });
 
+  // ⭐ Update teammates' Elo
   await Promise.all(
     teamA
       .filter((p) => p.id !== profile.player.id)
@@ -264,6 +272,7 @@ export async function saveFaceitResult(
       )
   );
 
+  // ⭐ Update opponents' Elo
   await Promise.all(
     teamB.map((bot) =>
       prisma.player.update({
@@ -272,6 +281,10 @@ export async function saveFaceitResult(
       })
     )
   );
+
+  // ---------------------------------------------------------------------------
+  // FINAL FACEIT METADATA
+  // ---------------------------------------------------------------------------
 
   await prisma.match.update({
     where: { id: dbMatchId },

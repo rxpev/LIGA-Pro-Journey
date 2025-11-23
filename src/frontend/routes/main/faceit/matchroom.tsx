@@ -10,6 +10,7 @@ import {
   faceitMatchCompleted,
   faceitRoomSet,
   faceitVetoSet,
+  faceitVetoClear,
 } from "@liga/frontend/redux/actions";
 
 // ------------------------------
@@ -442,7 +443,12 @@ export default function MatchRoom({
           </h1>
 
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (state.faceitMatchCompleted) {
+                dispatch(faceitVetoClear());
+              }
+              onClose();
+            }}
             className="px-4 py-2 bg-neutral-700 rounded hover:bg-neutral-600"
           >
             Back

@@ -212,15 +212,15 @@ model MapPool {
 }
 
 model Match {
-  id              Int           @id @default(autoincrement())
+  id               Int        @id @default(autoincrement())
+  matchType        String     @default("LEAGUE")
 
-  matchType       String        @default("LEAGUE") // "LEAGUE" | "TOURNAMENT" | "FACEIT_PUG"
+  date             DateTime   @default(now())
 
-  date            DateTime      @default(now())
-  payload         String
-  round           Int?
-  status          Int
-  totalRounds     Int?
+  payload          String
+  round            Int?
+  status           Int
+  totalRounds      Int?
 
   faceitEloDelta   Int?
   faceitRating     Float?
@@ -228,20 +228,18 @@ model Match {
   faceitTeammates  String?
   faceitOpponents  String?
 
-  // LEAGUE / TOURNAMENT relationships
-  competitionId   Int?
-  competition     Competition?  @relation(fields: [competitionId], references: [id])
+  competitionId    Int?
+  competition      Competition? @relation(fields: [competitionId], references: [id])
 
-  // PLAYER CAREER relationship
-  profileId       Int?
-  profile         Profile?      @relation(fields: [profileId], references: [id])
+  profileId        Int?
+  profile          Profile?     @relation(fields: [profileId], references: [id])
 
-  // Relations
-  events          MatchEvent[]
-  games           Game[]
-  competitors     MatchToTeam[]
-  players         Player[]
+  events           MatchEvent[]
+  games            Game[]
+  competitors      MatchToTeam[]
+  players          Player[]
 }
+
 
 model MatchEvent {
   id                  Int                 @id @default(autoincrement())
