@@ -810,6 +810,7 @@ End\n
             : this.faceitUserSide === 'ct'
               ? 'CT'
               : 'any',
+        damage_prints: 0,
       }
       : {
         demo: true,
@@ -827,6 +828,7 @@ End\n
         startmoney: this.settings.matchRules.startMoney,
         bombTimer: this.settings.matchRules.bombTimer,
         defuserAllocation: this.settings.matchRules.defuserAllocation,
+        damage_prints: 0,
 
         match_stat: this.match.competition.tier.name,
         teamflag_t: home.team.country.code,

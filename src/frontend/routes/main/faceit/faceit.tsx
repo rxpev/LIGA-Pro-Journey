@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import MatchRoom from "./matchroom";
 import { AppStateContext } from "@liga/frontend/redux";
 import { faceitRoomSet, faceitRoomClear } from "@liga/frontend/redux/actions";
+import { shuffle } from "lodash";
 
 import Scoreboard from "./scoreboard";
 
@@ -240,7 +241,21 @@ export default function Faceit(): JSX.Element {
   const finishQueue = async () => {
     try {
       const res = await api.faceit.queue();
-      dispatch(faceitRoomSet(res, null));
+
+      const shuffledTeamA = shuffle(res.teamA);
+      const shuffledTeamB = shuffle(res.teamB);
+
+      dispatch(
+        faceitRoomSet(
+          {
+            ...res,
+            teamA: shuffledTeamA,
+            teamB: shuffledTeamB,
+          },
+          null
+        )
+      );
+
       setShowMatchRoom(true);
     } finally {
       setQueueing(false);

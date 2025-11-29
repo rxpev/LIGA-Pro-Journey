@@ -83,10 +83,6 @@ function getTeamAvgLevel(team: MatchPlayer[]): number {
   return levelFromElo(getTeamAvgElo(team));
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
-}
-
 // ------------------------------
 // COMPONENT
 // ------------------------------
@@ -113,9 +109,8 @@ export default function MatchRoom({
     eloLoss,
   } = room;
 
-  // Randomize team lineups once per mount
-  const [shuffledTeamA] = useState<MatchPlayer[]>(() => shuffle(teamA));
-  const [shuffledTeamB] = useState<MatchPlayer[]>(() => shuffle(teamB));
+  const shuffledTeamA = teamA;
+  const shuffledTeamB = teamB;
 
   // Captains = first player in each team (after shuffle)
   const captainA = shuffledTeamA[0];
