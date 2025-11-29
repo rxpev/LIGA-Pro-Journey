@@ -1126,7 +1126,7 @@ End\n
   /**
    * Starts the game client.
    *
-   * If CS16 is enabled, also starts the game server.
+   *
    *
    * @function
    */

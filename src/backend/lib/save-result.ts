@@ -27,12 +27,16 @@ export async function saveFaceitResult(
   const payload = dbMatch?.payload ? JSON.parse(dbMatch.payload) : {};
   const sides = payload.sides || {};
 
-  const tTeamId = Number(Object.keys(sides).find(k => sides[k] === "t"));
-  const ctTeamId = Number(Object.keys(sides).find(k => sides[k] === "ct"));
+  const tTeamId = Number(Object.keys(sides).find((k) => sides[k] === "t"));
+  const ctTeamId = Number(Object.keys(sides).find((k) => sides[k] === "ct"));
 
   let scoreA = 0;
   let scoreB = 0;
 
+  // "half" counts how many times sides have flipped so far
+  //  - 0: starting sides
+  //  - 1: after first flip
+  //  - 2: after second flip, etc.
   let half = 0;
   let rounds = 1;
 
@@ -45,17 +49,31 @@ export async function saveFaceitResult(
     let effectiveWinner = w;
 
     if (rounds > maxRounds) {
+
       const roundsOT = rounds - maxRounds;
       const otRound = ((roundsOT - 1) % maxRoundsOT) + 1;
-      const otIndex = Math.ceil(roundsOT / maxRoundsOT);
-      const isSideFlip = otRound === maxRoundsOT / 2 || otRound === maxRoundsOT;
-      const doInvert = otIndex % 2 === 1;
-      if (doInvert) effectiveWinner = flipWinner(effectiveWinner);
-      if (isSideFlip) half++;
+      const isSideFlip =
+        otRound === maxRoundsOT / 2 || otRound === maxRoundsOT;
+
+      if (half % 2 === 1) {
+        effectiveWinner = flipWinner(effectiveWinner);
+      }
+
+      if (isSideFlip) {
+        half++;
+      }
     } else {
-      const isSideFlip = rounds === maxRounds / 2 || rounds === maxRounds;
-      if (half % 2 === 1) effectiveWinner = flipWinner(effectiveWinner);
-      if (isSideFlip) half++;
+
+      const isSideFlip =
+        rounds === maxRounds / 2 || rounds === maxRounds;
+
+      if (half % 2 === 1) {
+        effectiveWinner = flipWinner(effectiveWinner);
+      }
+
+      if (isSideFlip) {
+        half++;
+      }
     }
 
     const winnerTeamId =
@@ -268,3 +286,4 @@ export async function saveFaceitResult(
 
   return true;
 }
+
