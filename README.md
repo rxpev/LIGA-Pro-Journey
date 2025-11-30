@@ -1,115 +1,107 @@
 <div align="center">
   <p>
     <a href="https://discord.gg/ZaEwHfDD5N"><img src="https://img.shields.io/discord/1296858234853789826?style=for-the-badge&label=Discord&logo=discord&logoColor=white" /></a>
-    <a href="https://playliga.gg/#/#download"><img src="https://img.shields.io/badge/download-latest-salmon?style=for-the-badge&logo=github" /></a>
-    <a href="https://github.com/playliga/prototype/milestones"><img src="https://img.shields.io/badge/view_the-roadmap-blue?style=for-the-badge&logo=rocket&logoColor=white" /></a>
   </p>
-  <p>The world's first Esports simulator for Counter-Strike where you can play your matches in-game or simulate them, you choose!</p>
+
+  <h1>LIGA: Pro Journey</h1>
+  <p>Experience the full journey of becoming a professional Counter-Strike player — queue, compete, rank up, earn ELO, and build your legacy.</p>
 </div>
 
-# APIs and Technologies
+---
 
-- Node `v22.14.x`.
-- Electron `v36.x`.
-- SQLite `v5.x`.
-  - On Windows, Python `3.10` or above [is required](https://github.com/nodejs/node-gyp#on-windows).
+# 🎮 Features
 
-# Getting Started
+### **Interactive Role Selection**
+Choose your identity:
+- **Rifler**
+- **AWPer**
+- **In-Game Leader**
 
-> [!IMPORTANT]
-> On windows, `npm start` must be run from CMD.exe, Powershell, or WSL2. [More Info](https://www.electronforge.io/templates/typescript-+-webpack-template).
+<img width="637" height="463" alt="image" src="https://github.com/user-attachments/assets/1bba50b0-2464-4743-aa19-8752521bd15d" />
 
-```bash
-npm install
-npm start
-```
+The role you choose will impact how you play in-game and how likely teams are to offer you a spot.
 
-# Resetting the Database
+---
 
-> [!IMPORTANT]
-> A [Pandascore Access Token](https://app.pandascore.co/dashboard/main) is required.
+### **FACEIT-Inspired Progression**
+A full FACEIT-style matchmaking system:
+- Get matched against opponents in your ELO range 
+- Play your matches in-game  
+- Earn ELO   
+- Track win rate, streaks and player stats  
 
-This application uses [Prisma ORM](https://www.prisma.io/) to manage its database interactions.
+Play FACEIT to get recognized by Esports Organizations. Your journey from **Level 1 to Pro** happens here!
 
-A unique Prisma Client is generated from the schema defined in source control which sometimes may need to be regenerated along with the database for troubleshooting purposes.
+<img width="1891" height="721" alt="image" src="https://github.com/user-attachments/assets/1b2b249a-24a9-4072-a9fc-21749a6242b5" />
 
-```bash
-npm run db:reset
-```
+---
 
-After resetting the database the teams and players data will be repopulated using [PandaScore API](https://pandascore.co). A token must be provided in the `.env` file in order for this to work.
+### **Advanced Bot Behaviors (BetterBotsPlus)**
+Powered by my custom bot enhancer:
+- Smarter enemy desicions (ECO rounds, bots drop guns for each other and **much** more!) 
+- Realistic utility usage (over 800 grenades on 10 maps)  
+- More challenging aim and movement  
 
-# Development CLI
+**This makes every match feel closer to real Play.**
 
-Provides convenience wrappers and business logic for common development tasks.
+*Bots throw advanced utility*
 
-```bash
-npm run cli help
-```
+![ezgif-2f87161e0ac349b4](https://github.com/user-attachments/assets/48c3a4f1-17f4-41c4-bf50-7c5dcf43066b)
 
-# Building
+*A rifler Bot dropping an AWP to his AWPer*
 
-Generate platform specific distributables.
+![ezgif-24035d679ff71b7b](https://github.com/user-attachments/assets/54cec0ed-75a9-4dc7-bafd-07d33521d90f)
 
-[More Info](https://www.electronforge.io/config/makers).
+---
 
-```bash
-npm run make
-```
+# 🛠️ Development
 
-## Publishing
+### This Mod is still in development.
+**Currently, I am focusing on restructuring most of the game. This includes:**
 
-> [!IMPORTANT]
-> A [Github Access Token](https://github.com/settings/tokens) is required.
+- Stripping it of a lot of unused code for my goals
+- Changing most frontend tabs to fit a player career
+- Changing most of the transfer logic
+- Big overhaul on the worlgen and simulation side
 
-The publish command will build the application and publish it to Github as a draft release.
+**Some new features are also planned:**
 
-```bash
-export GITHUB_TOKEN="<...>"
-npm run publish
-```
+- Expanding LIGA's seasons with realistic tournaments
+- Creating a realistic player database
+- Adding an 'Agents' tab -> these will help you get contracts from Organizations
 
-## Updating Application Icon
+Currently, my modification of LIGA is **only playable** on my setup. I am actively working on it, but it will take a lot of time. Here is a rough plan of what I want to achieve & have already achieved:
 
-The installers only accept an `.ico` file so it must be manually converted from the base `assets/icon.png` image.
+- Career model refactor: “Manager” → “Player Career” foundation ✅
+- New save creation flow: create you (name/country/role) & start as teamless ✅
+- FACEIT system: ELO stat + queue → play pugs to get seen ✅
+- Contract & offers system from the player perspective 🛠️  
+- Team life as a player: squad hub, being benched/kicked, no transfer control ❌🔜
+- Progression & XP gains for everyone (no manual “team training” UI) ❌🔜
+- Role-specific gameplay mechanics (AWPer restrictions, IGL veto, Rifler as default) ❌🔜
+- UI / UX cleanup: Inbox rewrite, Player DB lock-down & refactor, Sponsor backgrounding, remove simulation, change worldgen ❌🔜
+- Polish and balancing pass (offer frequency, ELO curves, XP curves, role value) ❌🔜
 
-[More Info](https://www.electronforge.io/guides/create-and-add-icons#configuring-installer-icons).
+---
 
-```bash
-npm run gen:icon
-```
+# ❓ Why Does This Fork / Mod Exist?
 
-# Miscellaneous
+LIGA: Pro Journey exists because of three passions coming together:
 
-## Marketing
+1. A love for creating bots and AI-driven gameplay
 
-The resolution used for games and the app should be set to `1280x960`.
+I’ve always enjoyed experimenting with bot behavior in games - making them smarter, more reactive, and more realistic.
+BetterBotsPlus (also heavily inspired by manico's BetterBots) started as a personal playground for AI improvements and making them as close to real players as possible, and this fork aims to bring those bots into a full team-based, career-driven environment for others to enjoy.
 
-The game being demoed should also be running in window mode so that the transition between app and game is seamless when taking videos.
+2. Challenging myself with a large technical project
 
-## Transcoding Videos
+I wanted to learn new languages, dive deeper into game systems, and take on the challenge of refactoring and reshaping an entire game.
+LIGA’s open-source nature made it the perfect foundation to tear apart, rebuild, and transform into something new. Big thank you to lemonpole for being supportive and helping with issues I come across!
 
-`.webm` format should be used for videos such as the one used in the landing page because `.mp4` has stuttering and performance issues.
+3. Creating the Player Career Mode Counter-Strike never had
 
-VP9 prefers to encode in two passes so the first pass compiles a log file with statistics about the video file which is then used in the second pass to make the video.
+I’ve always enjoyed FIFA’s Player Career - your own journey, progression, contracts, and development.
+LIGA had a Manager Career, but no way to experience the climb from nobody → FACEIT grinder → rising star → contracted pro.
 
-```bash
-ffmpeg -i landing.mp4 -b:v 0 -crf 30 -pass 1 -an -f webm -y /dev/null
-ffmpeg -i landing.mp4 -b:v 0 -crf 30 -pass 2 landing.webm
-```
-
-For VP9, the CRF can range from 0 (best quality) to 63 (smallest file size). It is set to `30` above for roughly, medium quality.
-
-## Converting PNG to SVG
-
-SVGs are great for responsive apps so if it's feasible, consider converting that PNG to an SVG using [ImageMagick](http://www.imagemagick.org/Usage/draw/#svg_output) and [AutoTrace](https://github.com/autotrace/autotrace).
-
-```bash
-convert autotrace:src/assets/logo.png src/icons/logo.svg
-```
-
-# Troubleshooting
-
-## Error: Cannot find module 'undefinedbuild/Release/node_sqlite3.node'
-
-This is caused by editing files while the app is transpiling.
+So this fork exists to build exactly that:
+A true Player Career Mode for Counter-Strike, with FACEIT-style matchmaking, personal progression, realistic bot opponents, and a career path shaped around you.
