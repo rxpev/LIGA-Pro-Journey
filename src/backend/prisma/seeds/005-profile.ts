@@ -48,7 +48,6 @@ export default function registerProfileHandlers() {
           date: new Date().toISOString(),
           settings: JSON.stringify(Constants.Settings),
           faceitElo: 1200,
-          faceitLevel: 4,
           player: { connect: { id: player.id } },
         },
         include: { player: true },

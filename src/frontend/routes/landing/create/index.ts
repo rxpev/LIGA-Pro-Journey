@@ -4,11 +4,9 @@
  * @module
  */
 import Create from './create';
-import Team from './team';
 import Save from './save';
 import User from './user';
 import Role from './role';
-import Gallery from './gallery';
 
 /**
  * Exports this module.
@@ -17,9 +15,7 @@ import Gallery from './gallery';
  */
 export default {
   Create,
-  Team,
   Save,
   User,
-  Gallery,
   Role,
 };
