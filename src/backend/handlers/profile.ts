@@ -14,19 +14,18 @@ import { Constants, Util } from "@liga/shared";
 import { DatabaseClient, Game, WindowManager } from "@liga/backend/lib";
 
 export default function registerProfileHandlers() {
-
-  // --------------------------------------------------------------------------
-  // CREATE PLAYER CAREER
-  // --------------------------------------------------------------------------
   ipcMain.handle(
     "profiles:createPlayerCareer",
     async (_, data: { playerName: string; countryId: number; role: string }) => {
       const { playerName, countryId, role } = data;
 
-      const profile = await DatabaseClient.prisma.profile.create({
+      // Always use the single root profile
+      const existing = await DatabaseClient.prisma.profile.findFirst();
+
+      return DatabaseClient.prisma.profile.update({
+        where: { id: existing.id },
         data: {
           name: playerName,
-          careerMode: "PLAYER",
           date: new Date().toISOString(),
           faceitElo: 1200,
 
@@ -38,31 +37,20 @@ export default function registerProfileHandlers() {
               xp: 0,
               prestige: 0,
               userControlled: true,
-              teamId: null,
-              transferListed: false,
-              starter: false,
             },
           },
         },
         include: { player: true },
       });
-
-      return profile;
     }
   );
 
-  // --------------------------------------------------------------------------
-  // LOAD CURRENT PROFILE
-  // --------------------------------------------------------------------------
   ipcMain.handle(Constants.IPCRoute.PROFILES_CURRENT, async () => {
     return DatabaseClient.prisma.profile.findFirst({
       include: { player: true },
     });
   });
 
-  // --------------------------------------------------------------------------
-  // UPDATE PROFILE SETTINGS
-  // --------------------------------------------------------------------------
   ipcMain.handle(
     Constants.IPCRoute.PROFILES_UPDATE,
     async (_, query: Prisma.ProfileUpdateArgs) => {
@@ -109,9 +97,6 @@ export default function registerProfileHandlers() {
     }
   );
 
-  // --------------------------------------------------------------------------
-  // SAVE LISTING
-  // --------------------------------------------------------------------------
   ipcMain.handle(Constants.IPCRoute.SAVES_ALL, async () => {
     const saves = [];
     const files = await glob("save_*.db", {
@@ -144,9 +129,6 @@ export default function registerProfileHandlers() {
     return saves.filter(Boolean);
   });
 
-  // --------------------------------------------------------------------------
-  // DELETE SAVE
-  // --------------------------------------------------------------------------
   ipcMain.handle(Constants.IPCRoute.SAVES_DELETE, (_, id: number) => {
     const dbFileName = Util.getSaveFileName(id);
     const dbPath = path.join(DatabaseClient.basePath, dbFileName);
@@ -155,9 +137,6 @@ export default function registerProfileHandlers() {
     return fs.promises.unlink(dbPath);
   });
 
-  // --------------------------------------------------------------------------
-  // SQUAD HANDLERS REMOVED (Player Career only)
-  // --------------------------------------------------------------------------
   ipcMain.handle(Constants.IPCRoute.SQUAD_ALL, async () => {
     return [];
   });

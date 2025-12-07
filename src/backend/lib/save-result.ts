@@ -33,42 +33,41 @@ export async function saveFaceitResult(
   let scoreA = 0;
   let scoreB = 0;
 
-  // "half" counts how many times sides have flipped so far
-  //  - 0: starting sides
-  //  - 1: after first flip
-  //  - 2: after second flip, etc.
   let half = 0;
-  let rounds = 1;
+  let roundNumber = 1;
 
-  const flipWinner = (winner: number) => (winner === 0 ? 1 : 0);
+  const flipWinner = (w: number) => (w === 0 ? 1 : 0);
 
   for (const ev of roundEvents) {
-    const w = ev.payload?.winner;
+    let w = ev.payload?.winner;
     if (typeof w !== "number") continue;
 
-    let effectiveWinner = w;
+    if (roundNumber > maxRounds) {
+      const roundsOT = roundNumber - maxRounds;
 
-    if (rounds > maxRounds) {
-
-      const roundsOT = rounds - maxRounds;
+      const overtimeCount = Math.ceil(roundsOT / maxRoundsOT);
       const otRound = ((roundsOT - 1) % maxRoundsOT) + 1;
       const isSideFlip =
         otRound === maxRoundsOT / 2 || otRound === maxRoundsOT;
 
       if (half % 2 === 1) {
-        effectiveWinner = flipWinner(effectiveWinner);
+        w = flipWinner(w);
+      }
+
+      // OT segment flip (LIGA logic)
+      if (overtimeCount % 2 === 1) {
+        w = flipWinner(w);
       }
 
       if (isSideFlip) {
         half++;
       }
     } else {
-
       const isSideFlip =
-        rounds === maxRounds / 2 || rounds === maxRounds;
+        roundNumber === maxRounds / 2 || roundNumber === maxRounds;
 
       if (half % 2 === 1) {
-        effectiveWinner = flipWinner(effectiveWinner);
+        w = flipWinner(w);
       }
 
       if (isSideFlip) {
@@ -76,18 +75,16 @@ export async function saveFaceitResult(
       }
     }
 
-    const winnerTeamId =
-      effectiveWinner === 0 ? tTeamId : ctTeamId;
+    const winnerTeamId = w === 0 ? tTeamId : ctTeamId;
 
     if (winnerTeamId === 1) scoreA++;
     else if (winnerTeamId === 2) scoreB++;
 
-    rounds++;
+    roundNumber++;
   }
 
   const userId = profile.player.id;
-  const teamAPlayers = payload.teamA || [];
-  const isUserTeamA = teamAPlayers.some((p: any) => p.id === userId);
+  const isUserTeamA = (payload.teamA || []).some((p: any) => p.id === userId);
   const playerTeamId = isUserTeamA ? 1 : 2;
 
   const playerWin =
@@ -151,24 +148,6 @@ export async function saveFaceitResult(
     const victim = event.payload.victim ?? null;
     const assist = event.payload.assist ?? null;
 
-    const attackerId = resolvePlayerId(
-      attacker?.name ?? null,
-      attacker?.steamId ?? null,
-      attacker?.serverId ?? null
-    );
-
-    const victimId = resolvePlayerId(
-      victim?.name ?? null,
-      victim?.steamId ?? null,
-      victim?.serverId ?? null
-    );
-
-    const assistId = resolvePlayerId(
-      assist?.name ?? null,
-      assist?.steamId ?? null,
-      assist?.serverId ?? null
-    );
-
     return {
       payload: JSON.stringify({
         type: event.type,
@@ -179,9 +158,21 @@ export async function saveFaceitResult(
       }),
       timestamp: event.payload.timestamp ?? new Date(),
       half: 0,
-      attackerId,
-      victimId,
-      assistId,
+      attackerId: resolvePlayerId(
+        attacker?.name ?? null,
+        attacker?.steamId ?? null,
+        attacker?.serverId ?? null
+      ),
+      victimId: resolvePlayerId(
+        victim?.name ?? null,
+        victim?.steamId ?? null,
+        victim?.serverId ?? null
+      ),
+      assistId: resolvePlayerId(
+        assist?.name ?? null,
+        assist?.steamId ?? null,
+        assist?.serverId ?? null
+      ),
       headshot: event.payload.headshot ?? false,
       weapon: event.payload.weapon ?? null,
     };
@@ -192,18 +183,12 @@ export async function saveFaceitResult(
     data: {
       status: Constants.MatchStatus.COMPLETED,
       date: new Date(),
-      players: {
-        connect: players.map((p) => ({ id: p.id })),
-      },
-      events: {
-        create: eventsToCreate,
-      },
+      players: { connect: players.map((p) => ({ id: p.id })) },
+      events: { create: eventsToCreate },
       games: {
         updateMany: {
           where: {},
-          data: {
-            status: Constants.MatchStatus.COMPLETED,
-          },
+          data: { status: Constants.MatchStatus.COMPLETED },
         },
       },
       competitors: {
@@ -286,4 +271,3 @@ export async function saveFaceitResult(
 
   return true;
 }
-

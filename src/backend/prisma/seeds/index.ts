@@ -61,7 +61,7 @@ async function main() {
     const name = seeder.name.replace(/(?:\d+)-(.+)\.ts/, "$1");
 
     // Skip unwanted seeders
-    if (["prestige", "game-versions", "game-maps", "game-map-pool"].includes(name)) {
+    if (["game-versions", "game-maps", "game-map-pool"].includes(name)) {
       log.warn(`Skipping Seeder: ${name} (disabled for now)`);
       continue;
     }

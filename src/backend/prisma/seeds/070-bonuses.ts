@@ -1,7 +1,7 @@
 /**
  * XP Bonuses Seeder
  * Reworked for XP-only system.
- */
+ 
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants } from '@liga/shared';
 
@@ -63,3 +63,4 @@ export default async function (prisma: PrismaClient) {
 
   return prisma.$transaction(transaction);
 }
+*/

@@ -22,13 +22,19 @@ datasource db {
 // Models represent the entities of your application domain
 // ----------------------------------------------------------
 
+model Achievement {
+  id                  String              @id
+  award               Int?                @default(0)
+  unlocked            Boolean?            @default(false)
+}
+
 model Bonus {
   id                  Int                 @id @default(autoincrement())
   type                Int
   name                String              @unique
+  stats               String?
   cost                Int?
-  xpBoost             Int?                @default(0)
-  active              Boolean             @default(false)
+  active              Boolean?            @default(false)
 
   // belongs to
   profile             Profile?            @relation(fields: [profileId], references: [id])
@@ -212,34 +218,31 @@ model MapPool {
 }
 
 model Match {
-  id               Int        @id @default(autoincrement())
-  matchType        String     @default("LEAGUE")
+  id                  Int                 @id @default(autoincrement())
+  matchType           String              @default("LEAGUE")
+  date                DateTime
+  payload             String
+  faceitEloDelta      Int?
+  faceitRating        Float?
+  faceitIsWin         Boolean?
+  faceitTeammates     String?
+  faceitOpponents     String?
+  round               Int?
+  status              Int
+  totalRounds         Int?
 
-  date             DateTime   @default(now())
+  // has many
+  events              MatchEvent[]
+  games               Game[]
+  competitors         MatchToTeam[]
 
-  payload          String
-  round            Int?
-  status           Int
-  totalRounds      Int?
-
-  faceitEloDelta   Int?
-  faceitRating     Float?
-  faceitIsWin      Boolean?
-  faceitTeammates  String?
-  faceitOpponents  String?
-
-  competitionId    Int?
-  competition      Competition? @relation(fields: [competitionId], references: [id])
-
-  profileId        Int?
-  profile          Profile?     @relation(fields: [profileId], references: [id])
-
-  events           MatchEvent[]
-  games            Game[]
-  competitors      MatchToTeam[]
-  players          Player[]
+  // belongs to
+  competition         Competition?        @relation(fields: [competitionId], references: [id])
+  competitionId       Int?
+  players             Player[]
+  profileId           Int?
+  profile             Profile?            @relation(fields: [profileId], references: [id])
 }
-
 
 model MatchEvent {
   id                  Int                 @id @default(autoincrement())
@@ -295,64 +298,59 @@ model Persona {
   teamId              Int?
 }
 
-model Profile {
-  id            Int       @id @default(autoincrement())
-  name          String    @unique
-  date          DateTime
-  issues        String?
-  season        Int?      @default(0)
-  settings      String?
-  trainedAt     DateTime?
-  updatedAt     DateTime? @default(now())
-  faceitElo   Int         @default(1200)
-
-  careerMode    String    @default("MANAGER") // "MANAGER" | "PLAYER"
-
-  // has many
-  bonuses       Bonus[]
-
-  // belongs to
-  team          Team?     @relation(fields: [teamId], references: [id])
-  teamId        Int?      @unique
-
-  player        Player?   @relation(fields: [playerId], references: [id])
-  playerId      Int?      @unique
-
-  matches Match[]
-}
-
 model Player {
-  id            Int       @id @default(autoincrement())
-  name          String
-  cost          Int?      @default(0)
-  wages         Int?      @default(0)
-  starter       Boolean   @default(false)
-  transferListed Boolean  @default(false)
-  avatar        String?
-  prestige      Int?
-  personality   String?
-  role          String?
-  xp            Int       @default(0)
-  elo           Int       @default(0)
-
-  userControlled Boolean  @default(false)
+  id                  Int                 @id @default(autoincrement())
+  name                String
+  personality         String?
+  role                String?
+  xp                  Int                 @default(0)
+  elo                 Int                 @default(0)
+  cost                Int?                @default(0)
+  wages               Int?                @default(0)
+  starter             Boolean             @default(false)
+  transferListed      Boolean             @default(false)
+  avatar              String?
+  prestige            Int?
+  userControlled      Boolean             @default(false)
 
   // has many
-  matches       Match[]
-  shortlist     Shortlist[]
-  transfers     Transfer[]
-  assists       MatchEvent[] @relation("assist")
-  kills         MatchEvent[] @relation("attacker")
-  deaths        MatchEvent[] @relation("victim")
+  matches             Match[]
+  shortlist           Shortlist[]
+  transfers           Transfer[]
+  assists             MatchEvent[]        @relation("assist")
+  kills               MatchEvent[]        @relation("attacker")
+  deaths              MatchEvent[]        @relation("victim")
 
   // has one
-  profile       Profile?
+  profile             Profile?
 
   // belongs to
-  country       Country    @relation(fields: [countryId], references: [id])
-  countryId     Int
-  team          Team?      @relation(fields: [teamId], references: [id])
-  teamId        Int?
+  country             Country             @relation(fields: [countryId], references: [id])
+  countryId           Int
+  team                Team?               @relation(fields: [teamId], references: [id])
+  teamId              Int?
+}
+
+model Profile {
+  id                  Int                 @id @default(autoincrement())
+  name                String              @unique
+  date                DateTime
+  issues              String?
+  season              Int?                @default(0)
+  settings            String?
+  trainedAt           DateTime?
+  updatedAt           DateTime?           @default(now())
+  faceitElo           Int                 @default(1200)
+
+  // has many
+  bonuses             Bonus[]
+  matches             Match[]
+
+  // belongs to
+  team                Team?               @relation(fields: [teamId], references: [id])
+  teamId              Int?                @unique
+  player              Player?             @relation(fields: [playerId], references: [id])
+  playerId            Int?                @unique
 }
 
 model Shortlist {
@@ -446,6 +444,7 @@ model Tier {
   groupSize           Int?
   triggerTierSlug     String?
   triggerOffsetDays   Int?
+  lan                 Boolean?            @default(false)
 
   // has many
   competitions        Competition[]

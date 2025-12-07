@@ -347,12 +347,13 @@ export default function registerFaceitHandlers() {
           matchType: "FACEIT_PUG",
           payload: JSON.stringify(room),
           profileId: profile.id,
+          date: new Date(),
           status: Constants.MatchStatus.READY,
           competitors: {
             create: [
               { teamId: 1, seed: 0, score: 0, result: null },
-              { teamId: 2, seed: 1, score: 0, result: null },
-            ],
+              { teamId: 2, seed: 1, score: 0, result: null }
+            ]
           },
           games: {
             create: [
@@ -363,13 +364,13 @@ export default function registerFaceitHandlers() {
                 teams: {
                   create: [
                     { teamId: 1, seed: 0, score: 0, result: null },
-                    { teamId: 2, seed: 1, score: 0, result: null },
-                  ],
-                },
-              },
-            ],
-          },
-        },
+                    { teamId: 2, seed: 1, score: 0, result: null }
+                  ]
+                }
+              }
+            ]
+          }
+        }
       });
 
       const realMatchId = dbMatch.id;

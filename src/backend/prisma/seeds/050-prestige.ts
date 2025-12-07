@@ -77,11 +77,7 @@ export default async function (prisma: PrismaClient) {
                     where: { id: player.id },
                     data: {
                       prestige: chunk.prestige,
-                      stats: JSON.stringify(
-                        Bot.Templates.find((template) => template.prestige === chunk.prestige)
-                           || null,
-                      ),
-                    },
+                    }
                   })),
                 },
               },

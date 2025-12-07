@@ -1,238 +1,211 @@
 /**
  * Calendar IPC handlers.
- *
- * @module
  */
-import { dialog, ipcMain } from 'electron';
-import { add, addDays, differenceInDays, format } from 'date-fns';
-import { Prisma, Calendar } from '@prisma/client';
-import { DatabaseClient, Engine, WindowManager, Worldgen } from '@liga/backend/lib';
-import { Bot, Constants, Eagers, Util } from '@liga/shared';
+
+import { dialog, ipcMain } from "electron";
+import { add, addDays, differenceInDays, format } from "date-fns";
+import { Prisma, Calendar } from "@prisma/client";
+import { DatabaseClient, Engine, WindowManager, Worldgen } from "@liga/backend/lib";
+import { Bot, Eagers, Constants, Util } from "@liga/shared";
 
 /**
- * Prevents the main window from closing immediately and
- * instead warns the issue if they want to proceed.
- *
- * This helps mitigate issues with corrupted databases.
- *
- * @param event The event handler object.
- * @function
+ * Prevents the main window from closing immediately while the calendar advances.
  */
 async function disableClose(event: Electron.Event) {
   event.preventDefault();
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
   const data = await dialog.showMessageBox(mainWindow, {
-    type: 'warning',
-    message: 'The calendar is still advancing. Exiting now may cause database corruption.',
-    detail: 'Are you sure you want to continue and risk potential data loss?',
-    buttons: ['Continue', 'Cancel'],
+    type: "warning",
+    message: "The calendar is still advancing. Exiting now may cause database corruption.",
+    detail: "Are you sure you want to continue and risk potential data loss?",
+    buttons: ["Continue", "Cancel"],
   });
-  if (data.response === 0) {
-    mainWindow.destroy();
-  }
+  if (data.response === 0) mainWindow.destroy();
 }
 
 /**
- * Engine loop handler.
- *
- * Runs at the start of every engine loop tick.
- *
- * @function
+ * Engine middleware: start of each tick.
  */
 async function onTickStart() {
   Engine.Runtime.Instance.log.info(
-    'Running %s middleware...',
-    Engine.MiddlewareType.TICK_START.toUpperCase(),
+    "Running %s middleware...",
+    Engine.MiddlewareType.TICK_START.toUpperCase()
   );
 
-  // grab today's calendar entries
   const profile = await DatabaseClient.prisma.profile.findFirst();
+
+  // Fetch global calendar events for today. These run even if the user has no team.
   Engine.Runtime.Instance.input = await DatabaseClient.prisma.calendar.findMany({
     where: { date: profile.date.toISOString(), completed: false },
   });
 
   Engine.Runtime.Instance.log.info(
     "Today's date is: %s",
-    format(profile.date, Constants.Application.CALENDAR_DATE_FORMAT),
+    format(profile.date, Constants.Application.CALENDAR_DATE_FORMAT)
   );
-  Engine.Runtime.Instance.log.info('%d items to run.', Engine.Runtime.Instance.input.length);
 
+  Engine.Runtime.Instance.log.info("%d items to run.", Engine.Runtime.Instance.input.length);
   return Promise.resolve();
 }
 
 /**
- * Engine loop handler.
- *
- * Runs at the end of every engine loop tick.
- *
- * @param input   The input data.
- * @param status  The status of the engine loop.
- * @function
+ * Engine middleware: end of each tick.
  */
 async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   Engine.Runtime.Instance.log.info(
-    'Running %s middleware...',
-    Engine.MiddlewareType.TICK_END.toUpperCase(),
+    "Running %s middleware...",
+    Engine.MiddlewareType.TICK_END.toUpperCase()
   );
 
-  // mark today's calendar entries as completed
+  // Mark calendar entries as completed.
   await Promise.all(
     input.map((calendar) =>
       DatabaseClient.prisma.calendar.update({
         where: { id: calendar.id },
         data: { completed: true },
-      }),
-    ),
+      })
+    )
   );
 
-  // bail if loop was terminated early
   if (status === Engine.LoopStatus.TERMINATED) {
-    Engine.Runtime.Instance.log.info('Stopping...');
+    Engine.Runtime.Instance.log.info("Stopping...");
     return Promise.resolve();
   }
 
-  // record today's match results
+  // Record global match results (affects NPC teams and leagues).
   await Worldgen.recordMatchResults();
 
-  // bump the calendar date by one day
+  // Advance day.
   let profile = await DatabaseClient.prisma.profile.findFirst();
   profile = await DatabaseClient.prisma.profile.update({
     where: { id: profile.id },
-    data: {
-      date: addDays(profile.date, 1).toISOString(),
-    },
+    data: { date: addDays(profile.date, 1).toISOString() },
   });
 
-  // send the updated profile object to the renderer
+  // Push profile update to renderer.
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
-
-  if (mainWindow) {
-    mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, profile);
-  }
+  if (mainWindow) mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, profile);
 
   return Promise.resolve();
 }
 
 /**
- * Engine loop handler.
+ * Engine middleware: end of loop cycle.
  *
- * Runs at the very end of an engine loop cycle.
- *
- * @function
+ * User-team-specific events must only run when a team exists.
  */
 async function onLoopFinish() {
   Engine.Runtime.Instance.log.info(
-    'Running %s middleware...',
-    Engine.MiddlewareType.LOOP_FINISH.toUpperCase(),
+    "Running %s middleware...",
+    Engine.MiddlewareType.LOOP_FINISH.toUpperCase()
   );
 
-  // Fetch current profile
   const profile = await DatabaseClient.prisma.profile.findFirst({
     include: { player: true, team: true },
   });
 
-  //Player career - skip transfer/worldgen team logic
-  if (profile.careerMode === 'PLAYER') {
-    Engine.Runtime.Instance.log.info('[calendar/onLoopFinish] Player mode detected — skipping team-based worldgen.');
-    return Promise.resolve();
-  }
+  // If the user does not belong to a team, skip user-team logic.
+  if (!profile.teamId) return Promise.resolve();
 
-  // 🟠 Manager career — normal flow
+  // User has a team → run team-related transfer offers.
   return Worldgen.sendUserTransferOffer();
 }
 
 /**
- * Register engine loop middleware and IPC event handlers.
- *
- * @function
+ * Register calendar handlers.
  */
 export default function () {
-  // set up the engine loop built-ins
+  // Engine middleware registration.
   Engine.Runtime.Instance.register(Engine.MiddlewareType.TICK_START, onTickStart);
   Engine.Runtime.Instance.register(Engine.MiddlewareType.TICK_END, onTickEnd);
   Engine.Runtime.Instance.register(Engine.MiddlewareType.LOOP_FINISH, onLoopFinish);
 
-  // set up engine loop generic middleware
+  // Worldgen handlers (global world events).
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.COMPETITION_START,
-    Worldgen.onCompetitionStart,
+    Worldgen.onCompetitionStart
   );
   Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
   Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, Worldgen.onMatchdayNPC);
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, Worldgen.onMatchdayUser);
+  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, async (entry) => {
+    // User matchdays only run if the user belongs to a team.
+    const profile = await DatabaseClient.prisma.profile.findFirst();
+    if (!profile.teamId) return; // Prevents lookup errors.
+    return Worldgen.onMatchdayUser(entry as Calendar);
+  });
   Engine.Runtime.Instance.register(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.SPONSORSHIP_PARSE,
-    Worldgen.onSponsorshipOffer,
+    Worldgen.onSponsorshipOffer
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.SPONSORSHIP_PAYMENT,
-    Worldgen.onSponsorshipPayment,
+    Worldgen.onSponsorshipPayment
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.TRANSFER_PARSE,
-    Worldgen.onTransferOffer,
+    Worldgen.onTransferOffer
   );
 
-  // set up the ipc handlers
+  // IPC: create calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_CREATE, (_, data: Prisma.CalendarCreateInput) =>
-    DatabaseClient.prisma.calendar.create({ data }),
+    DatabaseClient.prisma.calendar.create({ data })
   );
+
+  // IPC: find calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_FIND, (_, query: Prisma.CalendarFindFirstArgs) =>
-    DatabaseClient.prisma.calendar.findFirst(query),
+    DatabaseClient.prisma.calendar.findFirst(query)
   );
+
+  // IPC: start calendar simulation.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_START, async (_, max?: number) => {
-    // load user settings
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const settings = Util.loadSettings(profile.settings);
 
-    // on first runs we skip to the first competition
-    // start date which is the minor open qualifiers
+    // First-run logic for competitions remains unchanged.
     if (!(await DatabaseClient.prisma.competition.count())) {
       const circuit = await DatabaseClient.prisma.league.findFirst({
-        where: {
-          slug: Constants.LeagueSlug.ESPORTS_CIRCUIT,
-        },
+        where: { slug: Constants.LeagueSlug.ESPORTS_CIRCUIT },
       });
 
       Engine.Runtime.Instance.log.debug(
-        'First run detected. Skipping %d days...',
-        circuit.startOffsetDays,
+        "First run detected. Skipping %d days...",
+        circuit.startOffsetDays
       );
 
       return Engine.Runtime.Instance.start(circuit.startOffsetDays + 1, true);
     }
 
-    // disable window interactivity while the calendar
-    // advances to prevent database corruption and
-    // also prevent the user from closing the app
-    WindowManager.get(Constants.WindowIdentifier.Main).on('close', disableClose);
+    // Disable window actions during calendar advance.
+    WindowManager.get(Constants.WindowIdentifier.Main).on("close", disableClose);
     WindowManager.disableMenu(Constants.WindowIdentifier.Main);
 
-    // figure out how many days to iterate
     let days = max;
-
     if (!max) {
       const from = profile.date;
       const to = add(from, { [settings.calendar.unit]: settings.calendar.maxIterations });
       days = differenceInDays(to, from);
     }
 
-    // start the calendar
     await Engine.Runtime.Instance.start(days, settings.calendar.ignoreExits);
 
-    // re-enable the window and detach
-    // the close event handler
-    WindowManager.get(Constants.WindowIdentifier.Main).off('close', disableClose);
+    WindowManager.get(Constants.WindowIdentifier.Main).off("close", disableClose);
     WindowManager.enableMenu(Constants.WindowIdentifier.Main);
     return Promise.resolve();
   });
+
+  // IPC: stop calendar.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_STOP, () => {
     Engine.Runtime.Instance.stop();
   });
+
+  // IPC: simulate matchday for the user.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_SIM, async () => {
-    // grab the calendar entry for today's user matchday
     const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+    // No team → no user matchday. Prevents id=null failures.
+    if (!profile.teamId) return null;
+
     const entry = await DatabaseClient.prisma.calendar.findFirst({
       where: {
         date: profile.date.toISOString(),
@@ -240,46 +213,36 @@ export default function () {
       },
     });
 
+    if (!entry) return null;
+
     Engine.Runtime.Instance.log.debug(
-      'Received request to sim for match(payload=%s) on %s',
+      "Received request to sim for match(payload=%s) on %s",
       entry.payload,
-      format(entry.date, Constants.Application.CALENDAR_DATE_FORMAT),
+      format(entry.date, Constants.Application.CALENDAR_DATE_FORMAT)
     );
 
-    // sim the match using worldgen
+    // Simulate NPC behavior for user match.
     await Worldgen.onMatchdayNPC(entry);
 
-    // give training boosts to squad if they won
+    // Reward XP if the user's team won.
     const match = await DatabaseClient.prisma.match.findFirst({
-      where: {
-        id: Number(entry.payload),
-      },
+      where: { id: Number(entry.payload) },
       include: Eagers.match.include,
     });
-    const userTeam = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
 
-    if (userTeam.result === Constants.MatchResult.WIN) {
-      const bonuses = [
-        {
-          id: -1,
-          type: Constants.BonusType.SERVER,
-          name: 'Win Bonus',
-          stats: JSON.stringify({ skill: 2, agression: 2, reactionTime: 2, attackDelay: 2 }),
-          cost: -1,
-          profileId: -1,
-          active: false,
-        },
-      ];
+    const userTeam = match.competitors.find((c) => c.teamId === profile.teamId);
+
+    if (userTeam && userTeam.result === Constants.MatchResult.WIN) {
       await DatabaseClient.prisma.$transaction(
-        Bot.Exp.trainAll(profile.team.players).map((player) =>
+        profile.team.players.map((player) =>
           DatabaseClient.prisma.player.update({
             where: { id: player.id },
-            data: { xp: player.xp }
-          }),
-        ),
+            data: { xp: player.xp },
+          })
+        )
       );
     }
 
-    return Promise.resolve(match);
+    return match;
   });
 }
