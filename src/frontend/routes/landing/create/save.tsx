@@ -53,10 +53,6 @@ export default function Save() {
 
         // Skip team-based season init (since teamless)
         setStatus(t('landing.create.statusWorldgen'));
-        await api.calendar.create({
-          date: windowData.today.toISOString(),
-          type: Constants.CalendarEntry.SEASON_START,
-        });
 
         await api.calendar.start();
 

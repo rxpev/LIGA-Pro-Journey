@@ -104,7 +104,7 @@ async function onLoopFinish() {
     include: { player: true, team: true },
   });
 
-  // If the user does not belong to a team, skip user-team logic.
+  // If the user does not belong to a team, skip user-team logic entirely.
   if (!profile.teamId) return Promise.resolve();
 
   // User has a team → run team-related transfer offers.
@@ -127,12 +127,16 @@ export default function () {
   );
   Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
   Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, Worldgen.onMatchdayNPC);
+
   Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, async (entry) => {
-    // User matchdays only run if the user belongs to a team.
     const profile = await DatabaseClient.prisma.profile.findFirst();
-    if (!profile.teamId) return; // Prevents lookup errors.
+
+    // Skip user matchdays entirely when teamless.
+    if (!profile.teamId) return;
+
     return Worldgen.onMatchdayUser(entry as Calendar);
   });
+
   Engine.Runtime.Instance.register(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.SPONSORSHIP_PARSE,
@@ -203,7 +207,7 @@ export default function () {
   ipcMain.handle(Constants.IPCRoute.CALENDAR_SIM, async () => {
     const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
 
-    // No team → no user matchday. Prevents id=null failures.
+    // No team → no user matchday allowed.
     if (!profile.teamId) return null;
 
     const entry = await DatabaseClient.prisma.calendar.findFirst({

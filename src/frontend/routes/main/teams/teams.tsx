@@ -79,6 +79,22 @@ export default function () {
     setTeam(teams.find((tteam) => tteam.id === state.profile.teamId));
   }, [state.profile, teams, team]);
 
+  // fallback: auto-select world #1 team when teamless
+  React.useEffect(() => {
+    // only run after main data loads
+    if (!teams.length || team) {
+      return;
+    }
+
+    // user has no team → pick world #1
+    if (!state.profile?.teamId) {
+      const sorted = [...teams].sort((a, b) => b.elo - a.elo); // highest elo first
+      if (sorted.length > 0) {
+        setTeam(sorted[0]);
+      }
+    }
+  }, [state.profile, teams, team]);
+
   // apply team filters
   React.useEffect(() => {
     api.teams.all<typeof Eagers.team>(teamQuery).then(setTeams);

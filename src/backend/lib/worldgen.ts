@@ -42,7 +42,7 @@ export async function bumpSeasonNumber() {
  */
 export async function createCompetitions() {
   // grab current profile
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
+  const profile = await DatabaseClient.prisma.profile.findFirst();
   const today = profile?.date || new Date();
 
   // loop through autofill entries and create competitions
@@ -135,10 +135,11 @@ async function createMatchdays(
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const today = profile?.date || new Date();
 
-  // grab user seed
-  const userCompetitorId = competition.competitors.find(
-    (competitor) => competitor.teamId === profile.teamId,
-  );
+  // grab user seed (teamless players will not match any competitor)
+  const userCompetitorId =
+    profile?.teamId != null
+      ? competition.competitors.find((competitor) => competitor.teamId === profile.teamId)
+      : undefined;
   const userSeed = tournament.getSeedByCompetitorId(userCompetitorId?.id);
 
   // create the matchdays
@@ -194,7 +195,7 @@ async function createMatchdays(
         const existingEntry = await DatabaseClient.prisma.calendar.findFirst({
           where: { payload: String(existingMatch.id) },
         });
-        if (match.p.includes(userSeed)) {
+        if (userSeed != null && match.p.includes(userSeed)) {
           Engine.Runtime.Instance.log.debug(
             'User has new match(id=%d) on %s',
             existingEntry.id,
@@ -205,9 +206,10 @@ async function createMatchdays(
           DatabaseClient.prisma.calendar.update({
             where: { id: existingEntry.id },
             data: {
-              type: match.p.includes(userSeed)
-                ? Constants.CalendarEntry.MATCHDAY_USER
-                : Constants.CalendarEntry.MATCHDAY_NPC,
+              type:
+                userSeed != null && match.p.includes(userSeed)
+                  ? Constants.CalendarEntry.MATCHDAY_USER
+                  : Constants.CalendarEntry.MATCHDAY_NPC,
             },
           }),
           DatabaseClient.prisma.match.update({
@@ -289,9 +291,10 @@ async function createMatchdays(
       // register matchday in the calendar
       return DatabaseClient.prisma.calendar.create({
         data: {
-          type: match.p.includes(userSeed)
-            ? Constants.CalendarEntry.MATCHDAY_USER
-            : Constants.CalendarEntry.MATCHDAY_NPC,
+          type:
+            userSeed != null && match.p.includes(userSeed)
+              ? Constants.CalendarEntry.MATCHDAY_USER
+              : Constants.CalendarEntry.MATCHDAY_NPC,
           date: matchday.toISOString(),
           payload: String(newMatch.id),
         },
@@ -310,6 +313,12 @@ async function createMatchdays(
  */
 export async function createWelcomeEmail() {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: skip team-based welcome email.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   const locale = getLocale(profile);
 
   if (new Date().getFullYear() === profile.date.getFullYear()) {
@@ -785,7 +794,7 @@ export function parseTeamTransferOffer(
  */
 export async function recordMatchResults() {
   // get today's match results
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
+  const profile = await DatabaseClient.prisma.profile.findFirst();
   const today = profile?.date || new Date();
   const allMatches = await DatabaseClient.prisma.match.findMany({
     where: {
@@ -1037,8 +1046,14 @@ export async function sendUserAward(
   competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
   preloadedTournament?: Tournament,
 ) {
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user awards.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   // bail if competition is not done yet
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
   const tournament = preloadedTournament || Tournament.restore(JSON.parse(competition.tournament));
 
   if (!tournament.$base.isDone()) {
@@ -1129,6 +1144,12 @@ export async function sendUserAward(
  */
 export async function sendUserTransferOffer() {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user transfer offers.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   const to = await DatabaseClient.prisma.team.findFirst({
     where: { id: profile.teamId },
     include: { players: true, personas: true },
@@ -1137,7 +1158,7 @@ export async function sendUserTransferOffer() {
   // build the player pool
   const players = to.players
     .filter((player) => player.id !== profile.playerId)
-    .sort((a, b) => Bot.Exp.getTotalXP(b.xp) - Bot.Exp.getTotalXP(a.xp))
+    .sort((a, b) => Bot.Exp.getTotalXP(b.xp) - Bot.Exp.getTotalXP(a.xp));
   const transferPool = players.filter((player) => player.transferListed);
 
   // bail early if user does not have any players to spare
@@ -1255,7 +1276,13 @@ export async function sendUserTransferOffer() {
  */
 export async function sponsorshipCheck() {
   // grab sponsorship info
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user sponsorship checks.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   const sponsorships = await DatabaseClient.prisma.sponsorship.findMany({
     where: {
       teamId: profile.teamId,
@@ -1304,9 +1331,14 @@ export async function sponsorshipCheck() {
       competitors: true,
     },
   });
-  const userTeamPosition = competition.competitors.find(
+  const userTeamPosition = competition?.competitors.find(
     (competitor) => competitor.teamId === profile.teamId,
   );
+
+  // if we couldn't find a position, there is nothing to evaluate
+  if (!userTeamPosition) {
+    return;
+  }
 
   // check contract conditions
   const locale = getLocale(profile);
@@ -1423,7 +1455,13 @@ export async function sponsorshipCheck() {
  */
 export async function sponsorshipInvite(id: number, status?: Constants.SponsorshipStatus) {
   // load user locale
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user sponsorship invites.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return;
+  }
+
   const locale = getLocale(profile);
 
   // load sponsorship contract info
@@ -1602,6 +1640,12 @@ export async function sponsorshipRenew(id: number) {
 
   // load user locale
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user sponsorship renewals.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return;
+  }
+
   const locale = getLocale(profile);
 
   // bail early if sponsorship not expired
@@ -1699,7 +1743,12 @@ export async function syncTiers() {
  */
 export async function syncWages() {
   // get the user's squad
-  const profile = await DatabaseClient.prisma.profile.findFirst<typeof Eagers.profile>();
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Teamless player: no user squad wage syncing.
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
 
   // build a transaction for all the updates
   const transaction = profile.team.players.map((player) => {
@@ -1948,22 +1997,25 @@ export async function onMatchdayNPC(entry: Calendar) {
   const [home, away] = match.competitors;
   const simulationResult = simulator.generate([home.team, away.team]);
 
-  // check if we need to award earnings to user for a win
+  // check if we need to award earnings to user for a win (only if user has a team)
   if (
     entry.type === Constants.CalendarEntry.MATCHDAY_USER &&
+    simulator.userTeamId != null &&
     Simulator.getMatchResult(simulator.userTeamId, simulationResult) === Constants.MatchResult.WIN
   ) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
-    await DatabaseClient.prisma.team.update({
-      where: {
-        id: profile.teamId,
-      },
-      data: {
-        earnings: {
-          increment: Constants.GameSettings.WIN_AWARD_AMOUNT,
+    if (profile.teamId != null) {
+      await DatabaseClient.prisma.team.update({
+        where: {
+          id: profile.teamId,
         },
-      },
-    });
+        data: {
+          earnings: {
+            increment: Constants.GameSettings.WIN_AWARD_AMOUNT,
+          },
+        },
+      });
+    }
   }
 
   // apply elo deltas
@@ -2060,13 +2112,18 @@ export async function onMatchdayUser(entry: Calendar) {
  * @function
  */
 export async function onSponsorshipOffer(entry: Partial<Calendar>) {
+  // Teamless player: no user sponsorship parsing.
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   // parse payload
   const [sponsorshipId, sponsorshipStatus] = isNaN(Number(entry.payload))
     ? JSON.parse(entry.payload)
     : [Number(entry.payload)];
 
   // load user locale
-  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   const locale = getLocale(profile);
 
   // grab latest offer
@@ -2189,7 +2246,7 @@ export async function onSponsorshipPayment(entry: Partial<Calendar>) {
   });
   const [offer] = sponsorship.offers;
 
-  // update user earnings
+  // update sponsorship team earnings (NPC-safe, not tied to profile.teamId)
   return DatabaseClient.prisma.team.update({
     where: {
       id: sponsorship.teamId,
@@ -2211,13 +2268,18 @@ export async function onSponsorshipPayment(entry: Partial<Calendar>) {
  * @function
  */
 export async function onTransferOffer(entry: Partial<Calendar>) {
+  // Teamless player: no user transfer parsing.
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  if (!profile || profile.teamId == null || !profile.team) {
+    return Promise.resolve();
+  }
+
   // parse payload
   const [transferId, transferStatus] = isNaN(Number(entry.payload))
     ? JSON.parse(entry.payload)
     : [Number(entry.payload)];
 
   // load user locale
-  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   const locale = getLocale(profile);
 
   // grab latest offer
@@ -2306,21 +2368,21 @@ export async function onTransferOffer(entry: Partial<Calendar>) {
           offer.cost > transfer.from.earnings
             ? 0
             : {
-                decrement: offer.cost,
-              },
+              decrement: offer.cost,
+            },
       },
     }),
     transfer.to
       ? DatabaseClient.prisma.team.update({
-          where: {
-            id: transfer.to.id,
+        where: {
+          id: transfer.to.id,
+        },
+        data: {
+          earnings: {
+            increment: offer.cost,
           },
-          data: {
-            earnings: {
-              increment: offer.cost,
-            },
-          },
-        })
+        },
+      })
       : Promise.resolve(),
   ]);
 }

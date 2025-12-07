@@ -22,11 +22,13 @@ export default function registerProfileHandlers() {
       // Always use the single root profile
       const existing = await DatabaseClient.prisma.profile.findFirst();
 
-      return DatabaseClient.prisma.profile.update({
+      // 1. CREATE / UPDATE PROFILE
+      const profile = await DatabaseClient.prisma.profile.update({
         where: { id: existing.id },
         data: {
           name: playerName,
           date: new Date().toISOString(),
+          season: 0,
           faceitElo: 1200,
 
           player: {
@@ -42,6 +44,16 @@ export default function registerProfileHandlers() {
         },
         include: { player: true },
       });
+
+      // Create the season-start calendar entry
+      await DatabaseClient.prisma.calendar.create({
+        data: {
+          type: Constants.CalendarEntry.SEASON_START,
+          date: profile.date,
+        },
+      });
+
+      return profile;
     }
   );
 
@@ -135,15 +147,5 @@ export default function registerProfileHandlers() {
 
     if (!fs.existsSync(dbPath)) return Promise.reject();
     return fs.promises.unlink(dbPath);
-  });
-
-  ipcMain.handle(Constants.IPCRoute.SQUAD_ALL, async () => {
-    return [];
-  });
-  ipcMain.handle(Constants.IPCRoute.SQUAD_UPDATE, async () => {
-    return [];
-  });
-  ipcMain.handle(Constants.IPCRoute.SQUAD_RELEASE_PLAYER, async () => {
-    return [];
   });
 }

@@ -27,49 +27,44 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
+
   const [competition, setCompetition] =
     React.useState<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>();
   const [federations, setFederations] = React.useState<
     Awaited<ReturnType<typeof api.federations.all>>
   >([]);
-  const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
-  const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
-  const [selectedTierId, setSelectedTierId] = React.useState<number>(-1);
   const [tiers, setTiers] = React.useState<
     Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>
   >([]);
 
-  // build user's continent to fetch their
-  // domestic league information later on
-  const userContinent = React.useMemo(
-    () =>
-      !!state.profile &&
-      state.continents.find((continent) =>
-        continent.countries.some((country) => country.id === state.profile.team.countryId),
-      ),
-    [state.profile],
-  );
+  const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
+  const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
+  const [selectedTierId, setSelectedTierId] = React.useState<number>(-1);
 
-  // build queries
+  // Used to ensure we only auto-initialize filters once from the profile.
+  const [initializedFromProfile, setInitializedFromProfile] = React.useState(false);
+
+  // Build queries
   const tierQuery: Parameters<typeof api.tiers.all>[number] = React.useMemo(
     () => ({
       ...Eagers.tier,
       ...(selectedFederationId > 0
         ? {
-            where: {
-              league: {
-                federations: {
-                  some: {
-                    id: selectedFederationId,
-                  },
+          where: {
+            league: {
+              federations: {
+                some: {
+                  id: selectedFederationId,
                 },
               },
             },
-          }
+          },
+        }
         : {}),
     }),
     [selectedFederationId],
   );
+
   const competitionQuery: Parameters<typeof api.competitions.find>[number] = React.useMemo(
     () => ({
       ...Eagers.competition,
@@ -84,46 +79,129 @@ export default function () {
     [selectedFederationId, selectedSeasonId, selectedTierId],
   );
 
-  // initial data fetch
+  // Initial data fetch
   React.useEffect(() => {
     api.federations.all().then(setFederations);
     api.tiers.all(tierQuery).then(setTiers);
   }, []);
 
-  // preload the user's domestic league
-  React.useEffect(() => {
-    if (!state.profile) {
-      return;
-    }
-
-    api.competitions
-      .find({
-        include: Eagers.competition.include,
-        where: {
-          federationId: userContinent.federationId,
-          season: state.profile.season,
-          tier: {
-            slug: Constants.Prestige[state.profile.team.tier],
-          },
-        },
-      })
-      .then((competition) => {
-        setCompetition(competition);
-      });
-  }, [state.profile]);
-
-  // re-fetch tiers when its query changes
+  // Re-fetch tiers when its query changes
   React.useEffect(() => {
     api.tiers.all(tierQuery).then(setTiers);
   }, [tierQuery]);
 
-  // reset tier selection when federation changes
+  // Reset tier selection when federation changes
   React.useEffect(() => {
     setSelectedTierId(-1);
   }, [selectedFederationId]);
 
-  // build seasons dropdown data
-  const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
+  /**
+   * Auto-initialize federation/season filters from the user's profile.
+   *
+   * - If the user has a team, uses the team's country.
+   * - If teamless, uses the player's country.
+   * - Maps country → continent → federation.
+   */
+  React.useEffect(() => {
+    if (!state.profile || initializedFromProfile) return;
+
+    // Prefer team country if available, otherwise player's country.
+    const playerCountryId =
+      state.profile.team?.countryId ?? state.profile.player?.countryId ?? null;
+
+    if (!playerCountryId) {
+      setInitializedFromProfile(true);
+      return;
+    }
+
+    const continent = state.continents.find((c) =>
+      c.countries.some((country) => country.id === playerCountryId),
+    );
+
+    if (!continent) {
+      setInitializedFromProfile(true);
+      return;
+    }
+
+    const federationId = continent.federationId;
+    if (federationId) {
+      setSelectedFederationId(federationId);
+    }
+    if (state.profile.season > 0) {
+      setSelectedSeasonId(state.profile.season);
+    }
+
+    setInitializedFromProfile(true);
+  }, [state.profile, state.continents, initializedFromProfile]);
+
+  /**
+   * Once we know:
+   * - which federation we are in
+   * - the tiers for that federation
+   * we can:
+   *
+   * - If the user has a team: pick the league tier matching the team's tier.
+   * - If teamless: pick the highest league tier available in that region.
+   *
+   * In both cases we auto-load the corresponding competition.
+   */
+  React.useEffect(() => {
+    if (!state.profile) return;
+    if (selectedFederationId < 0) return;
+    if (!tiers.length) return;
+
+    // Don't override user choice
+    if (selectedTierId > 0 && competition) return;
+
+    let defaultTier: (typeof tiers)[number] | undefined;
+
+    if (state.profile.teamId && state.profile.team) {
+      // Manager-style: use the team's current league tier.
+      const desiredSlug = Constants.Prestige[state.profile.team.tier];
+      defaultTier = tiers.find((tier) => tier.slug === desiredSlug);
+    } else {
+      // Player-style (teamless): pick the highest league tier in this federation.
+      const preferredOrder = [
+        'league:premier',
+        'league:advanced',
+        'league:main',
+        'league:intermediate',
+        'league:open',
+      ];
+
+      defaultTier =
+        preferredOrder
+          .map((slug) => tiers.find((tier) => tier.slug === slug))
+          .find(Boolean) || tiers[0];
+    }
+
+    if (!defaultTier) return;
+
+    if (selectedTierId <= 0) {
+      setSelectedTierId(defaultTier.id);
+    }
+
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: {
+          federationId: selectedFederationId,
+          season: state.profile.season,
+          tier: { id: defaultTier.id },
+        },
+      })
+      .then((result) => {
+        if (result) {
+          setCompetition(result);
+        }
+      });
+  }, [state.profile, selectedFederationId, tiers, selectedTierId, competition]);
+
+  // Build seasons dropdown data
+  const seasons = React.useMemo(
+    () => [...Array(state?.profile?.season || 0)],
+    [state.profile],
+  );
 
   return (
     <div className="dashboard">
