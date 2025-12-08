@@ -119,10 +119,10 @@ export default function () {
           },
           ...(player.teamId
             ? {
-                to: {
-                  connect: { id: player.teamId },
-                },
-              }
+              to: {
+                connect: { id: player.teamId },
+              },
+            }
             : {}),
         },
         {

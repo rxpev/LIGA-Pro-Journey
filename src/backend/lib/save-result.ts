@@ -45,17 +45,10 @@ export async function saveFaceitResult(
     if (roundNumber > maxRounds) {
       const roundsOT = roundNumber - maxRounds;
 
-      const overtimeCount = Math.ceil(roundsOT / maxRoundsOT);
       const otRound = ((roundsOT - 1) % maxRoundsOT) + 1;
-      const isSideFlip =
-        otRound === maxRoundsOT / 2 || otRound === maxRoundsOT;
+      const isSideFlip = otRound === maxRoundsOT / 2;
 
       if (half % 2 === 1) {
-        w = flipWinner(w);
-      }
-
-      // OT segment flip (LIGA logic)
-      if (overtimeCount % 2 === 1) {
         w = flipWinner(w);
       }
 
@@ -63,8 +56,7 @@ export async function saveFaceitResult(
         half++;
       }
     } else {
-      const isSideFlip =
-        roundNumber === maxRounds / 2 || roundNumber === maxRounds;
+      const isSideFlip = roundNumber === maxRounds / 2;
 
       if (half % 2 === 1) {
         w = flipWinner(w);
