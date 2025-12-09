@@ -92,7 +92,7 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
 /**
  * Engine middleware: end of loop cycle.
  *
- * User-team-specific events must only run when a team exists.
+ *
  */
 async function onLoopFinish() {
   Engine.Runtime.Instance.log.info(
@@ -100,15 +100,7 @@ async function onLoopFinish() {
     Engine.MiddlewareType.LOOP_FINISH.toUpperCase()
   );
 
-  const profile = await DatabaseClient.prisma.profile.findFirst({
-    include: { player: true, team: true },
-  });
-
-  // If the user does not belong to a team, skip user-team logic entirely.
-  if (!profile.teamId) return Promise.resolve();
-
-  // User has a team → run team-related transfer offers.
-  return Worldgen.sendUserTransferOffer();
+  return Promise.resolve();
 }
 
 /**
@@ -145,10 +137,6 @@ export default function () {
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.SPONSORSHIP_PAYMENT,
     Worldgen.onSponsorshipPayment
-  );
-  Engine.Runtime.Instance.register(
-    Constants.CalendarEntry.TRANSFER_PARSE,
-    Worldgen.onTransferOffer
   );
 
   // IPC: create calendar entry.

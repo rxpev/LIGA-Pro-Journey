@@ -204,11 +204,7 @@ export enum FederationSlug {
  * @enum
  */
 export enum Game {
-  CS16 = 'cs16',
-  CS2 = 'cs2',
   CSGO = 'csgo',
-  CSS = 'cssource',
-  CZERO = 'czero',
 }
 
 /**
@@ -855,33 +851,6 @@ export const GameSettings = {
   STEAM_LIBRARIES_FILE: 'steamapps/libraryfolders.vdf',
   WIN_AWARD_AMOUNT: 100,
 
-  // cs16 settings
-  CS16_APPID: 10,
-  CS16_BASEDIR: 'steamapps/common/Half-Life',
-  CS16_BOT_COMMAND_FILE: 'liga-bots.cfg',
-  CS16_BOT_CONFIG: 'botprofile.db',
-  CS16_DLL_BOTS: 'dlls/liga.dll',
-  CS16_DLL_METAMOD: 'addons/metamod/dlls/metamod.dll',
-  CS16_EXE: 'hl.exe',
-  CS16_GAMEDIR: 'cstrike',
-  CS16_MOTD_HTML_FILE: 'motd.html',
-  CS16_MOTD_TXT_FILE: 'motd.txt',
-  CS16_SERVER_CONFIG_FILE: 'listenserver.cfg',
-  CS16_SERVER_WARMUP_CONFIG_FILE: 'liga-warmup.cfg',
-
-  // cs2 settings
-  CS2_APPID: 730,
-  CS2_BOT_COMMAND_FILE: 'cfg/liga-bots.cfg',
-  CS2_BOT_CONFIG: 'botprofile.db',
-  CS2_BASEDIR: 'steamapps/common/Counter-Strike Global Offensive',
-  CS2_EXE: 'game/bin/win64/cs2.exe',
-  CS2_GAMEDIR: 'game/csgo',
-  CS2_GAMEINFO_FILE: 'gameinfo.gi',
-  CS2_LOGFILE: 'console.log',
-  CS2_SERVER_CONFIG_FILE: 'cfg/listenserver.cfg',
-  CS2_VPK_FILE: 'overrides/liga.vpk',
-  CS2_VPK_METAMOD: 'addons/metamod',
-
   // csgo settings
   CSGO_APPID: 730,
   CSGO_BETTER_BOTS_NAMES_FILE: 'addons/sourcemod/configs/bot_names.txt',
@@ -894,31 +863,6 @@ export const GameSettings = {
   CSGO_SERVER_CONFIG_FILE: 'cfg/server.cfg',
   CSGO_STEAM_INF_FILE: 'steam.inf',
   CSGO_VERSION: 2000258,
-
-  // cssource settings
-  CSSOURCE_APPID: 240,
-  CSSOURCE_BASEDIR: 'steamapps/common/Counter-Strike Source',
-  CSSOURCE_BOT_COMMAND_FILE: 'cfg/liga-bots.cfg',
-  CSSOURCE_BOT_CONFIG: 'custom/liga/botprofile.db',
-  CSSOURCE_EXE: 'cstrike.exe',
-  CSSOURCE_GAMEDIR: 'cstrike',
-  CSSOURCE_MOTD_HTML_FILE: 'cfg/motd.html',
-  CSSOURCE_MOTD_TXT_FILE: 'cfg/motd.txt',
-  CSSOURCE_SERVER_CONFIG_FILE: 'cfg/listenserver.cfg',
-
-  // czero
-  CZERO_APPID: 80,
-  CZERO_BASEDIR: 'steamapps/common/Half-Life',
-  CZERO_BOT_COMMAND_FILE: 'liga-bots.cfg',
-  CZERO_BOT_CONFIG: 'botprofile.db',
-  CZERO_DLL_BOTS: 'dlls/liga.dll',
-  CZERO_DLL_METAMOD: 'addons/metamod/dlls/metamod.dll',
-  CZERO_EXE: 'hl.exe',
-  CZERO_GAMEDIR: 'czero',
-  CZERO_MOTD_HTML_FILE: 'motd.html',
-  CZERO_MOTD_TXT_FILE: 'motd.txt',
-  CZERO_SERVER_CONFIG_FILE: 'listenserver.cfg',
-  CZERO_SERVER_WARMUP_CONFIG_FILE: 'liga-warmup.cfg',
 
   // rcon settings
   RCON_MAX_ATTEMPTS: 10,
@@ -986,42 +930,6 @@ export const IdiomaticTransferStatus: Record<number, string> = {
  * @constant
  */
 export const MapPoolReplacements: Record<Game, Record<string, string>> = {
-  [Game.CS16]: {
-    // csgo
-    de_ancient: 'de_cpl_mill',
-    de_anubis: 'de_cbble',
-    de_mirage: 'de_cpl_strike',
-
-    // czero
-    de_cbble_cz: 'de_cbble',
-    de_czl_freight: 'de_cpl_strike',
-    de_czl_karnak: 'de_cpl_mill',
-    de_czl_silo: 'de_cbble',
-    de_dust2_cz: 'de_dust2',
-    de_inferno_cz: 'de_inferno',
-    de_russka_cz: 'de_russka',
-  },
-  [Game.CS2]: {
-    // csgo
-    de_cache: 'de_dust2',
-    de_tuscan: 'de_mirage',
-
-    // cs1.6
-    de_cbble: 'de_anubis',
-    de_cpl_fire: 'de_inferno',
-    de_cpl_mill: 'de_ancient',
-    de_cpl_strike: 'de_mirage',
-    de_russka: 'de_train',
-
-    // czero
-    de_cbble_cz: 'de_anubis',
-    de_czl_freight: 'de_mirage',
-    de_czl_karnak: 'de_ancient',
-    de_czl_silo: 'de_anubis',
-    de_dust2_cz: 'de_dust2',
-    de_inferno_cz: 'de_inferno',
-    de_russka_cz: 'de_train',
-  },
   [Game.CSGO]: {
     // cs1.6
     de_cbble: 'de_anubis',
@@ -1038,41 +946,6 @@ export const MapPoolReplacements: Record<Game, Record<string, string>> = {
     de_dust2_cz: 'de_dust2',
     de_inferno_cz: 'de_inferno',
     de_russka_cz: 'de_train',
-  },
-  [Game.CSS]: {
-    // csgo
-    de_anubis: 'de_cbble',
-    de_mirage: 'de_cpl_strike',
-
-    // cs1.6
-    de_cpl_fire: 'de_inferno',
-    de_cpl_mill: 'de_ancient',
-
-    // czero
-    de_cbble_cz: 'de_cbble',
-    de_czl_freight: 'de_cpl_strike',
-    de_czl_karnak: 'de_ancient',
-    de_czl_silo: 'de_cbble',
-    de_dust2_cz: 'de_dust2',
-    de_inferno_cz: 'de_inferno',
-    de_russka_cz: 'de_train',
-  },
-  [Game.CZERO]: {
-    // csgo
-    de_ancient: 'de_czl_karnak',
-    de_anubis: 'de_czl_silo',
-    de_cache: 'de_dust2_cz',
-    de_dust2: 'de_dust2_cz',
-    de_inferno: 'de_inferno_cz',
-    de_mirage: 'de_czl_freight',
-    de_overpass: 'de_russka_cz',
-    de_tuscan: 'de_dust2_cz',
-
-    // cs1.6
-    de_cpl_fire: 'de_inferno_cz',
-    de_cpl_mill: 'de_ancient',
-    de_cpl_strike: 'de_czl_freight',
-    de_russka: 'de_russka_cz',
   },
 };
 
@@ -1780,24 +1653,8 @@ export const TransferSettings = {
  * @constant
  */
 export const WeaponTemplates = {
-  [Game.CS16]: {
-    [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
-  },
-  [Game.CS2]: {
-    [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galilar', 'mp7'],
-    [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galilar', 'mp7'],
-  },
   [Game.CSGO]: {
     [WeaponTemplate.RIFLE]: ['ak47', 'aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas', 'mp9', 'mac10', 'ump45', 'mp7'],
     [WeaponTemplate.SNIPER]: ['awp', 'ak47', 'aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas', 'ssg08', 'mp9', 'mac10', 'ump45', 'mp7'],
-  },
-  [Game.CSS]: {
-    [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
-  },
-  [Game.CZERO]: {
-    [WeaponTemplate.RIFLE]: ['m4a1', 'ak47', 'famas', 'galil', 'mp5'],
-    [WeaponTemplate.SNIPER]: ['awp', 'famas', 'galil', 'mp5'],
   },
 };
