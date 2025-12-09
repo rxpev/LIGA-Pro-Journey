@@ -783,6 +783,228 @@ export function parseTeamTransferOffer(
 }
 
 /**
+ * Accept a transfer offer that targets the user player (Player Career invite).
+ *
+ * - Marks the offer as PLAYER_ACCEPTED
+ * - Connects the player to the offering team
+ * - Sets profile.teamId
+ * - Cancels any other pending offers for this player
+ */
+export async function acceptUserPlayerTransfer(transferId: number) {
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  const transfer = await DatabaseClient.prisma.transfer.findFirst({
+    where: { id: transferId },
+    include: {
+      ...Eagers.transfer.include,
+      offers: { orderBy: { id: "desc" } },
+    },
+  });
+
+  if (!transfer) return Promise.resolve();
+
+  // Only handle invites that target our user player.
+  if (transfer.playerId !== profile.playerId) {
+    Engine.Runtime.Instance.log.warn(
+      "acceptUserPlayerTransfer: transfer %d does not target user player. Skipping.",
+      transferId
+    );
+    return Promise.resolve();
+  }
+
+  const [offer] = transfer.offers;
+
+  // Update transfer & this offer to accepted.
+  await DatabaseClient.prisma.transfer.update({
+    where: { id: transfer.id },
+    data: {
+      status: Constants.TransferStatus.PLAYER_ACCEPTED,
+      offers: {
+        update: {
+          where: { id: offer.id },
+          data: {
+            status: Constants.TransferStatus.PLAYER_ACCEPTED,
+          },
+        },
+      },
+    },
+  });
+
+  // Connect the player to the new team.
+  await DatabaseClient.prisma.player.update({
+    where: { id: transfer.playerId },
+    data: {
+      transferListed: false,
+      starter: true, // up to you
+      team: {
+        connect: { id: transfer.teamIdFrom },
+      },
+    },
+  });
+
+  // Update profile.teamId so the game knows you're now on a team.
+  // Update profile.teamId so the game knows you're now on a team.
+  const updatedProfile = await DatabaseClient.prisma.profile.update({
+    where: { id: profile.id },
+    data: {
+      team: {
+        connect: { id: transfer.teamIdFrom },
+      },
+    },
+    include: { player: true, team: true }, // or use Eagers.profile.include
+  });
+
+  // Notify renderer so UI updates immediately.
+  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
+  if (mainWindow) {
+    mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
+  }
+
+  // Mark future matches for this team as user matchdays.
+  const today = profile.date; // date before accepting – fine for a cutoff
+  const futureMatches = await DatabaseClient.prisma.match.findMany({
+    where: {
+      date: { gte: today.toISOString() },
+      competitors: {
+        some: { teamId: transfer.teamIdFrom },
+      },
+    },
+  });
+
+  if (futureMatches.length) {
+    await DatabaseClient.prisma.calendar.updateMany({
+      where: {
+        payload: { in: futureMatches.map((m) => String(m.id)) },
+        type: Constants.CalendarEntry.MATCHDAY_NPC,
+      },
+      data: {
+        type: Constants.CalendarEntry.MATCHDAY_USER,
+      },
+    });
+  }
+
+  // Reject any other pending offers for this player.
+  const otherTransfers = await DatabaseClient.prisma.transfer.findMany({
+    where: {
+      id: { not: transfer.id },
+      playerId: transfer.playerId,
+      status: {
+        in: [
+          Constants.TransferStatus.TEAM_PENDING,
+          Constants.TransferStatus.PLAYER_PENDING,
+        ],
+      },
+    },
+  });
+
+  if (otherTransfers.length) {
+    await Promise.all([
+      DatabaseClient.prisma.transfer.updateMany({
+        where: { id: { in: otherTransfers.map((t) => t.id) } },
+        data: { status: Constants.TransferStatus.PLAYER_REJECTED },
+      }),
+      DatabaseClient.prisma.offer.updateMany({
+        where: { transferId: { in: otherTransfers.map((t) => t.id) } },
+        data: { status: Constants.TransferStatus.PLAYER_REJECTED },
+      }),
+    ]);
+  }
+
+  // Small "Welcome" email (K.I.S.S).
+  const persona =
+    transfer.from.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT
+    ) ?? transfer.from.personas[0];
+
+  await sendEmail(
+    `Welcome to ${transfer.from.name}`,
+    `We are happy to have you on board at ${transfer.from.name}.`,
+    persona,
+    profile.date,
+    true
+  );
+
+  Engine.Runtime.Instance.log.info(
+    "%s joined %s via player-career invite.",
+    profile.name,
+    transfer.from.name
+  );
+
+  return Promise.resolve();
+}
+
+/**
+ * Reject a transfer offer that targets the user player (Player Career invite).
+ */
+export async function rejectUserPlayerTransfer(transferId: number) {
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  const transfer = await DatabaseClient.prisma.transfer.findFirst({
+    where: { id: transferId },
+    include: {
+      ...Eagers.transfer.include,
+      offers: { orderBy: { id: "desc" } },
+    },
+  });
+
+  if (!transfer) return Promise.resolve();
+
+  if (transfer.playerId !== profile.playerId) {
+    Engine.Runtime.Instance.log.warn(
+      "rejectUserPlayerTransfer: transfer %d does not target user player. Skipping.",
+      transferId
+    );
+    return Promise.resolve();
+  }
+
+  const [offer] = transfer.offers;
+
+  await DatabaseClient.prisma.transfer.update({
+    where: { id: transfer.id },
+    data: {
+      status: Constants.TransferStatus.PLAYER_REJECTED,
+      offers: {
+        update: {
+          where: { id: offer.id },
+          data: {
+            status: Constants.TransferStatus.PLAYER_REJECTED,
+          },
+        },
+      },
+    },
+  });
+
+  // Optional: send polite "Thanks but no" mail
+  const persona =
+    transfer.from.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT
+    ) ?? transfer.from.personas[0];
+
+  await sendEmail(
+    `Re: Offer from ${transfer.from.name}`,
+    `You have declined the offer from ${transfer.from.name}.`,
+    persona,
+    profile.date,
+    false
+  );
+
+  Engine.Runtime.Instance.log.info(
+    "User rejected invite from %s (transfer %d).",
+    transfer.from.name,
+    transfer.id
+  );
+
+  return Promise.resolve();
+}
+
+
+/**
  * Records the match results for the day by updating
  * their respective tournament object entries.
  *
@@ -1266,6 +1488,83 @@ export async function sendUserTransferOffer() {
     target.name,
   );
   return Promise.resolve();
+}
+
+/**
+ * Creates a team invite (transfer) targeting the user player when they are teamless.
+ *
+ * This is used by Player Career after FACEIT PUGs.
+ */
+export async function sendPlayerInviteForUser() {
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+
+  // Only if we have a profile and the user is teamless.
+  if (!profile || profile.teamId != null || !profile.player) {
+    return Promise.resolve();
+  }
+
+  const prisma = DatabaseClient.prisma;
+
+  // Pick a random team for now
+  const teams = await prisma.team.findMany({
+    include: { personas: true },
+  });
+
+  if (!teams.length) return Promise.resolve();
+
+  const from = sample(teams); // lodash.sample
+  const target = profile.player;
+
+  // Basic wages/cost – for now just reuse whatever the player currently has.
+  const wages = target.wages ?? 0;
+  const cost = target.cost ?? 0;
+
+  const transfer = await prisma.transfer.create({
+    data: {
+      status: Constants.TransferStatus.PLAYER_PENDING,
+      from: { connect: { id: from.id } },
+      target: { connect: { id: target.id } },
+      offers: {
+        create: [
+          {
+            status: Constants.TransferStatus.PLAYER_PENDING,
+            wages,
+            cost,
+          },
+        ],
+      },
+    },
+    include: Eagers.transfer.include,
+  });
+
+  const locale = getLocale(profile);
+
+  const persona =
+    from.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT,
+    ) ?? from.personas[0];
+
+  await sendEmail(
+    // SUBJECT with template
+    Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { transfer, profile }),
+    // CONTENT with buttons, also template
+    Sqrl.render(locale.templates.OfferIncoming.CONTENT, { transfer, profile }),
+    persona,
+    profile.date,
+    true,
+  );
+
+  WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+  Engine.Runtime.Instance.log.info(
+    "%s sent a player-career invite to %s",
+    from.name,
+    target.name,
+  );
+
+  return Promise.resolve(transfer);
 }
 
 /**
@@ -2073,33 +2372,29 @@ export async function onMatchdayNPC(entry: Calendar) {
  * @function
  */
 export async function onMatchdayUser(entry: Calendar) {
-  // load user settings
+  // Load profile (still useful for logging / future logic).
   const profile = await DatabaseClient.prisma.profile.findFirst();
-  const settings = Util.loadSettings(profile.settings);
+  if (!profile) {
+    return Promise.resolve();
+  }
 
-  // skip if this match has already been played
+  // Skip if this match has already been played.
   const match = await DatabaseClient.prisma.match.findFirst({
     where: {
       id: Number(entry.payload),
     },
   });
 
-  if (match.status === Constants.MatchStatus.COMPLETED) {
+  if (!match || match.status === Constants.MatchStatus.COMPLETED) {
     return Promise.resolve();
   }
 
-  // if engine loop terminate signals are
-  // being skipped we must sim it now
-  if (settings.calendar.ignoreExits) {
-    return onMatchdayNPC(entry);
-  }
-
-  // otherwise stop the engine loop
   Engine.Runtime.Instance.log.info(
-    'User matchday detected on %s. Stopping engine loop...',
+    'User matchday detected on %s (player career). Stopping engine loop...',
     format(entry.date, Constants.Application.CALENDAR_DATE_FORMAT),
   );
 
+  // Returning false tells the engine loop to halt and hand control to the renderer.
   return Promise.resolve(false);
 }
 

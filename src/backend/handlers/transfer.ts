@@ -20,19 +20,63 @@ export default function () {
     const transfers = await DatabaseClient.prisma.transfer.findMany(query);
     return transfers;
   });
+
   ipcMain.handle(Constants.IPCRoute.TRANSFER_ACCEPT, async (_, id: string) => {
     const transfer = await DatabaseClient.prisma.transfer.findFirst({
       where: { id: Number(id) },
       include: {
-        offers: { orderBy: { id: 'desc' } },
+        offers: { orderBy: { id: "desc" } },
       },
     });
 
-    await Worldgen.onTransferOffer({
-      payload: JSON.stringify([transfer.id, Constants.TransferStatus.TEAM_ACCEPTED]),
+    if (!transfer) return Promise.resolve();
+
+    const profile = await DatabaseClient.prisma.profile.findFirst();
+
+    // Player Career: accepting an invite targeted at the user player.
+    if (
+      profile &&
+      transfer.playerId === profile.playerId &&
+      transfer.teamIdTo == null // free agent invite
+    ) {
+      await Worldgen.acceptUserPlayerTransfer(transfer.id);
+    } else {
+      // Legacy Manager Career / team-based flow
+      await Worldgen.onTransferOffer({
+        payload: JSON.stringify([transfer.id, Constants.TransferStatus.TEAM_ACCEPTED]),
+      });
+    }
+
+    WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+    return Promise.resolve();
+  });
+
+  ipcMain.handle(Constants.IPCRoute.TRANSFER_REJECT, async (_, id: string) => {
+    const transfer = await DatabaseClient.prisma.transfer.findFirst({
+      where: { id: Number(id) },
+      include: {
+        offers: { orderBy: { id: "desc" } },
+      },
     });
 
-    // send transfers update to all windows
+    if (!transfer) return Promise.resolve();
+
+    const profile = await DatabaseClient.prisma.profile.findFirst();
+
+    // Player Career: rejecting an invite targeted at the user player.
+    if (
+      profile &&
+      transfer.playerId === profile.playerId &&
+      transfer.teamIdTo == null
+    ) {
+      await Worldgen.rejectUserPlayerTransfer(transfer.id);
+    } else {
+      // Legacy Manager flow
+      await Worldgen.onTransferOffer({
+        payload: JSON.stringify([transfer.id, Constants.TransferStatus.TEAM_REJECTED]),
+      });
+    }
+
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
     return Promise.resolve();
   });
@@ -118,20 +162,4 @@ export default function () {
       });
     },
   );
-  ipcMain.handle(Constants.IPCRoute.TRANSFER_REJECT, async (_, id: string) => {
-    const transfer = await DatabaseClient.prisma.transfer.findFirst({
-      where: { id: Number(id) },
-      include: {
-        offers: { orderBy: { id: 'desc' } },
-      },
-    });
-
-    await Worldgen.onTransferOffer({
-      payload: JSON.stringify([transfer.id, Constants.TransferStatus.TEAM_REJECTED]),
-    });
-
-    // send transfers update to all windows
-    WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
-    return Promise.resolve();
-  });
 }

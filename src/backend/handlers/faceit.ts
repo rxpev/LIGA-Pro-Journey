@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { DatabaseClient } from "@liga/backend/lib";
+import { DatabaseClient, Worldgen } from "@liga/backend/lib";
 import log from "electron-log";
 import { levelFromElo } from "@liga/backend/lib/levels";
 import { FaceitMatchmaker } from "@liga/backend/lib/matchmaker";
@@ -393,6 +393,10 @@ export default function registerFaceitHandlers() {
       });
 
       await saveFaceitResult(game, realMatchId, profile);
+
+      if (profile.teamId == null) {
+        await Worldgen.sendPlayerInviteForUser();
+      }
 
       return { ok: true, matchId: realMatchId };
     } catch (err) {
