@@ -18,13 +18,7 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { XPBar } from '@liga/frontend/components/player-card';
-import {
-  FaBan,
-  FaCheck,
-  FaPiggyBank,
-  FaTag,
-  FaWallet,
-} from 'react-icons/fa';
+import { FaBan, FaCheck, FaPiggyBank, FaTag, FaWallet } from 'react-icons/fa';
 
 /** @enum */
 enum Tab {
@@ -36,9 +30,7 @@ enum Tab {
 type Player = Awaited<ReturnType<typeof api.players.find<typeof Eagers.player>>>;
 
 /** @type {Transfer} */
-type Transfer = Awaited<
-  ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>
->[number];
+type Transfer = Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>[number];
 
 const TransferStatusBadgeColor: Record<number, string> = {
   [Constants.TransferStatus.PLAYER_ACCEPTED]: 'badge-success',
@@ -61,7 +53,7 @@ export default function TransferModal() {
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
 
-  const [activeTab, setActiveTab] = React.useState<Tab>(Tab.REVIEW_OFFERS);
+  const [activeTab, setActiveTab] = React.useState<Tab>(Tab.PAST_OFFERS);
   const [player, setPlayer] = React.useState<Player>();
   const [transfers, setTransfers] = React.useState<Array<Transfer>>([]);
 
@@ -82,13 +74,16 @@ export default function TransferModal() {
     fetchTransfers(playerId).then(setTransfers);
   }, []);
 
-  // All offers (flattened)
+  React.useEffect(() => {
+    if (!player) return;
+    setActiveTab(isUserPlayer ? Tab.REVIEW_OFFERS : Tab.PAST_OFFERS);
+  }, [player, isUserPlayer]);
+
   const offers = React.useMemo(() => {
     if (!transfers) return [];
     return flatten(transfers.map((t) => t.offers));
   }, [transfers]);
 
-  // Only incoming pending offers that YOU need to respond to
   const pendingTransfers = React.useMemo(() => {
     if (!isUserPlayer) return [];
     return (transfers ?? []).filter(
@@ -210,6 +205,13 @@ export default function TransferModal() {
       <section role="tablist" className="tabs-box tabs rounded-none border-t-0!">
         {Object.keys(Tab)
           .filter((k) => isNaN(Number(k)))
+          .filter((tabKey: keyof typeof Tab) => {
+            const tab = Tab[tabKey];
+            if (isUserPlayer) {
+              return tab === Tab.REVIEW_OFFERS || tab === Tab.PAST_OFFERS;
+            }
+            return tab === Tab.PAST_OFFERS;
+          })
           .map((tabKey: keyof typeof Tab) => (
             <a
               key={tabKey}
@@ -223,7 +225,7 @@ export default function TransferModal() {
       </section>
 
       {/* REVIEW OFFERS (Only PLAYER_PENDING for YOU) */}
-      {activeTab === Tab.REVIEW_OFFERS && (
+      {activeTab === Tab.REVIEW_OFFERS && isUserPlayer && (
         <section className="flex-1 overflow-y-scroll">
           <table className="table table-fixed table-pin-rows">
             <thead>
@@ -237,7 +239,7 @@ export default function TransferModal() {
             <tbody>
               {pendingTransfers.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center opacity-60 py-8">
+                  <td colSpan={3} className="py-8 text-center opacity-60">
                     No pending offers.
                   </td>
                 </tr>
@@ -297,7 +299,7 @@ export default function TransferModal() {
                 <th>From</th>
                 <th className="text-center">Fee</th>
                 <th className="text-center">Wages</th>
-                <th className="text-center w-3/12">Status</th>
+                <th className="w-3/12 text-center">Status</th>
               </tr>
             </thead>
 

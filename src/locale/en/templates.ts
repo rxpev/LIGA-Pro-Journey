@@ -89,9 +89,9 @@ export enum OfferIncoming {
   CONTENT = `
   Hello, {{it.profile.player.name}}.
 
-  **{{it.transfer.from.name}}** are interested in a transfer for **{{it.transfer.target.name}}**.
+  We at **{{it.transfer.from.name}}** are interested singing you, **{{it.transfer.target.name}}**.
 
-  The details are below:
+  We believe you would be a great fit for our roster and would like to make you an offer. The details are as follows:
 
   - Transfer fee: {{it.transfer.offers[0].cost | currency}}
 
@@ -168,6 +168,17 @@ export enum OfferRejectedEmailWages {
 export enum OfferRejectedUser {
   SUBJECT = 'Transfer Offer for {{it.transfer.target.name}}',
   CONTENT = `Rejected {{it.transfer.from.name}}'s offer.`,
+}
+
+export enum ContractExpiredPlayer {
+  SUBJECT = 'Contract expired with {{it.team.name}}',
+  CONTENT = `
+  Hello, {{it.profile.player.name}}.
+
+  Your contract with **{{it.team.name}}** has expired.
+
+  You are now a free agent. Feel free to explore new opportunities!
+  `,
 }
 
 /** @enum */

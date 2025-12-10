@@ -163,6 +163,16 @@ export enum OfferRejectedEmailWages {
   {{/if}}
   `,
 }
+export enum ContractExpiredPlayer {
+  SUBJECT = 'Contract expired with {{it.team.name}}',
+  CONTENT = `
+  Hello, {{it.profile.player.name}}.
+
+  Your contract with **{{it.team.name}}** has expired.
+
+  You are now a free agent and free to negotiate with other teams.
+  `,
+}
 
 /** @enum */
 export enum OfferRejectedUser {

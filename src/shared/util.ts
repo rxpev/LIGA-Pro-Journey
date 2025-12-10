@@ -57,12 +57,6 @@ export function convertMapPool(map: string, game: Constants.Game, uri = false) {
   const protocol = 'resources://maps/';
   const extension = (() => {
     switch (game) {
-      case Constants.Game.CS16:
-        return '.cs16.png';
-      case Constants.Game.CSS:
-        return '.css.png';
-      case Constants.Game.CZERO:
-        return '.cz.png';
       default:
         return '.png';
     }

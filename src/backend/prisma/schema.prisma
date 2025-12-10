@@ -312,6 +312,8 @@ model Player {
   avatar              String?
   prestige            Int?
   userControlled      Boolean             @default(false)
+  age                 Int?
+  contractEnd         DateTime?
 
   // has many
   matches             Match[]

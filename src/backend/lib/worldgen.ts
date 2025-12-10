@@ -501,14 +501,6 @@ export function parseTeamSponsorshipOffer(
   };
 }
 
-/**
- * Accept a transfer offer that targets the user player (Player Career invite).
- *
- * - Marks the offer as PLAYER_ACCEPTED
- * - Connects the player to the offering team
- * - Sets profile.teamId
- * - Cancels any other pending offers for this player
- */
 export async function acceptUserPlayerTransfer(transferId: number) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
@@ -550,20 +542,21 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     },
   });
 
-  // Connect the player to the new team.
+  // 1) Compute simple 1-year contract end.
+  const contractEnd = addYears(profile.date, 1);
+
+  // 2) Connect the player to the new team.
   await DatabaseClient.prisma.player.update({
     where: { id: transfer.playerId },
     data: {
       transferListed: false,
-      starter: true, // up to you
-      team: {
-        connect: { id: transfer.teamIdFrom },
-      },
+      starter: true,
+      team: { connect: { id: transfer.teamIdFrom } },
+      contractEnd,
     },
   });
 
-  // Update profile.teamId so the game knows you're now on a team.
-  // Update profile.teamId so the game knows you're now on a team.
+  // 3) Update profile.teamId so the game knows you're now on a team.
   const updatedProfile = await DatabaseClient.prisma.profile.update({
     where: { id: profile.id },
     data: {
@@ -571,17 +564,26 @@ export async function acceptUserPlayerTransfer(transferId: number) {
         connect: { id: transfer.teamIdFrom },
       },
     },
-    include: { player: true, team: true }, // or use Eagers.profile.include
+    include: { player: true, team: true },
   });
 
-  // Notify renderer so UI updates immediately.
+  // 4) Notify renderer so UI updates immediately.
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
   if (mainWindow) {
     mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
   }
 
-  // Mark future matches for this team as user matchdays.
-  const today = profile.date; // date before accepting – fine for a cutoff
+  // 5) Schedule contract expiry event in the calendar.  ⬅⬅⬅  THIS WAS MISSING
+  await DatabaseClient.prisma.calendar.create({
+    data: {
+      type: Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+      date: contractEnd.toISOString(),
+      payload: String(transfer.playerId),
+    },
+  });
+
+  // 6) Mark future matches for this team as user matchdays.
+  const today = profile.date;
   const futureMatches = await DatabaseClient.prisma.match.findMany({
     where: {
       date: { gte: today.toISOString() },
@@ -603,7 +605,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     });
   }
 
-  // Reject any other pending offers for this player.
+  // 7) Reject any other pending offers for this player.
   const otherTransfers = await DatabaseClient.prisma.transfer.findMany({
     where: {
       id: { not: transfer.id },
@@ -630,7 +632,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     ]);
   }
 
-  // Small "Welcome" email (K.I.S.S).
+  // 8) Welcome email.
   const persona =
     transfer.from.personas.find(
       (p) =>
@@ -1948,6 +1950,77 @@ export async function onMatchdayNPC(entry: Calendar) {
       },
     }),
   ]);
+}
+
+export async function onPlayerContractExpire(entry: Calendar) {
+  const playerId = Number(entry.payload);
+
+  // Load profile with team/player (like other user-specific handlers)
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  const player = await DatabaseClient.prisma.player.findFirst({
+    where: { id: playerId },
+    include: {
+      team: {
+        include: {
+          personas: true,
+        },
+      },
+    },
+  });
+
+  if (!player) return Promise.resolve();
+
+  // Only handle our user player's contract for now.
+  if (player.id !== profile.playerId) {
+    return Promise.resolve();
+  }
+
+  // Make user a free agent again.
+  await DatabaseClient.prisma.player.update({
+    where: { id: player.id },
+    data: {
+      teamId: null,
+      contractEnd: null,
+    },
+  });
+
+  const updatedProfile = await DatabaseClient.prisma.profile.update({
+    where: { id: profile.id },
+    data: { teamId: null },
+    include: { player: true, team: true },
+  });
+
+  // Push profile update to renderer.
+  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
+  if (mainWindow) {
+    mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
+  }
+
+  const locale = getLocale(profile);
+  const team = player.team;
+  const persona = team?.personas?.[0];
+
+  if (persona && team) {
+    await sendEmail(
+      Sqrl.render(locale.templates.ContractExpiredPlayer.SUBJECT, {
+        profile,
+        player,
+        team,
+      }),
+      Sqrl.render(locale.templates.ContractExpiredPlayer.CONTENT, {
+        profile,
+        player,
+        team,
+      }),
+      persona,
+      profile.date,
+      true,
+    );
+  }
+
+  return Promise.resolve();
 }
 
 /**

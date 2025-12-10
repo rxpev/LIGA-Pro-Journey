@@ -169,6 +169,16 @@ export enum OfferRejectedUser {
   SUBJECT = 'Offerta di trasferimento per {{it.transfer.target.name}}',
   CONTENT = `Rifiutata l'offerta di {{it.transfer.from.name}}'.`,
 }
+export enum ContractExpiredPlayer {
+  SUBJECT = 'Contract expired with {{it.team.name}}',
+  CONTENT = `
+  Hello, {{it.profile.player.name}}.
+
+  Your contract with **{{it.team.name}}** has expired.
+
+  You are now a free agent and free to negotiate with other teams.
+  `,
+}
 
 /** @enum */
 export enum SponsorshipAccepted {

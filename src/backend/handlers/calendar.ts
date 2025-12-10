@@ -138,6 +138,10 @@ export default function () {
     Constants.CalendarEntry.SPONSORSHIP_PAYMENT,
     Worldgen.onSponsorshipPayment
   );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+    Worldgen.onPlayerContractExpire
+  );
 
   // IPC: create calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_CREATE, (_, data: Prisma.CalendarCreateInput) =>
@@ -237,4 +241,5 @@ export default function () {
 
     return match;
   });
+
 }
