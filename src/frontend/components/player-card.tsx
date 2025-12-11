@@ -4,11 +4,9 @@
  * @module
  */
 import React from 'react';
-import { startCase } from 'lodash';
-import { Bot, Constants, Eagers, Util } from '@liga/shared';
+import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
-import { FaFolderOpen, FaShoppingBag, FaStar, FaUserSlash } from 'react-icons/fa';
 import ak47Icon from '@liga/frontend/assets/ak47.png';
 import awpIcon from '@liga/frontend/assets/awp.png';
 
@@ -34,11 +32,12 @@ interface PlayerCardProps extends React.ComponentProps<'article'> {
   className?: string;
   compact?: boolean;
   noStats?: boolean;
+
+  // Kept for type-compatibility, but no longer rendered as buttons
   onClickStarter?: () => void;
   onClickTransferListed?: () => void;
   onClickViewOffers?: () => void;
   onClickRelease?: () => void;
-
 }
 
 /**
@@ -106,25 +105,15 @@ export default function (props: PlayerCardProps) {
             className="h-12 w-auto"
           />
         </figure>
-        <aside className="stack-x col-span-2 gap-4 px-4">
-          <button
-            title={t('playerCard.setAsStarter')}
-            className={cx(!!props.onClickStarter && 'cursor-pointer [&_svg]:hover:text-yellow-500')}
-            disabled={!props.onClickStarter}
-            onClick={props.onClickStarter || null}
-          >
-            <FaStar className={cx(props.player.starter && 'text-yellow-500')} />
-          </button>
-          <nav className="center h-full place-items-start text-left">
-            <h3>{props.player.name}</h3>
-            <p className="line-clamp-1">
-              <span className={cx('fp', props.player.country.code.toLowerCase())} />
-              <span>&nbsp;{props.player.country.name}</span>
-            </p>
-          </nav>
+        <aside className="col-span-2 px-4">
+          <h3>{props.player.name}</h3>
+          <p className="line-clamp-1 text-sm">
+            <span className={cx('fp', props.player.country.code.toLowerCase())} />
+            <span>&nbsp;{props.player.country.name}</span>
+          </p>
         </aside>
-        <aside className="stack-y center gap-0">
-          <p className="text-muted">{t('playerCard.totalXP')}</p>
+        <aside className="stack-y center gap-0 px-2">
+          <p className="text-muted text-xs">{t('playerCard.totalXP')}</p>
           <p className="text-2xl! font-black">
             {props.noStats ? '-' : Math.floor(props.player.xp ?? 0)}
           </p>
@@ -132,7 +121,6 @@ export default function (props: PlayerCardProps) {
       </article>
     );
   }
-
   return (
     <article
       className={cx(
@@ -158,20 +146,6 @@ export default function (props: PlayerCardProps) {
       </header>
       <aside className="px-10 py-4">
         <label className="fieldset p-0 text-xs">
-          <p>Potential</p>
-          <figure className="rating mt-0 gap-1">
-            {[...Array(Constants.Prestige.length)].map((_, idx) => (
-              <span
-                key={idx + '__player_prestige'}
-                className="mask mask-star bg-yellow-500"
-                aria-current={idx + 1 <= props.player.prestige + 1}
-              />
-            ))}
-          </figure>
-        </label>
-      </aside>
-      <aside className="px-10 py-4">
-        <label className="fieldset p-0 text-xs">
           <p>Role</p>
           <div className="mt-2 flex items-center justify-between">
             <span
@@ -179,12 +153,11 @@ export default function (props: PlayerCardProps) {
                 'text-sm font-semibold',
                 props.player.role === Constants.PlayerRole.SNIPER
                   ? 'text-purple-300'
-                  : 'text-blue-300'
+                  : 'text-blue-300',
               )}
             >
               {props.player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
             </span>
-
             <img
               src={props.player.role === Constants.PlayerRole.SNIPER ? awpIcon : ak47Icon}
               alt={props.player.role === Constants.PlayerRole.SNIPER ? 'AWP icon' : 'AK-47 icon'}
@@ -200,37 +173,6 @@ export default function (props: PlayerCardProps) {
           value={props.player.xp ?? 0}
           max={100}
         />
-      </aside>
-      <aside className="grid grid-cols-4">
-        <button
-          title={t('playerCard.setAsStarter')}
-          className="btn btn-ghost btn-block rounded-none disabled:bg-transparent!"
-          disabled={!props.onClickStarter}
-          onClick={props.onClickStarter || null}
-        >
-          <FaStar className={cx(props.player.starter && 'text-yellow-500')} />
-        </button>
-        <button
-          title={t('playerCard.addToTransferList')}
-          className="btn btn-ghost btn-block rounded-none"
-          onClick={props.onClickTransferListed}
-        >
-          <FaShoppingBag className={cx(props.player.transferListed && 'text-primary')} />
-        </button>
-        <button
-          title={t('shared.viewOffers')}
-          className="btn btn-ghost btn-block rounded-none"
-          onClick={props.onClickViewOffers}
-        >
-          <FaFolderOpen />
-        </button>
-        <button
-          className="btn btn-ghost btn-block rounded-none"
-          disabled={!props.onClickRelease}
-          onClick={props.onClickRelease || null}
-        >
-          <FaUserSlash />
-        </button>
       </aside>
     </article>
   );

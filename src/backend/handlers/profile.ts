@@ -16,7 +16,10 @@ import { DatabaseClient, Game, WindowManager } from "@liga/backend/lib";
 export default function registerProfileHandlers() {
   ipcMain.handle(
     "profiles:createPlayerCareer",
-    async (_, data: { playerName: string; countryId: number; role: string }) => {
+    async (
+      _,
+      data: { playerName: string; countryId: number; role: string }
+    ) => {
       const { playerName, countryId, role } = data;
 
       // Always use the single root profile
@@ -77,8 +80,10 @@ export default function registerProfileHandlers() {
 
       // Reload logging level
       if (newSettings.general.logLevel !== settings.general.logLevel) {
-        log.transports.console.level = newSettings.general.logLevel as log.LogLevel;
-        log.transports.file.level = newSettings.general.logLevel as log.LogLevel;
+        log.transports.console.level =
+          newSettings.general.logLevel as log.LogLevel;
+        log.transports.file.level =
+          newSettings.general.logLevel as log.LogLevel;
       }
 
       // Rediscover game path if game mode changed
@@ -147,5 +152,33 @@ export default function registerProfileHandlers() {
 
     if (!fs.existsSync(dbPath)) return Promise.reject();
     return fs.promises.unlink(dbPath);
+  });
+
+  /**
+   * SQUAD (Player Career) — used by Squad Hub
+   *
+   * Returns the current team's players, or [] if teamless.
+   */
+  ipcMain.handle(Constants.IPCRoute.SQUAD_ALL, async () => {
+    const profile = await DatabaseClient.prisma.profile.findFirst({
+      include: {
+        team: {
+          include: {
+            players: {
+              include: {
+                country: true, // needed for flags / names in PlayerCard
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!profile || !profile.team) {
+      // teamless: Squad Hub will fall back to the "You are teamless" view
+      return [];
+    }
+
+    return profile.team.players;
   });
 }
