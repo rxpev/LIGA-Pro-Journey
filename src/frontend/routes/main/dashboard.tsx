@@ -68,9 +68,7 @@ export function StatusBanner(props: StatusBannerProps) {
     <section className="alert alert-warning flex h-8 justify-center rounded-none p-0">
       <FaExclamationTriangle />
       {error.code === Constants.ErrorCode.ENOENT &&
-        (message === Constants.GameSettings.CS16_EXE ||
-          message === Constants.GameSettings.CSSOURCE_EXE ||
-          message === Constants.GameSettings.STEAM_EXE) && (
+        message === Constants.GameSettings.STEAM_EXE && (
           <p>
             {message} {t('main.dashboard.gameNotDetected')}
           </p>
@@ -134,6 +132,11 @@ export default function () {
       return;
     }
 
+    if (!state.profile.teamId) {
+      setUpcoming([]);
+      return;
+    }
+
     api.matches.upcoming(Eagers.match, NUM_UPCOMING).then(setUpcoming);
   }, [state.profile]);
 
@@ -162,7 +165,12 @@ export default function () {
   React.useEffect(() => {
     const [nextMatch] = upcoming.slice(0, 1);
 
-    if (nextMatch || !state.profile) {
+    if (!state.profile || !state.profile.teamId) {
+      setPrevious([]);
+      return;
+    }
+
+    if (nextMatch) {
       return;
     }
 
@@ -194,25 +202,26 @@ export default function () {
   );
 
   // grab user's team info
-  const userTeam = React.useMemo(
-    () =>
-      !!standings &&
-      standings.competition.competitors.find(
-        (competitor) => competitor.teamId === state.profile.teamId,
-      ),
-    [standings, state.profile],
-  );
+  const userTeam = React.useMemo(() => {
+    if (!standings || !state.profile?.teamId) {
+      return undefined;
+    }
+
+    return standings.competition.competitors.find(
+      (competitor) => competitor.teamId === state.profile.teamId,
+    );
+  }, [standings, state.profile?.teamId]);
 
   // grab competitors by user's group
-  const userGroupCompetitors = React.useMemo(
-    () =>
-      !!standings &&
-      !!standings.competition.tier.groupSize &&
-      standings.competition.competitors
-        .filter((competitor) => competitor.group === userTeam.group)
-        .sort((a, b) => a.position - b.position),
-    [standings, userTeam],
-  );
+  const userGroupCompetitors = React.useMemo(() => {
+    if (!standings || !standings.competition.tier.groupSize || !userTeam) {
+      return undefined;
+    }
+
+    return standings.competition.competitors
+      .filter((competitor) => competitor.group === userTeam.group)
+      .sort((a, b) => a.position - b.position);
+  }, [standings, userTeam]);
 
   return (
     <div className="dashboard">
@@ -267,12 +276,12 @@ export default function () {
                     <td className="w-1/6">
                       {state.profile
                         ? format(
-                            addDays(
-                              !upcoming.length ? state.profile.date : upcoming.slice(-1)[0].date,
-                              idx + 1,
-                            ),
-                            'MM/dd',
-                          )
+                          addDays(
+                            !upcoming.length ? state.profile.date : upcoming.slice(-1)[0].date,
+                            idx + 1,
+                          ),
+                          'MM/dd',
+                        )
                         : '-'}
                     </td>
                     <td className="w-3/6 truncate">{t('main.dashboard.noMatchScheduled')}</td>
@@ -296,7 +305,7 @@ export default function () {
             {!!standings &&
               !!spotlight &&
               (() => {
-                if (standings.competition.tier.groupSize) {
+                if (standings.competition.tier.groupSize && userTeam && userGroupCompetitors) {
                   return (
                     <article className="stack-y divide-base-content/10 !gap-0 divide-y">
                       <aside className="stack-x items-center px-2">
@@ -321,16 +330,27 @@ export default function () {
                         competitors={userGroupCompetitors}
                         title={
                           standings.competition.tier.league.slug ===
-                          Constants.LeagueSlug.ESPORTS_LEAGUE
+                            Constants.LeagueSlug.ESPORTS_LEAGUE
                             ? Constants.IdiomaticTier[standings.competition.tier.slug]
                             : `${t('shared.group')} ${Util.toAlpha(userTeam.group)}`
                         }
                         zones={
-                          standings.competition.status === Constants.CompetitionStatus.STARTED &&
+                          standings.competition.status ===
+                          Constants.CompetitionStatus.STARTED &&
                           (Constants.TierZones[standings.competition.tier.slug] ||
                             Constants.TierZones.default)
                         }
                       />
+                    </article>
+                  );
+                }
+
+                if (standings.competition.tier.groupSize && !userTeam) {
+                  return (
+                    <article key="empty__standings_group" className="card h-32 rounded-none">
+                      <aside className="card-body items-center justify-center">
+                        <p className="grow-0">{t('main.dashboard.noStandings')}</p>
+                      </aside>
                     </article>
                   );
                 }
@@ -510,13 +530,18 @@ export default function () {
             const [homeHistorial, awayHistorial] = matchHistorial;
             const [homeWorldRanking, awayWorldRanking] = worldRankings;
             const [homeSuffix, awaySuffix] = [home, away].map((competitor) => {
-              if (!spotlight.competition.tier.groupSize) {
+              if (!spotlight.competition.tier.groupSize || !userGroupCompetitors) {
                 return Constants.IdiomaticTier[Constants.Prestige[competitor.team.tier]];
               }
 
-              return Util.toOrdinalSuffix(
-                userGroupCompetitors.findIndex((a) => a.teamId === competitor.teamId) + 1,
+              const idx = userGroupCompetitors.findIndex(
+                (a) => a.teamId === competitor.teamId,
               );
+              if (idx === -1) {
+                return Constants.IdiomaticTier[Constants.Prestige[competitor.team.tier]];
+              }
+
+              return Util.toOrdinalSuffix(idx + 1);
             });
 
             return (
@@ -530,7 +555,8 @@ export default function () {
                     <span>
                       <strong>Live&nbsp;</strong>
                       <em>
-                        ({spotlight.competitors.map((competitor) => competitor.score).join(' - ')})
+                        ({spotlight.competitors.map((competitor) => competitor.score).join(' - ')}
+                        )
                       </em>
                     </span>
                   </figure>
@@ -553,7 +579,9 @@ export default function () {
                       <div className="text-center">
                         <p>
                           {home.team.name}&nbsp;
-                          <small title={t('shared.worldRanking')}>(#{homeWorldRanking || 0})</small>
+                          <small title={t('shared.worldRanking')}>
+                            (#{homeWorldRanking || 0})
+                          </small>
                         </p>
                         <p>
                           <small>{homeSuffix}</small>
@@ -605,7 +633,9 @@ export default function () {
                       <div className="text-center">
                         <p>
                           {away.team.name}&nbsp;
-                          <small title="World Ranking">(#{awayWorldRanking || 0})</small>
+                          <small title="World Ranking">
+                            (#{awayWorldRanking || 0})
+                          </small>
                         </p>
                         <p>
                           <small>{awaySuffix}</small>
@@ -702,13 +732,13 @@ export default function () {
                             const onClick =
                               match._count.events > 0
                                 ? () =>
-                                    api.window.send<ModalRequest>(
-                                      Constants.WindowIdentifier.Modal,
-                                      {
-                                        target: '/postgame',
-                                        payload: match.id,
-                                      },
-                                    )
+                                  api.window.send<ModalRequest>(
+                                    Constants.WindowIdentifier.Modal,
+                                    {
+                                      target: '/postgame',
+                                      payload: match.id,
+                                    },
+                                  )
                                 : null;
 
                             return (
@@ -765,14 +795,14 @@ export default function () {
                             <td className="w-1/12">
                               {state.profile
                                 ? format(
-                                    addDays(
-                                      !matches.length
-                                        ? state.profile.date
-                                        : matches.slice(-1)[0].date,
-                                      idx - 1,
-                                    ),
-                                    'MM/dd',
-                                  )
+                                  addDays(
+                                    !matches.length
+                                      ? state.profile.date
+                                      : matches.slice(-1)[0].date,
+                                    idx - 1,
+                                  ),
+                                  'MM/dd',
+                                )
                                 : '-'}
                             </td>
                             <td className="w-4/12 text-center">-</td>

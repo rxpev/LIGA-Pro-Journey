@@ -89,6 +89,15 @@ export function XPBar(props: XPBarProps) {
  * @exports
  */
 export default function (props: PlayerCardProps) {
+
+  const roleRaw = props.player.role;
+
+  // Treat both the enum value and legacy/string values as “sniper”
+  const isSniper =
+    roleRaw === Constants.PlayerRole.SNIPER ||
+    String(roleRaw).toLowerCase() === 'awper' ||
+    String(roleRaw).toLowerCase() === 'sniper';
+
   const t = useTranslation('components');
   if (props.compact) {
     return (
@@ -151,16 +160,14 @@ export default function (props: PlayerCardProps) {
             <span
               className={cx(
                 'text-sm font-semibold',
-                props.player.role === Constants.PlayerRole.SNIPER
-                  ? 'text-purple-300'
-                  : 'text-blue-300',
+                isSniper ? 'text-purple-300' : 'text-blue-300',
               )}
             >
-              {props.player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
+              {isSniper ? 'AWPer' : 'Rifler'}
             </span>
             <img
-              src={props.player.role === Constants.PlayerRole.SNIPER ? awpIcon : ak47Icon}
-              alt={props.player.role === Constants.PlayerRole.SNIPER ? 'AWP icon' : 'AK-47 icon'}
+              src={isSniper ? awpIcon : ak47Icon}
+              alt={isSniper ? 'AWP icon' : 'AK-47 icon'}
               className="h-4 w-auto opacity-80"
             />
           </div>

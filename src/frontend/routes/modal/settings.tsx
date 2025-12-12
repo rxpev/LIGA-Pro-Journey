@@ -132,12 +132,7 @@ export default function () {
             <section>
               <header>
                 <p>{t('settings.gameTitle')}</p>
-                {settings.general.game === Constants.Game.CS2 && (
-                  <p className="text-warning">{t('settings.gameSubtitleCS2')}</p>
-                )}
-                {settings.general.game !== Constants.Game.CS2 && (
-                  <p>{t('settings.gameSubtitle')}</p>
-                )}
+                )
               </header>
               <article>
                 <select

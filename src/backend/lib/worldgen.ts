@@ -573,7 +573,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
   }
 
-  // 5) Schedule contract expiry event in the calendar.  ⬅⬅⬅  THIS WAS MISSING
+  // 5) Schedule contract expiry event in the calendar.
   await DatabaseClient.prisma.calendar.create({
     data: {
       type: Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
