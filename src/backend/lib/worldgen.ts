@@ -515,6 +515,15 @@ export async function acceptUserPlayerTransfer(transferId: number) {
 
   if (!transfer) return Promise.resolve();
 
+  const fromTeamId = transfer.from?.id;
+  if (!fromTeamId) {
+    Engine.Runtime.Instance.log.warn(
+      "acceptUserPlayerTransfer: transfer %d has no from team loaded. Skipping.",
+      transferId
+    );
+    return Promise.resolve();
+  }
+
   // Only handle invites that target our user player.
   if (transfer.playerId !== profile.playerId) {
     Engine.Runtime.Instance.log.warn(
@@ -551,7 +560,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     data: {
       transferListed: false,
       starter: true,
-      team: { connect: { id: transfer.teamIdFrom } },
+      team: { connect: { id: fromTeamId } },
       contractEnd,
     },
   });
@@ -561,7 +570,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     where: { id: profile.id },
     data: {
       team: {
-        connect: { id: transfer.teamIdFrom },
+        connect: { id: fromTeamId },
       },
     },
     include: { player: true, team: true },
@@ -588,7 +597,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     where: {
       date: { gte: today.toISOString() },
       competitors: {
-        some: { teamId: transfer.teamIdFrom },
+        some: { teamId: fromTeamId },
       },
     },
   });
@@ -639,16 +648,21 @@ export async function acceptUserPlayerTransfer(transferId: number) {
   }
 
   // 8) Welcome email.
+  const updatedPlayer = await DatabaseClient.prisma.player.findFirst({
+    where: { id: transfer.playerId },
+  });
+  const locale = getLocale(profile);
   const persona =
-    transfer.from.personas.find(
+    transfer.from?.personas?.find(
       (p) =>
         p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT
-    ) ?? transfer.from.personas[0];
+        p.role === Constants.PersonaRole.ASSISTANT,
+    ) ?? transfer.from?.personas?.[0];
+  if (!persona) return Promise.resolve();
 
   await sendEmail(
-    `Welcome to ${transfer.from.name}`,
-    `We are happy to have you on board at ${transfer.from.name}.`,
+    Sqrl.render(locale.templates.OfferAcceptedUser.SUBJECT, { transfer, profile, player: updatedPlayer }),
+    Sqrl.render(locale.templates.OfferAcceptedUser.CONTENT, { transfer, profile, player: updatedPlayer }),
     persona,
     profile.date,
     true
@@ -705,7 +719,6 @@ export async function rejectUserPlayerTransfer(transferId: number) {
     },
   });
 
-  // Optional: send polite "Thanks but no" mail
   const persona =
     transfer.from.personas.find(
       (p) =>

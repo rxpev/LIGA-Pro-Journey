@@ -73,8 +73,15 @@ export enum OfferAcceptedTeam {
 
 /** @enum */
 export enum OfferAcceptedUser {
-  SUBJECT = 'Transfer Offer for {{it.transfer.target.name}}',
-  CONTENT = `Accepted {{it.transfer.from.name}}'s offer.`,
+  SUBJECT = 'Welcome to {{it.transfer.from.name}}',
+  CONTENT = `
+  Hello, { { it.profile.player.name } }.
+
+  Welcome to ** {{ it.transfer.from.name }}**.We are happy to have you on board.
+
+  Your contract is valid until: { { it.player.contractEnd | date } }
+
+  `,
 }
 
 /** @enum */
