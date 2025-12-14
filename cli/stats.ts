@@ -209,9 +209,52 @@ export async function generateStats(args: any = {}) {
       }
     }
 
+    const xpOf = (p: Player) => (p.xp ?? 0);
+    const byXpDesc = (a: Player, b: Player) => xpOf(b) - xpOf(a);
+    snipers = teamPlayers.filter((p) => p.role === PlayerRole.SNIPER).sort(byXpDesc);
+
+    if (snipers.length === 0 && teamPlayers.length > 0) {
+      const chosen = [...teamPlayers].sort(byXpDesc)[0];
+      chosen.role = PlayerRole.SNIPER;
+      chosen.personality = getRandomSniperPersonality();
+      snipers = [chosen];
+    }
+
+    const awperStarter = snipers[0];
+
+    let riflers = teamPlayers
+      .filter((p) => p.id !== awperStarter.id && p.role === PlayerRole.RIFLER)
+      .sort(byXpDesc);
+
+    //if there still aren’t 4 riflers, convert best remaining players
+    if (riflers.length < 4) {
+      const fillCandidates = teamPlayers
+        .filter((p) => p.id !== awperStarter.id && p.role !== PlayerRole.RIFLER)
+        .sort(byXpDesc);
+
+      for (const p of fillCandidates) {
+        p.role = PlayerRole.RIFLER;
+        p.personality = getRandomRiflePersonality();
+        riflers.push(p);
+        if (riflers.length >= 4) break;
+      }
+
+      riflers.sort(byXpDesc);
+    }
+
+    const riflerStarters = riflers.slice(0, 4);
+
+    const starterIds = new Set<number>([
+      awperStarter.id,
+      ...riflerStarters.map((p) => p.id),
+    ]);
+
+    const transferListIds = new Set<number>(
+      teamPlayers.filter((p) => !starterIds.has(p.id)).map((p) => p.id),
+    );
+
     // Generate XP & stats
     for (const player of teamPlayers) {
-      // Initialize base XP from prestige if empty / null
       if (args.initial) {
         player.xp = getInitialXpForPrestige(player.prestige ?? 0);
       }
@@ -228,6 +271,8 @@ export async function generateStats(args: any = {}) {
             role: player.role,
             personality: player.personality,
             elo: faceitElo,
+            starter: starterIds.has(player.id),
+            transferListed: transferListIds.has(player.id),
           },
         }),
       );
