@@ -8,32 +8,29 @@ import { Command } from 'commander';
 import { random } from 'lodash';
 import { PrismaClient } from '@prisma/client';
 import type { Player } from '@prisma/client';
-import { Bot } from '@liga/shared';
 import { playerOverrides } from '@liga/backend/handlers/playeroverrides';
 import { PlayerRole, PersonalityTemplate } from '@liga/shared';
-import { levelFromElo } from "@liga/backend/lib/levels";
+import { levelFromElo } from '@liga/backend/lib/levels';
 
 function getFaceitEloForXp(xp: number): { elo: number; level: number } {
-  // XP → Elo tier logic
-
   let min = 300;
   let max = 800;
 
   if (xp <= 10) {
     min = 300;
-    max = 800; // FACEIT lvl 1 range
+    max = 800;
   } else if (xp <= 15) {
     min = 800;
-    max = 950; // Level 1–2 transitional
+    max = 950;
   } else if (xp <= 20) {
     min = 900;
-    max = 1250; // Level 2–4
+    max = 1250;
   } else if (xp <= 27) {
     min = 1250;
-    max = 1700; // Level 4–7
+    max = 1700;
   } else if (xp <= 40) {
     min = 1800;
-    max = 2100; // Level 8–10
+    max = 2100;
   } else if (xp <= 45) {
     min = 2100;
     max = 2300;
@@ -50,7 +47,6 @@ function getFaceitEloForXp(xp: number): { elo: number; level: number } {
 
   let elo = random(min, max);
 
-  // Make high XP players weighted toward the top
   if (xp >= 68) {
     const bias = (xp - 68) / 40;
     const weighted = elo + bias * (max - elo) * Math.random();
@@ -60,6 +56,7 @@ function getFaceitEloForXp(xp: number): { elo: number; level: number } {
   const level = levelFromElo(elo);
   return { elo, level };
 }
+
 function getInitialXpForPrestige(prestige: number): number {
   let minXp = 0;
   let maxXp = 0;
@@ -122,18 +119,10 @@ interface CLIArguments {
   max?: string;
 }
 
-/**
- * Initialize the local prisma client.
- *
- * @constant
- */
+/** @constant */
 const prisma = new PrismaClient();
 
-/**
- * Default scraper arguments.
- *
- * @constant
- */
+/** @constant */
 const DEFAULT_ARGS: CLIArguments = {
   min: '1',
   max: '5',
@@ -146,8 +135,6 @@ const DEFAULT_ARGS: CLIArguments = {
  * @param args CLI args.
  */
 export async function generateStats(args: any = {}) {
-  const mergedArgs = { ...DEFAULT_ARGS, ...args };
-
   const players = await prisma.player.findMany({
     include: { team: true },
   });
@@ -165,8 +152,8 @@ export async function generateStats(args: any = {}) {
   const updates: any[] = [];
 
   // Process all teams
-  for (const [teamId, teamPlayers] of Object.entries(playersByTeam)) {
-    // Apply overrides
+  for (const [, teamPlayers] of Object.entries(playersByTeam)) {
+    // Apply overrides first (role/personality may be overwritten later if required to enforce the starter AWPer invariant)
     for (const player of teamPlayers) {
       const override = playerOverrides[player.name];
       if (override) {
@@ -175,30 +162,43 @@ export async function generateStats(args: any = {}) {
       }
     }
 
-    // Ensure 1 sniper per team
-    let snipers = teamPlayers.filter((p) => p.role === PlayerRole.SNIPER);
-    if (snipers.length === 0) {
-      const eligible = teamPlayers.filter(
-        (p) => !playerOverrides[p.name] || playerOverrides[p.name].role !== PlayerRole.SNIPER,
-      );
-      const chosen =
-        eligible.length > 0
-          ? eligible[random(0, eligible.length - 1)]
-          : teamPlayers[random(0, teamPlayers.length - 1)];
-      chosen.role = PlayerRole.SNIPER;
-      chosen.personality = getRandomSniperPersonality();
-    }
-
-    // Handle multiple snipers
-    snipers = teamPlayers.filter((p) => p.role === PlayerRole.SNIPER);
-    if (snipers.length > 1) {
-      for (let i = 1; i < snipers.length; i++) {
-        snipers[i].role = PlayerRole.RIFLER;
-        snipers[i].personality = getRandomRiflePersonality();
+    // If this is an initial generation pass, assign XP up-front so starter selection uses the final XP values
+    if (args.initial) {
+      for (const player of teamPlayers) {
+        player.xp = getInitialXpForPrestige(player.prestige ?? 0);
       }
     }
 
-    // Assign defaults
+    const xpOf = (p: Player) => (p.xp ?? 0);
+    const byXpDesc = (a: Player, b: Player) => xpOf(b) - xpOf(a);
+
+    // Enforce: exactly one SNIPER on the roster, and that SNIPER is the AWPer starter
+    // If no SNIPER exists, promote the highest-XP player to SNIPER.
+    let snipers = teamPlayers.filter((p) => p.role === PlayerRole.SNIPER).sort(byXpDesc);
+
+    if (snipers.length === 0 && teamPlayers.length > 0) {
+      const chosen = [...teamPlayers].sort(byXpDesc)[0];
+      chosen.role = PlayerRole.SNIPER;
+      chosen.personality = getRandomSniperPersonality();
+      snipers = [chosen];
+    } else if (snipers.length > 1) {
+      const keep = snipers[0]; // highest-XP sniper
+      for (const extra of snipers.slice(1)) {
+        extra.role = PlayerRole.RIFLER;
+        extra.personality = getRandomRiflePersonality();
+      }
+      snipers = [keep];
+    }
+
+    const awperStarter = snipers[0];
+
+    // Hard guarantee: the starter AWPer is always SNIPER with a sniper personality
+    if (awperStarter) {
+      awperStarter.role = PlayerRole.SNIPER;
+      awperStarter.personality = getRandomSniperPersonality();
+    }
+
+    // Assign defaults for any remaining missing values.
     for (const player of teamPlayers) {
       if (!player.role) player.role = PlayerRole.RIFLER;
       if (!player.personality) {
@@ -209,24 +209,12 @@ export async function generateStats(args: any = {}) {
       }
     }
 
-    const xpOf = (p: Player) => (p.xp ?? 0);
-    const byXpDesc = (a: Player, b: Player) => xpOf(b) - xpOf(a);
-    snipers = teamPlayers.filter((p) => p.role === PlayerRole.SNIPER).sort(byXpDesc);
-
-    if (snipers.length === 0 && teamPlayers.length > 0) {
-      const chosen = [...teamPlayers].sort(byXpDesc)[0];
-      chosen.role = PlayerRole.SNIPER;
-      chosen.personality = getRandomSniperPersonality();
-      snipers = [chosen];
-    }
-
-    const awperStarter = snipers[0];
-
+    // Select starters: 1x SNIPER (AWPer) + 4x highest-XP RIFLERs
     let riflers = teamPlayers
       .filter((p) => p.id !== awperStarter.id && p.role === PlayerRole.RIFLER)
       .sort(byXpDesc);
 
-    //if there still aren’t 4 riflers, convert best remaining players
+    // If fewer than 4 riflers exist, convert best remaining non-AWPer players into riflers until we reach 4
     if (riflers.length < 4) {
       const fillCandidates = teamPlayers
         .filter((p) => p.id !== awperStarter.id && p.role !== PlayerRole.RIFLER)
@@ -249,19 +237,15 @@ export async function generateStats(args: any = {}) {
       ...riflerStarters.map((p) => p.id),
     ]);
 
+    // Everyone not in the starting five is transfer-listed (regardless of role)
     const transferListIds = new Set<number>(
       teamPlayers.filter((p) => !starterIds.has(p.id)).map((p) => p.id),
     );
 
-    // Generate XP & stats
+    // Persist roles, personalities, XP, Elo, and roster flags
     for (const player of teamPlayers) {
-      if (args.initial) {
-        player.xp = getInitialXpForPrestige(player.prestige ?? 0);
-      }
-
-      let newXp = player.xp;
-
-      const { elo: faceitElo, level: faceitLevel } = getFaceitEloForXp(newXp);
+      const newXp = player.xp ?? 0;
+      const { elo: faceitElo } = getFaceitEloForXp(newXp);
 
       updates.push(
         prisma.player.update({
@@ -286,7 +270,6 @@ export async function generateStats(args: any = {}) {
     log.info(`Assigning roles/personalities & training ${freeAgents.length} free agents...`);
 
     const freeAgentUpdates = freeAgents.map((player) => {
-      // Assign random role with 20% sniper chance
       const isSniper = Math.random() < 0.2;
       player.role = isSniper ? PlayerRole.SNIPER : PlayerRole.RIFLER;
       player.personality = isSniper
@@ -297,8 +280,7 @@ export async function generateStats(args: any = {}) {
         player.xp = getInitialXpForPrestige(player.prestige ?? 0);
       }
 
-      let newXp = player.xp;
-
+      const newXp = player.xp ?? 0;
       const { elo } = getFaceitEloForXp(newXp);
 
       return prisma.player.update({
@@ -308,15 +290,16 @@ export async function generateStats(args: any = {}) {
           role: player.role,
           personality: player.personality,
           elo,
+          starter: false,
+          transferListed: true,
         },
       });
     });
 
     await prisma.$transaction(freeAgentUpdates);
-    log.info(' Assigned roles and trained all free agents successfully.');
+    log.info('Assigned roles and trained all free agents successfully.');
   }
 
-  // Apply all player stat updates for team players
   await prisma.$transaction(updates);
   log.info('Stats generation complete.');
   return Promise.resolve();

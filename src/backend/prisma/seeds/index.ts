@@ -27,8 +27,6 @@ const prisma = new PrismaClient();
 program
   .argument("[seeder]", "Run a specific seeder (optional)")
   .option("-t, --token <token>", "Pandascore Access Token")
-  // 👇 our new CLI options
-  .option("--mode <mode>", "Career mode: MANAGER or PLAYER", "MANAGER")
   .option("--playerName <name>", "Player name")
   .option("--countryId <id>", "Country ID", (v) => parseInt(v, 10))
   .option("--role <role>", "Player role (RIFLER | AWPER | IGL)");

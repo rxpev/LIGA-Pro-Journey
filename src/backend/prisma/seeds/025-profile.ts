@@ -5,6 +5,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { Constants } from '@liga/shared';
+import log from 'electron-log';
 
 export default async function seedProfile(prisma: PrismaClient) {
   // Look for any existing profile (legacy "Default" or already migrated)
@@ -15,12 +16,16 @@ export default async function seedProfile(prisma: PrismaClient) {
     if (existing.playerId) {
       return;
     }
+    const c840 = await prisma.country.findUnique({ where: { id: 840 } });
+    log.info('Country(840) exists?', !!c840);
 
+    const anyCountry = await prisma.country.findFirst();
+    log.info('Any country exists?', !!anyCountry);
     // Otherwise, we're upgrading an old "Default" profile to the new format
     const player = await prisma.player.create({
       data: {
         name: 'Player',
-        countryId: 840,
+        countryId: 1,
         role: 'RIFLER',
         xp: 0,
         prestige: 0,
