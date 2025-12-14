@@ -120,11 +120,22 @@ export default function () {
   Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
   Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, Worldgen.onMatchdayNPC);
 
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, async (entry) => {
+  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, async (entry: Calendar) => {
     const profile = await DatabaseClient.prisma.profile.findFirst();
 
-    // Skip user matchdays entirely when teamless.
-    if (!profile.teamId) return;
+    // Fail-safe: if teamless but we encounter a MATCHDAY_USER,
+    // demote it and simulate as NPC so matches never get stuck
+    if (!profile?.teamId) {
+      await DatabaseClient.prisma.calendar.update({
+        where: { id: entry.id },
+        data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+      });
+
+      return Worldgen.onMatchdayNPC({
+        ...(entry as Calendar),
+        type: Constants.CalendarEntry.MATCHDAY_NPC,
+      });
+    }
 
     return Worldgen.onMatchdayUser(entry as Calendar);
   });

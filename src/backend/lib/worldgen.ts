@@ -594,14 +594,20 @@ export async function acceptUserPlayerTransfer(transferId: number) {
   });
 
   if (futureMatches.length) {
+    const matchIds = futureMatches.map((m) => String(m.id));
+
     await DatabaseClient.prisma.calendar.updateMany({
       where: {
-        payload: { in: futureMatches.map((m) => String(m.id)) },
-        type: Constants.CalendarEntry.MATCHDAY_NPC,
+        payload: { in: matchIds },
+        date: { gte: today.toISOString() },
+        type: {
+          in: [
+            Constants.CalendarEntry.MATCHDAY_NPC,
+            Constants.CalendarEntry.MATCHDAY_USER,
+          ],
+        },
       },
-      data: {
-        type: Constants.CalendarEntry.MATCHDAY_USER,
-      },
+      data: { type: Constants.CalendarEntry.MATCHDAY_USER },
     });
   }
 
@@ -1954,36 +1960,24 @@ export async function onMatchdayNPC(entry: Calendar) {
 
 export async function onPlayerContractExpire(entry: Calendar) {
   const playerId = Number(entry.payload);
-
-  // Load profile with team/player (like other user-specific handlers)
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
 
   const player = await DatabaseClient.prisma.player.findFirst({
     where: { id: playerId },
-    include: {
-      team: {
-        include: {
-          personas: true,
-        },
-      },
-    },
+    include: { team: { include: { personas: true } } },
   });
-
   if (!player) return Promise.resolve();
 
-  // Only handle our user player's contract for now.
-  if (player.id !== profile.playerId) {
-    return Promise.resolve();
-  }
+  if (player.id !== profile.playerId) return Promise.resolve();
 
-  // Make user a free agent again.
+  const oldTeamId = player.teamId;
+  const today = profile.date;
+
+  // Make user free agent again
   await DatabaseClient.prisma.player.update({
     where: { id: player.id },
-    data: {
-      teamId: null,
-      contractEnd: null,
-    },
+    data: { teamId: null, contractEnd: null },
   });
 
   const updatedProfile = await DatabaseClient.prisma.profile.update({
@@ -1992,7 +1986,31 @@ export async function onPlayerContractExpire(entry: Calendar) {
     include: { player: true, team: true },
   });
 
-  // Push profile update to renderer.
+  // Revert remaining USER matchdays for the old team back to NPC
+  if (oldTeamId != null) {
+    const futureMatches = await DatabaseClient.prisma.match.findMany({
+      where: {
+        date: { gte: today.toISOString() },
+        competitors: { some: { teamId: oldTeamId } },
+      },
+      select: { id: true },
+    });
+
+    const matchIds = futureMatches.map((m) => String(m.id));
+
+    if (matchIds.length) {
+      await DatabaseClient.prisma.calendar.updateMany({
+        where: {
+          payload: { in: matchIds },
+          date: { gte: today.toISOString() },
+          type: Constants.CalendarEntry.MATCHDAY_USER,
+        },
+        data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+      });
+    }
+  }
+
+  // Push profile update to renderer
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
   if (mainWindow) {
     mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
