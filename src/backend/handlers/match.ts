@@ -80,19 +80,17 @@ export default function () {
         ...query,
         take: limit,
         where: {
-          date: {
-            lte: profile.date.toISOString(),
-          },
-          competitors: {
-            some: {
-              teamId: id,
+          AND: [
+            query.where ?? {},
+            {
+              competitionId: { not: null }, // <- prevents match.competition === null
+              date: { lte: profile.date.toISOString() },
+              competitors: { some: { teamId: id } },
+              status: Constants.MatchStatus.COMPLETED,
             },
-          },
-          status: Constants.MatchStatus.COMPLETED,
+          ],
         },
-        orderBy: {
-          date: 'desc',
-        },
+        orderBy: { date: "desc" },
       });
     },
   );
@@ -100,25 +98,25 @@ export default function () {
     Constants.IPCRoute.MATCHES_UPCOMING,
     async (_, query: Partial<Prisma.MatchFindManyArgs> = {}, limit = 5) => {
       const profile = await DatabaseClient.prisma.profile.findFirst();
+      // Teamless safety: no upcoming team matches.
+      if (!profile?.teamId) {
+        return [];
+      }
       return DatabaseClient.prisma.match.findMany({
         ...query,
         take: limit,
         where: {
-          date: {
-            gte: profile.date.toISOString(),
-          },
-          competitors: {
-            some: {
-              teamId: profile.teamId,
+          AND: [
+            query.where ?? {},
+            {
+              competitionId: { not: null },
+              date: { gte: profile.date.toISOString() },
+              competitors: { some: { teamId: profile.teamId } },
+              status: { not: Constants.MatchStatus.COMPLETED },
             },
-          },
-          status: {
-            not: Constants.MatchStatus.COMPLETED,
-          },
+          ],
         },
-        orderBy: {
-          date: 'asc',
-        },
+        orderBy: { date: "asc" },
       });
     },
   );
