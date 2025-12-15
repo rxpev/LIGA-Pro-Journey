@@ -1166,7 +1166,7 @@ End\n
       gameClientProcess.on('close', this.cleanup.bind(this));
     }
 
-    // 6) Start scorebot on the correct log file (dedicated-aware)
+    // 6) Start scorebot on the correct log file
     const logRoot =
       this.settings.general.game === Constants.Game.CSGO
         ? (this.settings.general.dedicatedServerPath || this.settings.general.gamePath)
@@ -1200,7 +1200,7 @@ End\n
       this.scorebotEvents.push({ type: Scorebot.EventIdentifier.ROUND_OVER, payload }),
     );
 
-    // 8) Resolve when GAME_OVER fires – like original LIGA
+    // 8) Resolve when GAME_OVER fires
     return new Promise((resolve) => {
       this.scorebot.on(Scorebot.EventIdentifier.GAME_OVER, async (payload) => {
         // In CS:GO we delay + adjust score ordering for OT
@@ -1221,7 +1221,12 @@ End\n
             }
           }
         }
-
+        if (gameClientProcess && !gameClientProcess.killed) {
+          try {
+            gameClientProcess.kill();
+          } catch (e) {
+          }
+        }
         this.log.info('Final result: %O', payload);
         this.result = payload;
         resolve();
