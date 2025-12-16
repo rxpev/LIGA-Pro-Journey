@@ -322,6 +322,7 @@ model Player {
   assists             MatchEvent[]        @relation("assist")
   kills               MatchEvent[]        @relation("attacker")
   deaths              MatchEvent[]        @relation("victim")
+  careerStints        CareerStint[]
 
   // has one
   profile             Profile?
@@ -429,6 +430,7 @@ model Team {
   sponsorships        Sponsorship[]
   transfersIn         Transfer[]          @relation("to")
   transfersOut        Transfer[]          @relation("from")
+  careerStints        CareerStint[]
 
   // has one
   profile             Profile?
@@ -477,8 +479,30 @@ model Offer {
   status              Int
   cost                Int?                @default(0)
   wages               Int?                @default(0)
+  contractYears       Int?                @default(1)
 
   // belongs to
   transfer            Transfer            @relation(fields: [transferId], references: [id])
   transferId          Int
+}
+
+model CareerStint {
+  id                  Int                 @id @default(autoincrement())
+
+  // belongs to
+  player              Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId            Int
+  team                Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  teamId              Int?
+
+  // snapshot of team tier at the time (Open..Premier index)
+  tier                Int?
+
+  startedAt           DateTime
+  endedAt             DateTime?
+  createdAt           DateTime            @default(now())
+
+  @@index([playerId, endedAt])
+  @@index([teamId, startedAt])
+  @@index([tier, startedAt])
 }

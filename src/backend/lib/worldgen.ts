@@ -552,7 +552,8 @@ export async function acceptUserPlayerTransfer(transferId: number) {
   });
 
   // 1) Compute simple 1-year contract end.
-  const contractEnd = addYears(profile.date, 1);
+  const years = offer.contractYears ?? 1;
+  const contractEnd = addYears(profile.date, years);
 
   // 2) Connect the player to the new team.
   await DatabaseClient.prisma.player.update({
