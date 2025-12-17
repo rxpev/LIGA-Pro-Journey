@@ -6,6 +6,7 @@ import { FaceitMatchmaker } from "@liga/backend/lib/matchmaker";
 import { Server as Game } from "@liga/backend/lib/game";
 import { Constants } from "@liga/shared";
 import { saveFaceitResult } from "@liga/backend/lib/save-result";
+import { computeLifetimeStats, getRecentMatches } from "@liga/backend/lib/faceitstats";
 import { Eagers } from "@liga/shared";
 import { sample } from "lodash";
 
@@ -129,88 +130,6 @@ function buildFaceitPseudoMatch(profile: any, room: MatchRoom, dbMatchId: number
 
 
 export default function registerFaceitHandlers() {
-
-  async function computeLifetimeStats(
-    profileId: number,
-    playerId: number,
-    limit?: number
-  ) {
-    const prisma = DatabaseClient.prisma;
-
-    const matches = await prisma.match.findMany({
-      where: {
-        profileId,
-        matchType: "FACEIT_PUG",
-        status: Constants.MatchStatus.COMPLETED,
-      },
-      include: { events: true },
-      orderBy: { date: "desc" },
-      take: limit ?? undefined,
-    });
-
-    const matchIds = matches.map((m) => m.id);
-
-    const events = await prisma.matchEvent.findMany({
-      where: { matchId: { in: matchIds } },
-    });
-
-    let kills = 0;
-    let deaths = 0;
-    let assists = 0;
-    let headshots = 0;
-
-    for (const e of events) {
-      if (e.attackerId === playerId) {
-        kills++;
-        if (e.headshot) headshots++;
-      }
-      if (e.victimId === playerId) {
-        deaths++;
-      }
-      if (e.assistId === playerId) {
-        assists++;
-      }
-    }
-
-    const wins = matches.filter((m) => m.faceitIsWin === true).length;
-    const losses = matches.length - wins;
-
-    return {
-      matchesPlayed: matches.length,
-      wins,
-      losses,
-      winRate: matches.length ? (wins / matches.length) * 100 : 0,
-      kills,
-      deaths,
-      assists,
-      kdRatio: deaths === 0 ? kills : kills / deaths,
-      hsPercent: kills ? (headshots / kills) * 100 : 0,
-    };
-  }
-
-
-  async function getRecentMatches(profileId: number) {
-    const prisma = DatabaseClient.prisma;
-
-    const matches = await prisma.match.findMany({
-      where: {
-        profileId,
-        matchType: "FACEIT_PUG",
-        status: 3,
-      },
-      include: { games: true },
-      orderBy: { date: "desc" },
-      take: 15,
-    });
-
-    return matches.map((m) => ({
-      id: m.id,
-      map: m.games?.[0]?.map ?? "Unknown",
-      yourTeamWon: m.faceitIsWin ?? null,
-      eloDelta: m.faceitEloDelta ?? null,
-      date: m.date,
-    }));
-  }
 
   // ------------------------------------------------------
   // GET FACEIT PROFILE
@@ -395,7 +314,7 @@ export default function registerFaceitHandlers() {
       await saveFaceitResult(game, realMatchId, profile);
 
       if (profile.teamId == null) {
-        await Worldgen.sendPlayerInviteForUser();
+        await Worldgen.sendUserFaceitOffer();
       }
 
       return { ok: true, matchId: realMatchId };

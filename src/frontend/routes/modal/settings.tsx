@@ -417,7 +417,7 @@ export default function () {
                   onChange={(event) => onSettingsUpdate('matchRules.maxRounds', event.target.value)}
                   value={settings.matchRules.maxRounds}
                 >
-                  {[6, 12, 24, 30].map((value) => (
+                  {[2, 6, 12, 24, 30].map((value) => (
                     <option key={value} value={value}>
                       {value}
                     </option>

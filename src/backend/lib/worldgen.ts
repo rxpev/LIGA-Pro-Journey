@@ -14,7 +14,8 @@ import getLocale from './locale';
 import { addDays, addWeeks, addYears, differenceInDays, format, setDay } from 'date-fns';
 import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
 import { Calendar, Prisma } from '@prisma/client';
-import { Constants, Chance, Bot, Eagers, Util } from '@liga/shared';
+import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug } from '@liga/shared';
+import { computeLifetimeStats } from "./faceitstats";
 
 /**
  * Bumps the current season number by one.
@@ -1122,7 +1123,7 @@ export async function sendPlayerInviteForUser() {
 
   if (!teams.length) return Promise.resolve();
 
-  const from = sample(teams); // lodash.sample
+  const from = sample(teams);
   const target = profile.player;
 
   // Basic wages/cost – for now just reuse whatever the player currently has.
@@ -1172,6 +1173,217 @@ export async function sendPlayerInviteForUser() {
     "%s sent a player-career invite to %s",
     from.name,
     target.name,
+  );
+
+  return Promise.resolve(transfer);
+}
+
+// Blend helper (80% recent, 20% lifetime)
+function blendFaceitMetric(recent: number, lifetime: number) {
+  return recent * 0.8 + lifetime * 0.2;
+}
+
+type ContractYearWeight = { years: number; weight: number };
+const ContractYearsWeights =
+  UserOfferSettings.CONTRACT_YEARS_WEIGHTS as Partial<Record<TierSlug, ContractYearWeight[]>>;
+
+function rollContractYears(tier: TierSlug): number {
+  const options: ContractYearWeight[] =
+    ContractYearsWeights[tier] ?? [{ years: 1, weight: 100 }];
+
+  const pbx: Record<string, number> = {};
+  options.forEach((o: ContractYearWeight, idx: number) => {
+    pbx[String(idx)] = o.weight;
+  });
+  const pickedIdx = Number(Chance.roll(pbx));
+  return options[pickedIdx]?.years ?? 1;
+}
+
+function getFaceitOfferChanceByMatchCount(matchCount: number) {
+  const idx = Math.min(
+    matchCount,
+    UserOfferSettings.FACEIT_OFFER_PBX_BY_MATCH_INDEX.length - 1,
+  );
+  return UserOfferSettings.FACEIT_OFFER_PBX_BY_MATCH_INDEX[idx] ?? 0;
+}
+
+function tierFromElo(elo: number): TierSlug | null {
+  if (elo < UserOfferSettings.FACEIT_ELO_THRESHOLDS.OPEN_MAX) return TierSlug.LEAGUE_OPEN;
+  if (elo < UserOfferSettings.FACEIT_ELO_THRESHOLDS.INTERMEDIATE_MAX)
+    return TierSlug.LEAGUE_INTERMEDIATE;
+
+  return null;
+}
+
+export async function sendUserFaceitOffer() {
+  const prisma = DatabaseClient.prisma;
+
+  const [profile] = await prisma.profile.findMany({
+    take: 1,
+    include: {
+      player: {
+        include: {
+          country: {
+            include: { continent: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!profile || !profile.player) return Promise.resolve();
+  if (profile.teamId != null) return Promise.resolve();
+
+  // Pending offers cap
+  const pendingCount = await prisma.transfer.count({
+    where: {
+      playerId: profile.playerId,
+      status: Constants.TransferStatus.PLAYER_PENDING,
+    },
+  });
+
+  if (pendingCount >= UserOfferSettings.TEAMLESS_MAX_PENDING_OFFERS) {
+    return Promise.resolve();
+  }
+
+  if ((profile as any).lastTeamlessOfferAt) {
+    const last = (profile as any).lastTeamlessOfferAt as Date;
+    if (differenceInDays(profile.date, last) < UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS) {
+      return Promise.resolve();
+    }
+  }
+
+  const lifetime = await computeLifetimeStats(profile.id, profile.playerId);
+  const recent20 = await computeLifetimeStats(profile.id, profile.playerId, 20);
+
+  const lifetimeMatches = lifetime.matchesPlayed ?? lifetime.matchesPlayed ?? 0;
+  const recentMatches = recent20.matchesPlayed ?? recent20.matchesPlayed ?? 0;
+  const matchCount = Math.max(lifetimeMatches, recentMatches);
+
+  if (matchCount < UserOfferSettings.FACEIT_MIN_MATCHES_BEFORE_OFFERS) {
+    return Promise.resolve();
+  }
+
+  // Only ramp in the first window (3–10). After that, we stop.
+  const pbxBase = getFaceitOfferChanceByMatchCount(
+    Math.min(matchCount, UserOfferSettings.FACEIT_MAX_MATCHES_FIRST_WINDOW),
+  );
+
+  const lifetimeKd = lifetime.kdRatio ?? 1;
+  const recentKd = recent20.kdRatio ?? 1;
+  const kd = blendFaceitMetric(recentKd, lifetimeKd);
+
+  const lifetimeWinratePct = lifetime.winRate ?? 50;
+  const recentWinratePct = recent20.winRate ?? 50;
+  const winratePct = blendFaceitMetric(recentWinratePct, lifetimeWinratePct);
+
+  // Normalize to 0.1 for the multiplier math
+  const winrate = winratePct / 100;
+
+  const perfMult = Math.max(0.85, Math.min(1.30, 1 + (kd - 1) * 0.15 + (winrate - 0.5) * 0.2));
+  let pbx = Math.round(pbxBase * perfMult);
+
+  const elo = profile.faceitElo ?? 0;
+  const targetTier = tierFromElo(elo);
+  if (!targetTier) return Promise.resolve();
+
+  const isHotProspect =
+    matchCount >= 25 &&
+    kd >= 2.0 &&
+    elo >= 1800 &&
+    targetTier === TierSlug.LEAGUE_OPEN;
+
+  if (isHotProspect) {
+    pbx = Math.max(pbx, 90); // boost strongly
+  }
+
+  if (!Chance.rollD2(pbx)) {
+    return Promise.resolve();
+  }
+
+  if (!UserOfferSettings.FACEIT_ELIGIBLE_DIVISIONS.includes(targetTier)) return Promise.resolve();
+
+  // Federation restriction (own federation)
+  const userFedId = profile.player.country?.continent?.federationId ?? null;
+
+  const prestigeIdx = Constants.Prestige.findIndex((p) => p === targetTier);
+
+  const teams = await prisma.team.findMany({
+    where: {
+      tier: prestigeIdx,
+      profile: null,
+      ...(userFedId
+        ? { country: { continent: { federationId: userFedId } } }
+        : {}),
+    },
+    include: { personas: true },
+  });
+
+  if (!teams.length) return Promise.resolve();
+
+  let pool = teams;
+
+  if (isHotProspect) {
+    const sorted = [...teams].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const topCount = Math.max(3, Math.floor(sorted.length * 0.2)); // top 20%, min 3
+    pool = sorted.slice(0, topCount);
+  }
+
+  const from = sample(pool);
+  if (!from) return Promise.resolve();
+
+  const contractYears = rollContractYears(targetTier);
+
+  // Create transfer + offer
+  const target = profile.player;
+  const wages = target.wages ?? 0;
+  const cost = target.cost ?? 0;
+
+  const transfer = await prisma.transfer.create({
+    data: {
+      status: Constants.TransferStatus.PLAYER_PENDING,
+      from: { connect: { id: from.id } },
+      target: { connect: { id: target.id } },
+      offers: {
+        create: [
+          {
+            status: Constants.TransferStatus.PLAYER_PENDING,
+            wages,
+            cost,
+            contractYears,
+          },
+        ],
+      },
+    },
+    include: Eagers.transfer.include,
+  });
+
+  const locale = getLocale(profile);
+
+  const persona =
+    from.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT,
+    ) ?? from.personas[0];
+
+  await sendEmail(
+    Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { transfer, profile }),
+    Sqrl.render(locale.templates.OfferIncoming.CONTENT, { transfer, profile }),
+    persona,
+    profile.date,
+    true,
+  );
+
+  WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+  Engine.Runtime.Instance.log.info(
+    "%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d)",
+    from.name,
+    target.name,
+    targetTier,
+    contractYears,
+    pbx,
   );
 
   return Promise.resolve(transfer);

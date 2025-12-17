@@ -1648,6 +1648,63 @@ export const TransferSettings = {
 };
 
 /**
+ * Transfer settings for the user.
+ *
+ * @constant
+ */
+export const UserOfferSettings = {
+  FACEIT_MIN_MATCHES_BEFORE_OFFERS: 3,
+  FACEIT_MAX_MATCHES_FIRST_WINDOW: 10,
+
+  FACEIT_ELO_THRESHOLDS: {
+    OPEN_MAX: 2000,
+    INTERMEDIATE_MAX: 2200,
+  },
+  FACEIT_ELIGIBLE_DIVISIONS: [TierSlug.LEAGUE_OPEN, TierSlug.LEAGUE_INTERMEDIATE],
+
+  // ramp probability from match 3 to 10 (initial window)
+  FACEIT_OFFER_PBX_BY_MATCH_INDEX: [0, 0, 0, 15, 25, 35, 45, 55, 65, 75],
+
+  TEAMLESS_OFFER_COOLDOWN_DAYS: 5,
+  TEAMLESS_MAX_PENDING_OFFERS: 3,
+
+  // contract terms by tier
+  CONTRACT_YEARS_WEIGHTS: {
+    [TierSlug.LEAGUE_OPEN]: [
+      { years: 1, weight: 85 },
+      { years: 2, weight: 15 },
+    ],
+    [TierSlug.LEAGUE_INTERMEDIATE]: [
+      { years: 1, weight: 70 },
+      { years: 2, weight: 30 },
+    ],
+    [TierSlug.LEAGUE_MAIN]: [
+      { years: 1, weight: 50 },
+      { years: 2, weight: 50 },
+    ],
+    [TierSlug.LEAGUE_ADVANCED]: [
+      { years: 2, weight: 80 },
+      { years: 3, weight: 20 },
+    ],
+    [TierSlug.LEAGUE_PREMIER]: [
+      { years: 2, weight: 50 },
+      { years: 3, weight: 20 },
+      { years: 4, weight: 15 },
+      { years: 5, weight: 15 },
+    ],
+  },
+
+  // faceit vs league weighting by tier
+  SIGNAL_WEIGHTS_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: { faceit: 0.8, league: 0.2 },
+    [TierSlug.LEAGUE_INTERMEDIATE]: { faceit: 0.6, league: 0.4 },
+    [TierSlug.LEAGUE_MAIN]: { faceit: 0.2, league: 0.8 },
+    [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
+    [TierSlug.LEAGUE_PREMIER]: { faceit: 0.05, league: 0.95 },
+  },
+};
+
+/**
  * Game weapon templates derived from their
  * respective `BotProfile.db` file.
  *
