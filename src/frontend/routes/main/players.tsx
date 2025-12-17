@@ -521,26 +521,36 @@ export default function () {
                       </div>
 
                       {/* Role icon on the right */}
-                      <img
-                        src={player.role === Constants.PlayerRole.SNIPER ? awpIcon : ak47Icon}
-                        alt={player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
-                        className={cx(
-                          'absolute top-1/2 -translate-y-1/2 h-2.5 w-auto opacity-90',
-                          player.role === Constants.PlayerRole.SNIPER ? 'right-2' : 'right-[12px]'
-                        )}
-                        style={
-                          player.role === Constants.PlayerRole.SNIPER
-                            ? {
-                              filter:
-                                'invert(68%) sepia(52%) saturate(740%) hue-rotate(260deg) brightness(105%) contrast(98%)',
+                      {(() => {
+                        const roleRaw = player.role;
+                        const isSniper =
+                          roleRaw === Constants.PlayerRole.SNIPER ||
+                          String(roleRaw).toLowerCase() === 'awper' ||
+                          String(roleRaw).toLowerCase() === 'sniper';
+
+                        return (
+                          <img
+                            src={isSniper ? awpIcon : ak47Icon}
+                            alt={isSniper ? 'AWPer' : 'Rifler'}
+                            className={cx(
+                              'absolute top-1/2 -translate-y-1/2 h-2.5 w-auto opacity-90',
+                              isSniper ? 'right-2' : 'right-[12px]',
+                            )}
+                            style={
+                              isSniper
+                                ? {
+                                  filter:
+                                    'invert(68%) sepia(52%) saturate(740%) hue-rotate(260deg) brightness(105%) contrast(98%)',
+                                }
+                                : {
+                                  filter:
+                                    'invert(63%) sepia(37%) saturate(1200%) hue-rotate(190deg) brightness(102%) contrast(96%)',
+                                }
                             }
-                            : {
-                              filter:
-                                'invert(63%) sepia(37%) saturate(1200%) hue-rotate(190deg) brightness(102%) contrast(96%)',
-                            }
-                        }
-                        title={player.role === Constants.PlayerRole.SNIPER ? 'AWPer' : 'Rifler'}
-                      />
+                            title={isSniper ? 'AWPer' : 'Rifler'}
+                          />
+                        );
+                      })()}
                     </td>
                     <td>
                       {!!player.team && (
