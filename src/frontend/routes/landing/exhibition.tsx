@@ -331,15 +331,6 @@ export default function () {
           {activeTab === Tab.GENERAL && (
             <fieldset>
               <article>
-                <header>
-                  <p>{t('settings.gameTitle')}</p>
-                  {settings.general.game === Constants.Game.CS2 && (
-                    <p className="text-warning">{t('settings.gameSubtitleCS2')}</p>
-                  )}
-                  {settings.general.game !== Constants.Game.CS2 && (
-                    <p>{t('settings.gameSubtitle')}</p>
-                  )}
-                </header>
                 <aside>
                   <select
                     className="select"
