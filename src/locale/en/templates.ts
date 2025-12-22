@@ -77,7 +77,7 @@ export enum OfferAcceptedUser {
   CONTENT = `
   Hello, {{it.profile.player.name}}.
 
-  Welcome to **{{it.transfer.from.name}}**.We are happy to have you on board.
+  Welcome to **{{it.transfer.from.name}}**. We are happy to have you on board.
 
   Your contract is valid until: {{it.player.contractEnd | date }}
 
@@ -92,17 +92,19 @@ export enum OfferGeneric {
 
 /** @enum */
 export enum OfferIncoming {
-  SUBJECT = 'Transfer Offer for {{it.transfer.target.name}}',
-  CONTENT = `
-  Hello, {{it.profile.player.name}}.
+  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
 
-  We at **{{it.transfer.from.name}}** are interested singing you, **{{it.transfer.target.name}}**.
+  We at **{{it.transfer.from.name}}** would like to offer you a contract.
 
-  We believe you would be a great fit for our roster and would like to make you an offer. The details are as follows:
+  **Team details:**
 
-  - Transfer fee: {{it.transfer.offers[0].cost | currency}}
+  - Division: {{it.fromTierName}}
 
-  - Wages: {{it.transfer.offers[0].wages | currency}}
+  - Country: {{it.transfer.from.country.name}}
+
+
+  **Offer details:**
 
   - Contract length: {{it.transfer.offers[0].contractYears}} year(s)
 
@@ -111,7 +113,7 @@ export enum OfferIncoming {
   <button className="btn btn-primary" data-ipc-route="/transfer/accept" data-payload="{{it.transfer.id}}">Accept Offer</button>
   <button className="btn btn-ghost" data-ipc-route="/transfer/reject" data-payload="{{it.transfer.id}}">Reject Offer</button>
   `,
-}
+  }
 
 /** @enum */
 export enum OfferRejectedEmailCost {

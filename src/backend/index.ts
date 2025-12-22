@@ -4,6 +4,7 @@
  * @module
  */
 import * as Sqrl from 'squirrelly';
+import { format } from "date-fns";
 import * as IPCHandlers from '@liga/backend/handlers';
 import * as Protocols from '@liga/backend/protocols';
 import log from 'electron-log';
@@ -97,7 +98,16 @@ function handleOnActivate() {
   }
 
   // set up squirrelly custom filters
-  Sqrl.filters.define('currency', Util.formatCurrency);
+  Sqrl.filters.define("currency", Util.formatCurrency);
+
+  Sqrl.filters.define("date", (value: any) => {
+    if (!value) return "";
+
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+
+    return format(d, Constants.Application.CALENDAR_DATE_FORMAT);
+  });
 
   // disable insecure warnings in dev since
   // we use HMR and it only supports http
