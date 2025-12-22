@@ -36,9 +36,6 @@ export async function computeLeagueLifetimeStats(
     where: {
       status: Constants.MatchStatus.COMPLETED,
       competitionId: { not: null },
-
-      OR: [{ matchType: null }, { matchType: { not: "FACEIT_PUG" } }],
-
       competitors: {
         some: { teamId },
       },
@@ -129,7 +126,6 @@ export async function getRecentLeagueMatches(teamId: number, take = 15) {
     where: {
       status: Constants.MatchStatus.COMPLETED,
       competitionId: { not: null },
-      OR: [{ matchType: null }, { matchType: { not: "FACEIT_PUG" } }],
       competitors: { some: { teamId } },
     },
     include: {
