@@ -136,6 +136,7 @@ export enum CalendarEntry {
   SPONSORSHIP_PAYMENT = '/sponsorship/payment',
   SPONSORSHIP_RENEW = '/sponsorship/renew',
   TRANSFER_PARSE = '/transfer/parse',
+  PLAYER_SCOUTING_CHECK = '/player/scouting/check',
   PLAYER_CONTRACT_EXPIRE = '/player/contract-expire',
 }
 
@@ -1665,7 +1666,8 @@ export const UserOfferSettings = {
   // ramp probability from match 3 to 10 (initial window)
   FACEIT_OFFER_PBX_BY_MATCH_INDEX: [0, 0, 0, 15, 25, 35, 45, 55, 65, 75],
 
-  TEAMLESS_OFFER_COOLDOWN_DAYS: 5,
+  TEAMLESS_OFFER_COOLDOWN_DAYS: 8,
+  TEAM_OFFER_COOLDOWN_DAYS: 30,
   TEAMLESS_MAX_PENDING_OFFERS: 3,
 
   // contract terms by tier

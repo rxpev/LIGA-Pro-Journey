@@ -153,6 +153,10 @@ export default function () {
     Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
     Worldgen.onPlayerContractExpire
   );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+    Worldgen.onPlayerScoutingCheck
+  );
 
   // IPC: create calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_CREATE, (_, data: Prisma.CalendarCreateInput) =>
