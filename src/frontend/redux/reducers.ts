@@ -96,10 +96,6 @@ function working(state = InitialState.working, action: AppAction) {
     : state;
 }
 
-/** ---------------------------- */
-/** FACEIT REDUCERS */
-/** ---------------------------- */
-
 function faceitMatchRoom(
   state = InitialState.faceitMatchRoom,
   action: AppAction
@@ -168,6 +164,41 @@ function faceitVeto(state = InitialState.faceitVeto, action: AppAction) {
   }
 }
 
+function faceitQueue(state = InitialState.faceitQueue, action: AppAction) {
+  switch (action.type) {
+    case ReduxActions.FACEIT_QUEUE_SET:
+      return {
+        status: "QUEUEING",
+        startedAt: action.payload.startedAt,
+        targetSec: action.payload.targetSec,
+      };
+
+    case ReduxActions.FACEIT_QUEUE_RESOLVING:
+      return {
+        ...state,
+        status: "RESOLVING",
+      };
+
+    case ReduxActions.FACEIT_QUEUE_CLEAR:
+      return {
+        status: "IDLE",
+        startedAt: null,
+        targetSec: null,
+      };
+
+    case ReduxActions.FACEIT_ROOM_SET:
+    case ReduxActions.FACEIT_ROOM_CLEAR:
+      return {
+        status: "IDLE",
+        startedAt: null,
+        targetSec: null,
+      };
+
+    default:
+      return state;
+  }
+}
+
 /** ---------------------------- */
 /** ROOT REDUCER */
 /** ---------------------------- */
@@ -185,14 +216,10 @@ export default function reducer(state: AppState, action: AppAction) {
     shortlist: shortlist(state.shortlist, action),
     windowData: windowData(state.windowData, action),
     working: working(state.working, action),
-
-    /** FACEIT */
     faceitMatchRoom: faceitMatchRoom(state.faceitMatchRoom, action),
     faceitMatchId: faceitMatchId(state.faceitMatchId, action),
     faceitVeto: faceitVeto(state.faceitVeto, action),
-    faceitMatchCompleted: faceitMatchCompleted(
-      state.faceitMatchCompleted,
-      action
-    ),
+    faceitMatchCompleted: faceitMatchCompleted(state.faceitMatchCompleted, action),
+    faceitQueue: faceitQueue(state.faceitQueue, action),
   };
 }

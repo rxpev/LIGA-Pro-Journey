@@ -44,13 +44,9 @@ export interface AppState {
   shortlist: Awaited<
     ReturnType<typeof api.shortlist.all<typeof Eagers.shortlist>>
   >;
-
-  /** FACEIT persistent match state */
   faceitMatchRoom: any | null;
   faceitMatchId: number | null;
   faceitMatchCompleted: boolean;
-
-  /** FACEIT veto persistent state */
   faceitVeto: {
     history: Array<{
       map: string;
@@ -60,7 +56,11 @@ export interface AppState {
     completed: boolean;
     deciderMap: string | null;
   };
-
+  faceitQueue: {
+    status: "IDLE" | "QUEUEING" | "RESOLVING";
+    startedAt: number | null;
+    targetSec: number | null;
+  };
   windowData: Partial<{
     [Constants.WindowIdentifier.Landing]: {
       user?: PlayerCareerUser;
@@ -94,6 +94,11 @@ export const InitialState: AppState = {
     history: [],
     completed: false,
     deciderMap: null,
+  },
+  faceitQueue: {
+    status: "IDLE",
+    startedAt: null,
+    targetSec: null,
   },
   windowData: {
     landing: {

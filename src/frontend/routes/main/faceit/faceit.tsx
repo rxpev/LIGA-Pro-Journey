@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import MatchRoom from "./matchroom";
 import { AppStateContext } from "@liga/frontend/redux";
-import { faceitRoomSet, faceitRoomClear } from "@liga/frontend/redux/actions";
+import {faceitRoomSet,faceitRoomClear,faceitQueueSet,faceitQueueClear,faceitQueueResolving,} from "@liga/frontend/redux/actions";
 import { shuffle } from "lodash";
 
 import Scoreboard from "./scoreboard";
@@ -103,9 +103,13 @@ export default function Faceit(): JSX.Element {
   const [loading, setLoading] = useState(true);
 
   // QUEUE
-  const [queueing, setQueueing] = useState(false);
   const [queueTimer, setQueueTimer] = useState(0);
-  const [queueInterval, setQueueInterval] = useState<any>(null);
+  const faceitQueue = state.faceitQueue;
+  const queueing = faceitQueue.status === "QUEUEING" || faceitQueue.status === "RESOLVING";
+  const queueStartedAt = faceitQueue.startedAt; // epoch ms
+  const queueTargetSec = faceitQueue.targetSec; // 8..12
+  const queueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const finishingRef = useRef(false);
 
   // SCOREBOARD OVERLAY
   const [viewMatchId, setViewMatchId] = useState<number | null>(null);
@@ -209,42 +213,72 @@ export default function Faceit(): JSX.Element {
       .finally(() => setLoadingScoreboard(false));
   }, [viewMatchId]);
 
+  useEffect(() => {
+    if (activeMatch) {
+      clearQueueInterval();
+      setQueueTimer(0);
+      return;
+    }
+    if (faceitQueue.status !== "QUEUEING" || !queueStartedAt || !queueTargetSec) {
+      clearQueueInterval();
+      if (!queueing) setQueueTimer(0);
+      return;
+    }
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - queueStartedAt) / 1000);
+      setQueueTimer(elapsed);
+
+      if (elapsed >= queueTargetSec) {
+        clearQueueInterval();
+        finishQueue();
+      }
+    };
+    tick();
+    clearQueueInterval();
+    queueIntervalRef.current = setInterval(tick, 250);
+
+    return () => clearQueueInterval();
+  }, [faceitQueue.status, queueStartedAt, queueTargetSec, activeMatch]);
+
   // ---------------------------------------------------------------------------
   // QUEUE SYSTEM
   // ---------------------------------------------------------------------------
 
+  function randIntInclusive(min: number, max: number) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function clearQueueInterval() {
+    if (queueIntervalRef.current) {
+      clearInterval(queueIntervalRef.current);
+      queueIntervalRef.current = null;
+    }
+  }
+
   const startQueue = () => {
     if (queueing || activeMatch) return;
-    setQueueing(true);
-    setQueueTimer(0);
 
-    const interval = setInterval(() => {
-      setQueueTimer((t) => {
-        if (t >= 12) {
-          clearInterval(interval);
-          finishQueue();
-        }
-        return t + 1;
-      });
-    }, 1000);
-
-    setQueueInterval(interval);
+    const startedAt = Date.now();
+    const targetSec = randIntInclusive(8, 12);
+    dispatch(faceitQueueSet(startedAt, targetSec));
   };
 
   const cancelQueue = () => {
-    if (queueInterval) clearInterval(queueInterval);
-    setQueueInterval(null);
-    setQueueing(false);
+    clearQueueInterval();
+    finishingRef.current = false;
+
+    dispatch(faceitQueueClear());
     setQueueTimer(0);
   };
 
   const finishQueue = async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    dispatch(faceitQueueResolving());
     try {
       const res = await api.faceit.queue();
-
       const shuffledTeamA = shuffle(res.teamA);
       const shuffledTeamB = shuffle(res.teamB);
-
       dispatch(
         faceitRoomSet(
           {
@@ -255,13 +289,12 @@ export default function Faceit(): JSX.Element {
           null
         )
       );
-
       setShowMatchRoom(true);
     } finally {
-      setQueueing(false);
+      clearQueueInterval();
+      dispatch(faceitQueueClear());
       setQueueTimer(0);
-      if (queueInterval) clearInterval(queueInterval);
-      setQueueInterval(null);
+      finishingRef.current = false;
     }
   };
 
@@ -545,7 +578,6 @@ function NormalFaceitBody({
       {/* ------------------------------------------------------------------- */}
       {/* MATCHMAKING BUTTON */}
       {/* ------------------------------------------------------------------- */}
-      {/* MATCHMAKING BUTTON */}
       <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] flex flex-col">
         <div className="w-full bg-[#0c0c0c] py-3 flex justify-center items-center border-b border-[#ff7300]/40">
           <h2 className="text-lg font-bold">MATCHMAKING</h2>

@@ -28,6 +28,9 @@ export enum ReduxActions {
   FACEIT_MATCH_COMPLETED,
   FACEIT_VETO_SET,
   FACEIT_VETO_CLEAR,
+  FACEIT_QUEUE_SET,
+  FACEIT_QUEUE_RESOLVING,
+  FACEIT_QUEUE_CLEAR,
 }
 
 /** Basic action creators */
@@ -109,11 +112,6 @@ export function play(id: number, spectating?: boolean) {
     dispatch(playingUpdate(false));
   };
 }
-
-/** ------------------------ */
-/** FACEIT ACTIONS */
-/** ------------------------ */
-
 export function faceitRoomSet(room: any, matchId?: number) {
   return {
     type: ReduxActions.FACEIT_ROOM_SET,
@@ -146,4 +144,17 @@ export const faceitVetoSet = (
 
 export const faceitVetoClear = () => ({
   type: ReduxActions.FACEIT_VETO_CLEAR,
+});
+
+export const faceitQueueSet = (startedAt: number, targetSec: number) => ({
+  type: ReduxActions.FACEIT_QUEUE_SET,
+  payload: { startedAt, targetSec },
+});
+
+export const faceitQueueResolving = () => ({
+  type: ReduxActions.FACEIT_QUEUE_RESOLVING,
+});
+
+export const faceitQueueClear = () => ({
+  type: ReduxActions.FACEIT_QUEUE_CLEAR,
 });
