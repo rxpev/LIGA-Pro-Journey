@@ -163,8 +163,10 @@ function faceitVeto(state = InitialState.faceitVeto, action: AppAction) {
       return state;
   }
 }
-
-function faceitQueue(state = InitialState.faceitQueue, action: AppAction) {
+function faceitQueue(
+  state: AppState["faceitQueue"] = InitialState.faceitQueue,
+  action: AppAction
+): AppState["faceitQueue"] {
   switch (action.type) {
     case ReduxActions.FACEIT_QUEUE_SET:
       return {
@@ -172,20 +174,17 @@ function faceitQueue(state = InitialState.faceitQueue, action: AppAction) {
         startedAt: action.payload.startedAt,
         targetSec: action.payload.targetSec,
       };
-
     case ReduxActions.FACEIT_QUEUE_RESOLVING:
       return {
         ...state,
         status: "RESOLVING",
       };
-
     case ReduxActions.FACEIT_QUEUE_CLEAR:
       return {
         status: "IDLE",
         startedAt: null,
         targetSec: null,
       };
-
     case ReduxActions.FACEIT_ROOM_SET:
     case ReduxActions.FACEIT_ROOM_CLEAR:
       return {
@@ -193,7 +192,6 @@ function faceitQueue(state = InitialState.faceitQueue, action: AppAction) {
         startedAt: null,
         targetSec: null,
       };
-
     default:
       return state;
   }
