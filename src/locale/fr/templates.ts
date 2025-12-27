@@ -10,6 +10,84 @@
  */
 
 /** @enum */
+export enum PlayerBenched {
+  SUBJECT = "Squad update from {{it.team.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
+
+This is an update regarding your role at **{{it.team.name}}**.
+You have been moved to the bench and placed on the transfer list.
+
+**Context**
+
+Your performance in the {{it.tierName}} has not met the expectations set by the management.
+Your statistics and KD of {{it.kd}} in the last 30 days has not been satisfactory.
+
+You can still receive offers while benched. We wish you the best of luck in finding a new team!
+
+---`
+}
+
+/** @enum */
+export enum PlayerKicked {
+  SUBJECT = "Contract terminated by {{it.team.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
+
+We are writing to inform you that we at **{{it.team.name}}** have terminated your contract early.
+
+The team has decided to part ways due to your recent performance in the {{it.tierName}} not aligning with the club's standards.
+We understand that this news may come as a surprise, but we believe this decision is in the best interest of both parties.
+You may start looking for a new team immediately.
+`
+}
+
+/** @enum */
+export enum ContractExtensionOffer {
+  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
+
+We at **{{it.transfer.from.name}}** would like to extend your contract.
+We value your contributions to the team and would like to keep you on board for the upcoming seasons.
+
+**Offer details**
+
+- New contract length: {{it.contractYears}} year(s)
+
+- Time left on current contract: {{it.daysLeft}} day(s)
+
+---
+
+<button className="btn btn-primary" data-ipc-route="/transfer/accept" data-payload="{{it.transfer.id}}">Accept Extension</button>
+<button className="btn btn-ghost" data-ipc-route="/transfer/reject" data-payload="{{it.transfer.id}}">Reject</button>
+`
+}
+
+export enum ContractExtensionAccepted {
+  SUBJECT = "Extension accepted — {{it.team.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
+
+We are happy you decided to stick with us at **{{it.team.name}}**.
+
+**New contract**
+
+- Length: {{it.years}} year(s)
+
+- Contract end date: {{it.contractEndDate}}
+
+From here on, let's aim for greater heights together!
+`
+}
+
+/** @enum */
+export enum ContractExtensionRejected {
+  SUBJECT = "Re: Contract extension — {{it.transfer.from.name}}",
+  CONTENT = `Hello, {{it.profile.player.name}}.
+
+It's unfortunate to hear that you have decided not to extend your contract with **{{it.transfer.from.name}}**.
+We respect your decision and wish you the best of luck in your future endeavors.
+`
+}
+
+/** @enum */
 export enum AwardTypeChampion {
   SUBJECT = 'Félicitations {{it.profile.team.name}} !',
   CONTENT = `
