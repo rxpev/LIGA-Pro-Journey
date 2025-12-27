@@ -138,6 +138,8 @@ export enum CalendarEntry {
   TRANSFER_PARSE = '/transfer/parse',
   PLAYER_SCOUTING_CHECK = '/player/scouting/check',
   PLAYER_CONTRACT_EXPIRE = '/player/contract-expire',
+  PLAYER_CONTRACT_REVIEW = '/player/contract-review',
+  PLAYER_CONTRACT_EXTENSION_EVAL = '/player/contract-extension-eval',
 }
 
 /**
@@ -1704,6 +1706,58 @@ export const UserOfferSettings = {
     [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
     [TierSlug.LEAGUE_PREMIER]: { faceit: 0.05, league: 0.95 },
   },
+};
+
+export const PlayerContractSettings = {
+  // Bench evaluation
+  BENCH_MIN_LEAGUE_MATCHES: 7,
+  BENCH_KD_MIN_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: 0.90,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 0.95,
+    [TierSlug.LEAGUE_MAIN]: 1.00,
+    [TierSlug.LEAGUE_ADVANCED]: 1.05,
+    [TierSlug.LEAGUE_PREMIER]: 1.10,
+  },
+  BENCH_PBX_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: 30,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 35,
+    [TierSlug.LEAGUE_MAIN]: 50,
+    [TierSlug.LEAGUE_ADVANCED]: 65,
+    [TierSlug.LEAGUE_PREMIER]: 80,
+  },
+
+  // Kick evaluation (early termination)
+  KICK_MIN_LEAGUE_MATCHES: 6,
+  KICK_WINDOW_DAYS: 90,
+  KICK_KD_MAX_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: 0.70,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 0.75,
+    [TierSlug.LEAGUE_MAIN]: 0.80,
+    [TierSlug.LEAGUE_ADVANCED]: 0.90,
+    [TierSlug.LEAGUE_PREMIER]: 0.95,
+  },
+  KICK_PBX_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: 50,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 20,
+    [TierSlug.LEAGUE_MAIN]: 25,
+    [TierSlug.LEAGUE_ADVANCED]: 30,
+    [TierSlug.LEAGUE_PREMIER]: 45,
+  },
+
+  // Extension
+  EXTENSION_EVAL_DAYS_BEFORE_END: 30,
+  EXTENSION_MIN_MATCHES: 7,
+  EXTENSION_PLAYER_OK_KD_BY_TIER: {
+    [TierSlug.LEAGUE_OPEN]: 1.00,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 1.00,
+    [TierSlug.LEAGUE_MAIN]: 1.05,
+    [TierSlug.LEAGUE_ADVANCED]: 1.10,
+    [TierSlug.LEAGUE_PREMIER]: 1.15,
+  },
+  EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER: 85,
+  EXTENSION_PBX_BAD_TEAM_GOOD_PLAYER: 45,
+  EXTENSION_PBX_GOOD_TEAM_OK_PLAYER: 55,
+  EXTENSION_DECLINE_PBX_EVEN_IF_GOOD: 10,
 };
 
 /**

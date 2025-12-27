@@ -23,7 +23,7 @@ export default function () {
   ipcMain.handle(Constants.IPCRoute.TRANSFER_ACCEPT, async (_, id: string) => {
     // All safety checks (profile, transfer.target == user player, etc.)
     // are handled inside acceptUserPlayerTransfer.
-    await Worldgen.acceptUserPlayerTransfer(Number(id));
+    await Worldgen.acceptTransferOffer(Number(id));
 
     // Let all windows refresh their transfer UIs.
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
@@ -31,7 +31,7 @@ export default function () {
   });
 
   ipcMain.handle(Constants.IPCRoute.TRANSFER_REJECT, async (_, id: string) => {
-    await Worldgen.rejectUserPlayerTransfer(Number(id));
+    await Worldgen.rejectTransferOffer(Number(id));
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
     return Promise.resolve();

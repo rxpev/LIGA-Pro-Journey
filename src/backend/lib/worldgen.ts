@@ -634,6 +634,107 @@ async function benchVictim(params: {
 }
 
 /**
+ * Promotes a benched/transfer-listed player to starter to fill the vacancy.
+ *
+ * - If outgoing user is AWPER => promote highest XP SNIPER
+ * - Otherwise => promote highest XP RIFLER
+ *
+ * Prefer transferListed players first
+ * fallback to any non-starter of the desired role.
+ */
+async function promoteReplacement(params: {
+  prisma: typeof DatabaseClient.prisma;
+  teamId: number;
+  outgoingUserRole: unknown;
+  now: Date;
+  outgoingPlayerId: number;
+  outgoingWasStarter: boolean;
+}) {
+  const { prisma, teamId, outgoingUserRole, now, outgoingPlayerId, outgoingWasStarter } = params;
+
+  // No vacancy if the outgoing player wasn't a starter
+  if (!outgoingWasStarter) return;
+
+  const team = await prisma.team.findFirst({
+    where: { id: teamId },
+    include: {
+      players: {
+        select: {
+          id: true,
+          role: true,
+          starter: true,
+          xp: true,
+          contractEnd: true,
+          transferListed: true,
+        },
+      },
+    },
+  });
+
+  if (!team) return;
+
+  const uRole = normalizeRole(outgoingUserRole);
+  const outgoingWasAwper = uRole === "AWPER";
+
+  const desiredRole = outgoingWasAwper ? "SNIPER" : "RIFLER";
+
+  let candidates = team.players.filter(
+    (p) =>
+      p.id !== outgoingPlayerId &&
+      !p.starter &&
+      p.transferListed &&
+      normalizeRole(p.role) === desiredRole,
+  );
+
+  if (!candidates.length) {
+    candidates = team.players.filter(
+      (p) =>
+        p.id !== outgoingPlayerId &&
+        !p.starter &&
+        normalizeRole(p.role) === desiredRole,
+    );
+  }
+  if (!candidates.length) {
+    candidates = team.players.filter(
+      (p) => p.id !== outgoingPlayerId && !p.starter && p.transferListed,
+    );
+  }
+
+  if (!candidates.length) return;
+
+  // Selection rule:
+  // Highest XP first; tie-break with longer contract remaining
+  candidates.sort((a, b) => {
+    const aXp = a.xp ?? 0;
+    const bXp = b.xp ?? 0;
+    if (aXp !== bXp) return bXp - aXp;
+
+    const aDays = daysLeftOrHuge(a.contractEnd as any, now);
+    const bDays = daysLeftOrHuge(b.contractEnd as any, now);
+    return bDays - aDays;
+  });
+
+  const promoted = candidates[0];
+  if (!promoted) return;
+
+  await prisma.player.update({
+    where: { id: promoted.id },
+    data: {
+      starter: true,
+      transferListed: false,
+    },
+  });
+
+  Engine.Runtime.Instance.log.info(
+    "Promoted replacement: teamId=%d promotedId=%d promotedRole=%s (xp=%d) starter=true transferListed=false",
+    teamId,
+    promoted.id,
+    normalizeRole(promoted.role),
+    promoted.xp ?? 0,
+  );
+}
+
+/**
  * Accepts a transfer offer that targets the user player.
  *
  * @param transferId The transfer offer to parse.
@@ -641,8 +742,7 @@ async function benchVictim(params: {
  * @param status      Force accepts or rejects the offer.
  * @function
  */
-
-export async function acceptUserPlayerTransfer(transferId: number) {
+export async function acceptTransferOffer(transferId: number) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
   const oldTeamId = profile.teamId;
@@ -677,6 +777,14 @@ export async function acceptUserPlayerTransfer(transferId: number) {
 
   const [offer] = transfer.offers;
 
+  // Extension detection:
+  // If the offer comes from the user's CURRENT team, we treat it as a contract extension.
+  const isExtension =
+    profile.teamId != null &&
+    fromTeamId === profile.teamId;
+
+  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
+
   // Update transfer & this offer to accepted.
   await DatabaseClient.prisma.transfer.update({
     where: { id: transfer.id },
@@ -693,8 +801,181 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     },
   });
 
-  // Compute simple 1-year contract end.
+  // NOTE: For extensions we extend from max(now, current contract end).
+  // For new signings we use "now".
   const years = offer.contractYears ?? 1;
+
+  if (isExtension) {
+    // Extension path: do NOT bench anyone, do NOT move teams, do NOT write a new stint.
+    // We only extend the contract and reschedule contract-related calendar entries.
+
+    // Load current player to base the extension on the current contract end (if still active).
+    const currentPlayer = await DatabaseClient.prisma.player.findFirst({
+      where: { id: transfer.playerId },
+      select: {
+        id: true,
+        teamId: true,
+        contractEnd: true,
+        wages: true,
+        cost: true,
+      },
+    });
+
+    if (!currentPlayer) return Promise.resolve();
+
+    if (currentPlayer.teamId !== profile.teamId) {
+      Engine.Runtime.Instance.log.warn(
+        "acceptTransferOffer: extension offer mismatch (player.teamId=%s profile.teamId=%s). Skipping.",
+        String(currentPlayer.teamId),
+        String(profile.teamId),
+      );
+      return Promise.resolve();
+    }
+
+    const baseDate =
+      currentPlayer.contractEnd && currentPlayer.contractEnd > profile.date
+        ? currentPlayer.contractEnd
+        : profile.date;
+
+    const contractEnd = addYears(baseDate, years);
+
+    await DatabaseClient.prisma.player.update({
+      where: { id: transfer.playerId },
+      data: {
+        contractEnd,
+        // keep current starter/transferListed/teamId as-is for an extension
+      },
+    });
+
+    // Schedule contract expiry event in the calendar.
+    await DatabaseClient.prisma.calendar.deleteMany({
+      where: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+        completed: false,
+        payload: String(transfer.playerId),
+        date: { gte: profile.date.toISOString() },
+      },
+    });
+    await DatabaseClient.prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+        date: contractEnd.toISOString(),
+        payload: String(transfer.playerId),
+      },
+    });
+
+    const EXT_DAYS = Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END;
+    const extensionEvalDate = addDays(contractEnd, -EXT_DAYS);
+    if (extensionEvalDate > profile.date) {
+      await DatabaseClient.prisma.calendar.deleteMany({
+        where: {
+          type: Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+          completed: false,
+          payload: String(transfer.playerId),
+          date: { gte: profile.date.toISOString() },
+        },
+      });
+      await DatabaseClient.prisma.calendar.create({
+        data: {
+          type: Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+          date: extensionEvalDate.toISOString(),
+          payload: String(transfer.playerId),
+        },
+      });
+    }
+
+    // Schedule weekly contract review (bench/kick evaluation)
+    const firstReviewDate = addDays(profile.date, 7);
+    await DatabaseClient.prisma.calendar.deleteMany({
+      where: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        completed: false,
+        payload: String(transfer.playerId),
+        date: { gte: profile.date.toISOString() },
+      },
+    });
+    await DatabaseClient.prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        date: firstReviewDate.toISOString(),
+        payload: String(transfer.playerId),
+      },
+    });
+
+    // Reject any other pending offers for this player.
+    const otherTransfers = await DatabaseClient.prisma.transfer.findMany({
+      where: {
+        id: { not: transfer.id },
+        playerId: transfer.playerId,
+        status: {
+          in: [
+            Constants.TransferStatus.TEAM_PENDING,
+            Constants.TransferStatus.PLAYER_PENDING,
+          ],
+        },
+      },
+    });
+
+    if (otherTransfers.length) {
+      await Promise.all([
+        DatabaseClient.prisma.transfer.updateMany({
+          where: { id: { in: otherTransfers.map((t) => t.id) } },
+          data: { status: Constants.TransferStatus.PLAYER_REJECTED },
+        }),
+        DatabaseClient.prisma.offer.updateMany({
+          where: { transferId: { in: otherTransfers.map((t) => t.id) } },
+          data: { status: Constants.TransferStatus.PLAYER_REJECTED },
+        }),
+      ]);
+    }
+
+    // Extension accepted email.
+    const updatedPlayer = await DatabaseClient.prisma.player.findFirst({
+      where: { id: transfer.playerId },
+    });
+
+    const locale = getLocale(profile);
+    const persona =
+      transfer.from?.personas?.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER ||
+          p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.from?.personas?.[0];
+    if (!persona) return Promise.resolve();
+
+    const team = transfer.from;
+    const contractEndDate = format(contractEnd, Constants.Application.CALENDAR_DATE_FORMAT);
+
+    await sendEmail(
+      Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, { profile, team }),
+      Sqrl.render(locale.templates.ContractExtensionAccepted.CONTENT, {
+        profile,
+        team,
+        years,
+        contractEndDate,
+      }),
+      persona,
+      profile.date,
+      true
+    );
+
+    const refreshedProfile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+    mainWindow?.send(Constants.IPCRoute.PROFILES_CURRENT, refreshedProfile);
+
+    WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+
+    Engine.Runtime.Instance.log.info(
+      "%s accepted a contract extension at %s (years=%d).",
+      profile.name,
+      transfer.from.name,
+      years
+    );
+
+    return Promise.resolve();
+  }
+
+  // Normal signing path
   const contractEnd = addYears(profile.date, years);
 
   await benchVictim({
@@ -728,7 +1009,6 @@ export async function acceptUserPlayerTransfer(transferId: number) {
   });
 
   // Notify renderer so UI updates immediately.
-  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
   if (mainWindow) {
     mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
   }
@@ -765,8 +1045,45 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     },
   });
 
-  const scoutingDate = addDays(profile.date, 7);
+  const EXT_DAYS = Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END;
+  const extensionEvalDate = addDays(contractEnd, -EXT_DAYS);
+  if (extensionEvalDate > profile.date) {
+    await DatabaseClient.prisma.calendar.deleteMany({
+      where: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+        completed: false,
+        payload: String(transfer.playerId),
+        date: { gte: profile.date.toISOString() },
+      },
+    });
+    await DatabaseClient.prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+        date: extensionEvalDate.toISOString(),
+        payload: String(transfer.playerId),
+      },
+    });
+  }
 
+  // Schedule weekly contract review (bench/kick evaluation)
+  const firstReviewDate = addDays(profile.date, 7);
+  await DatabaseClient.prisma.calendar.deleteMany({
+    where: {
+      type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+      completed: false,
+      payload: String(transfer.playerId),
+      date: { gte: profile.date.toISOString() },
+    },
+  });
+  await DatabaseClient.prisma.calendar.create({
+    data: {
+      type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+      date: firstReviewDate.toISOString(),
+      payload: String(transfer.playerId),
+    },
+  });
+
+  const scoutingDate = addDays(profile.date, 7);
   // Remove any existing future scouting checks for this player
   await DatabaseClient.prisma.calendar.deleteMany({
     where: {
@@ -776,7 +1093,6 @@ export async function acceptUserPlayerTransfer(transferId: number) {
       date: { gte: profile.date.toISOString() },
     },
   });
-
   // Create the first scouting check
   await DatabaseClient.prisma.calendar.create({
     data: {
@@ -866,7 +1182,7 @@ export async function acceptUserPlayerTransfer(transferId: number) {
     ]);
   }
 
-  // Welcome email.
+  // Welcome email
   const updatedPlayer = await DatabaseClient.prisma.player.findFirst({
     where: { id: transfer.playerId },
   });
@@ -896,10 +1212,11 @@ export async function acceptUserPlayerTransfer(transferId: number) {
   return Promise.resolve();
 }
 
+
 /**
  * Reject a transfer offer that targets the user player.
  */
-export async function rejectUserPlayerTransfer(transferId: number) {
+export async function rejectTransferOffer(transferId: number) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
 
@@ -920,6 +1237,14 @@ export async function rejectUserPlayerTransfer(transferId: number) {
     );
     return Promise.resolve();
   }
+
+  // Extension detection:
+  // If the offer comes from the user's CURRENT team, we treat it as a contract extension.
+  const fromTeamId = transfer.from?.id;
+  const isExtension =
+    profile.teamId != null &&
+    fromTeamId != null &&
+    fromTeamId === profile.teamId;
 
   const [offer] = transfer.offers;
 
@@ -945,6 +1270,35 @@ export async function rejectUserPlayerTransfer(transferId: number) {
         p.role === Constants.PersonaRole.ASSISTANT
     ) ?? transfer.from.personas[0];
 
+  // Different email content for extensions vs new-team offers.
+  const locale = getLocale(profile);
+
+  if (isExtension) {
+    if ((locale.templates as any).ContractExtensionRejected) {
+      await sendEmail(
+        Sqrl.render((locale.templates as any).ContractExtensionRejected.SUBJECT, {
+          transfer,
+          profile,
+        }),
+        Sqrl.render((locale.templates as any).ContractExtensionRejected.CONTENT, {
+          transfer,
+          profile,
+          offer,
+        }),
+        persona,
+        profile.date,
+        false
+      );
+    }
+
+    Engine.Runtime.Instance.log.info(
+      "User rejected contract extension from %s (transfer %d).",
+      transfer.from.name,
+      transfer.id
+    );
+
+    return Promise.resolve();
+  }
   await sendEmail(
     `Re: Offer from ${transfer.from.name}`,
     `You have declined the offer from ${transfer.from.name}.`,
@@ -957,6 +1311,313 @@ export async function rejectUserPlayerTransfer(transferId: number) {
     "User rejected invite from %s (transfer %d).",
     transfer.from.name,
     transfer.id
+  );
+  return Promise.resolve();
+}
+
+/**
+ * Benches the user player
+ * - starter=false, transferListed=true
+ * - convert future MATCHDAY_USER -> MATCHDAY_NPC for this team
+ * - send PlayerBenched email (tier name + KD + team standing/form + reason)
+ */
+export async function benchUserPlayer(params: {
+  teamId: number;
+  playerId: number;
+  now: Date;
+  reason?: string;
+}) {
+  const { teamId, playerId, now, reason } = params;
+  const prisma = DatabaseClient.prisma;
+
+  const profile = await prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  // Safety: only act on the user player + current team context
+  if (profile.playerId !== playerId) return Promise.resolve();
+  if (profile.teamId !== teamId) return Promise.resolve();
+
+  // Load team for tier/personas
+  const team = await prisma.team.findFirst({
+    where: { id: teamId },
+    include: { personas: true },
+  });
+  if (!team) return Promise.resolve();
+
+  const outgoing = await prisma.player.findFirst({
+    where: { id: playerId },
+    select: { starter: true, role: true },
+  });
+
+  // Update player status
+  await prisma.player.update({
+    where: { id: playerId },
+    data: {
+      starter: false,
+      transferListed: true,
+    },
+  });
+
+  await promoteReplacement({
+    prisma,
+    teamId,
+    outgoingUserRole: outgoing?.role ?? (profile as any)?.player?.role,
+    now,
+    outgoingPlayerId: playerId,
+    outgoingWasStarter: !!outgoing?.starter,
+  });
+
+  // Convert future matchdays for this team from USER -> NPC
+  const futureMatches = await prisma.match.findMany({
+    where: {
+      date: { gte: now.toISOString() },
+      competitors: { some: { teamId } },
+    },
+    select: { id: true },
+  });
+
+  const matchIds = futureMatches.map((m) => String(m.id));
+  if (matchIds.length) {
+    await prisma.calendar.updateMany({
+      where: {
+        payload: { in: matchIds },
+        date: { gte: now.toISOString() },
+        type: Constants.CalendarEntry.MATCHDAY_USER,
+      },
+      data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+    });
+  }
+
+  const tierName = getTeamTierName(team.tier);
+
+  let kd = 1;
+  let matchesPlayed = 0;
+  try {
+    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(teamId, playerId, 30);
+    kd = leagueRecent.kdRatio ?? 1;
+    matchesPlayed = leagueRecent.matchesPlayed ?? 0;
+  } catch (_) {
+    // If stats fail, email still sends with defaults.
+  }
+
+  const standingScore = await computeTeamStandingScore({ ...profile, teamId });
+  const formScore = await computeTeamFormScore({ ...profile, teamId }, 5);
+
+  // Email
+  const locale = getLocale(profile);
+  const persona =
+    team.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT,
+    ) ?? team.personas[0];
+
+  const kdFmt = Number.isFinite(kd) ? Number(kd).toFixed(2) : "1.00";
+
+  if (persona && (locale.templates as any).PlayerBenched) {
+    await sendEmail(
+      Sqrl.render((locale.templates as any).PlayerBenched.SUBJECT, {
+        profile,
+        team,
+      }),
+      Sqrl.render((locale.templates as any).PlayerBenched.CONTENT, {
+        profile,
+        team,
+        tierName,
+        kd: kdFmt,
+      }),
+      persona,
+      now,
+      true,
+    );
+  }
+
+  const refreshedProfile = await prisma.profile.findFirst(Eagers.profile);
+  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
+  if (mainWindow && refreshedProfile) {
+    mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, refreshedProfile);
+  }
+
+  Engine.Runtime.Instance.log.info(
+    "benchUserPlayer: playerId=%d teamId=%d tier=%s kd=%s standing=%s form=%s reason=%s",
+    playerId,
+    teamId,
+    tierName,
+    Number(kd).toFixed(2),
+    Number(standingScore).toFixed(2),
+    Number(formScore).toFixed(2),
+    reason ?? "",
+  );
+
+  return Promise.resolve();
+}
+
+/**
+ * Kicks the user player
+ * - profile.teamId=null
+ * - close open career stints
+ * - revert future matchdays for old team to NPC
+ * - delete future contract calendar entries
+ */
+export async function kickUserPlayer(params: {
+  teamId: number;
+  playerId: number;
+  now: Date;
+  currentEntryId?: number;
+  reason?: string;
+}) {
+  const { teamId, playerId, now, reason } = params;
+  const prisma = DatabaseClient.prisma;
+
+  const profile = await prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  // Safety: only act on the user player + current team context
+  if (profile.playerId !== playerId) return Promise.resolve();
+  if (profile.teamId !== teamId) return Promise.resolve();
+
+  // Load team context for email/persona before we detach
+  const team = await prisma.team.findFirst({
+    where: { id: teamId },
+    include: { personas: true },
+  });
+
+  const tierName = team ? getTeamTierName(team.tier) : "Unknown";
+
+  const outgoing = await prisma.player.findFirst({
+    where: { id: playerId },
+    select: { starter: true, role: true },
+  });
+
+  // Detach player from team and wipe contract
+  await prisma.player.update({
+    where: { id: playerId },
+    data: {
+      teamId: null,
+      contractEnd: null,
+      transferListed: true,
+      starter: false,
+    },
+  });
+
+  await promoteReplacement({
+    prisma,
+    teamId,
+    outgoingUserRole: outgoing?.role ?? (profile as any)?.player?.role,
+    now,
+    outgoingPlayerId: playerId,
+    outgoingWasStarter: !!outgoing?.starter,
+  });
+
+  // Update profile teamId
+  const updatedProfile = await prisma.profile.update({
+    where: { id: profile.id },
+    data: { teamId: null },
+    include: { player: true, team: true },
+  });
+
+  // Close open career stints
+  await closeOpenCareerStints(prisma, playerId, now);
+
+  // Revert future matchdays for old team back to NPC
+  const oldFutureMatches = await prisma.match.findMany({
+    where: {
+      date: { gte: now.toISOString() },
+      competitors: { some: { teamId } },
+    },
+    select: { id: true },
+  });
+
+  const oldMatchIds = oldFutureMatches.map((m) => String(m.id));
+  if (oldMatchIds.length) {
+    await prisma.calendar.updateMany({
+      where: {
+        payload: { in: oldMatchIds },
+        date: { gte: now.toISOString() },
+        type: Constants.CalendarEntry.MATCHDAY_USER,
+      },
+      data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+    });
+  }
+
+  // Delete any future contract-related calendar entries for this player
+  const nowIso = now.toISOString();
+  await prisma.calendar.updateMany({
+    where: {
+      completed: false,
+      payload: String(playerId),
+      type: {
+        in: [
+          Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+          Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+          Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        ],
+      },
+      date: { gt: nowIso },
+    },
+    data: { completed: true },
+  });
+
+  // Push profile update to renderer
+  const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
+  if (mainWindow) {
+    mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
+  }
+
+  // Email
+  let kd = 1;
+  let matchesPlayed = 0;
+  let standingScore = 0.5;
+  let formScore = 0.5;
+
+  try {
+    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(teamId, playerId, 30);
+    kd = leagueRecent.kdRatio ?? 1;
+    matchesPlayed = leagueRecent.matchesPlayed ?? 0;
+  } catch (_) { }
+
+  try {
+    standingScore = await computeTeamStandingScore({ ...profile, teamId });
+    formScore = await computeTeamFormScore({ ...profile, teamId }, 5);
+  } catch (_) { }
+
+  if (team?.personas?.length) {
+    const persona =
+      team.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER ||
+          p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? team.personas[0];
+
+    const locale = getLocale(profile);
+
+    const tpl =
+      (locale.templates as any).PlayerKicked ??
+      (locale.templates as any).ContractTerminatedEarly;
+
+    if (persona && tpl) {
+      await sendEmail(
+        Sqrl.render(tpl.SUBJECT, { profile, team, tierName }),
+        Sqrl.render(tpl.CONTENT, {
+          profile,
+          team,
+          tierName,
+        }),
+        persona,
+        now,
+        true,
+      );
+    }
+  }
+
+  Engine.Runtime.Instance.log.info(
+    "kickUserPlayer: playerId=%d oldTeamId=%d tier=%s kd=%s standing=%s form=%s reason=%s",
+    playerId,
+    teamId,
+    tierName,
+    Number(kd).toFixed(2),
+    Number(standingScore).toFixed(2),
+    Number(formScore).toFixed(2),
   );
 
   return Promise.resolve();
@@ -1523,6 +2184,422 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     });
   }
 }
+
+/**
+ * Weekly contract review (bench + kick) for the user player.
+ *
+ * Payload: playerId (stringified)
+ */
+export async function onPlayerContractReview(entry: Calendar) {
+  const prisma = DatabaseClient.prisma;
+  const playerId = Number(entry.payload);
+
+  // Load profile with team+player context (must exist and match payload)
+  const profile = await prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+  if (profile.playerId !== playerId) return Promise.resolve();
+
+  // Must currently be on a team
+  if (!profile.teamId || !profile.team) {
+    return Promise.resolve();
+  }
+
+  const now = profile.date;
+  const teamId = profile.teamId;
+
+  // Load the user player state to prevent repeated benching + repeated emails.
+  const userPlayer = await prisma.player.findFirst({
+    where: { id: playerId },
+    select: {
+      id: true,
+      teamId: true,
+      starter: true,
+      transferListed: true,
+    },
+  });
+
+  if (!userPlayer) return Promise.resolve();
+
+  // Safety: ensure we're still evaluating the same team context
+  if (userPlayer.teamId !== teamId) return Promise.resolve();
+
+  // If already benched/transfer-listed, do NOT bench again
+  const alreadyBenched = userPlayer.starter === false && userPlayer.transferListed === true;
+
+  // Tier slug from team tier idx
+  const tierSlug = getTeamTierSlug(profile.team.tier);
+  if (!tierSlug) {
+    Engine.Runtime.Instance.log.warn(
+      "onPlayerContractReview: could not resolve tierSlug (team.tier=%s). Skipping.",
+      String(profile.team.tier),
+    );
+    // still reschedule
+    const nextDate = addDays(now, 7);
+    await prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        date: nextDate.toISOString(),
+        payload: String(playerId),
+      },
+    });
+    return Promise.resolve();
+  }
+
+  // Load active stint (contract start proxy)
+  const activeStint = await prisma.careerStint.findFirst({
+    where: { playerId, endedAt: null },
+    orderBy: { startedAt: "desc" },
+    select: { startedAt: true, teamId: true, tier: true },
+  });
+
+  // If we cannot find an active stint, we still can run logic but we lose the kick window condition.
+  const contractStart = activeStint?.startedAt ?? now;
+  const daysInContract = differenceInDays(now, contractStart);
+
+  // League stats for the last 30 league matches
+  let kd = 0;
+  let matchesPlayed = 0;
+  try {
+    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(
+      teamId,
+      playerId,
+      30,
+      contractStart,
+    );
+    kd = leagueRecent.kdRatio ?? 0;
+    matchesPlayed = leagueRecent.matchesPlayed ?? 0;
+  } catch (e) {
+    Engine.Runtime.Instance.log.warn(
+      "onPlayerContractReview: failed to compute league stats (teamId=%d playerId=%d).",
+      teamId,
+      playerId,
+    );
+  }
+
+  // Team context scores
+  const standingScore = await computeTeamStandingScore(profile);
+  const formScore = await computeTeamFormScore(profile, 5);
+
+  // Settings
+  const S = Constants.PlayerContractSettings;
+
+  const benchMinMatches = S.BENCH_MIN_LEAGUE_MATCHES;
+  const kickWindowDays = S.KICK_WINDOW_DAYS;
+  const kickMinMatches = S.KICK_MIN_LEAGUE_MATCHES;
+  const benchKdMin =
+    (S.BENCH_KD_MIN_BY_TIER as Record<string, number>)[tierSlug];
+  const benchBasePbx =
+    (S.BENCH_PBX_BY_TIER as Record<string, number>)[tierSlug];
+
+  const kickKdMax =
+    (S.KICK_KD_MAX_BY_TIER as Record<string, number>)[tierSlug];
+  const kickBasePbx =
+    (S.KICK_PBX_BY_TIER as Record<string, number>)[tierSlug];
+
+  // Probability shaping based on form: (1 + (0.5 - formScore)) => [~0.5..~1.5] if formScore in [0..1]
+  const formMult = 1 + (0.5 - formScore);
+
+  Engine.Runtime.Instance.log.debug(
+    `onPlayerContractReview: teamId=${teamId} tier=${tierSlug} daysInContract=${daysInContract} ` +
+    `kd=${kd.toFixed(2)} matches=${matchesPlayed} standing=${standingScore.toFixed(2)} form=${formScore.toFixed(2)}`
+  );
+
+  // Kick logic
+  const inKickWindow = daysInContract <= kickWindowDays;
+  const eligibleForKick = inKickWindow && matchesPlayed >= kickMinMatches && kd <= kickKdMax;
+
+  if (eligibleForKick) {
+    let pbx = kickBasePbx * formMult;
+    pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+
+    Engine.Runtime.Instance.log.debug(
+      `onPlayerContractReview: kick check eligible (kd<=${kickKdMax.toFixed(2)}, matches>=${kickMinMatches}, days<=${kickWindowDays}). pbx=${pbx}`
+    );
+
+    if (Chance.rollD2(pbx)) {
+      await kickUserPlayer({
+        teamId,
+        playerId,
+        now,
+        reason: `Performance below standard (KD ${kd.toFixed(2)} <= ${kickKdMax.toFixed(
+          2,
+        )}) within first ${kickWindowDays} days. Form=${formScore.toFixed(2)}.`,
+      });
+
+      return Promise.resolve();
+    }
+  }
+
+  // Bench logic
+  const eligibleForBench = !alreadyBenched && matchesPlayed >= benchMinMatches && kd < benchKdMin;
+
+  if (eligibleForBench) {
+    let pbx = benchBasePbx * formMult;
+    pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+
+    Engine.Runtime.Instance.log.debug(
+      "onPlayerContractReview: bench check eligible (kd<%.2f, matches>=%d). pbx=%d",
+      benchKdMin,
+      benchMinMatches,
+      pbx,
+    );
+
+    if (Chance.rollD2(pbx)) {
+      await benchUserPlayer({
+        teamId,
+        playerId,
+        now,
+        reason: `Underperforming (KD ${kd.toFixed(2)} < ${benchKdMin.toFixed(
+          2,
+        )}) after ${matchesPlayed} matches. Form=${formScore.toFixed(2)}.`,
+      });
+      // Continue through to reschedule (bench does not remove contract)
+    }
+  }
+
+  // Reschedule weekly review if still on a team
+  const freshProfile = await prisma.profile.findFirst(Eagers.profile);
+  if (freshProfile?.playerId === playerId && freshProfile.teamId) {
+    const nextDate = addDays(now, 7);
+    await prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        date: nextDate.toISOString(),
+        payload: String(playerId),
+      },
+    });
+  }
+
+  return Promise.resolve();
+}
+
+/**
+ * One-shot contract extension evaluation.
+ *
+ * Payload: playerId (stringified)
+ */
+export async function onPlayerContractExtensionEval(entry: Calendar) {
+  const prisma = DatabaseClient.prisma;
+  const playerId = Number(entry.payload);
+
+  const profile = await prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+  if (profile.playerId !== playerId) return Promise.resolve();
+
+  // Must be on a team
+  if (!profile.teamId || !profile.team) return Promise.resolve();
+
+  const now = profile.date;
+  const teamId = profile.teamId;
+
+  // Load the current player to check contract end
+  const player = await prisma.player.findFirst({
+    where: { id: playerId },
+    select: {
+      id: true,
+      teamId: true,
+      contractEnd: true,
+      starter: true,
+      transferListed: true,
+      wages: true,
+      cost: true,
+    },
+  });
+  if (!player) return Promise.resolve();
+  if (player.teamId !== teamId) return Promise.resolve();
+  if (!player.contractEnd) return Promise.resolve();
+
+  // Window check: 0 < daysLeft <= 30
+  const daysLeft = differenceInDays(player.contractEnd, now);
+  if (!(daysLeft > 0 && daysLeft <= (Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END ?? 30))) {
+    return Promise.resolve();
+  }
+
+  // Determine tier slug
+  const tierSlug = getTeamTierSlug(profile.team.tier);
+  if (!tierSlug) return Promise.resolve();
+
+  // Prevent duplicate extension offers (pending)
+  const existingPendingExtension = await prisma.transfer.findFirst({
+    where: {
+      playerId,
+      status: Constants.TransferStatus.PLAYER_PENDING,
+      teamIdFrom: teamId,
+      offers: {
+        some: {
+          status: Constants.TransferStatus.PLAYER_PENDING,
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (existingPendingExtension) {
+    Engine.Runtime.Instance.log.debug(
+      "onPlayerContractExtensionEval: pending extension offer already exists (transferId=%d).",
+      existingPendingExtension.id,
+    );
+    return Promise.resolve();
+  }
+
+  // Pull league stats
+  let kd = 0;
+  let matchesPlayed = 0;
+  try {
+    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(teamId, playerId, 30);
+    kd = leagueRecent.kdRatio ?? 0;
+    matchesPlayed = leagueRecent.matchesPlayed ?? 0;
+  } catch (_) {
+    // If stats fail, do not offer an extension.
+    return Promise.resolve();
+  }
+
+  // Team context
+  const standingScore = await computeTeamStandingScore(profile);
+  const formScore = await computeTeamFormScore(profile, 5);
+
+  const S = Constants.PlayerContractSettings;
+
+  const extMinMatches = S.EXTENSION_MIN_MATCHES ?? 7;
+
+  // Tier-indexed extension thresholds
+  const extOkKd =
+    ((S.EXTENSION_PLAYER_OK_KD_BY_TIER as Record<string, number>)[tierSlug]) ?? 1.00;
+
+  // "Good team" and "good/ok player"
+  const goodTeam = formScore >= 0.5; // optionally also check standingScore >= 0.5
+  const goodPlayer = matchesPlayed >= extMinMatches && kd >= extOkKd;
+
+  // "Ok player" bucket (for the goodTeam+okPlayer case)
+  // Slightly below "good", but not bench-worthy.
+  const okKdFloor = extOkKd * 0.95;
+  const okPlayer = matchesPlayed >= extMinMatches && kd >= okKdFloor;
+
+  // Choose probability bucket
+  let pbx = 0;
+
+  if (goodTeam && goodPlayer) {
+    pbx = S.EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER ?? 85;
+  } else if (!goodTeam && goodPlayer) {
+    pbx = S.EXTENSION_PBX_BAD_TEAM_GOOD_PLAYER ?? 45;
+  } else if (goodTeam && okPlayer) {
+    pbx = S.EXTENSION_PBX_GOOD_TEAM_OK_PLAYER ?? 55;
+  } else {
+    pbx = 0;
+  }
+
+  // Additional small decline chance even when conditions are good
+  const declinePbx = S.EXTENSION_DECLINE_PBX_EVEN_IF_GOOD ?? 10;
+  if (pbx > 0 && declinePbx > 0 && Chance.rollD2(declinePbx)) {
+    Engine.Runtime.Instance.log.debug(
+      "onPlayerContractExtensionEval: declined to offer despite eligibility (declinePbx=%d).",
+      declinePbx,
+    );
+    return Promise.resolve();
+  }
+
+  if (pbx <= 0) return Promise.resolve();
+
+  // Roll whether we offer
+  pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+  if (!Chance.rollD2(pbx)) {
+    Engine.Runtime.Instance.log.debug(
+      "onPlayerContractExtensionEval: offer roll failed (pbx=%d).",
+      pbx,
+    );
+    return Promise.resolve();
+  }
+
+  const contractYears = rollContractYears(tierSlug);
+
+  // Create transfer-like "extension offer"
+  const transfer = await prisma.transfer.create({
+    data: {
+      status: Constants.TransferStatus.PLAYER_PENDING,
+      from: { connect: { id: teamId } },
+      target: { connect: { id: playerId } },
+      offers: {
+        create: [
+          {
+            status: Constants.TransferStatus.PLAYER_PENDING,
+            wages: player.wages ?? 0,
+            cost: player.cost ?? 0,
+            contractYears,
+          },
+        ],
+      },
+    },
+    include: Eagers.transfer.include,
+  });
+
+  // Email
+  const locale = getLocale(profile);
+  const persona =
+    profile.team.personas.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT,
+    ) ?? profile.team.personas[0];
+
+  const tierName = getTeamTierName(profile.team.tier);
+
+  if ((locale.templates as any).ContractExtensionOffer) {
+    await sendEmail(
+      Sqrl.render((locale.templates as any).ContractExtensionOffer.SUBJECT, {
+        profile,
+        transfer,
+        tierName,
+      }),
+      Sqrl.render((locale.templates as any).ContractExtensionOffer.CONTENT, {
+        profile,
+        transfer,
+        daysLeft,
+        contractYears,
+      }),
+      persona,
+      now,
+      true,
+    );
+  }
+
+  WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+  Engine.Runtime.Instance.log.info(
+    "Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d pbx=%d kd=%.2f matches=%d form=%.2f standing=%.2f daysLeft=%d",
+    teamId,
+    playerId,
+    tierSlug,
+    contractYears,
+    pbx,
+    kd,
+    matchesPlayed,
+    formScore,
+    standingScore,
+    daysLeft,
+  );
+
+  return Promise.resolve();
+}
+
+function isExtensionOffer(params: {
+  profile: Prisma.ProfileGetPayload<typeof Eagers.profile>;
+  transfer: Prisma.TransferGetPayload<typeof Eagers.transfer>;
+}) {
+  const { profile, transfer } = params;
+
+  const fromTeamId = transfer.from?.id ?? null;
+  if (!fromTeamId) return false;
+
+  // Must currently be on a team and the offer must come from that same team.
+  if (!profile.teamId) return false;
+  if (fromTeamId !== profile.teamId) return false;
+
+  const playerTeamId = (profile as any)?.player?.teamId ?? null;
+  if (playerTeamId != null && playerTeamId !== profile.teamId) return false;
+
+  return true;
+}
+
 
 /**
  * Records the match results for the day by updating

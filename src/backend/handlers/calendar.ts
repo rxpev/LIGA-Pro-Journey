@@ -140,7 +140,10 @@ export default function () {
     return Worldgen.onMatchdayUser(entry as Calendar);
   });
 
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.SEASON_START,
+    Worldgen.onSeasonStart
+  );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.SPONSORSHIP_PARSE,
     Worldgen.onSponsorshipOffer
@@ -156,6 +159,14 @@ export default function () {
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
     Worldgen.onPlayerScoutingCheck
+  );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+    Worldgen.onPlayerContractReview
+  );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+    Worldgen.onPlayerContractExtensionEval
   );
 
   // IPC: create calendar entry.
