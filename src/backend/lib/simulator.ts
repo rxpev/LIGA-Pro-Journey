@@ -45,10 +45,10 @@ type Team = Prisma.TeamGetPayload<{ include: { players: true } }>;
 
 /** @enum */
 enum SimulationResult {
-  DRAW = 15,
-  LOSE_HIGH = 14,
+  DRAW = 12,
+  LOSE_HIGH = 11,
   LOSE_LOW = 0,
-  WIN = 16,
+  WIN = 13,
 }
 
 /**

@@ -17,6 +17,7 @@ import { Calendar, Prisma } from '@prisma/client';
 import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug } from '@liga/shared';
 import { computeLifetimeStats } from "./faceitstats";
 import * as LeagueStats from "./leaguestats";
+import * as XpEconomy from "@liga/backend/lib/xp-economy";
 
 /**
  * Bumps the current season number by one.
@@ -3775,6 +3776,15 @@ export async function syncWages() {
   return DatabaseClient.prisma.$transaction(transaction);
 }
 
+async function incrementAgesSeasonal() {
+  const res = await DatabaseClient.prisma.player.updateMany({
+    where: { age: { not: null } },
+    data: { age: { increment: 1 } },
+  });
+
+  Engine.Runtime.Instance.log.info("Season start: incremented age for %d players.", res.count);
+}
+
 /**
  * Engine loop handler.
  *
@@ -3924,6 +3934,7 @@ export async function onSeasonStart() {
     .then(createCompetitions)
     .then(resetTrainingGains)
     .then(sponsorshipCheck)
+    .then(incrementAgesSeasonal)
     .then(syncTiers)
     .then(syncWages);
 }
@@ -4019,6 +4030,17 @@ export async function onMatchdayNPC(entry: Calendar) {
     Util.getEloRatingDelta(homeActualScore, homeExpectedScore),
     Util.getEloRatingDelta(awayActualScore, awayExpectedScore),
   ];
+
+  await XpEconomy.applyMatchXpFromSim({
+    matchId: match.id,
+    homeTeam: home.team,
+    awayTeam: away.team,
+    simulationResult,
+    allowDraw: simulator.allowDraw,
+    profile: entry.type === Constants.CalendarEntry.MATCHDAY_USER
+      ? { teamId: simulator.userTeamId, playerId: simulator.userPlayerId }
+      : undefined,
+  });
 
   return Promise.all([
     ...deltas.map((delta, teamIdx) =>

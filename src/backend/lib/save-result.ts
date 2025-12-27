@@ -1,5 +1,6 @@
 import { DatabaseClient } from "@liga/backend/lib";
 import { Constants, Util } from "@liga/shared";
+import * as XpEconomy from "@liga/backend/lib/xp-economy";
 
 type MatchPlayerLite = {
   id: number;
@@ -260,6 +261,8 @@ export async function saveFaceitResult(
       faceitEloDelta: delta,
     },
   });
+
+  await XpEconomy.seedUserXp({ profileId: profile.id, teamlessOnly: true });
 
   return true;
 }

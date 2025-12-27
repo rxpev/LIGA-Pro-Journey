@@ -9,6 +9,7 @@ import { ipcMain } from 'electron';
 import { flatten, merge, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { saveFaceitResult } from "@liga/backend/lib/save-result";
+import * as XpEconomy from "@liga/backend/lib/xp-economy";
 import {
   DatabaseClient,
   Game,
@@ -349,6 +350,13 @@ export default function () {
         },
       },
     });
+
+    if (matchCompleted) {
+      await XpEconomy.applyMatchXpFromCompletedMatch({
+        matchId: match.id,
+        profile: { teamId: profile.teamId, playerId: profile.playerId },
+      });
+    }
 
     // bail early if match isn't completed yet and send a profile
     // update so that the match status gets refreshed
