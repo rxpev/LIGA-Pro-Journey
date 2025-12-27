@@ -122,15 +122,24 @@ function applyFloatDeltaToInt(params: { baseInt: number; mult: number }) {
   return sign * out;
 }
 
-function computeTeamStrength(team: TeamWithPlayers, profile?: { teamId: number | null; playerId: number | null }) {
+function computeTeamStrength(
+  team: TeamWithPlayers,
+  profile?: { teamId: number | null; playerId: number | null }
+) {
   const userTeamId = profile?.teamId ?? null;
   const userPlayerId = profile?.playerId ?? null;
+
+  const isUserTeam = team.id === userTeamId;
+
+  const forceSizeExcludingUser = isUserTeam
+    ? Constants.Application.SQUAD_MIN_LENGTH - 1   // 4
+    : Constants.Application.SQUAD_MIN_LENGTH;     // 5
 
   const squad = Util.getSquad(
     team as any,
     { teamId: userTeamId, playerId: userPlayerId } as any,
-    team.id === userTeamId && team.players.length <= Constants.Application.SQUAD_MIN_LENGTH,
-    Constants.Application.SQUAD_MIN_LENGTH,
+    isUserTeam, // includeUser
+    forceSizeExcludingUser,
   );
 
   const totalXp = squad.map((p: any) => Bot.Exp.getTotalXP(p.xp)).reduce((a, b) => a + b, 0);
