@@ -73,13 +73,6 @@ export class Exp {
   }
 
   /**
- * Public wrapper to simulate XP change for external callers.
- */
-  public simulateXpChangeForExternal(): number {
-    return this.simulateXpChange();
-  }
-
-  /**
    * Returns total XP value for a player.
    */
   public static getTotalXP(playerXP?: number) {
@@ -115,49 +108,5 @@ export class Exp {
   public getBotTemplate() {
     const totalXp = this.player.xp ?? 0;
     return Exp.getTemplateByXP(totalXp);
-  }
-
-  /**
-   * Trains XP for all players (simple XP gain/loss system).
-   * You can expand this to depend on match performance.
-   */
-  public static trainAll(players: Array<Player>) {
-    return players.map(player => {
-      const xp = new Exp(player);
-      const delta = xp.simulateXpChange();
-      const newXp = Math.max(0, (player.xp || 0) + delta);
-
-      xp.log.debug('[%s] XP change: %+d → %d', player.name, delta, newXp);
-
-      return {
-        ...player,
-        xp: newXp,
-      };
-    });
-  }
-
-  /**
-   * Simulates a random XP gain/loss event.
-   */
-  private simulateXpChange(): number {
-    // 85% chance to gain XP, 15% chance to lose XP
-    const gain = Chance.roll({ true: 85, false: 15 });
-
-    let result: string | number | undefined;
-
-    if (gain) {
-      result = Chance.roll(XP_GAIN_PROB);
-    } else {
-      result = Chance.roll(XP_LOSS_PROB);
-    }
-
-    // fallback if Chance.roll returns undefined or invalid
-    const safeNumber = Number(result);
-    if (isNaN(safeNumber)) {
-      this.log.warn('Chance.roll returned invalid value, defaulting to 0');
-      return 0;
-    }
-
-    return safeNumber;
   }
 }
