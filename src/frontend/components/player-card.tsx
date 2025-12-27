@@ -124,7 +124,7 @@ export default function (props: PlayerCardProps) {
         <aside className="stack-y center gap-0 px-2">
           <p className="text-muted text-xs">{t('playerCard.totalXP')}</p>
           <p className="text-2xl! font-black">
-            {props.noStats ? '-' : Math.floor(props.player.xp ?? 0)}
+            {Math.floor(props.player.xp ?? 0)}
           </p>
         </aside>
       </article>

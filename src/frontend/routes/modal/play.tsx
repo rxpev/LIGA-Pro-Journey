@@ -410,15 +410,23 @@ export default function () {
             // wire user's squad which can be changed
             // on-the-fly to this competitor's squad
             if (isUserTeam) {
-              team.players = team.players.map((player) => ({
-                ...player,
-                starter: userSquad.find((userPlayer) => userPlayer.id === player.id)?.starter,
-              }));
+              team.players = team.players.map((player) => {
+                const entry = userSquad.find((u) => u.id === player.id);
+                return {
+                  ...player,
+                  starter: entry ? entry.starter : player.starter,
+                };
+              });
             }
 
-            const starters = Util.getSquad(team, state.profile, true);
+            const allowBackfill =
+              isUserTeam && team.players.length <= Constants.Application.SQUAD_MIN_LENGTH;
+
+            const starters = Util.getSquad(team, state.profile, allowBackfill);
             const bench = differenceBy(team.players, starters, 'id');
             const squad = { starters, bench };
+            console.log("USER ROW", starters.find(p => p.id === state.profile.playerId));
+
 
             return (
               <table key={competitor.id + '__competitor'} className="table-xs table table-fixed">
@@ -447,7 +455,7 @@ export default function () {
                               className="border-transparent bg-transparent"
                               game={settingsAll.general.game}
                               player={player}
-                              noStats={player.id === state.profile.playerId}
+                              noStats={false}
                               onClickStarter={
                                 isUserTeam &&
                                 player.id !== state.profile.playerId &&
