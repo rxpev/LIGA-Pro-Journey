@@ -14,6 +14,7 @@ export async function computeLeagueLifetimeStats(
   teamId: number,
   playerId: number,
   limit?: number,
+  since?: Date,
 ) {
   const prisma = DatabaseClient.prisma;
 
@@ -36,13 +37,10 @@ export async function computeLeagueLifetimeStats(
     where: {
       status: Constants.MatchStatus.COMPLETED,
       competitionId: { not: null },
-      competitors: {
-        some: { teamId },
-      },
+      ...(since ? { date: { gte: since.toISOString() } } : {}),
+      competitors: { some: { teamId } },
     },
-    include: {
-      competitors: true,
-    },
+    include: { competitors: true },
     orderBy: { date: "desc" },
     take: limit ?? undefined,
   });
@@ -65,7 +63,14 @@ export async function computeLeagueLifetimeStats(
   const matchIds = matches.map((m) => m.id);
 
   const events = await prisma.matchEvent.findMany({
-    where: { matchId: { in: matchIds } },
+    where: {
+      matchId: { in: matchIds },
+      OR: [
+        { attackerId: playerId },
+        { victimId: playerId },
+        { assistId: playerId },
+      ],
+    },
   });
 
   let kills = 0;
