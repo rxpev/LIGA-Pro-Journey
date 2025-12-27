@@ -113,6 +113,70 @@ function getRandomSniperPersonality(): PersonalityTemplate {
   return pool[random(0, pool.length - 1)];
 }
 
+function clamp(num: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, num));
+}
+
+/**
+ * Triangular distribution in [min, max] with most probability mass near `mode`.
+ */
+function randomTriangular(min: number, max: number, mode: number) {
+  const u = Math.random();
+  const c = (mode - min) / (max - min);
+
+  if (u < c) {
+    return min + Math.sqrt(u * (max - min) * (mode - min));
+  }
+
+  return max - Math.sqrt((1 - u) * (max - min) * (max - mode));
+}
+
+/**
+ * Seeds an age 18..35, skewing young overall.
+ * Slight prestige shift upward
+ */
+function getInitialAgeForPrestigeAndXp(prestige: number, xp: number): number {
+  const min = 18;
+  const max = 35;
+
+  const p = clamp(prestige ?? 0, 0, 4);
+  const x = Math.max(0, xp ?? 0);
+
+  // Veteran chances by prestige (tuneable).
+  // Even at prestige 4, "true veterans" should be uncommon.
+  const veteranPbxByPrestige = [2, 3, 4, 6, 8]; // percent
+
+  // High XP players skew prime; reduce veteran probability for elite XP.
+  const isEliteXp = x >= 75;          // tune threshold to taste
+  const isVeryEliteXp = x >= 88;      // even rarer
+  let veteranPbx = veteranPbxByPrestige[p];
+
+  if (isEliteXp) veteranPbx *= 0.45;       // cut veteran odds heavily
+  if (isVeryEliteXp) veteranPbx *= 0.35;   // cut further for superstar XP
+
+  const roll = Math.random() * 100;
+  const isVeteranTrack = roll < veteranPbx;
+
+  if (isVeteranTrack) {
+    // Veteran track: concentrated 28–35 with a peak around 30–31.
+    const vMin = 28;
+    const vMax = 35;
+    const vMode = clamp(30 + p * 0.25, vMin, vMax);
+    return clamp(Math.round(randomTriangular(vMin, vMax, vMode)), min, max);
+  }
+
+  // Prime track: concentrated 18–32, peak around 20–25 depending on prestige.
+  // prestige 0 => ~20
+  // prestige 4 => ~25
+  const mode = clamp(20 + p * 1.25, min, max);
+
+  // Also gently cap prime track upper tail so you don't get many 33–35s here.
+  const primeMax = 32;
+
+  return clamp(Math.round(randomTriangular(min, primeMax, mode)), min, max);
+}
+
+
 /** @interface */
 interface CLIArguments {
   min?: string;
@@ -166,6 +230,12 @@ export async function generateStats(args: any = {}) {
     if (args.initial) {
       for (const player of teamPlayers) {
         player.xp = getInitialXpForPrestige(player.prestige ?? 0);
+      }
+    }
+
+    for (const player of teamPlayers) {
+      if (player.age == null) {
+        player.age = getInitialAgeForPrestigeAndXp(player.prestige ?? 0, player.xp ?? 0);
       }
     }
 
@@ -252,6 +322,7 @@ export async function generateStats(args: any = {}) {
           where: { id: player.id },
           data: {
             xp: newXp,
+            age: player.age,
             role: player.role,
             personality: player.personality,
             elo: faceitElo,
@@ -280,6 +351,10 @@ export async function generateStats(args: any = {}) {
         player.xp = getInitialXpForPrestige(player.prestige ?? 0);
       }
 
+      if (player.age == null) {
+        player.age = getInitialAgeForPrestigeAndXp(player.prestige ?? 0, player.xp ?? 0);
+      }
+
       const newXp = player.xp ?? 0;
       const { elo } = getFaceitEloForXp(newXp);
 
@@ -287,6 +362,7 @@ export async function generateStats(args: any = {}) {
         where: { id: player.id },
         data: {
           xp: newXp,
+          age: player.age,
           role: player.role,
           personality: player.personality,
           elo,
