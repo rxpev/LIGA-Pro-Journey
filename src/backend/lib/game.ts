@@ -20,6 +20,7 @@ import { glob } from 'glob';
 import { Prisma, Profile } from '@prisma/client';
 import { compact, flatten, random, startCase, uniq } from 'lodash';
 import { Constants, Bot, Chance, Util, Eagers, Dedent, is } from '@liga/shared';
+import DatabaseClient from "./database-client";
 
 /**
  * Promisified version of `exec`.
@@ -726,6 +727,15 @@ End\n
       return;
     }
 
+    const prisma = DatabaseClient.prisma;
+
+    const user = await prisma.player.findUnique({
+      where: { id: this.profile.playerId },
+      select: { role: true },
+    });
+
+    const isAWP = !this.spectating && user?.role === "AWPER" ? 1 : 0;
+
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
     // ------------------------------
@@ -811,6 +821,7 @@ End\n
               ? 'CT'
               : 'any',
         damage_prints: 0,
+        isAWP,
       }
       : {
         demo: true,
@@ -829,6 +840,7 @@ End\n
         bombTimer: this.settings.matchRules.bombTimer,
         defuserAllocation: this.settings.matchRules.defuserAllocation,
         damage_prints: 0,
+        isAWP,
 
         match_stat: this.match.competition.tier.name,
         teamflag_t: home.team.country.code,
