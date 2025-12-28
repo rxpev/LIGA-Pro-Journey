@@ -735,6 +735,8 @@ End\n
     });
 
     const isAWP = !this.spectating && user?.role === "AWPER" ? 1 : 0;
+    const isIGL = !this.spectating && user?.role === "IGL";
+    const bot_defer_to_human_items = this.isFaceit ? 0 : (isIGL ? 1 : 0);
 
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
@@ -803,6 +805,9 @@ End\n
         startmoney: this.settings.matchRules.startMoney,
         bombTimer: this.settings.matchRules.bombTimer,
         defuserAllocation: this.settings.matchRules.defuserAllocation,
+        damage_prints: 0,
+        isAWP,
+        bot_defer_to_human_items,
 
         // FACEIT scoreboard-ish
         match_stat: 'FACEIT PUG',
@@ -820,8 +825,6 @@ End\n
             : this.faceitUserSide === 'ct'
               ? 'CT'
               : 'any',
-        damage_prints: 0,
-        isAWP,
       }
       : {
         demo: true,
@@ -841,6 +844,7 @@ End\n
         defuserAllocation: this.settings.matchRules.defuserAllocation,
         damage_prints: 0,
         isAWP,
+        bot_defer_to_human_items,
 
         match_stat: this.match.competition.tier.name,
         teamflag_t: home.team.country.code,
