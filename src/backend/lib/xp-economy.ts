@@ -357,9 +357,9 @@ type SeedXpRange = { min: number; max: number };
  */
 export function seedXpRangeFromKD(kd: number): SeedXpRange {
   if (!Number.isFinite(kd) || kd <= 0) return { min: 10, max: 10 };
-  if (kd >= 3.0) return { min: 21, max: 28 };
-  if (kd >= 2.0) return { min: 15, max: 20 };
-  if (kd >= 1.0) return { min: 11, max: 14 };
+  if (kd >= 3.0) return { min: 30, max: 35 };
+  if (kd >= 2.0) return { min: 20, max: 30 };
+  if (kd >= 1.0) return { min: 15, max: 20 };
   return { min: 10, max: 10 };
 }
 
