@@ -481,6 +481,8 @@ model Offer {
   cost                Int?                @default(0)
   wages               Int?                @default(0)
   contractYears       Int?                @default(1)
+  expiresAt           DateTime?
+  createdAt           DateTime            @default(now())
 
   // belongs to
   transfer            Transfer            @relation(fields: [transferId], references: [id])
