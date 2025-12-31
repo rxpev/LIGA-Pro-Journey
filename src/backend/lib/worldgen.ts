@@ -14,7 +14,7 @@ import getLocale from './locale';
 import { addDays, addWeeks, addYears, differenceInDays, format, setDay, subDays } from 'date-fns';
 import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
 import { Calendar, Prisma } from '@prisma/client';
-import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug } from '@liga/shared';
+import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug, UserRole } from '@liga/shared';
 import { computeLifetimeStats } from "./faceitstats";
 import * as LeagueStats from "./leaguestats";
 import * as XpEconomy from "@liga/backend/lib/xp-economy";
@@ -541,6 +541,28 @@ function getTeamTierName(teamTierIdx: number | null | undefined): string {
 }
 function normalizeRole(r: unknown): string {
   return String(r ?? "").toUpperCase();
+}
+
+function resolveUserRole(profile: any, player: any): UserRole {
+  const role =
+    player?.role ??
+    profile?.player?.role ??
+    profile?.role;
+
+  if (role === UserRole.IGL) return UserRole.IGL;
+  if (role === UserRole.AWPER) return UserRole.AWPER;
+  return UserRole.RIFLER;
+}
+
+function getRoleOfferTuning(role: UserRole) {
+  return (
+    UserOfferSettings.ROLE_OFFER_TUNING?.[role] ??
+    UserOfferSettings.ROLE_OFFER_TUNING?.[UserRole.RIFLER]
+  );
+}
+
+function clampPbx(x: number) {
+  return Math.max(1, Math.min(95, Math.round(x)));
 }
 
 function daysLeftOrHuge(contractEnd: Date | null | undefined, now: Date): number {
@@ -1771,6 +1793,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       contractEnd: true,
       countryId: true,
       lastOfferAt: true,
+      role: true,
     },
   });
   if (!player) return Promise.resolve();
@@ -1935,18 +1958,29 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   );
 
   try {
-    // Cooldown: different rules if teamless vs in a team
-    const cooldownDays = isTeamless
+    const role = resolveUserRole(profile, player);
+    const tuning = getRoleOfferTuning(role);
+
+    const baseCooldownDays = isTeamless
       ? UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS
       : UserOfferSettings.TEAM_OFFER_COOLDOWN_DAYS;
+
+    const cooldownDays = Math.max(
+      1,
+      Math.round(
+        baseCooldownDays *
+        (isTeamless ? tuning.cooldownMultTeamless : tuning.cooldownMultTeam)
+      )
+    );
 
     if (player.lastOfferAt) {
       const daysSinceLast = differenceInDays(profile.date, player.lastOfferAt);
       if (daysSinceLast < cooldownDays) {
         Engine.Runtime.Instance.log.debug(
-          "PlayerScoutingCheck: cooldown active (daysSinceLast=%d < cooldown=%d).",
+          "PlayerScoutingCheck: cooldown active (daysSinceLast=%d < cooldown=%d) role=%s",
           daysSinceLast,
           cooldownDays,
+          role,
         );
         return Promise.resolve();
       }
@@ -2035,7 +2069,15 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     // Teamless Advanced/Premier scouting should be a bit rarer than contracted scouting
     if (isTeamless) pbx *= 0.85;
 
-    pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+    pbx *= tuning.pbxMultLeague;
+    pbx = clampPbx(pbx);
+
+    Engine.Runtime.Instance.log.debug(
+      "PlayerScoutingCheck: role=%s pbxAfterRole=%d (roleMult=%s)",
+      role,
+      pbx,
+      tuning.pbxMultLeague.toFixed(2),
+    );
 
     Engine.Runtime.Instance.log.debug(
       "PlayerScoutingCheck: pickedTier=%s base=%d pbx=%d contractMult=%s starter=%s listed=%s",
@@ -3203,6 +3245,9 @@ export async function sendUserFaceitOffer() {
   if (!profile || !profile.player) return Promise.resolve();
   if (profile.teamId != null) return Promise.resolve();
 
+  const role = resolveUserRole(profile, profile.player);
+  const tuning = getRoleOfferTuning(role);
+
   // Pending offers cap
   const pendingCount = await prisma.transfer.count({
     where: {
@@ -3216,8 +3261,13 @@ export async function sendUserFaceitOffer() {
   }
 
   const last = profile.player.lastOfferAt;
+  const cooldownDays = Math.max(
+    1,
+    Math.round(UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS * tuning.cooldownMultTeamless)
+  );
+
   if (last) {
-    if (differenceInDays(profile.date, last) < UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS) {
+    if (differenceInDays(profile.date, last) < cooldownDays) {
       return Promise.resolve();
     }
   }
@@ -3251,27 +3301,26 @@ export async function sendUserFaceitOffer() {
     0.85,
     Math.min(1.30, 1 + (kd - 1) * 0.15 + (winrate - 0.5) * 0.2),
   );
+
+  // post window pbx
   let pbx = Math.round(pbxBase * perfMult);
+  if (matchCount > maxWindow) pbx = Math.round(pbx * 0.25);
 
-  if (matchCount > maxWindow) {
-    pbx = Math.round(pbx * 0.10);
-  }
-
-  // Clamp to sane bounds
-  pbx = Math.max(1, Math.min(95, pbx));
+  pbx *= tuning.pbxMultFaceit;
+  pbx = clampPbx(pbx);
 
   const elo = profile.faceitElo ?? 0;
   const targetTier = tierFromElo(elo);
   if (!targetTier) return Promise.resolve();
 
   const isHotProspect =
-    matchCount >= 25 &&
-    kd >= 2.0 &&
+    matchCount >= 20 &&
+    kd >= 1.8 &&
     elo >= 1800 &&
-    targetTier === TierSlug.LEAGUE_OPEN;
+    targetTier === TierSlug.LEAGUE_INTERMEDIATE;
 
   if (isHotProspect) {
-    pbx = Math.max(pbx, 90); // boost strongly
+    pbx = Math.max(pbx, clampPbx(90 * tuning.pbxMultFaceit));
   }
 
   if (!Chance.rollD2(pbx)) {

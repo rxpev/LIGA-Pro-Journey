@@ -84,6 +84,11 @@ export enum PlayerRole {
   RIFLER = 'RIFLER',
   SNIPER = 'SNIPER',
 }
+export enum UserRole {
+  RIFLER = "RIFLER",
+  IGL = "IGL",
+  AWPER = "AWPER",
+}
 export enum PersonalityTemplate {
   LURK = 'LurkPersonality',
   ALURK = 'ALurkPersonality',
@@ -1671,7 +1676,7 @@ export const UserOfferSettings = {
   // ramp probability from match 3 to 10 (initial window)
   FACEIT_OFFER_PBX_BY_MATCH_INDEX: [0, 0, 0, 15, 25, 35, 45, 55, 65, 75],
 
-  TEAMLESS_OFFER_COOLDOWN_DAYS: 15,
+  TEAMLESS_OFFER_COOLDOWN_DAYS: 10,
   TEAM_OFFER_COOLDOWN_DAYS: 50,
   TEAMLESS_MAX_PENDING_OFFERS: 3,
 
@@ -1708,6 +1713,27 @@ export const UserOfferSettings = {
     [TierSlug.LEAGUE_MAIN]: { faceit: 0.2, league: 0.8 },
     [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
     [TierSlug.LEAGUE_PREMIER]: { faceit: 0.05, league: 0.95 },
+  },
+
+  ROLE_OFFER_TUNING: {
+    [UserRole.RIFLER]: {
+      pbxMultLeague: 1.0,
+      pbxMultFaceit: 1.0,
+      cooldownMultTeam: 1.0,
+      cooldownMultTeamless: 1.0,
+    },
+    [UserRole.IGL]: {
+      pbxMultLeague: 0.85,
+      pbxMultFaceit: 0.90,
+      cooldownMultTeam: 1.30,
+      cooldownMultTeamless: 1.30,
+    },
+    [UserRole.AWPER]: {
+      pbxMultLeague: 0.55,
+      pbxMultFaceit: 0.70,
+      cooldownMultTeam: 1.60,
+      cooldownMultTeamless: 1.60,
+    },
   },
 };
 
