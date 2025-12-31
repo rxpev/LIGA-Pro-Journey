@@ -73,15 +73,8 @@ export enum OfferAcceptedTeam {
 
 /** @enum */
 export enum OfferAcceptedUser {
-  SUBJECT = 'Welcome to {{it.transfer.from.name}}',
-  CONTENT = `
-  Hello, {{it.profile.player.name}}.
-
-  Welcome to **{{it.transfer.from.name}}**. We are happy to have you on board.
-
-  Your contract is valid until: {{it.player.contractEnd | date }}
-
-  `,
+  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  CONTENT = "Accepted {{it.transfer.from.name}}'s offer.",
 }
 
 /** @enum */
@@ -96,6 +89,7 @@ export enum OfferIncoming {
   CONTENT = `Hello, {{it.profile.player.name}}.
 
   We at **{{it.transfer.from.name}}** would like to offer you a contract.
+  Please note that this offer is only valid for the next 7 days.
 
   **Team details:**
 
@@ -177,7 +171,7 @@ export enum OfferRejectedEmailWages {
 
 /** @enum */
 export enum OfferRejectedUser {
-  SUBJECT = 'Transfer Offer for {{it.transfer.target.name}}',
+  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
   CONTENT = `Rejected {{it.transfer.from.name}}'s offer.`,
 }
 
@@ -231,6 +225,7 @@ export enum ContractExtensionOffer {
 
 We at **{{it.transfer.from.name}}** would like to extend your contract.
 We value your contributions to the team and would like to keep you on board for the upcoming seasons.
+Please note that this offer is only valid for the rest of your current contract duration.
 
 **Offer details**
 
@@ -246,29 +241,25 @@ We value your contributions to the team and would like to keep you on board for 
 }
 
 export enum ContractExtensionAccepted {
-  SUBJECT = "Extension accepted — {{it.team.name}}",
-  CONTENT = `Hello, {{it.profile.player.name}}.
-
-We are happy you decided to stick with us at **{{it.team.name}}**.
-
-**New contract**
-
-- Length: {{it.years}} year(s)
-
-- Contract end date: {{it.contractEndDate}}
-
-From here on, let's aim for greater heights together!
-`
+  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  CONTENT = "Accepted {{it.transfer.from.name}}'s extension offer.",
 }
 
 /** @enum */
 export enum ContractExtensionRejected {
-  SUBJECT = "Re: Contract extension — {{it.transfer.from.name}}",
-  CONTENT = `Hello, {{it.profile.player.name}}.
+  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  CONTENT = "Rejected {{it.transfer.from.name}}'s extension offer.",
+}
+/** @enum */
+export enum ContractExtensionExpired {
+  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  CONTENT = "Expired {{it.transfer.from.name}}'s offer.",
+}
 
-It's unfortunate to hear that you have decided not to extend your contract with **{{it.transfer.from.name}}**.
-We respect your decision and wish you the best of luck in your future endeavors.
-`
+/** @enum */
+export enum OfferExpiredUser {
+  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  CONTENT = "Expired {{it.transfer.from.name}}'s offer.",
 }
 
 /** @enum */

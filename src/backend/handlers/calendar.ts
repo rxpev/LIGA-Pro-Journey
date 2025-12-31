@@ -52,12 +52,7 @@ async function onTickStart() {
  * Engine middleware: end of each tick.
  */
 async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
-  Engine.Runtime.Instance.log.info(
-    "Running %s middleware...",
-    Engine.MiddlewareType.TICK_END.toUpperCase()
-  );
-
-  // Mark calendar entries as completed.
+  // Mark entries completed
   await Promise.all(
     input.map((calendar) =>
       DatabaseClient.prisma.calendar.update({
@@ -67,22 +62,21 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
     )
   );
 
+  await Worldgen.recordMatchResults();
+
+  // If stopped, do not advance day
   if (status === Engine.LoopStatus.TERMINATED) {
     Engine.Runtime.Instance.log.info("Stopping...");
     return Promise.resolve();
   }
 
-  // Record global match results (affects NPC teams and leagues).
-  await Worldgen.recordMatchResults();
-
-  // Advance day.
+  // Advance day
   let profile = await DatabaseClient.prisma.profile.findFirst();
   profile = await DatabaseClient.prisma.profile.update({
     where: { id: profile.id },
     data: { date: addDays(profile.date, 1).toISOString() },
   });
 
-  // Push profile update to renderer.
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
   if (mainWindow) mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, profile);
 
@@ -167,6 +161,10 @@ export default function () {
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
     Worldgen.onPlayerContractExtensionEval
+  );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
+    Worldgen.onTransferOfferExpiryCheck
   );
 
   // IPC: create calendar entry.

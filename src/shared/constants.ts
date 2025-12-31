@@ -140,6 +140,7 @@ export enum CalendarEntry {
   PLAYER_CONTRACT_EXPIRE = '/player/contract-expire',
   PLAYER_CONTRACT_REVIEW = '/player/contract-review',
   PLAYER_CONTRACT_EXTENSION_EVAL = '/player/contract-extension-eval',
+  TRANSFER_OFFER_EXPIRY_CHECK = '/transfer/offer-expiry-check',
 }
 
 /**
@@ -575,6 +576,7 @@ export enum TransferStatus {
   PLAYER_ACCEPTED,
   PLAYER_PENDING,
   PLAYER_REJECTED,
+  EXPIRED,
 }
 
 /** @enum */
@@ -926,6 +928,7 @@ export const IdiomaticTransferStatus: Record<number, string> = {
   [TransferStatus.TEAM_ACCEPTED]: 'Team Accepted',
   [TransferStatus.TEAM_PENDING]: 'Team Pending',
   [TransferStatus.TEAM_REJECTED]: 'Team Rejected',
+  [TransferStatus.EXPIRED]: 'Expired',
 };
 
 /**

@@ -758,6 +758,21 @@ export async function acceptTransferOffer(transferId: number) {
 
   if (!transfer) return Promise.resolve();
 
+  const latestPending = transfer.offers.find(
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+  );
+
+  if (
+    latestPending?.expiresAt &&
+    latestPending.expiresAt <= profile.date
+  ) {
+    await onTransferOfferExpiryCheck({
+      ...({} as any),
+      payload: String(transfer.id),
+    } as any);
+    return Promise.resolve();
+  }
+
   const fromTeamId = transfer.from?.id;
   if (!fromTeamId) {
     Engine.Runtime.Instance.log.warn(
@@ -1230,6 +1245,21 @@ export async function rejectTransferOffer(transferId: number) {
   });
 
   if (!transfer) return Promise.resolve();
+
+  const latestPending = transfer.offers.find(
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+  );
+
+  if (
+    latestPending?.expiresAt &&
+    latestPending.expiresAt <= profile.date
+  ) {
+    await onTransferOfferExpiryCheck({
+      ...({} as any),
+      payload: String(transfer.id),
+    } as any);
+    return Promise.resolve();
+  }
 
   if (transfer.playerId !== profile.playerId) {
     Engine.Runtime.Instance.log.warn(
@@ -2104,7 +2134,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     // Create transfer + offer
     let contractYears = rollContractYears(pickedTierSlug);
-
+    const offerExpiresAt = addDays(profile.date, 7);
     if (!player.starter && contractYears > 1) contractYears -= 1;
     if (player.transferListed && contractYears > 1) contractYears -= 1;
 
@@ -2130,11 +2160,20 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
               wages,
               cost,
               contractYears,
+              expiresAt: offerExpiresAt,
             },
           ],
         },
       },
       include: Eagers.transfer.include,
+    });
+
+    await prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
+        date: offerExpiresAt.toISOString(),
+        payload: String(transfer.id),
+      },
     });
 
     await prisma.player.update({
@@ -2160,6 +2199,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     );
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+    await scheduleOfferPauseAndExpiry(transfer.id, offerExpiresAt);
+    Engine.Runtime.Instance.stop();
 
     Engine.Runtime.Instance.log.info(
       "League-based offer: %s -> %s (tier=%s years=%d wages=%d cost=%d pbx=%d)",
@@ -2512,6 +2554,10 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   }
 
   const contractYears = rollContractYears(tierSlug);
+  const rawExpiry = addDays(now, 30);
+  const offerExpiresAt = player.contractEnd
+    ? (player.contractEnd < rawExpiry ? player.contractEnd : rawExpiry)
+    : rawExpiry;
 
   // Create transfer-like "extension offer"
   const transfer = await prisma.transfer.create({
@@ -2526,11 +2572,20 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
             wages: player.wages ?? 0,
             cost: player.cost ?? 0,
             contractYears,
+            expiresAt: offerExpiresAt,
           },
         ],
       },
     },
     include: Eagers.transfer.include,
+  });
+
+  await prisma.calendar.create({
+    data: {
+      type: Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
+      date: offerExpiresAt.toISOString(),
+      payload: String(transfer.id),
+    },
   });
 
   // Email
@@ -2564,6 +2619,9 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   }
 
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+  await scheduleOfferPauseAndExpiry(transfer.id, offerExpiresAt);
+  Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
     "Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d pbx=%d kd=%.2f matches=%d form=%.2f standing=%.2f daysLeft=%d",
@@ -3202,6 +3260,7 @@ export async function sendUserFaceitOffer() {
   const target = profile.player;
   const wages = target.wages ?? 0;
   const cost = target.cost ?? 0;
+  const offerExpiresAt = addDays(profile.date, 7);
 
   const transfer = await prisma.transfer.create({
     data: {
@@ -3215,11 +3274,20 @@ export async function sendUserFaceitOffer() {
             wages,
             cost,
             contractYears,
+            expiresAt: offerExpiresAt,
           },
         ],
       },
     },
     include: Eagers.transfer.include,
+  });
+
+  await prisma.calendar.create({
+    data: {
+      type: Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
+      date: offerExpiresAt.toISOString(),
+      payload: String(transfer.id),
+    },
   });
 
   await prisma.player.update({
@@ -3246,6 +3314,9 @@ export async function sendUserFaceitOffer() {
   );
 
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+  await scheduleOfferPauseAndExpiry(transfer.id, offerExpiresAt);
+  Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
     "%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d)",
@@ -4348,6 +4419,131 @@ export async function onSponsorshipPayment(entry: Partial<Calendar>) {
       earnings: {
         increment: offer.amount,
       },
+    },
+  });
+}
+
+export async function onTransferOfferExpiryCheck(entry: Calendar) {
+  const prisma = DatabaseClient.prisma;
+
+  const profile = await prisma.profile.findFirst(Eagers.profile);
+  if (!profile) return Promise.resolve();
+
+  const now = profile.date;
+  const transferId = Number(entry.payload || 0);
+  if (!transferId) return Promise.resolve();
+
+  const transfer = await prisma.transfer.findFirst({
+    where: { id: transferId },
+    include: {
+      ...Eagers.transfer.include,
+      offers: { orderBy: { id: "desc" } },
+      from: { include: { personas: true } },
+    },
+  });
+  if (!transfer) return Promise.resolve();
+
+  // Only handle user-targeted pending transfers
+  if (transfer.playerId !== profile.playerId) return Promise.resolve();
+  if (transfer.status !== Constants.TransferStatus.PLAYER_PENDING) return Promise.resolve();
+
+  const pendingOffer = transfer.offers.find(
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+  );
+  if (!pendingOffer?.expiresAt) return Promise.resolve();
+
+  const daysLeft = differenceInDays(pendingOffer.expiresAt, now);
+
+  if (daysLeft > 1) return Promise.resolve();
+
+  // Exactly 1 day before expiry: pause the calendar loop
+  if (daysLeft === 1) {
+    Engine.Runtime.Instance.stop();
+    return Promise.resolve();
+  }
+
+  const isExtension = profile.teamId != null && transfer.from?.id === profile.teamId;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.offer.updateMany({
+      where: {
+        id: pendingOffer.id,
+        status: Constants.TransferStatus.PLAYER_PENDING,
+      },
+      data: { status: Constants.TransferStatus.EXPIRED },
+    });
+
+    await tx.transfer.updateMany({
+      where: {
+        id: transfer.id,
+        status: Constants.TransferStatus.PLAYER_PENDING,
+      },
+      data: { status: Constants.TransferStatus.EXPIRED },
+    });
+  });
+
+  const locale = getLocale(profile);
+
+  const persona =
+    transfer.from?.personas?.find(
+      (p) =>
+        p.role === Constants.PersonaRole.MANAGER ||
+        p.role === Constants.PersonaRole.ASSISTANT
+    ) ?? transfer.from?.personas?.[0];
+
+  if (persona) {
+    const subject = isExtension
+      ? Sqrl.render((locale.templates as any).ContractExtensionOffer.SUBJECT, { profile, transfer })
+      : Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { profile, transfer });
+
+    const content = isExtension
+      ? Sqrl.render((locale.templates as any).ContractExtensionExpired.CONTENT, { profile, transfer })
+      : Sqrl.render((locale.templates as any).OfferExpiredUser.CONTENT, { profile, transfer });
+
+    await sendEmail(subject, content, persona, now, true);
+  }
+
+  WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+  return Promise.resolve();
+}
+
+async function scheduleOfferPauseAndExpiry(transferId: number, expiresAt: Date) {
+  const prisma = DatabaseClient.prisma;
+
+  const type = Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK;
+  const payload = String(transferId);
+
+  const pauseAt = addDays(expiresAt, -1);
+
+  await prisma.calendar.upsert({
+    where: {
+      date_type_payload: {
+        date: pauseAt.toISOString(),
+        type,
+        payload,
+      },
+    },
+    update: {},
+    create: {
+      date: pauseAt.toISOString(),
+      type,
+      payload,
+    },
+  });
+
+  await prisma.calendar.upsert({
+    where: {
+      date_type_payload: {
+        date: expiresAt.toISOString(),
+        type,
+        payload,
+      },
+    },
+    update: {},
+    create: {
+      date: expiresAt.toISOString(),
+      type,
+      payload,
     },
   });
 }

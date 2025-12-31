@@ -127,10 +127,14 @@ export default function () {
             selected.length === 1 &&
             (() => {
               const email = state.emails.find((email) => email.id === selected[0]);
+
+              const isTerminal = (s: string) => /^(accepted|rejected|expired)\b/i.test((s || '').trimStart());
+              const threadClosed = email.dialogues.some((d) => isTerminal(d.content || ''));
+
               return email.dialogues
                 .sort((a, b) => b.id - a.id)
                 .map((dialogue) =>
-                  /^(accepted|rejected)/gi.test(dialogue.content) ? (
+                  isTerminal(dialogue.content || '') ? (
                     <article
                       key={`${email.id}__email__${dialogue.id}`}
                       className="divider before:bg-base-content/10 after:bg-base-content/10 before:h-px after:h-px"
@@ -151,16 +155,14 @@ export default function () {
                       </header>
                       <footer className="prose max-w-none py-5">
                         <ReactMarkdown
-                          rehypePlugins={
-                            [rehypeRaw] as Parameters<typeof ReactMarkdown>[number]['remarkPlugins']
-                          }
+                          rehypePlugins={[rehypeRaw] as Parameters<typeof ReactMarkdown>[number]['remarkPlugins']}
                           components={{
                             button(props) {
                               const { node, children, ...rest } = props;
                               return (
                                 <button
                                   {...rest}
-                                  disabled={dialogue.completed || working}
+                                  disabled={threadClosed || dialogue.completed || working}
                                   onClick={() =>
                                     Promise.resolve(setWorking(true))
                                       .then(() =>
@@ -175,9 +177,7 @@ export default function () {
                                           data: { completed: true },
                                         }),
                                       )
-                                      .then((data) =>
-                                        Promise.resolve(dispatch(emailsUpdate([data]))),
-                                      )
+                                      .then((data) => Promise.resolve(dispatch(emailsUpdate([data]))))
                                       .then(() => setWorking(false))
                                   }
                                 >
