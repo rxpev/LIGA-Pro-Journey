@@ -11,7 +11,7 @@ import * as Engine from './engine';
 import Tournament from '@liga/shared/tournament';
 import DatabaseClient from './database-client';
 import getLocale from './locale';
-import { addDays, addWeeks, addYears, differenceInDays, format, setDay } from 'date-fns';
+import { addDays, addWeeks, addYears, differenceInDays, format, setDay, subDays } from 'date-fns';
 import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
 import { Calendar, Prisma } from '@prisma/client';
 import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug } from '@liga/shared';
@@ -2267,7 +2267,7 @@ export async function onPlayerContractReview(entry: Calendar) {
   if (userPlayer.teamId !== teamId) return Promise.resolve();
 
   // If already benched/transfer-listed, do NOT bench again
-  const alreadyBenched = userPlayer.starter === false && userPlayer.transferListed === true;
+  const isBenched = userPlayer.transferListed === true;
 
   // Tier slug from team tier idx
   const tierSlug = getTeamTierSlug(profile.team.tier);
@@ -2347,56 +2347,104 @@ export async function onPlayerContractReview(entry: Calendar) {
     `kd=${kd.toFixed(2)} matches=${matchesPlayed} standing=${standingScore.toFixed(2)} form=${formScore.toFixed(2)}`
   );
 
-  // Kick logic
-  const inKickWindow = daysInContract <= kickWindowDays;
-  const eligibleForKick = inKickWindow && matchesPlayed >= kickMinMatches && kd <= kickKdMax;
+  // Off-season / inactivity block: require at least 3 matches in the last 30 days
+  const reviewMinRecentMatches = S.REVIEW_MIN_MATCHES_LAST_30_DAYS ?? 3;
 
-  if (eligibleForKick) {
-    let pbx = kickBasePbx * formMult;
-    pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+  // Use a true last-30-days window (optionally clamped to contractStart)
+  const since30d = subDays(now, 30);
+  const activitySince = contractStart > since30d ? contractStart : since30d;
 
-    Engine.Runtime.Instance.log.debug(
-      `onPlayerContractReview: kick check eligible (kd<=${kickKdMax.toFixed(2)}, matches>=${kickMinMatches}, days<=${kickWindowDays}). pbx=${pbx}`
-    );
-
-    if (Chance.rollD2(pbx)) {
-      await kickUserPlayer({
-        teamId,
-        playerId,
-        now,
-        reason: `Performance below standard (KD ${kd.toFixed(2)} <= ${kickKdMax.toFixed(
-          2,
-        )}) within first ${kickWindowDays} days. Form=${formScore.toFixed(2)}.`,
-      });
-
-      return Promise.resolve();
-    }
+  let matchesPlayed30d = 0;
+  try {
+    matchesPlayed30d = await prisma.match.count({
+      where: {
+        status: Constants.MatchStatus.COMPLETED,
+        competitionId: { not: null },
+        date: { gte: activitySince.toISOString() },
+        competitors: { some: { teamId } },
+        events: {
+          some: {
+            OR: [
+              { attackerId: playerId },
+              { victimId: playerId },
+              { assistId: playerId },
+            ],
+          },
+        },
+      },
+    });
+  } catch (_) {
+    matchesPlayed30d = 0;
   }
+  const hasRecentActivity = matchesPlayed30d >= reviewMinRecentMatches;
 
-  // Bench logic
-  const eligibleForBench = !alreadyBenched && matchesPlayed >= benchMinMatches && kd < benchKdMin;
-
-  if (eligibleForBench) {
-    let pbx = benchBasePbx * formMult;
-    pbx = Math.max(1, Math.min(95, Math.round(pbx)));
-
+  if (!hasRecentActivity) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractReview: bench check eligible (kd<%.2f, matches>=%d). pbx=%d",
-      benchKdMin,
-      benchMinMatches,
-      pbx,
+      "onPlayerContractReview: skipping kick/bench; only %d user-played matches in last 30 days (min=%d).",
+      matchesPlayed30d,
+      reviewMinRecentMatches,
     );
+  } else {
+    // Kick logic
+    const inKickWindow = daysInContract <= kickWindowDays;
+    const eligibleForKick =
+      !isBenched &&
+      inKickWindow &&
+      matchesPlayed >= kickMinMatches &&
+      kd <= kickKdMax;
 
-    if (Chance.rollD2(pbx)) {
-      await benchUserPlayer({
-        teamId,
-        playerId,
-        now,
-        reason: `Underperforming (KD ${kd.toFixed(2)} < ${benchKdMin.toFixed(
+    if (eligibleForKick) {
+      let pbx = kickBasePbx * formMult;
+      pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+
+      Engine.Runtime.Instance.log.debug(
+        `onPlayerContractReview: kick check eligible (kd<=${kickKdMax.toFixed(
           2,
-        )}) after ${matchesPlayed} matches. Form=${formScore.toFixed(2)}.`,
-      });
-      // Continue through to reschedule (bench does not remove contract)
+        )}, matches>=${kickMinMatches}, days<=${kickWindowDays}). pbx=${pbx}`,
+      );
+
+      if (Chance.rollD2(pbx)) {
+        await kickUserPlayer({
+          teamId,
+          playerId,
+          now,
+          reason: `Performance below standard (KD ${kd.toFixed(
+            2,
+          )} <= ${kickKdMax.toFixed(2)}) within first ${kickWindowDays} days. Form=${formScore.toFixed(
+            2,
+          )}.`,
+        });
+
+        return Promise.resolve();
+      }
+    }
+
+    // Bench logic
+    const eligibleForBench =
+      !isBenched && matchesPlayed >= benchMinMatches && kd < benchKdMin;
+
+    if (eligibleForBench) {
+      let pbx = benchBasePbx * formMult;
+      pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+
+      Engine.Runtime.Instance.log.debug(
+        "onPlayerContractReview: bench check eligible (kd<%.2f, matches>=%d). pbx=%d",
+        benchKdMin,
+        benchMinMatches,
+        pbx,
+      );
+
+      if (Chance.rollD2(pbx)) {
+        await benchUserPlayer({
+          teamId,
+          playerId,
+          now,
+          reason: `Underperforming (KD ${kd.toFixed(2)} < ${benchKdMin.toFixed(
+            2,
+          )}) after ${matchesPlayed} matches. Form=${formScore.toFixed(2)}.`,
+        });
+        // Continue through to reschedule (bench does not remove contract)
+      }
     }
   }
 
@@ -2451,6 +2499,13 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   if (!player) return Promise.resolve();
   if (player.teamId !== teamId) return Promise.resolve();
   if (!player.contractEnd) return Promise.resolve();
+  if (player.transferListed) {
+    Engine.Runtime.Instance.log.debug(
+      "onPlayerContractExtensionEval: playerId=%d is transferListed; skipping extension offer.",
+      playerId,
+    );
+    return Promise.resolve();
+  }
 
   // Window check: 0 < daysLeft <= 30
   const daysLeft = differenceInDays(player.contractEnd, now);
