@@ -268,27 +268,38 @@ export function getSquad(
   includeUser = false,
   forceSize?: number,
 ) {
-  // target length for this team (excluding the user)
-  const size =
-    forceSize || Constants.GameSettings.SQUAD_STARTERS_NUM - +(team.id === profile.teamId);
+  const isUserTeam = team.id === profile.teamId;
 
-  // ensure the squad does not include the user
-  let squad = team.players.filter((player) => player.id !== profile.playerId);
+  const user = isUserTeam
+    ? team.players.find((p) => p.id === profile.playerId)
+    : undefined;
 
-  // build the squad using starters first
-  const starters = squad.filter((player) => player.starter);
+  const willIncludeUser = !!(includeUser && isUserTeam && user && !user.transferListed);
+  const size = forceSize || Constants.GameSettings.SQUAD_STARTERS_NUM - +willIncludeUser;
+  const pool = team.players.filter((p) => p.id !== profile.playerId);
 
-  // add on backfill if we do not meet size minimum
-  if (starters.length < size) {
-    squad = [...starters, ...differenceBy(squad, starters, 'id')];
-  } else {
-    squad = starters;
+  const eligible = pool.filter((p) => !p.transferListed);
+  const listed = pool.filter((p) => p.transferListed);
+
+  // build starters from eligible first
+  const eligibleStarters = eligible.filter((p) => p.starter);
+  let squad = [...eligibleStarters];
+
+  // backfill with remaining eligible
+  if (squad.length < size) {
+    const eligibleRest = differenceBy(eligible, eligibleStarters, 'id');
+    squad = [...squad, ...eligibleRest];
   }
 
-  // trim to squad size and return
-  return includeUser && team.id === profile.teamId
-    ? [...squad.slice(0, size), team.players.find((player) => player.id === profile.playerId)]
-    : squad.slice(0, size);
+  if (squad.length < size) {
+    const listedStarters = listed.filter((p) => p.starter);
+    const listedRest = differenceBy(listed, listedStarters, 'id');
+    squad = [...squad, ...listedStarters, ...listedRest];
+  }
+
+  squad = squad.slice(0, size);
+
+  return willIncludeUser ? [...squad, user!] : squad;
 }
 
 /**

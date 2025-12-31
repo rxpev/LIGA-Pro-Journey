@@ -412,9 +412,13 @@ export default function () {
             if (isUserTeam) {
               team.players = team.players.map((player) => {
                 const entry = userSquad.find((u) => u.id === player.id);
+
+                // transferListed players can never be starters
+                const starter = player.transferListed ? false : entry ? entry.starter : player.starter;
+
                 return {
                   ...player,
-                  starter: entry ? entry.starter : player.starter,
+                  starter,
                 };
               });
             }
@@ -458,6 +462,7 @@ export default function () {
                               noStats={false}
                               onClickStarter={
                                 isUserTeam &&
+                                !player.transferListed &&
                                 player.id !== state.profile.playerId &&
                                 (userSquad.filter((userPlayer) => userPlayer.starter).length <
                                   Constants.Application.SQUAD_MIN_LENGTH - 1 ||
