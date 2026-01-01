@@ -121,21 +121,24 @@ export default function registerProfileHandlers() {
     });
 
     for (const file of files) {
-      const [databaseId] = Array.from(
+      const [databaseIdStr] = Array.from(
         file.matchAll(/save_(\d+)\.db/g),
         (groups) => groups[1]
       );
-      if (!databaseId) continue;
+      if (!databaseIdStr) continue;
+
+      const databaseId = Number(databaseIdStr);
+      if (!Number.isFinite(databaseId) || databaseId === 0) continue;
 
       await DatabaseClient.disconnect();
-      await DatabaseClient.connect(parseInt(databaseId));
+      await DatabaseClient.connect(databaseId);
 
       const profile = await DatabaseClient.prisma.profile.findFirst({
         include: { player: true },
       });
 
       if (profile) {
-        profile.id = parseInt(databaseId);
+        profile.id = databaseId;
         saves.push(profile);
       }
     }
@@ -143,7 +146,7 @@ export default function registerProfileHandlers() {
     await DatabaseClient.disconnect();
     await DatabaseClient.connect();
 
-    return saves.filter(Boolean);
+    return saves.filter((save) => !!save && save.id !== 0);
   });
 
   ipcMain.handle(Constants.IPCRoute.SAVES_DELETE, (_, id: number) => {
