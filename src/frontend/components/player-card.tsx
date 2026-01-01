@@ -98,6 +98,9 @@ export default function (props: PlayerCardProps) {
     String(roleRaw).toLowerCase() === 'awper' ||
     String(roleRaw).toLowerCase() === 'sniper';
 
+  const isIgl =
+    roleRaw === Constants.UserRole.IGL
+
   const t = useTranslation('components');
   if (props.compact) {
     return (
@@ -160,15 +163,20 @@ export default function (props: PlayerCardProps) {
             <span
               className={cx(
                 'text-sm font-semibold',
-                isSniper ? 'text-purple-300' : 'text-blue-300',
+                isSniper ? 'text-purple-300' : isIgl ? 'text-green-300' : 'text-blue-300',
               )}
             >
-              {isSniper ? 'AWPer' : 'Rifler'}
+              {isSniper ? 'AWPer' : isIgl ? 'IGL' : 'Rifler'}
             </span>
             <img
               src={isSniper ? awpIcon : ak47Icon}
               alt={isSniper ? 'AWP icon' : 'AK-47 icon'}
-              className="h-4 w-auto opacity-80"
+              className={cx('h-4 w-auto opacity-80')}
+              style={
+                !isSniper && isIgl
+                  ? { filter: 'hue-rotate(90deg) saturate(2) brightness(1.1)' }
+                  : undefined
+              }
             />
           </div>
         </label>

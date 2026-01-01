@@ -132,6 +132,7 @@ export default function () {
         <section className="fieldset w-full">
           <label className="label">
             <span className="label-text text-lg font-semibold">{t('shared.alias')}</span>
+            <span className="label-text-alt italic opacity-80 ml-2">(Alias must match your Steam name)</span>
           </label>
           <input
             {...register('name', { required: true, pattern: /^[\w]+$/, maxLength: 15 })}

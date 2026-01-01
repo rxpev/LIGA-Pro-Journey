@@ -13,6 +13,9 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import { useTheme, useTranslation } from '@liga/frontend/hooks';
 import { Confetti, Image } from '@liga/frontend/components';
+import awperIcon from '@liga/frontend/assets/awper.png';
+import riflerIcon from '@liga/frontend/assets/rifler.png';
+import iglIcon from '@liga/frontend/assets/igl.png';
 import {
   continentsUpdate,
   emailsUpdate,
@@ -40,7 +43,25 @@ import '@liga/frontend/assets/styles.css';
 const ROLE_LABELS: Record<string, string> = {
   RIFLER: 'Rifler',
   AWPER: 'AWPer',
-  IGL: 'In-Game Leader',
+  IGL: 'IGL',
+};
+
+const ROLE_COLOR_CLASSES: Record<string, string> = {
+  RIFLER: 'text-blue-300',
+  AWPER: 'text-purple-300',
+  IGL: 'text-green-300',
+};
+
+const ROLE_ICON_SRC: Record<string, string> = {
+  AWPER: awperIcon,
+  RIFLER: riflerIcon,
+  IGL: iglIcon,
+};
+
+const ROLE_BADGE_CLASSES: Record<string, string> = {
+  AWPER: 'bg-purple-300',
+  RIFLER: 'bg-blue-300',
+  IGL: 'bg-green-300',
 };
 
 /** @constant */
@@ -270,8 +291,6 @@ function Root() {
             ))}
           </ul>
         </nav>
-
-        {/* STANDARD MENU FOR ALL OTHER RESOLUTIONS */}
         <nav className="xl:stack-x hidden h-full w-full gap-0!">
           {navItems.map(([id, name, isMatch]: [string, string, PathMatch | undefined]) => (
             <button
@@ -293,15 +312,13 @@ function Root() {
             </button>
           ))}
         </nav>
-
-        {/* TEAM INFO DROPDOWN FOR ALL RESOLUTIONS */}
         <section className="dropdown dropdown-end p-2">
           <article tabIndex={0} role="button" className="btn btn-ghost">
             <Image
               src={
                 state.profile?.team?.blazon
                   ? state.profile.team.blazon
-                  : 'resources://blazonry/009399.svg' // 🟧 teamless fallback
+                  : 'resources://blazonry/009399.svg'
               }
               className="h-full w-auto"
             />
@@ -312,97 +329,78 @@ function Root() {
             tabIndex={-1}
             className="menu dropdown-content bg-base-100 rounded-box w-64 shadow-sm"
           >
-            {state.profile?.team ? (
-              <>
-                {/* Manager / has team */}
-                <li className="menu-title">{state.profile.team.name}</li>
-                <li>
-                  <a
-                    onClick={() =>
-                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                        target: '/team/edit',
-                      })
-                    }
-                  >
-                    Edit Team Details
-                  </a>
-                </li>
-                <li>
-                  <a
-                    onClick={() =>
-                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                        target: '/user',
-                      })
-                    }
-                  >
-                    Edit User Details
-                  </a>
-                </li>
-                <li>
-                  <a
-                    onClick={() =>
-                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                        target: '/settings',
-                      })
-                    }
-                  >
-                    {t('shared.settings')}
-                  </a>
-                </li>
-                <div className="divider mt-2 mb-0 before:h-px after:h-px" />
-                <li className="menu-disabled text-muted! italic">
-                  <p>
-                    Earnings:&nbsp;
-                    {Util.formatCurrency(state.profile.team.earnings || 0, { notation: 'compact' })}
-                  </p>
-                  <p>{Constants.IdiomaticTier[Constants.Prestige[state.profile.team.tier]]}</p>
-                  <p>Season {state.profile?.season}</p>
-                </li>
-              </>
-            ) : (
-              <>
-                  {/* Player Career / teamless */}
-                  <li className="menu-title">{state.profile?.player?.name || 'Free Agent'}</li>
-
-                  <li className="px-4 py-2">
-                    <p className="font-medium">
+            <>
+              <li className="py-2">
+                <div className="flex w-full justify-center text-lg font-bold">
+                  {state.profile?.player?.name}
+                </div>
+              </li>
+              <li className="py-2">
+                <div className="flex items-center justify-between gap-3">
+                  {/* Left: FLAG • ROLENAME */}
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span
+                      title={state.profile?.player?.country?.name || 'Unknown Country'}
+                      className={cx('fp', (state.profile?.player?.country?.code || '').toLowerCase())}
+                    />
+                    <span className="opacity-60">•</span>
+                    <span
+                      className={cx(
+                        'font-semibold text-base truncate',
+                        ROLE_COLOR_CLASSES[state.profile?.player?.role ?? ''] || 'text-blue-300',
+                      )}
+                    >
                       {ROLE_LABELS[state.profile?.player?.role ?? ''] || 'Rifler'}
-                    </p>
-                    <p className="font-medium">{state.profile?.player?.country?.name || 'Unknown Country'}</p>
-                  </li>
+                    </span>
+                  </div>
 
-                  <div className="divider mt-2 mb-0 before:h-px after:h-px" />
-
-                  <li className="px-4 py-2 text-sm text-warning font-semibold">
-                    You are currently teamless
-                  </li>
-
-                  <div className="divider mt-2 mb-0 before:h-px after:h-px" />
-
-                  <li>
-                    <a
-                      onClick={() =>
-                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                          target: '/user',
-                        })
-                      }
+                  {/* Right: role icon (your filled circle + larger icon) */}
+                  <div className="shrink-0">
+                    <div
+                      className={cx(
+                        'h-9 w-9 rounded-full grid place-items-center',
+                        ROLE_BADGE_CLASSES[state.profile?.player?.role ?? ''] || 'bg-blue-300',
+                      )}
                     >
-                      Edit Player Profile
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      onClick={() =>
-                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                          target: '/settings',
-                        })
-                      }
-                    >
-                      {t('shared.settings')}
-                    </a>
-                  </li>
-              </>
-            )}
+                      <img
+                        src={ROLE_ICON_SRC[state.profile?.player?.role ?? ''] || riflerIcon}
+                        alt={`${ROLE_LABELS[state.profile?.player?.role ?? ''] || 'Rifler'} icon`}
+                        className="h-8 w-8 opacity-95"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </li>
+              <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+              <li>
+                <a
+                  role="button"
+                  className="text-sm font-semibold text-warning"
+                  onClick={() => navigate('/squad')}
+                >
+                  {state.profile?.team?.name ?? 'You are currently teamless'}
+                </a>
+              </li>
+              <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+              <li>
+                <a
+                  onClick={() =>
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, { target: '/user' })
+                  }
+                >
+                  Edit Player Avatar
+                </a>
+              </li>
+              <li>
+                <a
+                  onClick={() =>
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, { target: '/settings' })
+                  }
+                >
+                  {t('shared.settings')}
+                </a>
+              </li>
+            </>
           </ul>
         </section>
       </header>

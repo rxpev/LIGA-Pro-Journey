@@ -113,17 +113,9 @@ export default function () {
           <label className="label">
             <span className="label-text">{t('shared.alias')}</span>
           </label>
-          <input
-            {...register('name', { required: 'Required', pattern: /^[\w]+$/, maxLength: 15 })}
-            type="text"
-            className={cx('input', 'w-full', !!formState.errors?.name?.type && 'input-error')}
-          />
-          <footer className="label h-5">
-            <span className="label-text-alt">
-              {formState.errors?.name?.type === 'required' && t('shared.required')}
-              {formState.errors?.name?.type === 'pattern' && t('shared.specialCharactersError')}
-            </span>
-          </footer>
+          <div className="input w-full flex items-center">
+            {state.profile.player.name}
+          </div>
         </section>
         <button
           type="submit"

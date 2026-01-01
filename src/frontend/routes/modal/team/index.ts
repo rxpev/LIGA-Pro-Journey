@@ -3,7 +3,6 @@
  *
  * @module
  */
-import Edit from './edit';
 import Gallery from './gallery';
 
 /**
@@ -12,6 +11,5 @@ import Gallery from './gallery';
  * @exports
  */
 export default {
-  Edit,
   Gallery,
 };
