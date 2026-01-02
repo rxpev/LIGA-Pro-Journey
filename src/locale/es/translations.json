@@ -215,6 +215,8 @@
       "launchOptionsSubtitle": "Solo para usuarios avanzados. ¡Usar con precaución!",
       "launchOptionsTitle": "Opciones de Lanzamiento",
       "loopExitSubtitle": "Normalmente el calendario se detiene por cosas como días de partido y correos electrónicos.",
+      "calendarDateFormatTitle": "Date format",
+      "calendarDateFormatSubtitle": "Choose how dates are displayed in the calendar.",
       "logLevelTitle": "Nivel de Registro",
       "loopExitTitle": "Ignorar Salidas de Bucle",
       "loopTitle": "Repetir Hasta",

@@ -4,9 +4,9 @@
  * @module
  */
 import React from 'react';
-import { format } from 'date-fns';
 import { Constants, Eagers } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 
 /** @type {Match} */
 type Match = Awaited<ReturnType<typeof api.matches.upcoming<typeof Eagers.match>>>[number];
@@ -26,6 +26,7 @@ interface Props {
  */
 export default function (props: Props) {
   const badgeStyle = 'badge badge-xs';
+  const fmtDate = useFormatAppDate();
 
   // fill in data until it meets the minimum
   const data = React.useMemo<typeof props.matches>(() => {
@@ -67,10 +68,7 @@ export default function (props: Props) {
         return (
           <span
             key={match.id + props.teamId + '__result'}
-            title={
-              ['Win on ', 'Draw on ', 'Loss on '][result] +
-              format(match.date, Constants.Application.CALENDAR_DATE_FORMAT)
-            }
+            title={['Win on ', 'Draw on ', 'Loss on '][result] + fmtDate(match.date)}
             className={cx(badgeStyle, ['badge-success', 'badge-ghost', 'badge-error'][result])}
           />
         );

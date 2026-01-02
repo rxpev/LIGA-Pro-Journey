@@ -218,6 +218,8 @@
       "logLevelTitle": "Log Level",
       "loopExitTitle": "Ignora fermate del Loop",
       "loopTitle": "Loop Fino a",
+      "calendarDateFormatTitle": "Date format",
+      "calendarDateFormatSubtitle": "Choose how dates are displayed in the calendar.",
       "gameTitle": "Gioco",
       "simTitle": "Modalità Simulazione",
       "steamTitle": "Percorso Steam",

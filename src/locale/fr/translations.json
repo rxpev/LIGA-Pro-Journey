@@ -218,6 +218,8 @@
       "logLevelTitle": "Niveau d'écriture des journaux",
       "loopExitTitle": "Ignorer les sorties de boucles",
       "loopTitle": "Répétition du calendrier",
+      "calendarDateFormatTitle": "Date format",
+      "calendarDateFormatSubtitle": "Choose how dates are displayed in the calendar.",
       "gameTitle": "Jeu",
       "simTitle": "Mode de simulation",
       "steamTitle": "Chemin d'accès Steam",

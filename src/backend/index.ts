@@ -106,7 +106,7 @@ function handleOnActivate() {
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
 
-    return format(d, Constants.Application.CALENDAR_DATE_FORMAT);
+    return format(d, Constants.Settings.calendar.calendarDateFormat);
   });
 
   // disable insecure warnings in dev since

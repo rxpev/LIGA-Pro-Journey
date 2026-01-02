@@ -41,7 +41,7 @@ async function onTickStart() {
 
   Engine.Runtime.Instance.log.info(
     "Today's date is: %s",
-    format(profile.date, Constants.Application.CALENDAR_DATE_FORMAT)
+    format(profile.date, Constants.Settings.calendar.calendarDateFormat)
   );
 
   Engine.Runtime.Instance.log.info("%d items to run.", Engine.Runtime.Instance.input.length);
@@ -238,7 +238,7 @@ export default function () {
     Engine.Runtime.Instance.log.debug(
       "Received request to sim for match(payload=%s) on %s",
       entry.payload,
-      format(entry.date, Constants.Application.CALENDAR_DATE_FORMAT)
+      format(entry.date, Constants.Settings.calendar.calendarDateFormat)
     );
 
     // Simulate NPC behavior for user match.

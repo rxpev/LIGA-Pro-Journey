@@ -12,6 +12,7 @@ import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Pagination } from '@liga/frontend/components';
 import { FaChartBar, FaSortAmountDown, FaSortAmountDownAlt } from 'react-icons/fa';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 
 /** @constant */
 const NUM_COLUMNS = 7;
@@ -58,6 +59,7 @@ export default function () {
     ExtractBaseType<Parameters<typeof api.matches.all>[number]['orderBy']>
   >({ date: 'desc' });
   const [working, setWorking] = React.useState(false);
+  const fmtDate = useFormatAppDate();
 
   // build query information
   const totalPages = React.useMemo(() => Math.ceil(numMatches / PAGE_SIZE), [numMatches]);
@@ -171,7 +173,7 @@ export default function () {
                     <FaChartBar className="mx-auto" />
                   </td>
                   <td title={format(match.date, 'PPPP')} className="text-center">
-                    {format(match.date, Constants.Application.CALENDAR_DATE_FORMAT)}
+                    {fmtDate(match.date)}
                   </td>
                   <td className="truncate text-right" title={home.team.name}>
                     <span>{home.team.name}</span>

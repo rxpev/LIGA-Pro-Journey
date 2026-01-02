@@ -216,6 +216,8 @@
       "launchOptionsTitle": "Launch Options",
       "loopExitSubtitle": "Usually the calendar loop is stopped for things like matchdays and e-mails.",
       "logLevelTitle": "Log Level",
+      "calendarDateFormatTitle": "Date format",
+      "calendarDateFormatSubtitle": "Choose how dates are displayed in the calendar.",
       "loopExitTitle": "Ignore Loop Exits",
       "loopTitle": "Loop Until",
       "gameTitle": "Game",

@@ -6,13 +6,13 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
-import { format } from 'date-fns';
 import { Constants, Dedent } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { emailsDelete, emailsUpdate } from '@liga/frontend/redux/actions';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaBorderNone, FaEnvelopeOpen, FaMailBulk, FaTrash } from 'react-icons/fa';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 
 /**
  * Exports this module.
@@ -24,6 +24,7 @@ export default function () {
   const { state, dispatch } = React.useContext(AppStateContext);
   const [selected, setSelected] = React.useState<Array<number>>([]);
   const [working, setWorking] = React.useState(false);
+  const fmtDate = useFormatAppDate();
 
   // grab e-mails on first load
   React.useEffect(() => {
@@ -107,7 +108,7 @@ export default function () {
                 <p className="font-bold">{email.from.name}</p>
                 <p>{email.subject}</p>
                 <em className="text-sm">
-                  {format(email.sentAt, Constants.Application.CALENDAR_DATE_FORMAT)}
+                  {fmtDate(email.sentAt)}
                 </em>
               </header>
               <footer>
@@ -150,7 +151,7 @@ export default function () {
                         <h3>{email.from.name}</h3>
                         <h4>{email.subject}</h4>
                         <em className="text-sm">
-                          {format(dialogue.sentAt, Constants.Application.CALENDAR_DATE_FORMAT)}
+                            {fmtDate(dialogue.sentAt)}
                         </em>
                       </header>
                       <footer className="prose max-w-none py-5">

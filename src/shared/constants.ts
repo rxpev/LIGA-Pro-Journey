@@ -13,7 +13,6 @@
  * @enum
  */
 export enum Application {
-  CALENDAR_DATE_FORMAT = 'yyyy/MM/dd',
   CUSTOM_DIR = 'custom',
   DATABASE_NAME_FORMAT = 'save_%s.db',
   DATABASES_DIR = 'saves',
@@ -163,6 +162,16 @@ export enum CalendarUnit {
   WEEK = 'weeks',
   MONTH = 'months',
   YEAR = 'years',
+}
+
+/**
+ * Calendar Date Format types.
+ *
+ * @enum
+ */
+export enum CalendarDateFormat {
+  EU = 'dd/MM/yyyy',
+  US = 'MM/dd/yyyy',
 }
 
 /**
@@ -1093,6 +1102,7 @@ export const Settings = {
     volume: 0.05,
   },
   calendar: {
+    calendarDateFormat: CalendarDateFormat.EU,
     ignoreExits: false,
     maxIterations: 8,
     unit: CalendarUnit.DAY,

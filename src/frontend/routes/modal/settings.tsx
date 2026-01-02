@@ -11,6 +11,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaChevronRight, FaExclamationTriangle, FaFolderOpen } from 'react-icons/fa';
+import { ReduxActions } from '@liga/frontend/redux/actions';
 
 /** @enum */
 enum Tab {
@@ -28,7 +29,7 @@ export default function () {
   const navigate = useNavigate();
   const location = useLocation();
   const t = useTranslation('windows');
-  const { state } = React.useContext(AppStateContext);
+  const { state, dispatch } = React.useContext(AppStateContext);
   const [activeTab, setActiveTab] = React.useState(Tab.GENERAL);
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
@@ -87,11 +88,25 @@ export default function () {
   const onSettingsUpdate = (path: string, value: unknown) => {
     const modified = cloneDeep(settings);
     set(modified, path, value);
+
+    // 1) immediate update for this screen
+    setSettings(modified);
+
+    const json = JSON.stringify(modified);
+
+    // 2) immediate update for the whole app (critical)
+    dispatch({
+      type: ReduxActions.PROFILE_UPDATE,
+      payload: {
+        ...state.profile,
+        settings: json,
+      },
+    });
+
+    // 3) persistence
     api.profiles.update({
       where: { id: state.profile.id },
-      data: {
-        settings: JSON.stringify(modified),
-      },
+      data: { settings: json },
     });
   };
 
@@ -369,6 +384,26 @@ export default function () {
         )}
         {activeTab === Tab.CALENDAR && (
           <fieldset>
+            <section>
+              <header>
+                <p>{t('settings.calendarDateFormatTitle')}</p>
+                <p>{t('settings.calendarDateFormatSubtitle')}</p>
+              </header>
+              <article>
+                <select
+                  className="select"
+                  onChange={(event) => onSettingsUpdate('calendar.calendarDateFormat', event.target.value)}
+                  value={settings.calendar.calendarDateFormat}
+                >
+                  {Object.values(Constants.CalendarDateFormat).map((format) => (
+                    <option key={format} value={format}>
+                      {format}
+                    </option>
+                  ))}
+                </select>
+              </article>
+            </section>
+
             <section>
               <header>
                 <p>{t('settings.loopTitle')}</p>

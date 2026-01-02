@@ -4,23 +4,11 @@
  * @module
  */
 import React from 'react';
-import { format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
-
-/**
- * Format contract end timestamp (ms since epoch) using app date format.
- */
-function formatContractEnd(contractEnd?: number | null) {
-  if (!contractEnd) return '-';
-
-  const date = new Date(contractEnd);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  return format(date, Constants.Application.CALENDAR_DATE_FORMAT);
-}
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 
 /**
  * Exports this module.
@@ -33,7 +21,8 @@ export default function () {
   const [settings, setSettings] = React.useState(Constants.Settings);
   const [squad, setSquad] = React.useState<
     Awaited<ReturnType<typeof api.squad.all<typeof Eagers.player>>>
-  >([]);
+    >([]);
+  const fmtDate = useFormatAppDate();
 
   // fetch data on first load
   React.useEffect(() => {
@@ -50,7 +39,7 @@ export default function () {
     }
 
     setSettings(Util.loadSettings(state.profile.settings));
-  }, [state.profile]);
+  }, [state.profile.settings]);
 
   const starters = React.useMemo(() => squad.filter((player) => player.starter), [squad]);
   const transferListed = React.useMemo(
@@ -134,7 +123,7 @@ export default function () {
                           <span>&nbsp;{player.name}</span>
                         </td>
                         <td className="text-right font-mono text-sm">
-                          {formatContractEnd(player.contractEnd as unknown as number)}
+                          {fmtDate(player.contractEnd as unknown as number)}
                         </td>
                       </tr>
                     ))}
@@ -171,7 +160,7 @@ export default function () {
                           <span>&nbsp;{player.name}</span>
                         </td>
                         <td className="text-right font-mono text-sm">
-                          {formatContractEnd(player.contractEnd as unknown as number)}
+                          {fmtDate(player.contractEnd as unknown as number)}
                         </td>
                       </tr>
                     ))}

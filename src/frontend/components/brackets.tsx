@@ -5,8 +5,8 @@
  */
 import React from 'react';
 import Tournament from '@liga/shared/tournament';
-import { format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import {
   SingleEliminationBracket,
   Match,
@@ -63,13 +63,13 @@ const theme = createTheme({
  * @param matches The Prisma matches data.
  * @function
  */
-function toBracketsData(tourney: Tournament, matches: Props['matches']): MatchType[] {
+function toBracketsData(tourney: Tournament, matches: Props['matches'], fmtDate: (value: Date | number | string) => string,): MatchType[] {
   return matches.map((match) => {
     const [nextMatchId] = tourney.brackets.right(JSON.parse(match.payload)) || [];
     return {
       id: match.payload,
       nextMatchId: JSON.stringify(nextMatchId),
-      startTime: format(match.date, Constants.Application.CALENDAR_DATE_FORMAT),
+      startTime: fmtDate(match.date),
       tournamentRoundText: String(match.round),
       state: (() => {
         switch (match.status) {
@@ -111,7 +111,7 @@ function toBracketsData(tourney: Tournament, matches: Props['matches']): MatchTy
 export default function (props: Props) {
   // bail if no brackets data
   const tourney = Tournament.restore(JSON.parse(props.matches[0].competition.tournament));
-
+  const fmtDate = useFormatAppDate();
   if (!tourney.brackets) {
     return null;
   }
@@ -136,7 +136,7 @@ export default function (props: Props) {
   return (
     <div ref={refWrapper} className="h-full w-full cursor-grab">
       <SingleEliminationBracket
-        matches={toBracketsData(tourney, props.matches)}
+        matches={toBracketsData(tourney, props.matches, fmtDate)}
         matchComponent={Match}
         theme={theme}
         options={{

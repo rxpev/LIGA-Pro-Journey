@@ -45,7 +45,7 @@ function Issue(props: GitHubIssueResponse & { onClick: () => void }) {
       </td>
       <td
         className="truncate capitalize"
-        title={format(new Date(props.created_at), Constants.Application.CALENDAR_DATE_FORMAT)}
+        title={format(new Date(props.created_at), Constants.Settings.calendar.calendarDateFormat)}
       >
         {formatDistanceToNow(new Date(props.created_at), { addSuffix: true })}
       </td>

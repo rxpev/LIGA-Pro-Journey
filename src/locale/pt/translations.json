@@ -218,6 +218,8 @@
       "logLevelTitle": "Nível de registro",
       "loopExitTitle": "Desligar pausas do avanço do calendário",
       "loopTitle": "Tempo de avanço automático",
+      "calendarDateFormatTitle": "Date format",
+      "calendarDateFormatSubtitle": "Choose how dates are displayed in the calendar.",
       "gameTitle": "Versão do CS",
       "simTitle": "Manipular resultado",
       "steamTitle": "Endereço da steam",

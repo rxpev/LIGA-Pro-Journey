@@ -202,7 +202,7 @@ async function createMatchdays(
           Engine.Runtime.Instance.log.debug(
             'User has new match(id=%d) on %s',
             existingEntry.id,
-            format(existingEntry.date, Constants.Application.CALENDAR_DATE_FORMAT),
+            format(existingEntry.date, Constants.Settings.calendar.calendarDateFormat),
           );
         }
         return DatabaseClient.prisma.$transaction([
@@ -982,7 +982,7 @@ export async function acceptTransferOffer(transferId: number) {
     if (!persona) return Promise.resolve();
 
     const team = transfer.from;
-    const contractEndDate = format(contractEnd, Constants.Application.CALENDAR_DATE_FORMAT);
+    const contractEndDate = format(contractEnd, Constants.Settings.calendar.calendarDateFormat);
 
     await sendEmail(
       Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, { profile, team }),
@@ -2874,7 +2874,7 @@ export async function recordMatchResults() {
           Engine.Runtime.Instance.log.debug(
             'Scheduling start date for %s on %s...',
             triggeredCompetition.tier.name,
-            format(date, Constants.Application.CALENDAR_DATE_FORMAT),
+            format(date, Constants.Settings.calendar.calendarDateFormat),
           );
 
           try {
@@ -4364,7 +4364,7 @@ export async function onMatchdayUser(entry: Calendar) {
 
   Engine.Runtime.Instance.log.info(
     'User matchday detected on %s (player career). Stopping engine loop...',
-    format(entry.date, Constants.Application.CALENDAR_DATE_FORMAT),
+    format(entry.date, Constants.Settings.calendar.calendarDateFormat),
   );
 
   // Returning false tells the engine loop to halt and hand control to the renderer.

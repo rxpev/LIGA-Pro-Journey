@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation } from 'react-router-dom';
 import { Constants } from '@liga/shared';
@@ -13,6 +13,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaComment } from 'react-icons/fa';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 
 /** @enum */
 enum Status {
@@ -50,6 +51,7 @@ export default function () {
   const { state } = React.useContext(AppStateContext);
   const [comments, setComments] = React.useState<Array<GitHubCommentResponse>>([]);
   const [issue, setIssue] = React.useState<GitHubIssueResponse>();
+  const fmtDate = useFormatAppDate();
 
   // form setup
   const { formState, handleSubmit, register, reset } = useForm({
@@ -117,10 +119,7 @@ export default function () {
             <td>
               <time
                 className="capitalize"
-                title={format(
-                  new Date(issue.created_at),
-                  Constants.Application.CALENDAR_DATE_FORMAT,
-                )}
+                title={fmtDate(new Date(issue.created_at))}
               >
                 {formatDistanceToNow(new Date(issue.created_at), { addSuffix: true })}
               </time>
@@ -183,10 +182,7 @@ export default function () {
               {comment.performed_via_github_app ? t('issues.comments.you') : comment.user.login}
               <time
                 className="ml-2 text-xs opacity-50"
-                title={format(
-                  new Date(comment.created_at),
-                  Constants.Application.CALENDAR_DATE_FORMAT,
-                )}
+                title={fmtDate(new Date(comment.created_at))}
               >
                 {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
               </time>
