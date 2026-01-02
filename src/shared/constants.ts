@@ -53,14 +53,6 @@ export enum BonusType {
   FACILITY,
 }
 
-/** @enum */
-export enum BotChatter {
-  MINIMAL = 'minimal',
-  NORMAL = 'normal',
-  OFF = 'off',
-  RADIO = 'radio',
-}
-
 /**
  * Idiomatic bot difficulty names.
  *
@@ -182,13 +174,6 @@ export enum CompetitionStatus {
   SCHEDULED,
   STARTED,
   COMPLETED,
-}
-
-/** @enum */
-export enum DefuserAllocation {
-  NO_FREE_DEFUSERS,
-  RANDOM_PLAYERS,
-  ALL_PLAYERS,
 }
 
 /** @enum */
@@ -1102,10 +1087,8 @@ export const Settings = {
     steamPath: null as string,
     gamePath: null as string,
     dedicatedServerPath: null as string,
-    botChatter: BotChatter.RADIO,
     gameLaunchOptions: null as string,
     theme: ThemeType.SYSTEM,
-    botDifficulty: null as string,
     locale: null as LocaleIdentifier,
     volume: 0.05,
   },
@@ -1115,14 +1098,9 @@ export const Settings = {
     unit: CalendarUnit.DAY,
   },
   matchRules: {
-    bombTimer: 40,
-    defuserAllocation: DefuserAllocation.NO_FREE_DEFUSERS,
-    freezeTime: 7,
-    mapOverride: null as string,
-    maxRounds: 6,
+    maxRounds: 24,
     maxRoundsOvertime: 6,
     overtime: true,
-    startMoney: 10_000,
   },
 };
 

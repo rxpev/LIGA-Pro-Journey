@@ -8,7 +8,6 @@ import { Command } from 'commander';
 import { random } from 'lodash';
 import { PrismaClient } from '@prisma/client';
 import type { Player } from '@prisma/client';
-import { playerOverrides } from '@liga/backend/handlers/playeroverrides';
 import { PlayerRole, PersonalityTemplate } from '@liga/shared';
 import { levelFromElo } from '@liga/backend/lib/levels';
 
@@ -217,14 +216,6 @@ export async function generateStats(args: any = {}) {
 
   // Process all teams
   for (const [, teamPlayers] of Object.entries(playersByTeam)) {
-    // Apply overrides first (role/personality may be overwritten later if required to enforce the starter AWPer invariant)
-    for (const player of teamPlayers) {
-      const override = playerOverrides[player.name];
-      if (override) {
-        player.role = override.role;
-        player.personality = override.personality;
-      }
-    }
 
     // If this is an initial generation pass, assign XP up-front so starter selection uses the final XP values
     if (args.initial) {

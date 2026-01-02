@@ -382,10 +382,10 @@ export class Server {
    */
   private get map() {
     if (this.isFaceit) {
-      return this.matchGame.map || "de_inferno";
+      return this.matchGame.map;
     }
 
-    return this.settings.matchRules.mapOverride || this.matchGame.map;
+    return this.matchGame.map;
   }
 
 
@@ -791,20 +791,14 @@ End\n
     const serverCfgData = this.isFaceit
       ? {
         demo: true,
-        freezetime: this.settings.matchRules.freezeTime,
         hostname: this.hostname,
-        maxrounds: this.settings.matchRules.maxRounds || 30,
-        maxrounds_ot: this.settings.matchRules.maxRoundsOvertime || 6,
+        maxrounds: this.settings.matchRules.maxRounds,
         ot: +this.overtime,
         rcon_password: Constants.GameSettings.RCON_PASSWORD,
         teamname_t: tTeam.team.name,
         teamname_ct: ctTeam.team.name,
         gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
-        bot_chatter: this.settings.general.botChatter,
         spectating: +this.spectating,
-        startmoney: this.settings.matchRules.startMoney,
-        bombTimer: this.settings.matchRules.bombTimer,
-        defuserAllocation: this.settings.matchRules.defuserAllocation,
         damage_prints: 0,
         isAWP,
         bot_defer_to_human_items,
@@ -828,20 +822,14 @@ End\n
       }
       : {
         demo: true,
-        freezetime: this.settings.matchRules.freezeTime,
         hostname: this.hostname,
         maxrounds: this.settings.matchRules.maxRounds,
-        maxrounds_ot: this.settings.matchRules.maxRoundsOvertime,
         ot: +this.overtime,
         rcon_password: Constants.GameSettings.RCON_PASSWORD,
         teamname_t: home.team.name,
         teamname_ct: away.team.name,
         gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
-        bot_chatter: this.settings.general.botChatter,
         spectating: +this.spectating,
-        startmoney: this.settings.matchRules.startMoney,
-        bombTimer: this.settings.matchRules.bombTimer,
-        defuserAllocation: this.settings.matchRules.defuserAllocation,
         damage_prints: 0,
         isAWP,
         bot_defer_to_human_items,

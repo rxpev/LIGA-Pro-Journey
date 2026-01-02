@@ -28,16 +28,13 @@ export default function () {
   ipcMain.handle(
     Constants.IPCRoute.PLAY_EXHIBITION,
     async (_, settings: typeof Constants.Settings, teamIds: Array<number>, teamId: number) => {
-      // configure default map if none selected
-      if (!settings.matchRules.mapOverride) {
+      // configure default map if none selected 
         const mapPool = await DatabaseClient.prisma.mapPool.findMany({
           where: {
             gameVersion: { slug: settings.general.game },
           },
           include: Eagers.mapPool.include,
         });
-        settings.matchRules.mapOverride = sample(mapPool).gameMap.name;
-      }
 
       // minimize the landing window
       const landingWindow = WindowManager.get(Constants.WindowIdentifier.Landing);
@@ -83,7 +80,6 @@ export default function () {
       const match = {
         games: [
           {
-            map: settings.matchRules.mapOverride,
             status: Constants.MatchStatus.READY,
           },
         ],

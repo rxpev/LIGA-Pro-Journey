@@ -331,21 +331,6 @@ export default function () {
           {activeTab === Tab.GENERAL && (
             <fieldset>
               <article>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) => onSettingsUpdate('general.game', event.target.value)}
-                    value={settings.general.game}
-                  >
-                    {Object.values(Constants.Game).map((game) => (
-                      <option key={game} value={game}>
-                        {game}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
-              <article>
                 <header>
                   <p>{t('settings.steamTitle')}</p>
                   <p>
@@ -435,74 +420,10 @@ export default function () {
                   />
                 </aside>
               </article>
-              <article>
-                <header>
-                  <p>{t('settings.botChatterTitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) => onSettingsUpdate('general.botChatter', event.target.value)}
-                    value={settings.general.botChatter}
-                  >
-                    {Object.values(Constants.BotChatter).map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>{t('settings.botDifficultyTitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate(
-                        'general.botDifficulty',
-                        event.target.value === 'Default' ? null : event.target.value,
-                      )
-                    }
-                    value={
-                      isNull(settings.general.botDifficulty) ? '' : settings.general.botDifficulty
-                    }
-                  >
-                    <option value={null}>Default</option>
-                    {Object.values(Constants.BotDifficulty).map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
             </fieldset>
           )}
           {activeTab === Tab.MATCH_RULES && (
             <fieldset>
-              <article>
-                <header>
-                  <p>{t('shared.bombTimer')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate('matchRules.bombTimer', event.target.value)
-                    }
-                    value={settings.matchRules.bombTimer}
-                  >
-                    {[35, 40, 45].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
               <article>
                 <header>
                   <p>{t('shared.maxRoundsTitle')}</p>
@@ -525,70 +446,6 @@ export default function () {
               </article>
               <article>
                 <header>
-                  <p>{t('shared.startMoneyTitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate('matchRules.startMoney', event.target.value)
-                    }
-                    value={settings.matchRules.startMoney}
-                  >
-                    {[800, 10_000].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>{t('shared.freezeTimeTitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate('matchRules.freezeTime', event.target.value)
-                    }
-                    value={settings.matchRules.freezeTime}
-                  >
-                    {[7, 15].map((value) => (
-                      <option key={value} value={value}>
-                        {value}s
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>{t('shared.mapOverrideTitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate('matchRules.mapOverride', event.target.value)
-                    }
-                    value={
-                      isNull(settings.matchRules.mapOverride)
-                        ? mapPool[0].gameMap.name
-                        : settings.matchRules.mapOverride
-                    }
-                  >
-                    {mapPool.map((map) => (
-                      <option key={map.gameMap.name} value={map.gameMap.name}>
-                        {map.gameMap.name}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
-              <article>
-                <header>
                   <p>{t('shared.overtimeTitle')}</p>
                   <p>{t('shared.overtimeSubtitle')}</p>
                 </header>
@@ -602,29 +459,6 @@ export default function () {
                     checked={settings.matchRules.overtime}
                     value={String(settings.matchRules.overtime)}
                   />
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>{t('shared.defuserAllocationTitle')}</p>
-                  <p>{t('shared.defuserAllocationSubtitle')}</p>
-                </header>
-                <aside>
-                  <select
-                    className="select"
-                    onChange={(event) =>
-                      onSettingsUpdate('matchRules.defuserAllocation', event.target.value)
-                    }
-                    value={settings.matchRules.defuserAllocation}
-                  >
-                    {Object.keys(Constants.DefuserAllocation)
-                      .filter((value) => isNaN(Number(value)))
-                      .map((value: keyof typeof Constants.DefuserAllocation) => (
-                        <option key={value} value={Constants.DefuserAllocation[value]}>
-                          {value}
-                        </option>
-                      ))}
-                  </select>
                 </aside>
               </article>
             </fieldset>

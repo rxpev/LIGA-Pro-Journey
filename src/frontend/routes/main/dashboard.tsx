@@ -565,7 +565,7 @@ export default function () {
                   <Image
                     className="h-full w-full"
                     src={Util.convertMapPool(
-                      settings.matchRules.mapOverride || spotlight.games[0].map,
+                      spotlight.games[0].map,
                       settings.general.game,
                       true,
                     )}
@@ -605,7 +605,7 @@ export default function () {
                           <FaMapSigns />
                           <span>
                             {Util.convertMapPool(
-                              settings.matchRules.mapOverride || spotlight.games[0].map,
+                              spotlight.games[0].map,
                               settings.general.game,
                             )}
                           </span>

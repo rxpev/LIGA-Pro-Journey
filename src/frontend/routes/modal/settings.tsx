@@ -33,6 +33,7 @@ export default function () {
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
+  const GAME_SLUG = Constants.Game.CSGO;
 
   // load settings
   React.useEffect(() => {
@@ -41,19 +42,19 @@ export default function () {
     }
 
     const localSettings = Util.loadSettings(state.profile.settings);
+    localSettings.general.game = GAME_SLUG;
 
     // if paths are not explicitly initialized then
     // we detect steam and game paths together
     // which avoids a race-condition
     if (localSettings.general.steamPath === null || localSettings.general.gamePath === null) {
-      Promise.all([api.app.detectSteam(), api.app.detectGame(localSettings.general.game)]).then(
-        ([steamPath, gamePath]) => {
-          const modified = cloneDeep(localSettings);
-          modified.general.steamPath = steamPath;
-          modified.general.gamePath = gamePath;
-          setSettings(modified);
-        },
-      );
+      Promise.all([api.app.detectSteam(), api.app.detectGame(GAME_SLUG)]).then(([steamPath, gamePath]) => {
+        const modified = cloneDeep(localSettings);
+        modified.general.game = GAME_SLUG;
+        modified.general.steamPath = steamPath;
+        modified.general.gamePath = gamePath;
+        setSettings(modified);
+      });
       return;
     }
 
@@ -75,7 +76,7 @@ export default function () {
       .find({
         where: {
           gameVersion: {
-            slug: settings.general.game,
+            slug: GAME_SLUG,
           },
         },
       })
@@ -129,25 +130,6 @@ export default function () {
       <form className="form-ios h-full">
         {activeTab === Tab.GENERAL && (
           <fieldset>
-            <section>
-              <header>
-                <p>{t('settings.gameTitle')}</p>
-                )
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => onSettingsUpdate('general.game', event.target.value)}
-                  value={settings.general.game}
-                >
-                  {Object.values(Constants.Game).map((game) => (
-                    <option key={game} value={game}>
-                      {game}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
             <section>
               <header>
                 <p>{t('settings.simTitle')}</p>
@@ -309,50 +291,6 @@ export default function () {
             </section>
             <section>
               <header>
-                <p>{t('settings.botChatterTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => onSettingsUpdate('general.botChatter', event.target.value)}
-                  value={settings.general.botChatter}
-                >
-                  {Object.values(Constants.BotChatter).map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('settings.botDifficultyTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate(
-                      'general.botDifficulty',
-                      event.target.value === 'Default' ? null : event.target.value,
-                    )
-                  }
-                  value={
-                    isNull(settings.general.botDifficulty) ? '' : settings.general.botDifficulty
-                  }
-                >
-                  <option value={null}>Default</option>
-                  {Object.values(Constants.BotDifficulty).map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
                 <p>{t('settings.themeTitle')}</p>
               </header>
               <article>
@@ -391,24 +329,6 @@ export default function () {
           <fieldset>
             <section>
               <header>
-                <p>{t('shared.bombTimer')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => onSettingsUpdate('matchRules.bombTimer', event.target.value)}
-                  value={settings.matchRules.bombTimer}
-                >
-                  {[35, 40, 45].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
                 <p>{t('shared.maxRoundsTitle')}</p>
               </header>
               <article>
@@ -420,72 +340,6 @@ export default function () {
                   {[2, 6, 12, 24, 30].map((value) => (
                     <option key={value} value={value}>
                       {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.startMoneyTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate('matchRules.startMoney', event.target.value)
-                  }
-                  value={settings.matchRules.startMoney}
-                >
-                  {[800, 10_000].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.freezeTimeTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate('matchRules.freezeTime', event.target.value)
-                  }
-                  value={settings.matchRules.freezeTime}
-                >
-                  {[7, 15].map((value) => (
-                    <option key={value} value={value}>
-                      {value}s
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.mapOverrideTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate(
-                      'matchRules.mapOverride',
-                      event.target.value === 'none' ? null : event.target.value,
-                    )
-                  }
-                  value={
-                    isNull(settings.matchRules.mapOverride) ? '' : settings.matchRules.mapOverride
-                  }
-                >
-                  <option value={null}>none</option>
-                  {mapPool.map((map) => (
-                    <option key={map.gameMap.name} value={map.gameMap.name}>
-                      {map.gameMap.name}
                     </option>
                   ))}
                 </select>
@@ -509,46 +363,6 @@ export default function () {
                 >
                   <FaChevronRight />
                 </aside>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.overtimeTitle')}</p>
-                <p>{t('shared.overtimeSubtitle')}</p>
-              </header>
-              <article>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  onChange={(event) =>
-                    onSettingsUpdate('matchRules.overtime', event.target.checked)
-                  }
-                  checked={settings.matchRules.overtime}
-                  value={String(settings.matchRules.overtime)}
-                />
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.defuserAllocationTitle')}</p>
-                <p>{t('shared.defuserAllocationSubtitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate('matchRules.defuserAllocation', event.target.value)
-                  }
-                  value={settings.matchRules.defuserAllocation}
-                >
-                  {Object.keys(Constants.DefuserAllocation)
-                    .filter((value) => isNaN(Number(value)))
-                    .map((value: keyof typeof Constants.DefuserAllocation) => (
-                      <option key={value} value={Constants.DefuserAllocation[value]}>
-                        {value}
-                      </option>
-                    ))}
-                </select>
               </article>
             </section>
           </fieldset>

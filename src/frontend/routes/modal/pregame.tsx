@@ -263,24 +263,6 @@ export default function () {
           <legend className="border-t-0!">{t('play.matchRules')}</legend>
           <article>
             <header>
-              <p>{t('shared.bombTimer')}</p>
-            </header>
-            <aside>
-              <select
-                className="select"
-                onChange={(event) => onSettingsUpdate('matchRules.bombTimer', event.target.value)}
-                value={settings.matchRules.bombTimer}
-              >
-                {[35, 40, 45].map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </aside>
-          </article>
-          <article>
-            <header>
               <p>{t('shared.maxRoundsTitle')}</p>
               <SettingsOverrideLabel
                 left={Number(settings.matchRules.maxRounds)}
@@ -298,114 +280,6 @@ export default function () {
                     {value}
                   </option>
                 ))}
-              </select>
-            </aside>
-          </article>
-          <article>
-            <header>
-              <p>{t('shared.startMoneyTitle')}</p>
-            </header>
-            <aside>
-              <select
-                className="select"
-                onChange={(event) => onSettingsUpdate('matchRules.startMoney', event.target.value)}
-                value={settings.matchRules.startMoney}
-              >
-                {[800, 10_000].map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </aside>
-          </article>
-          <article>
-            <header>
-              <p>{t('shared.freezeTimeTitle')}</p>
-              <SettingsOverrideLabel
-                left={Number(settings.matchRules.freezeTime)}
-                right={Number(settingsAll.matchRules.freezeTime)}
-              />
-            </header>
-            <aside>
-              <select
-                className="select"
-                onChange={(event) => onSettingsUpdate('matchRules.freezeTime', event.target.value)}
-                value={settings.matchRules.freezeTime}
-              >
-                {[7, 15].map((value) => (
-                  <option key={value} value={value}>
-                    {value}s
-                  </option>
-                ))}
-              </select>
-            </aside>
-          </article>
-          <article>
-            <header>
-              <p>{t('shared.mapOverrideTitle')}</p>
-              <SettingsOverrideLabel
-                left={Number(settings.matchRules.mapOverride)}
-                right={Number(settingsAll.matchRules.mapOverride)}
-              />
-            </header>
-            <aside>
-              <select
-                className="select"
-                onChange={(event) =>
-                  onSettingsUpdate(
-                    'matchRules.mapOverride',
-                    event.target.value === 'none' ? null : event.target.value,
-                  )
-                }
-                value={
-                  isNull(settings.matchRules.mapOverride) ? '' : settings.matchRules.mapOverride
-                }
-              >
-                <option value={null}>none</option>
-                {mapPool.map((map) => (
-                  <option key={map.gameMap.name} value={map.gameMap.name}>
-                    {map.gameMap.name}
-                  </option>
-                ))}
-              </select>
-            </aside>
-          </article>
-          <article>
-            <header>
-              <p>{t('shared.overtimeTitle')}</p>
-              <p>{t('shared.overtimeSubtitle')}</p>
-            </header>
-            <aside>
-              <input
-                type="checkbox"
-                className="toggle"
-                onChange={(event) => onSettingsUpdate('matchRules.overtime', event.target.checked)}
-                checked={settings.matchRules.overtime}
-                value={String(settings.matchRules.overtime)}
-              />
-            </aside>
-          </article>
-          <article>
-            <header>
-              <p>{t('shared.defuserAllocationTitle')}</p>
-              <p>{t('shared.defuserAllocationSubtitle')}</p>
-            </header>
-            <aside>
-              <select
-                className="select"
-                onChange={(event) =>
-                  onSettingsUpdate('matchRules.defuserAllocation', event.target.value)
-                }
-                value={settings.matchRules.defuserAllocation}
-              >
-                {Object.keys(Constants.DefuserAllocation)
-                  .filter((value) => isNaN(Number(value)))
-                  .map((value: keyof typeof Constants.DefuserAllocation) => (
-                    <option key={value} value={Constants.DefuserAllocation[value]}>
-                      {value}
-                    </option>
-                  ))}
               </select>
             </aside>
           </article>
