@@ -68,6 +68,13 @@ type MatchRoomData = {
   eloLoss: number;
 };
 
+type DailyState = {
+  playedToday: number;
+  maxToday: number;
+  hasPendingUserMatchday: boolean;
+  date: string;
+};
+
 const LEVEL_RANGES: Record<number, [number, number]> = {
   1: [100, 800],
   2: [801, 950],
@@ -92,6 +99,8 @@ export default function Faceit(): JSX.Element {
   const matchCompleted = state.faceitMatchCompleted;
 
   const [showMatchRoom, setShowMatchRoom] = useState(false);
+  const [daily, setDaily] = useState<DailyState | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   // PROFILE + STATS
   const [elo, setElo] = useState(0);
@@ -106,10 +115,26 @@ export default function Faceit(): JSX.Element {
   const [queueTimer, setQueueTimer] = useState(0);
   const faceitQueue = state.faceitQueue;
   const queueing = faceitQueue.status === "QUEUEING" || faceitQueue.status === "RESOLVING";
-  const queueStartedAt = faceitQueue.startedAt; // epoch ms
-  const queueTargetSec = faceitQueue.targetSec; // 8..12
+  const queueStartedAt = faceitQueue.startedAt;
+  const queueTargetSec = faceitQueue.targetSec;
   const queueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finishingRef = useRef(false);
+  const canQueue = React.useMemo(() => {
+    if (activeMatch) return false;
+    if (queueing) return false;
+    if (!daily) return true;
+    return daily.playedToday < daily.maxToday;
+  }, [activeMatch, queueing, daily]);
+
+  const queueBlockMessage = React.useMemo(() => {
+    if (!daily) return null;
+    if (daily.playedToday < daily.maxToday) return null;
+
+    if (daily.hasPendingUserMatchday) {
+      return "Matchday scheduled today. FACEIT is limited to 2 matches to avoid skipping it.";
+    }
+    return "Daily FACEIT limit reached.";
+  }, [daily]);
 
   // SCOREBOARD OVERLAY
   const [viewMatchId, setViewMatchId] = useState<number | null>(null);
@@ -134,14 +159,11 @@ export default function Faceit(): JSX.Element {
 
       let scoreA: number | null = null;
       let scoreB: number | null = null;
-
       if (md?.match?.competitors) {
         const comp = md.match.competitors as { teamId: number; score: number }[];
-
         scoreA = comp.find((c) => c.teamId === 1)?.score ?? null;
         scoreB = comp.find((c) => c.teamId === 2)?.score ?? null;
       }
-
       enrichedRecent.push({
         ...rm,
         scoreA,
@@ -151,10 +173,11 @@ export default function Faceit(): JSX.Element {
 
     setElo(profileData.faceitElo);
     setLevel(profileData.faceitLevel);
-    setRecent(enrichedRecent); // <---- now includes scores
+    setRecent(enrichedRecent);
     setLifetime(profileData.lifetime || null);
-
     if (last20Stats) setLast20(last20Stats);
+    setDaily(profileData.daily ?? null);
+    setQueueError(null);
   };
 
   // Auto-remove match room ONLY if already closed
@@ -164,7 +187,7 @@ export default function Faceit(): JSX.Element {
     }
   }, [state.faceitMatchCompleted, showMatchRoom, dispatch]);
 
-  // Refresh profile (elo + recent matches) once we leave the match room
+  // Refresh profile once we leave the match room
   useEffect(() => {
     if (state.faceitMatchCompleted && !showMatchRoom) {
       refreshProfile();
@@ -182,7 +205,6 @@ export default function Faceit(): JSX.Element {
     return map;
   }, [state.continents]);
 
-  // SETTINGS (for map labels + images)
   const settingsAll = React.useMemo(() => {
     if (!state.profile) return Constants.Settings;
     return Util.loadSettings(state.profile.settings);
@@ -190,7 +212,6 @@ export default function Faceit(): JSX.Element {
 
   const gameSlug = settingsAll.general.game;
 
-  // Load profile + stats initially
   useEffect(() => {
     (async () => {
       try {
@@ -199,10 +220,8 @@ export default function Faceit(): JSX.Element {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load SCOREBOARD (overlay)
   useEffect(() => {
     if (!viewMatchId) return;
     setLoadingScoreboard(true);
@@ -256,7 +275,7 @@ export default function Faceit(): JSX.Element {
   }
 
   const startQueue = () => {
-    if (queueing || activeMatch) return;
+    if (!canQueue) return;
 
     const startedAt = Date.now();
     const targetSec = randIntInclusive(8, 12);
@@ -275,17 +294,30 @@ export default function Faceit(): JSX.Element {
     if (finishingRef.current) return;
     finishingRef.current = true;
     dispatch(faceitQueueResolving());
+
     try {
-      const res = await api.faceit.queue();
+      let res;
+      try {
+        res = await api.faceit.queue();
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (msg.includes("FACEIT_BLOCKED_MATCHDAY_USER_TODAY")) {
+          setQueueError(
+            "Matchday scheduled today. You can only play 2 FACEIT matches to warm up."
+          );
+        } else if (msg.includes("FACEIT_BLOCKED_DAILY_LIMIT")) {
+          setQueueError("Daily FACEIT limit reached.");
+        } else {
+          setQueueError("Unable to queue FACEIT match.");
+        }
+        refreshProfile();
+        return;
+      }
       const shuffledTeamA = shuffle(res.teamA);
       const shuffledTeamB = shuffle(res.teamB);
       dispatch(
         faceitRoomSet(
-          {
-            ...res,
-            teamA: shuffledTeamA,
-            teamB: shuffledTeamB,
-          },
+          { ...res, teamA: shuffledTeamA, teamB: shuffledTeamB },
           null
         )
       );
@@ -366,6 +398,12 @@ export default function Faceit(): JSX.Element {
             activeMatch={activeMatch}
             reopenMatchRoom={() => setShowMatchRoom(true)}
             gameSlug={gameSlug}
+
+            daily={daily}
+            canQueue={canQueue}
+            queueBlockMessage={queueBlockMessage}
+            queueError={queueError}
+
           />
         </>
       )}
@@ -437,6 +475,11 @@ interface NormalFaceitBodyProps {
   reopenMatchRoom: () => void;
 
   gameSlug: string;
+
+  daily: DailyState | null;
+  canQueue: boolean;
+  queueBlockMessage: string | null;
+  queueError: string | null;
 }
 
 function NormalFaceitBody({
@@ -451,6 +494,10 @@ function NormalFaceitBody({
   activeMatch,
   reopenMatchRoom,
   gameSlug,
+  daily,
+  canQueue,
+  queueBlockMessage,
+  queueError,
 }: NormalFaceitBodyProps) {
   // ALL-TIME
   const kills = lifetime ? lifetime.kills : 0;
@@ -585,7 +632,7 @@ function NormalFaceitBody({
 
         {/* Move button up using items-start + pt-20 */}
         <div className="flex-1 flex items-start justify-center pt-20">
-          <div className="relative">
+          <div className="relative flex flex-col items-center">
             {activeMatch ? (
               <button
                 onClick={reopenMatchRoom}
@@ -596,24 +643,44 @@ function NormalFaceitBody({
             ) : (
               <>
                 <button
-                  onClick={!queueing ? startQueue : undefined}
+                  disabled={!canQueue && !queueing}
+                  onClick={!queueing && canQueue ? startQueue : undefined}
                   className={`
-              w-56 py-5 text-xl rounded text-white shadow-lg transition-all text-center
-              ${queueing ? "bg-orange-600 cursor-default" : "bg-orange-600 hover:bg-orange-700"}
-            `}
+        w-56 py-5 text-xl rounded text-white shadow-lg transition-all text-center
+        ${queueing ? "bg-orange-600 cursor-default" : ""}
+        ${!queueing && canQueue ? "bg-orange-600 hover:bg-orange-700" : ""}
+        ${!queueing && !canQueue ? "bg-neutral-600 cursor-not-allowed opacity-70" : ""}
+      `}
                 >
-                  {!queueing ? "FIND MATCH" : `SEARCHING... ${queueTimer}s`}
+                  {queueing
+                    ? `SEARCHING... ${queueTimer}s`
+                    : !canQueue
+                      ? "LIMIT REACHED"
+                      : "FIND MATCH"}
                 </button>
-
                 {queueing && (
                   <button
                     onClick={cancelQueue}
                     className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center
-                  rounded-full bg-red-600 hover:bg-red-700 text-white text-sm shadow-md"
+          rounded-full bg-red-600 hover:bg-red-700 text-white text-sm shadow-md"
                   >
                     ×
                   </button>
                 )}
+                {daily && (
+                  <div className="mt-3 text-center text-xs opacity-70">
+                    Matches today: {daily.playedToday}/{daily.maxToday}
+                  </div>
+                )}
+                {queueError ? (
+                  <div className="mt-2 text-center text-xs text-red-400 px-6">
+                    {queueError}
+                  </div>
+                ) : queueBlockMessage ? (
+                  <div className="mt-2 text-center text-xs text-neutral-300 px-6">
+                    {queueBlockMessage}
+                  </div>
+                ) : null}
               </>
             )}
           </div>

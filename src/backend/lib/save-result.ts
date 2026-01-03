@@ -175,7 +175,6 @@ export async function saveFaceitResult(
     where: { id: dbMatchId },
     data: {
       status: Constants.MatchStatus.COMPLETED,
-      date: new Date(),
       players: { connect: players.map((p) => ({ id: p.id })) },
       events: { create: eventsToCreate },
       games: {

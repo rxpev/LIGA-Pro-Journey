@@ -2774,6 +2774,7 @@ export async function recordMatchResults() {
   const allMatches = await DatabaseClient.prisma.match.findMany({
     where: {
       date: today.toISOString(),
+      matchType: {not: "FACEIT_PUG"},
       status: Constants.MatchStatus.COMPLETED,
     },
     include: {

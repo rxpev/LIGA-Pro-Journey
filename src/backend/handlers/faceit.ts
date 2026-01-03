@@ -9,6 +9,8 @@ import { saveFaceitResult } from "@liga/backend/lib/save-result";
 import { computeLifetimeStats, getRecentMatches } from "@liga/backend/lib/faceitstats";
 import { Eagers } from "@liga/shared";
 import { sample } from "lodash";
+import { Engine } from "@liga/backend/lib";
+import { Util } from "@liga/shared";
 
 // ------------------------------
 // Types sent to frontend
@@ -34,6 +36,70 @@ export type MatchRoom = {
   eloLoss: number;
   selectedMap?: string;
 };
+
+function getLocalDayRange(d: Date) {
+  const start = new Date(d);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return { start, end };
+}
+
+async function getFaceitDailyState(prisma: any, profile: any) {
+  const d = profile.date instanceof Date ? profile.date : new Date(profile.date);
+  const start = new Date(d);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  // Pull matchday entries for today
+  const matchdayEntries = profile.teamId
+    ? await prisma.calendar.findMany({
+      where: {
+        date: { gte: start, lt: end },
+        type: Constants.CalendarEntry.MATCHDAY_USER,
+      },
+      select: { id: true, payload: true },
+    })
+    : [];
+  const matchIds = matchdayEntries
+    .map((e: any) => Number(e.payload))
+    .filter((n: number) => Number.isFinite(n) && n > 0);
+
+  // Is any matchday match still unplayed?
+  const hasPendingUserMatchday =
+    matchIds.length > 0 &&
+    (await prisma.match.count({
+      where: {
+        id: { in: matchIds },
+        status: { not: Constants.MatchStatus.COMPLETED },
+      },
+    })) > 0;
+  const playedToday = await prisma.match.count({
+    where: {
+      profileId: profile.id,
+      matchType: "FACEIT_PUG",
+      date: { gte: start, lt: end },
+      status: Constants.MatchStatus.COMPLETED,
+    },
+  });
+  const maxToday = hasPendingUserMatchday ? 2 : 3;
+  return {
+    inGameDateIso: start.toISOString(),
+    hasPendingUserMatchday,
+    playedToday,
+    maxToday,
+  };
+}
+
+async function advanceOneDayFromFaceit(prisma: any, profileId: number) {
+  const profile = await prisma.profile.findFirst({ where: { id: profileId } });
+  if (!profile) return;
+  const settings = Util.loadSettings(profile.settings);
+  await Engine.Runtime.Instance.start(1, settings.calendar.ignoreExits);
+}
 
 // ------------------------------------------------------
 // Build minimal pseudo-match for Game(Server)
@@ -145,14 +211,19 @@ export default function registerFaceitHandlers() {
 
       const recent = await getRecentMatches(profile.id);
       const lifetime = await computeLifetimeStats(profile.id, profile.playerId);
-
+      const daily = await getFaceitDailyState(prisma, profile);
       return {
         faceitElo: profile.faceitElo,
         faceitLevel: levelFromElo(profile.faceitElo),
-
-        // ⭐ added
         recent,
         lifetime,
+
+        daily: {
+          playedToday: daily.playedToday,
+          maxToday: daily.maxToday,
+          hasPendingUserMatchday: daily.hasPendingUserMatchday,
+          date: daily.inGameDateIso,
+        },
       };
     } catch (err) {
       log.error(err);
@@ -212,6 +283,15 @@ export default function registerFaceitHandlers() {
 
       if (!profile) throw new Error("No active profile found");
 
+      const daily = await getFaceitDailyState(prisma, profile);
+      if (daily.playedToday >= daily.maxToday) {
+        throw new Error(
+          daily.hasPendingUserMatchday
+            ? "FACEIT_BLOCKED_MATCHDAY_USER_TODAY"
+            : "FACEIT_BLOCKED_DAILY_LIMIT"
+        );
+      }
+
       const user = {
         id: profile.player.id,
         name: profile.player.name,
@@ -245,6 +325,15 @@ export default function registerFaceitHandlers() {
         ? JSON.parse(profile.settings)
         : Constants.Settings;
 
+      const daily = await getFaceitDailyState(prisma, profile);
+      if (daily.playedToday >= daily.maxToday) {
+        throw new Error(
+          daily.hasPendingUserMatchday
+            ? "FACEIT_BLOCKED_MATCHDAY_USER_TODAY"
+            : "FACEIT_BLOCKED_DAILY_LIMIT"
+        );
+      }
+
       const mapPool = await prisma.mapPool.findMany({
         where: {
           gameVersion: { slug: settings.general.game },
@@ -266,7 +355,7 @@ export default function registerFaceitHandlers() {
           matchType: "FACEIT_PUG",
           payload: JSON.stringify(room),
           profileId: profile.id,
-          date: new Date(),
+          date: profile.date.toISOString(),
           status: Constants.MatchStatus.READY,
           competitors: {
             create: [
@@ -315,6 +404,12 @@ export default function registerFaceitHandlers() {
 
       if (profile.teamId == null) {
         await Worldgen.sendUserFaceitOffer();
+      }
+
+      const dailyAfter = await getFaceitDailyState(prisma, profile);
+
+      if (!dailyAfter.hasPendingUserMatchday && dailyAfter.playedToday === 3) {
+        await advanceOneDayFromFaceit(prisma, profile.id);
       }
 
       return { ok: true, matchId: realMatchId };

@@ -14,6 +14,13 @@ import { ipcRenderer } from 'electron';
 /** @type {IPCRendererCallback} */
 type IPCRendererCallback = (...args: unknown[]) => void;
 
+type DailyState = {
+  playedToday: number;
+  maxToday: number;
+  hasPendingUserMatchday: boolean;
+  date: string;
+};
+
 /**
  * Exports this module.
  *
@@ -130,6 +137,7 @@ export default {
           kdRatio: number;
           hsPercent: number;
         };
+        daily?: DailyState | null;
       }>,
     queue: () =>
       ipcRenderer.invoke('faceit:queuePug') as Promise<any>,
