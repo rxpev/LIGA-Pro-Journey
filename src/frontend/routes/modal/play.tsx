@@ -426,7 +426,7 @@ export default function () {
             const allowBackfill =
               isUserTeam && team.players.length <= Constants.Application.SQUAD_MIN_LENGTH;
 
-            const starters = Util.getSquad(team, state.profile, allowBackfill);
+            const starters = Util.getSquad(team, state.profile, isUserTeam);
             const bench = differenceBy(team.players, starters, 'id');
             const squad = { starters, bench };
             console.log("USER ROW", starters.find(p => p.id === state.profile.playerId));

@@ -345,18 +345,28 @@ export class Server {
 
       this.competitors = [teamA, teamB] as any;
     } else {
-      this.competitors = match.competitors.map((competitor) => ({
-        ...competitor,
-        team: {
-          ...competitor.team,
-          players: Util.getSquad(
-            competitor.team,
-            this.profile,
-            false,
-            this.spectating && Constants.Application.SQUAD_MIN_LENGTH,
-          ),
-        },
-      }));
+      this.competitors = match.competitors.map((competitor) => {
+        const isUserTeam = competitor.teamId === this.profile.teamId;
+
+        const forceSize =
+          this.spectating
+            ? Constants.Application.SQUAD_MIN_LENGTH
+            : isUserTeam
+              ? Constants.Application.SQUAD_MIN_LENGTH - 1
+              : Constants.Application.SQUAD_MIN_LENGTH;
+        return {
+          ...competitor,
+          team: {
+            ...competitor.team,
+            players: Util.getSquad(
+              competitor.team,
+              this.profile,
+              false,
+              forceSize,
+            ),
+          },
+        };
+      });
     }
   }
 
