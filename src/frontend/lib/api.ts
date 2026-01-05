@@ -302,18 +302,6 @@ export default {
     delete: (query: Prisma.ShortlistDeleteArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.SHORTLIST_DELETE, query),
   },
-  sponsors: {
-    all: <T = typeof Eagers.sponsor>(query?: Prisma.SponsorFindManyArgs) =>
-      ipcRenderer.invoke(Constants.IPCRoute.SPONSORS_ALL, query) as Promise<
-        Array<Prisma.SponsorGetPayload<T>>
-      >,
-  },
-  sponsorships: {
-    create: (sponsorship: Partial<Prisma.SponsorshipCreateInput>) =>
-      ipcRenderer.invoke(Constants.IPCRoute.SPONSORSHIP_CREATE, sponsorship) as Promise<
-        Prisma.SponsorshipGetPayload<unknown>
-      >,
-  },
   squad: {
     all: <T = typeof Eagers.player>() =>
       ipcRenderer.invoke(Constants.IPCRoute.SQUAD_ALL) as Promise<

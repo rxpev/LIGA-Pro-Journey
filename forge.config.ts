@@ -32,7 +32,6 @@ const config: ForgeConfig = {
       './src/resources/markdown',
       './src/resources/trophies',
       './src/resources/certs',
-      './src/resources/sponsors',
       './src/resources/competitions',
       './src/resources/avatars',
       './src/resources/audio',

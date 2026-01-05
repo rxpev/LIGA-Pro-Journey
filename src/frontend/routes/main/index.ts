@@ -8,7 +8,6 @@ import Competitions from './competitions';
 import Dashboard from './dashboard';
 import Inbox from './inbox';
 import Players from './players';
-import Sponsors from './sponsors';
 import Squad from './squad';
 import Teams from './teams';
 import Faceit from "./faceit/faceit";
@@ -29,6 +28,5 @@ export default {
 
   // composite routes
   Competitions,
-  Sponsors,
   Teams,
 };

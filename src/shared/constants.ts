@@ -128,9 +128,6 @@ export enum CalendarEntry {
   MATCHDAY_NPC = '/matchday/npc',
   MATCHDAY_USER = '/matchday/user',
   SEASON_START = '/season/start',
-  SPONSORSHIP_PARSE = '/sponsorship/parse',
-  SPONSORSHIP_PAYMENT = '/sponsorship/payment',
-  SPONSORSHIP_RENEW = '/sponsorship/renew',
   TRANSFER_PARSE = '/transfer/parse',
   PLAYER_SCOUTING_CHECK = '/player/scouting/check',
   PLAYER_CONTRACT_EXPIRE = '/player/contract-expire',
@@ -221,7 +218,6 @@ export enum LeagueSlug {
   ESPORTS_LEAGUE = 'esl',
   ESPORTS_LEAGUE_CUP = 'eslc',
   ESPORTS_WORLD_CUP = 'eswc',
-  SPONSORS = 'sponsors',
 }
 
 /**
@@ -335,12 +331,6 @@ export enum IPCRoute {
   SHORTLIST_CREATE = '/shortlist/create',
   SHORTLIST_DELETE = '/shortlist/delete',
   SHORTLIST_UPDATE = '/shortlist/update',
-  SPONSORS_ALL = '/sponsors/all',
-  SPONSORSHIP_CREATE = '/sponsorship/create',
-  SPONSORSHIP_INVITE_ACCEPT = '/sponsorship/invite/accept',
-  SPONSORSHIP_INVITE_REJECT = '/sponsorship/invite/reject',
-  SPONSORSHIP_RENEW_ACCEPT = '/sponsorship/renew/accept',
-  SPONSORSHIP_RENEW_REJECT = '/sponsorship/renew/reject',
   SQUAD_ALL = '/squad/all',
   SQUAD_UPDATE = '/squad/update',
   SQUAD_RELEASE_PLAYER = '/squad/release/player',
@@ -434,64 +424,6 @@ export enum SimulationMode {
 }
 
 /**
- * Sponsor unique identifiers.
- *
- * @enum
- */
-export enum SponsorSlug {
-  ALOHA_ENERGY = 'aloha-energy',
-  BLUEQUIL = 'bluequil',
-  GOGTECH = 'gogtech',
-  HEAVENCASE = 'heavencase',
-  NINEKBET = '9kbet',
-  OWNERCARD = 'ownercard',
-  PREY = 'prey',
-  SKINARCH = 'skinarch',
-  WHITE_WOLF = 'white-wolf',
-  YNFO = 'ynfo',
-  YTL = 'ytl',
-}
-
-/**
- * The types of bonuses that can be awarded by sponsors.
- *
- * @enum
- */
-export enum SponsorshipBonus {
-  PLACEMENT = 'placement',
-  QUALIFY = 'qualify',
-  TOURNAMENT_WIN = 'tournament_win',
-  WIN_STREAK = 'win_streak',
-}
-
-/**
- * Sponsor and team status types.
- *
- * @enum
- */
-export enum SponsorshipStatus {
-  SPONSOR_ACCEPTED,
-  SPONSOR_PENDING,
-  SPONSOR_REJECTED,
-  SPONSOR_TERMINATED,
-  TEAM_ACCEPTED,
-  TEAM_PENDING,
-  TEAM_REJECTED,
-  CONTRACT_EXPIRED,
-}
-
-/**
- * Sponsor contract requirements.
- *
- * @enum
- */
-export enum SponsorshipRequirement {
-  EARNINGS = 'earnings',
-  PLACEMENT = 'placement',
-  RELEGATION = 'relegation',
-}
-
-/**
  * Tier unique identifiers.
  *
  * @enum
@@ -517,11 +449,6 @@ export enum TierSlug {
   LEAGUE_OPEN_PLAYOFFS = 'league:open:playoffs',
   LEAGUE_PREMIER = 'league:premier',
   LEAGUE_PREMIER_PLAYOFFS = 'league:premier:playoffs',
-  SPONSORS_BLUEQUIL = 'sponsors:bluequil',
-  SPONSORS_HEAVENCASE = 'sponsors:heavencase',
-  SPONSORS_NINEKBET = 'sponsors:9kbet',
-  SPONSORS_SKINARCH = 'sponsors:skinarch',
-  SPONSORS_WHITE_WOLF = 'sponsors:white-wolf',
 }
 
 /**
@@ -776,41 +703,6 @@ export const Awards = [
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
     start: 1,
   },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.SPONSORS_BLUEQUIL,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.SPONSORS_HEAVENCASE,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.SPONSORS_NINEKBET,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.SPONSORS_SKINARCH,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.SPONSORS_WHITE_WOLF,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
 ];
 
 /**
@@ -901,22 +793,6 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'Advanced Division Playoffs',
   [TierSlug.LEAGUE_PREMIER]: 'Premier Division',
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: 'Premier Division Playoffs',
-  [TierSlug.SPONSORS_BLUEQUIL]: 'BlueQuil Invitational',
-  [TierSlug.SPONSORS_HEAVENCASE]: 'HeavenCase Challenge',
-  [TierSlug.SPONSORS_NINEKBET]: '9kBet Cup',
-  [TierSlug.SPONSORS_SKINARCH]: 'SkinArch Showdown',
-  [TierSlug.SPONSORS_WHITE_WOLF]: 'WhiteWolf Invitational',
-};
-
-export const IdiomaticSponsorshipStatus: Record<number, string> = {
-  [SponsorshipStatus.SPONSOR_ACCEPTED]: 'Sponsor Accepted',
-  [SponsorshipStatus.SPONSOR_PENDING]: 'Sponsor Pending',
-  [SponsorshipStatus.SPONSOR_REJECTED]: 'Sponsor Rejected',
-  [SponsorshipStatus.SPONSOR_TERMINATED]: 'Sponsor Terminated',
-  [SponsorshipStatus.TEAM_ACCEPTED]: 'Team Accepted',
-  [SponsorshipStatus.TEAM_PENDING]: 'Team Pending',
-  [SponsorshipStatus.TEAM_REJECTED]: 'Team Rejected',
-  [SponsorshipStatus.CONTRACT_EXPIRED]: 'Contract Expired',
 };
 
 /** @constant */
@@ -1006,10 +882,6 @@ export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = 
     6: 'auto', // saturday
     0: 'auto', // sunday
   },
-  [LeagueSlug.SPONSORS]: {
-    1: 50, // monday
-    2: 'auto', // tuesday
-  },
 };
 
 /**
@@ -1076,11 +948,6 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_PREMIER]: { total: 200_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.SPONSORS_BLUEQUIL]: { total: 20_000, distribution: [50, 35, 15] },
-  [TierSlug.SPONSORS_HEAVENCASE]: { total: 12_000, distribution: [50, 35, 15] },
-  [TierSlug.SPONSORS_NINEKBET]: { total: 12_000, distribution: [50, 35, 15] },
-  [TierSlug.SPONSORS_SKINARCH]: { total: 5_000, distribution: [50, 35, 15] },
-  [TierSlug.SPONSORS_WHITE_WOLF]: { total: 10_000, distribution: [50, 35, 15] },
 };
 
 /**
@@ -1115,412 +982,6 @@ export const Settings = {
 };
 
 /**
- * Sponsor contract conditions.
- *
- * @constant
- */
-export const SponsorContract: Record<
-  SponsorSlug,
-  {
-    bonuses: Array<{
-      type: SponsorshipBonus | SponsorshipRequirement;
-      condition?: string | number;
-      amount?: number;
-    }>;
-    requirements: Array<{
-      type: SponsorshipBonus | SponsorshipRequirement;
-      condition?: string | number;
-      amount?: number;
-    }>;
-    terms: Array<{
-      length: number;
-      frequency: CalendarFrequency;
-      amount: number;
-    }>;
-    tiers?: Array<TierSlug>;
-    tournament?: TierSlug;
-  }
-> = {
-  [SponsorSlug.ALOHA_ENERGY]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.QUALIFY,
-        condition: TierSlug.CIRCUIT_FINALS,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.PLACEMENT,
-        condition: 10,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_ADVANCED, TierSlug.LEAGUE_PREMIER],
-  },
-  [SponsorSlug.BLUEQUIL]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.BI_WEEKLY,
-        amount: 2000,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-    tournament: TierSlug.SPONSORS_BLUEQUIL,
-  },
-  [SponsorSlug.GOGTECH]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.BI_WEEKLY,
-        amount: 2000,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-  },
-  [SponsorSlug.HEAVENCASE]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.QUALIFY,
-        condition: TierSlug.CIRCUIT_FINALS,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.PLACEMENT,
-        condition: 8,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_ADVANCED, TierSlug.LEAGUE_PREMIER],
-    tournament: TierSlug.SPONSORS_HEAVENCASE,
-  },
-  [SponsorSlug.NINEKBET]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.QUALIFY,
-        condition: TierSlug.CIRCUIT_FINALS,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.PLACEMENT,
-        condition: 8,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_ADVANCED, TierSlug.LEAGUE_PREMIER],
-    tournament: TierSlug.SPONSORS_NINEKBET,
-  },
-  [SponsorSlug.OWNERCARD]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-  },
-  [SponsorSlug.PREY]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-  },
-  [SponsorSlug.SKINARCH]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: 8,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.QUALIFY,
-        condition: TierSlug.CIRCUIT_FINALS,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.PLACEMENT,
-        condition: 10,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_MAIN, TierSlug.LEAGUE_ADVANCED],
-    tournament: TierSlug.SPONSORS_SKINARCH,
-  },
-  [SponsorSlug.WHITE_WOLF]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: 8,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.QUALIFY,
-        condition: TierSlug.CIRCUIT_FINALS,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.PLACEMENT,
-        condition: 10,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_ADVANCED],
-    tournament: TierSlug.SPONSORS_WHITE_WOLF,
-  },
-  [SponsorSlug.YNFO]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-  },
-  [SponsorSlug.YTL]: {
-    bonuses: [
-      {
-        type: SponsorshipBonus.PLACEMENT,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_END,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.TOURNAMENT_WIN,
-        condition: Zones.LEAGUE_PROMOTION_AUTO_START,
-        amount: 5000,
-      },
-      {
-        type: SponsorshipBonus.WIN_STREAK,
-        condition: 5,
-        amount: 5000,
-      },
-    ],
-    requirements: [
-      {
-        type: SponsorshipRequirement.EARNINGS,
-        condition: 1000,
-      },
-      {
-        type: SponsorshipRequirement.RELEGATION,
-        condition: Zones.LEAGUE_RELEGATION_START,
-      },
-    ],
-    terms: [
-      {
-        length: 2,
-        frequency: CalendarFrequency.MONTHLY,
-        amount: 500,
-      },
-    ],
-    tiers: [TierSlug.LEAGUE_PREMIER],
-  },
-};
-
-/**
  * Match config for tiers such as
  * the number of games per match.
  *
@@ -1544,11 +1005,6 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: [3, 3],
-  [TierSlug.SPONSORS_BLUEQUIL]: [3, 3],
-  [TierSlug.SPONSORS_HEAVENCASE]: [3, 3],
-  [TierSlug.SPONSORS_NINEKBET]: [3, 3],
-  [TierSlug.SPONSORS_SKINARCH]: [3, 3],
-  [TierSlug.SPONSORS_WHITE_WOLF]: [3, 3],
 };
 
 /**

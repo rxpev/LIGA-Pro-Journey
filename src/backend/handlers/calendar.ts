@@ -139,14 +139,6 @@ export default function () {
     Worldgen.onSeasonStart
   );
   Engine.Runtime.Instance.register(
-    Constants.CalendarEntry.SPONSORSHIP_PARSE,
-    Worldgen.onSponsorshipOffer
-  );
-  Engine.Runtime.Instance.register(
-    Constants.CalendarEntry.SPONSORSHIP_PAYMENT,
-    Worldgen.onSponsorshipPayment
-  );
-  Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
     Worldgen.onPlayerContractExpire
   );

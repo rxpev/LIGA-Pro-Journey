@@ -368,45 +368,6 @@ model Shortlist {
   playerId            Int
 }
 
-model Sponsor {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  slug                String              @unique
-  description         String
-  logo                String?
-
-  // has many
-  sponsorships        Sponsorship[]
-  teams               Team[]
-}
-
-model Sponsorship {
-  id                  Int                 @id @default(autoincrement())
-  status              Int
-
-  // has many
-  offers              SponsorshipOffer[]
-
-  // belongs to
-  team                Team                @relation(fields: [teamId], references: [id])
-  teamId              Int
-  sponsor             Sponsor             @relation(fields: [sponsorId], references: [id])
-  sponsorId           Int
-}
-
-model SponsorshipOffer {
-  id                  Int                 @id @default(autoincrement())
-  status              Int
-  start               DateTime
-  end                 DateTime
-  amount              Int?                @default(0)
-  frequency           Int?                @default(0)
-
-  // belongs to
-  sponsorship         Sponsorship         @relation(fields: [sponsorshipId], references: [id])
-  sponsorshipId       Int
-}
-
 model Team {
   id                  Int                 @id @default(autoincrement())
   name                String              @unique
@@ -427,8 +388,6 @@ model Team {
   players             Player[]
   personas            Persona[]
   shortlist           Shortlist[]
-  sponsors            Sponsor[]
-  sponsorships        Sponsorship[]
   transfersIn         Transfer[]          @relation("to")
   transfersOut        Transfer[]          @relation("from")
   careerStints        CareerStint[]

@@ -123,20 +123,6 @@ const routes = createMemoryRouter([
         ],
       },
       {
-        path: '/sponsors',
-        element: <Routes.Main.Sponsors.Sponsors />,
-        children: [
-          {
-            element: <Routes.Main.Sponsors.Overview />,
-            index: true,
-          },
-          {
-            path: 'all',
-            element: <Routes.Main.Sponsors.All />,
-          },
-        ],
-      },
-      {
         path: '/teams',
         element: <Routes.Main.Teams.Teams />,
         children: [
@@ -256,7 +242,6 @@ function Root() {
     ['/teams', t('navigation.teams'), useMatch('/teams/*')],
     ['/players', t('navigation.players')],
     ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
-    ['/sponsors', t('navigation.sponsors'), useMatch('/sponsors/*')],
     ['/calendar', t('navigation.calendar')],
   ];
 
