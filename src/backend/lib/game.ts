@@ -784,6 +784,15 @@ End\n
       if (maybeCT) ctTeam = maybeCT;
     }
 
+    const humanteam =
+      this.spectating
+        ? 'any'
+        : this.profile.teamId === tTeam.teamId
+          ? 'T'
+          : this.profile.teamId === ctTeam.teamId
+            ? 'CT'
+            : 'any';
+
     let homeStats: any;
     let awayStats: any;
 
@@ -811,9 +820,9 @@ End\n
         spectating: +this.spectating,
         damage_prints: 0,
         isAWP,
+        isFaceit: 1,
         bot_defer_to_human_items,
 
-        // FACEIT scoreboard-ish
         match_stat: 'FACEIT PUG',
         teamflag_t: tTeam.team.country?.code || 'EU',
         teamflag_ct: ctTeam.team.country?.code || 'EU',
@@ -821,8 +830,6 @@ End\n
         shortname_ct: ctTeam.team.slug || 'FACEITB',
         stat_t: '',
         stat_ct: '',
-
-        // Human side: map internal 't' / 'ct' to CVar's 'T' / 'CT' / 'any'
         humanteam:
           this.faceitUserSide === 't'
             ? 'T'
@@ -842,7 +849,9 @@ End\n
         spectating: +this.spectating,
         damage_prints: 0,
         isAWP,
+        isFaceit: 0,
         bot_defer_to_human_items,
+        humanteam,
 
         match_stat: this.match.competition.tier.name,
         teamflag_t: home.team.country.code,
