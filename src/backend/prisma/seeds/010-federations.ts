@@ -27,7 +27,17 @@ export const data = [
   {
     name: 'Electronic Sports Europa',
     slug: Constants.FederationSlug.ESPORTS_EUROPA,
-    continents: ['af', 'as', 'eu', 'oc'],
+    continents: ['af', 'eu'],
+  },
+  {
+    name: 'Electronic Sports Asia',
+    slug: Constants.FederationSlug.ESPORTS_ASIA,
+    continents: ['as'],
+  },
+  {
+    name: 'Electronic Sports Oceania',
+    slug: Constants.FederationSlug.ESPORTS_OCE,
+    continents: ['oc'],
   },
   {
     name: 'World',

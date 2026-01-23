@@ -25,7 +25,9 @@ const data: Array<LeagueSeedData> = [
     startOffsetDays: 60,
     federations: [
       Constants.FederationSlug.ESPORTS_AMERICAS,
+      Constants.FederationSlug.ESPORTS_ASIA,
       Constants.FederationSlug.ESPORTS_EUROPA,
+      Constants.FederationSlug.ESPORTS_OCE,
     ],
     tiers: [
       {
@@ -101,7 +103,9 @@ const data: Array<LeagueSeedData> = [
     startOffsetDays: 90,
     federations: [
       Constants.FederationSlug.ESPORTS_AMERICAS,
+      Constants.FederationSlug.ESPORTS_ASIA,
       Constants.FederationSlug.ESPORTS_EUROPA,
+      Constants.FederationSlug.ESPORTS_OCE,
     ],
     tiers: [
       {
@@ -117,7 +121,9 @@ const data: Array<LeagueSeedData> = [
     startOffsetDays: 14,
     federations: [
       Constants.FederationSlug.ESPORTS_AMERICAS,
+      Constants.FederationSlug.ESPORTS_ASIA,
       Constants.FederationSlug.ESPORTS_EUROPA,
+      Constants.FederationSlug.ESPORTS_OCE,
     ],
     tiers: [
       {

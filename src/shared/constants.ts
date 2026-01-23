@@ -195,7 +195,9 @@ export enum ErrorCode {
  */
 export enum FederationSlug {
   ESPORTS_AMERICAS = 'americas',
+  ESPORTS_ASIA = 'asia',
   ESPORTS_EUROPA = 'europa',
+  ESPORTS_OCE = 'oceania',
   ESPORTS_WORLD = 'world',
 }
 

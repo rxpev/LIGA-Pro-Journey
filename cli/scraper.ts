@@ -65,6 +65,23 @@ const COUNTRY_WEIGHTS: Record<string, Record<string, number | 'auto'>> = {
     pe: 2,
     us: 51,
   },
+  [Constants.FederationSlug.ESPORTS_ASIA]: {
+    ae: 1,
+    cn: 30,
+    id: 2,
+    in: 4,
+    ir: 1,
+    jp: 5,
+    kr: 5,
+    my: 1,
+    ph: 1,
+    sa: 2,
+    sg: 1,
+    th: 2,
+    tr: 1,
+    vn: 2,
+    mn: 50,
+  },
   [Constants.FederationSlug.ESPORTS_EUROPA]: {
     al: 1,
     be: 3,
@@ -83,15 +100,12 @@ const COUNTRY_WEIGHTS: Record<string, Record<string, number | 'auto'>> = {
     hu: 1,
     ie: 1,
     it: 2,
-    kr: 1,
     lt: 1,
     lv: 1,
     nl: 1,
     no: 3,
-    nz: 4,
     pl: 4,
     pt: 1,
-    sa: 1,
     se: 8,
     sk: 1,
     ro: 1,
@@ -99,6 +113,10 @@ const COUNTRY_WEIGHTS: Record<string, Record<string, number | 'auto'>> = {
     ru: 4,
     ua: 4,
     za: 1,
+  },
+  [Constants.FederationSlug.ESPORTS_OCE]: {
+    au: 90,
+    nz: 10,
   },
 };
 
@@ -140,6 +158,29 @@ async function buildPrismaPayload(data: Array<TeamAPIResponse | PlayerAPIRespons
     const countries = flatten(federation.continents.map((continent) => continent.countries));
     const countryPbx = COUNTRY_WEIGHTS[federation.slug];
 
+    if (!countryPbx) {
+      log.warn('Missing country weights for federation: %s', federation.slug);
+      return;
+    }
+
+    if (!countries.length) {
+      log.warn('No countries found for federation: %s', federation.slug);
+      return;
+    }
+
+    const pickCountryId = () => {
+      const countryPick = Chance.roll(countryPbx);
+      const match = countries.find(
+        (country) => country.code.toLowerCase() === countryPick.toLowerCase(),
+      );
+
+      if (match) {
+        return match.id;
+      }
+
+      return countries[0].id;
+    };
+
     for (const country of countries) {
       if (country.code.toLowerCase() in countryPbx) {
         continue;
@@ -158,21 +199,11 @@ async function buildPrismaPayload(data: Array<TeamAPIResponse | PlayerAPIRespons
           create: {
             name: item.name,
             slug: item.slug,
-            countryId: (() => {
-              const countryPick = Chance.roll(countryPbx);
-              return countries.find(
-                (country) => country.code.toLowerCase() === countryPick.toLowerCase(),
-              ).id;
-            })(),
+            countryId: pickCountryId(),
             players: {
               create: item.players.map((player) => ({
                 name: player.name,
-                countryId: (() => {
-                  const countryPick = Chance.roll(countryPbx);
-                  return countries.find(
-                    (country) => country.code.toLowerCase() === countryPick.toLowerCase(),
-                  ).id;
-                })(),
+                countryId: pickCountryId(),
               })),
             },
             personas: {
@@ -192,12 +223,7 @@ async function buildPrismaPayload(data: Array<TeamAPIResponse | PlayerAPIRespons
         data: {
           name: item.name,
           transferListed: true,
-          countryId: (() => {
-            const countryPick = Chance.roll(countryPbx);
-            return countries.find(
-              (country) => country.code.toLowerCase() === countryPick.toLowerCase(),
-            ).id;
-          })(),
+          countryId: pickCountryId(),
         },
       });
     });
