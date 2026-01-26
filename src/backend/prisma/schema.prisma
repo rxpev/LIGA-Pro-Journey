@@ -58,6 +58,8 @@ model Competition {
   season              Int?                @default(1)
   status              Int?                @default(0)
   tournament          String?
+  size                Int?
+  groupSize           Int?
 
   // has many
   matches             Match[]
@@ -457,7 +459,7 @@ model CareerStint {
   team                Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
   teamId              Int?
 
-  // snapshot of team tier at the time (Open..Premier index)
+  // snapshot of team tier at the time (Open..Pro League index)
   tier                Int?
 
   startedAt           DateTime

@@ -162,7 +162,7 @@ export default function () {
     } else {
       // Player-style (teamless): pick the highest league tier in this federation.
       const preferredOrder = [
-        'league:premier',
+        'league:pro',
         'league:advanced',
         'league:main',
         'league:intermediate',

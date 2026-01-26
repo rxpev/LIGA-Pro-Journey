@@ -70,6 +70,25 @@ export const Items: Array<Item> = [
         start: Constants.Zones.LEAGUE_RELEGATION_START,
         season: -1,
       },
+      // Asia/OCE relegate from Advanced to Open
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 19,
+        end: 20,
+        season: -1,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 15,
+        end: 16,
+        season: -1,
+      },
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
@@ -101,7 +120,7 @@ export const Items: Array<Item> = [
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_OPEN,
         start: 0,
-        end: 4,
+        end: 8,
         season: 0,
       },
     ],
@@ -183,7 +202,7 @@ export const Items: Array<Item> = [
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_INTERMEDIATE,
         start: 0,
-        end: 4,
+        end: 8,
         season: 0,
       },
     ],
@@ -265,7 +284,7 @@ export const Items: Array<Item> = [
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_MAIN,
         start: 0,
-        end: 4,
+        end: 8,
         season: 0,
       },
     ],
@@ -281,6 +300,25 @@ export const Items: Array<Item> = [
         target: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
         start: Constants.Zones.LEAGUE_PROMOTION_AUTO_START,
         end: Constants.Zones.LEAGUE_PROMOTION_AUTO_END,
+        season: -1,
+      },
+      // Asia/OCE promote directly from Open playoffs
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 2,
+        season: -1,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 2,
         season: -1,
       },
       // last place advanced playoffs (1 player)
@@ -300,12 +338,41 @@ export const Items: Array<Item> = [
         end: Constants.Zones.LEAGUE_MID_TABLE_END,
         season: -1,
       },
-      // 18th thru 20th premier (3 players)
+      // 17th thru 32nd EPL (demoted back to their region)
       {
         action: Action.INCLUDE,
-        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
-        start: Constants.Zones.LEAGUE_RELEGATION_START,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 17,
+        end: 32,
+        season: -1,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 17,
+        end: 32,
+        season: -1,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 17,
+        end: 32,
+        season: -1,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 17,
+        end: 32,
         season: -1,
       },
       {
@@ -347,65 +414,111 @@ export const Items: Array<Item> = [
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_ADVANCED,
         start: 0,
-        end: 4,
+        end: 8,
         season: 0,
       },
     ],
   },
   {
-    tierSlug: Constants.TierSlug.LEAGUE_PREMIER,
+    tierSlug: Constants.TierSlug.LEAGUE_PRO,
     on: Constants.CalendarEntry.SEASON_START,
     entries: [
-      // 1st thru 3rd advanced playoffs (3 players)
+      // top 16 retained from last EPL
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        start: 1,
+        end: 16,
+        season: -1,
+      },
+      // qualifiers from Advanced playoffs
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
-        start: Constants.Zones.LEAGUE_PROMOTION_AUTO_START,
-        end: Constants.Zones.LEAGUE_PROMOTION_AUTO_END,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 8,
         season: -1,
       },
-      // 1st thru 17th premier (17 players)
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
-        start: Constants.Zones.LEAGUE_PROMOTION_AUTO_START,
-        end: Constants.Zones.LEAGUE_MID_TABLE_END,
+        target: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+        end: 4,
         season: -1,
       },
       {
-        action: Action.FALLBACK,
+        action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
-        start: 0,
+        target: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 3,
+        season: -1,
       },
-      // @todo: remove after beta
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 1,
+        season: -1,
+      },
+      // initial season seeding by region (top teams)
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_ADVANCED,
-        start: Constants.Zones.LEAGUE_PROMOTION_AUTO_START,
-        end: Constants.Zones.LEAGUE_PROMOTION_AUTO_END,
-        season: -1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 18,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+        end: 8,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 4,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 2,
       },
     ],
   },
   {
-    tierSlug: Constants.TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+    tierSlug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
     on: Constants.CalendarEntry.SEASON_START,
     entries: [],
   },
   {
-    tierSlug: Constants.TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+    tierSlug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
     on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
         action: Action.INCLUDE,
-        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
         start: 0,
-        end: 4,
+        end: 16,
         season: 0,
       },
     ],
@@ -436,12 +549,6 @@ export const Items: Array<Item> = [
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_ADVANCED,
-        start: 0,
-      },
-      {
-        action: Action.FALLBACK,
-        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
         start: 0,
       },
     ],
@@ -551,7 +658,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         start: 13,
         end: 20,
         season: -1,
@@ -559,7 +666,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         start: 13,
         end: 20,
       },
@@ -605,7 +712,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 9,
         end: 12,
@@ -614,7 +721,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 9,
         end: 12,
@@ -623,7 +730,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 9,
         end: 12,
@@ -632,7 +739,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 9,
         end: 12,
@@ -641,7 +748,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 9,
         end: 12,
@@ -649,7 +756,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 9,
         end: 12,
@@ -657,7 +764,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 9,
         end: 12,
@@ -665,7 +772,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 9,
         end: 12,
@@ -721,7 +828,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 5,
         end: 8,
@@ -730,7 +837,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 5,
         end: 8,
@@ -739,7 +846,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 5,
         end: 8,
@@ -748,7 +855,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 5,
         end: 8,
@@ -757,7 +864,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 5,
         end: 8,
@@ -765,7 +872,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 5,
         end: 8,
@@ -773,7 +880,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 5,
         end: 8,
@@ -781,7 +888,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 5,
         end: 8,
@@ -809,7 +916,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 0,
         end: 4,
@@ -818,7 +925,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 0,
         end: 4,
@@ -827,7 +934,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 0,
         end: 4,
@@ -836,7 +943,7 @@ export const Items: Array<Item> = [
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 0,
         end: 4,
@@ -845,7 +952,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
         start: 0,
         end: 4,
@@ -853,7 +960,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 0,
         end: 4,
@@ -861,7 +968,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
         start: 0,
         end: 4,
@@ -869,7 +976,7 @@ export const Items: Array<Item> = [
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
-        target: Constants.TierSlug.LEAGUE_PREMIER,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 0,
         end: 4,
@@ -923,7 +1030,8 @@ async function handleIncludeAction(
   federation: Prisma.FederationGetPayload<unknown>,
 ): Promise<Array<Team>> {
   const profile = await DatabaseClient.prisma.profile.findFirst();
-  const competition = await DatabaseClient.prisma.competition.findFirst({
+  const targetFederationSlug = entry.federationSlug || federation.slug;
+  let competition = await DatabaseClient.prisma.competition.findFirst({
     where: {
       season: profile.season + entry.season,
       tier: {
@@ -933,24 +1041,87 @@ async function handleIncludeAction(
         },
       },
       federation: {
-        slug: entry.federationSlug || federation.slug,
+        slug: targetFederationSlug,
       },
     },
     include: {
+      federation: true,
       competitors: {
         orderBy: { position: 'asc' },
         include: {
-          team: true,
+          team: {
+            include: {
+              country: {
+                include: {
+                  continent: {
+                    include: {
+                      federation: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
   });
 
+  if (!competition && entry.federationSlug) {
+    competition = await DatabaseClient.prisma.competition.findFirst({
+      where: {
+        season: profile.season + entry.season,
+        tier: {
+          slug: entry.target,
+          league: {
+            slug: entry.from,
+          },
+        },
+        federation: {
+          slug: Constants.FederationSlug.ESPORTS_WORLD,
+        },
+      },
+      include: {
+        federation: true,
+        competitors: {
+          orderBy: { position: 'asc' },
+          include: {
+            team: {
+              include: {
+                country: {
+                  include: {
+                    continent: {
+                      include: {
+                        federation: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   if (!competition) {
     return Promise.resolve([]);
   }
 
-  const competitors = competition.competitors.slice(
+  let competitors = competition.competitors;
+
+  if (
+    entry.federationSlug &&
+    competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD
+  ) {
+    competitors = competitors.filter(
+      (competitor) =>
+        competitor.team?.country?.continent?.federation?.slug === entry.federationSlug,
+    );
+  }
+
+  competitors = competitors.slice(
     entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
     entry.end || undefined,
   );
@@ -1021,6 +1192,15 @@ export async function parse(
   tier: Prisma.TierGetPayload<typeof Eagers.tier>,
   federation: Prisma.FederationGetPayload<unknown>,
 ) {
+  const sizing = Constants.resolveCompetitionSizing({
+    leagueSlug: tier.league.slug as Constants.LeagueSlug,
+    federationSlug: federation.slug as Constants.FederationSlug,
+    tierSlug: tier.slug as Constants.TierSlug,
+    defaultSize: tier.size,
+    defaultGroupSize: tier.groupSize,
+  });
+  const competitionSize = sizing.size;
+
   // fill competitors list using this autofill item's entries
   const competitors = [] as Array<Team>;
 
@@ -1046,14 +1226,15 @@ export async function parse(
 
   // if the required quota for the current tier is not met then
   // use the fallback entries to backfill the competitors list
-  const quota = item.entries
+  const includeQuota = item.entries
     .filter((entry) => entry.action === Action.INCLUDE)
     .map((entry) =>
       entry.start < 0
         ? Math.abs(entry.start)
-        : (entry.end || tier.size) - Math.max(0, entry.start - 1),
+        : (entry.end || competitionSize) - Math.max(0, entry.start - 1),
     )
     .reduce((a, b) => a + b, 0);
+  const quota = Math.max(competitionSize, includeQuota);
 
   if (!quota || competitors.length < quota) {
     let fallbackList: Awaited<ReturnType<typeof handleIncludeAction>>;
@@ -1086,9 +1267,9 @@ export async function parse(
     'Autofilled %s - %s with %d teams',
     federation.name,
     tier.name,
-    competitors.slice(0, tier.size).length,
+    competitors.slice(0, competitionSize).length,
   );
 
   // return our payload
-  return Promise.resolve(competitors.slice(0, tier.size));
+  return Promise.resolve(competitors.slice(0, competitionSize));
 }
