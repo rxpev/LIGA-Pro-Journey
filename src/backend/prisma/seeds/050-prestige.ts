@@ -49,13 +49,32 @@ export default async function (prisma: PrismaClient) {
   // and build the transaction
   const groups = groupBy(teams, (team) => team.country.continent.federation.slug);
   const transaction = Object.keys(groups)
-    .map((slug) => groups[slug])
-    .map((federationTeams) => {
+    .map((slug) => ({ slug, federationTeams: groups[slug] }))
+    .map(({ slug, federationTeams }) => {
+      let offset = 0;
       // chunk the teams into the different levels of prestige
-      const chunks = tiers.map((tier, tierIdx) => ({
-        prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
-        teams: federationTeams.slice(tier.size * tierIdx, tier.size * tierIdx + tier.size),
-      }));
+      const chunks = tiers
+        .map((tier) => {
+          const sizing = Constants.resolveCompetitionSizing({
+            leagueSlug: Constants.LeagueSlug.ESPORTS_LEAGUE,
+            federationSlug: slug as Constants.FederationSlug,
+            tierSlug: tier.slug as Constants.TierSlug,
+            defaultSize: tier.size,
+            defaultGroupSize: tier.groupSize,
+          });
+
+          if (sizing.size <= 0) {
+            return null;
+          }
+
+          const chunk = {
+            prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
+            teams: federationTeams.slice(offset, offset + sizing.size),
+          };
+          offset += sizing.size;
+          return chunk;
+        })
+        .filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
 
       log.info(
         chunks.map((chunk) => ({ prestige: chunk.prestige, totalTeams: chunk.teams.length })),

@@ -26,7 +26,15 @@ export default async function (prisma: PrismaClient, args: Record<string, string
 
   // figure out the total number of teams to scrape by
   // adding up the size of every federation's tier
-  const federationsCount = await prisma.federation.count();
+  const federations = await prisma.federation.findMany({
+    where: {
+      leagues: {
+        some: {
+          slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        },
+      },
+    },
+  });
   const tiers = await prisma.tier.findMany({
     where: {
       league: {
@@ -34,7 +42,19 @@ export default async function (prisma: PrismaClient, args: Record<string, string
       },
     },
   });
-  const totalRequiredTeams = tiers.reduce((total, tier) => total + tier.size * federationsCount, 0);
+  const totalRequiredTeams = federations.reduce((total, federation) => {
+    const federationTotal = tiers.reduce((tierTotal, tier) => {
+      const sizing = Constants.resolveCompetitionSizing({
+        leagueSlug: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        federationSlug: federation.slug as Constants.FederationSlug,
+        tierSlug: tier.slug as Constants.TierSlug,
+        defaultSize: tier.size,
+        defaultGroupSize: tier.groupSize,
+      });
+      return tierTotal + Math.max(0, sizing.size);
+    }, 0);
+    return total + federationTotal;
+  }, 0);
 
   // run the scrapers
   await scrape('teams', {

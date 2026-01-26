@@ -219,6 +219,7 @@ export enum LeagueSlug {
   ESPORTS_CIRCUIT = 'esc',
   ESPORTS_LEAGUE = 'esl',
   ESPORTS_LEAGUE_CUP = 'eslc',
+  ESPORTS_PRO_LEAGUE = 'espl',
   ESPORTS_WORLD_CUP = 'eswc',
 }
 
@@ -449,8 +450,8 @@ export enum TierSlug {
   LEAGUE_MAIN_PLAYOFFS = 'league:main:playoffs',
   LEAGUE_OPEN = 'league:open',
   LEAGUE_OPEN_PLAYOFFS = 'league:open:playoffs',
-  LEAGUE_PREMIER = 'league:premier',
-  LEAGUE_PREMIER_PLAYOFFS = 'league:premier:playoffs',
+  LEAGUE_PRO = 'league:pro',
+  LEAGUE_PRO_PLAYOFFS = 'league:pro:playoffs',
 }
 
 /**
@@ -624,7 +625,7 @@ export const Awards = [
   },
   {
     on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+    target: TierSlug.LEAGUE_PRO_PLAYOFFS,
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
     start: Zones.LEAGUE_PROMOTION_AUTO_START,
@@ -728,7 +729,7 @@ export const EloRatings: Partial<Record<TierSlug, number>> = {
   [TierSlug.LEAGUE_INTERMEDIATE]: 1250,
   [TierSlug.LEAGUE_MAIN]: 1500,
   [TierSlug.LEAGUE_ADVANCED]: 1750,
-  [TierSlug.LEAGUE_PREMIER]: 2000,
+  [TierSlug.LEAGUE_PRO]: 2000,
 };
 
 /**
@@ -793,8 +794,8 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: 'Main Division Playoffs',
   [TierSlug.LEAGUE_ADVANCED]: 'Advanced Division',
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'Advanced Division Playoffs',
-  [TierSlug.LEAGUE_PREMIER]: 'Premier Division',
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: 'Premier Division Playoffs',
+  [TierSlug.LEAGUE_PRO]: 'ESL Pro League',
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: 'ESL Pro League Playoffs',
 };
 
 /** @constant */
@@ -884,7 +885,74 @@ export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = 
     6: 'auto', // saturday
     0: 'auto', // sunday
   },
+  [LeagueSlug.ESPORTS_PRO_LEAGUE]: {
+    5: 20, // friday
+    6: 'auto', // saturday
+    0: 'auto', // sunday
+  },
 };
+
+type CompetitionSizing = {
+  size: number;
+  groupSize?: number | null;
+};
+
+export const LeagueCompetitionSizing: Record<
+  LeagueSlug,
+  Partial<Record<FederationSlug, Partial<Record<TierSlug, CompetitionSizing>>>>
+> = {
+  [LeagueSlug.ESPORTS_LEAGUE]: {
+    [FederationSlug.ESPORTS_ASIA]: {
+      [TierSlug.LEAGUE_OPEN]: { size: 30, groupSize: 30 },
+      [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { size: 8 },
+      [TierSlug.LEAGUE_INTERMEDIATE]: { size: 0 },
+      [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: { size: 0 },
+      [TierSlug.LEAGUE_MAIN]: { size: 0 },
+      [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { size: 0 },
+      [TierSlug.LEAGUE_ADVANCED]: { size: 20, groupSize: 20 },
+      [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { size: 8 },
+    },
+    [FederationSlug.ESPORTS_OCE]: {
+      [TierSlug.LEAGUE_OPEN]: { size: 20, groupSize: 20 },
+      [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { size: 8 },
+      [TierSlug.LEAGUE_INTERMEDIATE]: { size: 0 },
+      [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: { size: 0 },
+      [TierSlug.LEAGUE_MAIN]: { size: 0 },
+      [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { size: 0 },
+      [TierSlug.LEAGUE_ADVANCED]: { size: 16, groupSize: 16 },
+      [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { size: 8 },
+    },
+  },
+  [LeagueSlug.ESPORTS_PRO_LEAGUE]: {
+    [FederationSlug.ESPORTS_WORLD]: {
+      [TierSlug.LEAGUE_PRO]: { size: 32, groupSize: 4 },
+      [TierSlug.LEAGUE_PRO_PLAYOFFS]: { size: 16 },
+    },
+  },
+};
+
+export function resolveCompetitionSizing({
+  leagueSlug,
+  federationSlug,
+  tierSlug,
+  defaultSize,
+  defaultGroupSize,
+}: {
+  leagueSlug: LeagueSlug;
+  federationSlug: FederationSlug;
+  tierSlug: TierSlug;
+  defaultSize: number;
+  defaultGroupSize?: number | null;
+}) {
+  const sizing = LeagueCompetitionSizing[leagueSlug]?.[federationSlug]?.[tierSlug];
+  return {
+    size: sizing?.size ?? defaultSize,
+    groupSize:
+      sizing && Object.prototype.hasOwnProperty.call(sizing, 'groupSize')
+        ? sizing.groupSize
+        : defaultGroupSize,
+  };
+}
 
 /**
  * Player wages sorted by tiers.
@@ -900,7 +968,7 @@ export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = 
  */
 export const PlayerWages = {
   [TierSlug.LEAGUE_ADVANCED]: [{ percent: 20, low: 1_000, high: 5_000, multiplier: 2 }],
-  [TierSlug.LEAGUE_PREMIER]: [
+  [TierSlug.LEAGUE_PRO]: [
     { percent: 20, low: 5_000, high: 10_000, multiplier: 2 },
     { percent: 80, low: 10_000, high: 15_000, multiplier: 4 },
     { percent: 20, low: 15_000, high: 20_000, multiplier: 6 },
@@ -921,7 +989,7 @@ export const Prestige = [
   TierSlug.LEAGUE_INTERMEDIATE,
   TierSlug.LEAGUE_MAIN,
   TierSlug.LEAGUE_ADVANCED,
-  TierSlug.LEAGUE_PREMIER,
+  TierSlug.LEAGUE_PRO,
 ];
 
 /**
@@ -948,8 +1016,8 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_ADVANCED]: { total: 70_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_PREMIER]: { total: 200_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: { total: 0, distribution: [] },
+  [TierSlug.LEAGUE_PRO]: { total: 200_000, distribution: [50, 35, 15] },
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
 };
 
 /**
@@ -1006,7 +1074,7 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: [3, 3],
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: [3, 3],
 };
 
 /**
@@ -1144,7 +1212,7 @@ export const UserOfferSettings = {
       { years: 2, weight: 80 },
       { years: 3, weight: 20 },
     ],
-    [TierSlug.LEAGUE_PREMIER]: [
+    [TierSlug.LEAGUE_PRO]: [
       { years: 2, weight: 50 },
       { years: 3, weight: 20 },
       { years: 4, weight: 15 },
@@ -1158,7 +1226,7 @@ export const UserOfferSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: { faceit: 0.6, league: 0.4 },
     [TierSlug.LEAGUE_MAIN]: { faceit: 0.2, league: 0.8 },
     [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
-    [TierSlug.LEAGUE_PREMIER]: { faceit: 0.05, league: 0.95 },
+    [TierSlug.LEAGUE_PRO]: { faceit: 0.05, league: 0.95 },
   },
 
   ROLE_OFFER_TUNING: {
@@ -1191,14 +1259,14 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.95,
     [TierSlug.LEAGUE_MAIN]: 1.00,
     [TierSlug.LEAGUE_ADVANCED]: 1.05,
-    [TierSlug.LEAGUE_PREMIER]: 1.10,
+    [TierSlug.LEAGUE_PRO]: 1.10,
   },
   BENCH_PBX_BY_TIER: {
     [TierSlug.LEAGUE_OPEN]: 30,
     [TierSlug.LEAGUE_INTERMEDIATE]: 35,
     [TierSlug.LEAGUE_MAIN]: 50,
     [TierSlug.LEAGUE_ADVANCED]: 65,
-    [TierSlug.LEAGUE_PREMIER]: 80,
+    [TierSlug.LEAGUE_PRO]: 80,
   },
 
   // Kick evaluation (early termination)
@@ -1209,14 +1277,14 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.75,
     [TierSlug.LEAGUE_MAIN]: 0.80,
     [TierSlug.LEAGUE_ADVANCED]: 0.90,
-    [TierSlug.LEAGUE_PREMIER]: 0.95,
+    [TierSlug.LEAGUE_PRO]: 0.95,
   },
   KICK_PBX_BY_TIER: {
     [TierSlug.LEAGUE_OPEN]: 50,
     [TierSlug.LEAGUE_INTERMEDIATE]: 20,
     [TierSlug.LEAGUE_MAIN]: 25,
     [TierSlug.LEAGUE_ADVANCED]: 30,
-    [TierSlug.LEAGUE_PREMIER]: 45,
+    [TierSlug.LEAGUE_PRO]: 45,
   },
 
   // Extension
@@ -1227,7 +1295,7 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 1.00,
     [TierSlug.LEAGUE_MAIN]: 1.05,
     [TierSlug.LEAGUE_ADVANCED]: 1.10,
-    [TierSlug.LEAGUE_PREMIER]: 1.15,
+    [TierSlug.LEAGUE_PRO]: 1.15,
   },
   EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER: 85,
   EXTENSION_PBX_BAD_TEAM_GOOD_PLAYER: 45,

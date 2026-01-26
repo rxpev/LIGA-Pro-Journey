@@ -1,0 +1,3 @@
+ALTER TABLE "Competition"
+ADD COLUMN "size" INTEGER,
+ADD COLUMN "groupSize" INTEGER;

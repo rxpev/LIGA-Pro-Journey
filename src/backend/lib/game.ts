@@ -411,7 +411,12 @@ export class Server {
     }
 
     // override if playoff match
-    if (!this.match.competition.tier.groupSize) {
+    const groupSize =
+      this.match.competition.groupSize !== null && this.match.competition.groupSize !== undefined
+        ? this.match.competition.groupSize
+        : this.match.competition.tier.groupSize;
+
+    if (!groupSize) {
       return true;
     }
 

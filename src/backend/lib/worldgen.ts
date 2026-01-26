@@ -66,12 +66,32 @@ export async function createCompetitions() {
       const tier = tiers.find((tier) => tier.slug === item.tierSlug);
       return Promise.all(
         tier.league.federations.map(async (federation) => {
+          const sizing = Constants.resolveCompetitionSizing({
+            leagueSlug: tier.league.slug as Constants.LeagueSlug,
+            federationSlug: federation.slug as Constants.FederationSlug,
+            tierSlug: tier.slug as Constants.TierSlug,
+            defaultSize: tier.size,
+            defaultGroupSize: tier.groupSize,
+          });
+
+          if (sizing.size <= 0) {
+            Engine.Runtime.Instance.log.debug(
+              'Skipping %s - %s (size=%d)',
+              federation.name,
+              tier.name,
+              sizing.size,
+            );
+            return Promise.resolve();
+          }
+
           // collect teams and create the competition
           const teams = await Autofill.parse(item, tier, federation);
           const competition = await DatabaseClient.prisma.competition.create({
             data: {
               status: Constants.CompetitionStatus.SCHEDULED,
               season: profile.season,
+              size: sizing.size,
+              groupSize: sizing.groupSize ?? null,
               federation: {
                 connect: {
                   id: federation.id,
@@ -1597,7 +1617,11 @@ async function computeTeamStandingScore(profile: any) {
         in: [Constants.CompetitionStatus.STARTED, Constants.CompetitionStatus.COMPLETED],
       },
       tier: {
-        league: { slug: Constants.LeagueSlug.ESPORTS_LEAGUE },
+        league: {
+          slug: {
+            in: [Constants.LeagueSlug.ESPORTS_LEAGUE, Constants.LeagueSlug.ESPORTS_PRO_LEAGUE],
+          },
+        },
       },
       competitors: {
         some: { teamId: profile.teamId },
@@ -1717,7 +1741,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const idxInter = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_INTERMEDIATE);
   const idxMain = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_MAIN);
   const idxAdv = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_ADVANCED);
-  const idxPrem = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PREMIER);
+  const idxPro = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PRO);
 
   // Current tier from team; if teamless fall back to last stint tier; otherwise Open.
   const currentTierIdx =
@@ -1815,14 +1839,14 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   // Always: lateral at baseline
   addTier(baselineTierIdx);
 
-  // Premier: always premier offers 
-  if (currentTierIdx >= idxPrem) addTier(idxPrem);
+  // Pro League: always pro league offers
+  if (currentTierIdx >= idxPro) addTier(idxPro);
 
   // Upward movement rules
   // - If baseline/current >= MAIN: allow MAIN lateral + occasional ADVANCED
-  // - If baseline/current >= ADVANCED: allow ADVANCED lateral + rare low-ranked PREMIER
+  // - If baseline/current >= ADVANCED: allow ADVANCED lateral + rare low-ranked PRO LEAGUE
   // - If current tier OPEN/INTERMEDIATE: allow MAIN only on exceptional performance
-  let premierLowRankOnly = false;
+  let proLowRankOnly = false;
 
   const isLowTier = currentTierIdx <= idxInter;
   if (isLowTier) {
@@ -1832,10 +1856,10 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     if (baselineTierIdx >= idxMain && baselineTierIdx < idxAdv) {
       if (leagueSignal >= 0.75) addTier(idxAdv);
     }
-    if (baselineTierIdx >= idxAdv && baselineTierIdx < idxPrem) {
+    if (baselineTierIdx >= idxAdv && baselineTierIdx < idxPro) {
       if (leagueSignal >= 0.85) {
-        addTier(idxPrem);
-        premierLowRankOnly = true;
+        addTier(idxPro);
+        proLowRankOnly = true;
       }
     }
   }
@@ -1848,12 +1872,12 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const eligibleTierSlugs = eligibleTierIdxs.map((i) => Constants.Prestige[i]);
 
   Engine.Runtime.Instance.log.debug(
-    "PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s premierLowRankOnly=%s",
+    "PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s proLowRankOnly=%s",
     Constants.Prestige[currentTierIdx],
     Constants.Prestige[recentPeakTierIdx],
     Constants.Prestige[baselineTierIdx],
     eligibleTierSlugs.join(","),
-    premierLowRankOnly ? "true" : "false",
+    proLowRankOnly ? "true" : "false",
   );
 
   try {
@@ -1955,7 +1979,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       [TierSlug.LEAGUE_INTERMEDIATE]: 28,
       [TierSlug.LEAGUE_MAIN]: 18,
       [TierSlug.LEAGUE_ADVANCED]: 12,
-      [TierSlug.LEAGUE_PREMIER]: 8,
+      [TierSlug.LEAGUE_PRO]: 8,
     };
 
     const base = basePbxByTier[pickedTierSlug] ?? 12;
@@ -1965,7 +1989,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     pbx *= starterMult;
     pbx *= listedMult;
 
-    // Teamless Advanced/Premier scouting should be a bit rarer than contracted scouting
+    // Teamless Advanced/Pro League scouting should be a bit rarer than contracted scouting
     if (isTeamless) pbx *= 0.85;
 
     pbx *= tuning.pbxMultLeague;
@@ -2014,9 +2038,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     // Cross-federation chance depends on user's level (baseline tier)
     // - Open/Intermediate/Main: never
     // - Advanced: 5%
-    // - Premier: 10%
+    // - Pro League: 10%
     const crossFedPbx =
-      pickedTierIdx >= idxPrem ? 10 :
+      pickedTierIdx >= idxPro ? 10 :
         pickedTierIdx >= idxAdv ? 5 :
           0;
 
@@ -2057,7 +2081,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     let pool = teams;
 
-    if (premierLowRankOnly && pickedTierIdx === idxPrem) {
+    if (proLowRankOnly && pickedTierIdx === idxPro) {
       const sortedAsc = [...teams].sort((a, b) => (a.elo ?? 0) - (b.elo ?? 0));
       const bottomCount = Math.max(3, Math.floor(sortedAsc.length * 0.30));
       pool = sortedAsc.slice(0, bottomCount);
@@ -3340,7 +3364,9 @@ export async function syncTiers() {
       season: profile.season,
       tier: {
         league: {
-          slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
+          slug: {
+            in: [Constants.LeagueSlug.ESPORTS_LEAGUE, Constants.LeagueSlug.ESPORTS_PRO_LEAGUE],
+          },
         },
       },
     },
@@ -3482,9 +3508,15 @@ export async function onCompetitionStart(entry: Calendar) {
     });
   }
 
+  const competitionSize = competition.size ?? competition.tier.size;
+  const competitionGroupSize =
+    competition.groupSize !== null && competition.groupSize !== undefined
+      ? competition.groupSize
+      : competition.tier.groupSize;
+
   // create and start the tournament
-  const tournament = new Tournament(competition.tier.size, {
-    groupSize: competition.tier.groupSize,
+  const tournament = new Tournament(competitionSize, {
+    groupSize: competitionGroupSize,
     meetTwice: false,
     short: true,
   });
@@ -3632,7 +3664,12 @@ export async function onMatchdayNPC(entry: Calendar) {
   }
 
   // are draws allowed?
-  if (!match.competition.tier.groupSize) {
+  const competitionGroupSize =
+    match.competition.groupSize !== null && match.competition.groupSize !== undefined
+      ? match.competition.groupSize
+      : match.competition.tier.groupSize;
+
+  if (!competitionGroupSize) {
     simulator.allowDraw = false;
   }
 

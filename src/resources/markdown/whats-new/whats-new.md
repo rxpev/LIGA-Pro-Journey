@@ -50,7 +50,7 @@ _Please note the above docs are still a work-in-progress!_
 
 League divisions now have a definitive way to crown champions.
 
-Playoffs have been introduced for all divisions, from Open to Premier. The top three teams from these playoffs earn a promotion to the next division, while the 4th-placed team stays to fight another season in their current division.
+Playoffs have been introduced for all divisions, from Open to Advanced. Top teams from these playoffs earn promotion or qualification to the next level, while lower finishers stay to fight another season in their current division.
 
 ## Transfer Market
 
