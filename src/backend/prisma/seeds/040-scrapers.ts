@@ -5,7 +5,7 @@
  */
 import log from 'electron-log';
 import { PrismaClient } from '@prisma/client';
-import { Constants } from '@liga/shared';
+import { Constants, Util } from '@liga/shared';
 import { scrape } from 'cli/scraper';
 
 /**
@@ -26,15 +26,42 @@ export default async function (prisma: PrismaClient, args: Record<string, string
 
   // figure out the total number of teams to scrape by
   // adding up the size of every federation's tier
-  const federationsCount = await prisma.federation.count();
-  const tiers = await prisma.tier.findMany({
+  const league = await prisma.league.findFirst({
     where: {
-      league: {
-        slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
-      },
+      slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
+    },
+    include: {
+      federations: true,
+      tiers: true,
     },
   });
-  const totalRequiredTeams = tiers.reduce((total, tier) => total + tier.size * federationsCount, 0);
+
+  if (!league) {
+    log.warn('League not found. Skipping.');
+    return Promise.resolve();
+  }
+
+  const totalRequiredTeams = league.federations.reduce((total, federation) => {
+    const federationTotal = league.tiers.reduce((tierTotal, tier) => {
+      if (
+        !Util.isLeagueTierEnabledForFederation(
+          tier.slug as Constants.TierSlug,
+          federation.slug as Constants.FederationSlug,
+        )
+      ) {
+        return tierTotal;
+      }
+
+      const tierSize = Util.getLeagueTierSize(
+        tier.slug as Constants.TierSlug,
+        federation.slug as Constants.FederationSlug,
+        tier.size,
+      );
+      return tierTotal + tierSize;
+    }, 0);
+
+    return total + federationTotal;
+  }, 0);
 
   // run the scrapers
   await scrape('teams', {

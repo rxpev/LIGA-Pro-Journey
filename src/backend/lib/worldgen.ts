@@ -66,6 +66,16 @@ export async function createCompetitions() {
       const tier = tiers.find((tier) => tier.slug === item.tierSlug);
       return Promise.all(
         tier.league.federations.map(async (federation) => {
+          if (
+            tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE &&
+            !Util.isLeagueTierEnabledForFederation(
+              tier.slug as Constants.TierSlug,
+              federation.slug as Constants.FederationSlug,
+            )
+          ) {
+            return Promise.resolve();
+          }
+
           // collect teams and create the competition
           const teams = await Autofill.parse(item, tier, federation);
           const competition = await DatabaseClient.prisma.competition.create({
@@ -2673,7 +2683,7 @@ export async function recordMatchResults() {
   const allMatches = await DatabaseClient.prisma.match.findMany({
     where: {
       date: today.toISOString(),
-      matchType: {not: "FACEIT_PUG"},
+      matchType: { not: "FACEIT_PUG" },
       status: Constants.MatchStatus.COMPLETED,
     },
     include: {
@@ -3483,12 +3493,26 @@ export async function onCompetitionStart(entry: Calendar) {
   }
 
   // create and start the tournament
-  const tournament = new Tournament(competition.tier.size, {
+  const tierSize =
+    competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+      ? Util.getLeagueTierSize(
+          competition.tier.slug as Constants.TierSlug,
+          competition.federation.slug as Constants.FederationSlug,
+          competition.tier.size,
+        )
+      : competition.tier.size;
+  const competitorCount = competition.competitors.length;
+  const tournamentSize = Math.min(tierSize, competitorCount);
+  const tournament = new Tournament(tournamentSize, {
     groupSize: competition.tier.groupSize,
     meetTwice: false,
     short: true,
   });
-  tournament.addCompetitors(shuffle(competition.competitors).map((competitor) => competitor.id));
+  tournament.addCompetitors(
+    shuffle(competition.competitors)
+      .slice(0, tournamentSize)
+      .map((competitor) => competitor.id),
+  );
   tournament.start();
 
   // collect map pool

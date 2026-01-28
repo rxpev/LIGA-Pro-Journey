@@ -1041,6 +1041,61 @@ export const TierZones: Record<string | 'default', number[][]> = {
 };
 
 /**
+ * League tier sizes per federation.
+ *
+ * @constant
+ */
+export const LeagueTierSizesByFederation: Record<
+  FederationSlug,
+  Partial<Record<TierSlug, number>>
+> = {
+  [FederationSlug.ESPORTS_AMERICAS]: {
+    [TierSlug.LEAGUE_OPEN]: 40,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 30,
+    [TierSlug.LEAGUE_MAIN]: 20,
+    [TierSlug.LEAGUE_ADVANCED]: 20,
+  },
+  [FederationSlug.ESPORTS_ASIA]: {
+    [TierSlug.LEAGUE_OPEN]: 30,
+    [TierSlug.LEAGUE_ADVANCED]: 20,
+  },
+  [FederationSlug.ESPORTS_EUROPA]: {
+    [TierSlug.LEAGUE_OPEN]: 40,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 30,
+    [TierSlug.LEAGUE_MAIN]: 20,
+    [TierSlug.LEAGUE_ADVANCED]: 20,
+  },
+  [FederationSlug.ESPORTS_OCE]: {
+    [TierSlug.LEAGUE_OPEN]: 20,
+    [TierSlug.LEAGUE_ADVANCED]: 16,
+  },
+  [FederationSlug.ESPORTS_WORLD]: {},
+};
+
+/**
+ * League tiers disabled by federation.
+ *
+ * @constant
+ */
+export const LeagueTierDisabledByFederation: Record<FederationSlug, TierSlug[]> = {
+  [FederationSlug.ESPORTS_AMERICAS]: [],
+  [FederationSlug.ESPORTS_ASIA]: [
+    TierSlug.LEAGUE_INTERMEDIATE,
+    TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+    TierSlug.LEAGUE_MAIN,
+    TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  ],
+  [FederationSlug.ESPORTS_EUROPA]: [],
+  [FederationSlug.ESPORTS_OCE]: [
+    TierSlug.LEAGUE_INTERMEDIATE,
+    TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+    TierSlug.LEAGUE_MAIN,
+    TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  ],
+  [FederationSlug.ESPORTS_WORLD]: [],
+};
+
+/**
  * Transfer settings when accepting transfer offers.
  *
  * @constant

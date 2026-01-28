@@ -6,7 +6,7 @@
 import log from 'electron-log';
 import { flatten, groupBy } from 'lodash';
 import { PrismaClient } from '@prisma/client';
-import { Constants, Bot } from '@liga/shared';
+import { Constants, Bot, Util } from '@liga/shared';
 
 /**
  * The main seeder.
@@ -44,6 +44,11 @@ export default async function (prisma: PrismaClient) {
       },
     },
   });
+  const tiersSorted = [...tiers].sort(
+    (a, b) =>
+      Constants.Prestige.indexOf(a.slug as Constants.TierSlug) -
+      Constants.Prestige.indexOf(b.slug as Constants.TierSlug),
+  );
 
   // group the teams by federation
   // and build the transaction
@@ -51,11 +56,32 @@ export default async function (prisma: PrismaClient) {
   const transaction = Object.keys(groups)
     .map((slug) => groups[slug])
     .map((federationTeams) => {
+      const federationSlug = federationTeams[0]?.country.continent.federation
+        .slug as Constants.FederationSlug;
+      let offset = 0;
+
       // chunk the teams into the different levels of prestige
-      const chunks = tiers.map((tier, tierIdx) => ({
-        prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
-        teams: federationTeams.slice(tier.size * tierIdx, tier.size * tierIdx + tier.size),
-      }));
+      const chunks = tiersSorted.map((tier) => {
+        const enabled = Util.isLeagueTierEnabledForFederation(
+          tier.slug as Constants.TierSlug,
+          federationSlug,
+        );
+        const tierSize = enabled
+          ? Util.getLeagueTierSize(
+              tier.slug as Constants.TierSlug,
+              federationSlug,
+              tier.size,
+            )
+          : 0;
+        const sliceStart = offset;
+        const sliceEnd = offset + tierSize;
+        offset = sliceEnd;
+
+        return {
+          prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
+          teams: federationTeams.slice(sliceStart, sliceEnd),
+        };
+      });
 
       log.info(
         chunks.map((chunk) => ({ prestige: chunk.prestige, totalTeams: chunk.teams.length })),

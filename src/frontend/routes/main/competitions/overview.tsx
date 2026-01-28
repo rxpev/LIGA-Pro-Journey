@@ -141,9 +141,7 @@ export default function () {
             <tbody>
               <tr>
                 <td colSpan={2}>
-                  {competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD
-                    ? `${competition.tier.league.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`
-                    : `${competition.federation.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`}
+                  {`${Constants.IdiomaticTier[competition.tier.slug]} · ${competition.federation.name}`}
                 </td>
               </tr>
             </tbody>

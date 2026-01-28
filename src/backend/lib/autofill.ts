@@ -9,7 +9,7 @@ import log from 'electron-log';
 import DatabaseClient from './database-client';
 import { differenceBy, flatten, xorBy } from 'lodash';
 import { Prisma, Team } from '@prisma/client';
-import { Constants, Eagers } from '@liga/shared';
+import { Constants, Eagers, Util } from '@liga/shared';
 
 /**
  * Autofill syntax action types.
@@ -1021,6 +1021,15 @@ export async function parse(
   tier: Prisma.TierGetPayload<typeof Eagers.tier>,
   federation: Prisma.FederationGetPayload<unknown>,
 ) {
+  const tierSize =
+    tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+      ? Util.getLeagueTierSize(
+          tier.slug as Constants.TierSlug,
+          federation.slug as Constants.FederationSlug,
+          tier.size,
+        )
+      : tier.size;
+
   // fill competitors list using this autofill item's entries
   const competitors = [] as Array<Team>;
 
@@ -1051,11 +1060,13 @@ export async function parse(
     .map((entry) =>
       entry.start < 0
         ? Math.abs(entry.start)
-        : (entry.end || tier.size) - Math.max(0, entry.start - 1),
+        : (entry.end || tierSize) - Math.max(0, entry.start - 1),
     )
     .reduce((a, b) => a + b, 0);
 
-  if (!quota || competitors.length < quota) {
+  const requiredCount = Math.max(quota, tierSize);
+
+  if (!requiredCount || competitors.length < requiredCount) {
     let fallbackList: Awaited<ReturnType<typeof handleIncludeAction>>;
 
     // use the standard include action logic if the
@@ -1069,7 +1080,7 @@ export async function parse(
     );
 
     // if that still doesn't meet the quota, then use the default fallback
-    if (!fallbackList.length || fallbackList.length < quota - competitors.length) {
+    if (!fallbackList.length || fallbackList.length < requiredCount - competitors.length) {
       fallbackList = flatten(
         await Promise.all(
           item.entries
@@ -1086,9 +1097,9 @@ export async function parse(
     'Autofilled %s - %s with %d teams',
     federation.name,
     tier.name,
-    competitors.slice(0, tier.size).length,
+    competitors.slice(0, tierSize).length,
   );
 
   // return our payload
-  return Promise.resolve(competitors.slice(0, tier.size));
+  return Promise.resolve(competitors.slice(0, tierSize));
 }

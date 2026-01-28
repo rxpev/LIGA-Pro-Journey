@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Constants, Eagers } from '@liga/shared';
+import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
@@ -145,10 +145,33 @@ export default function () {
    *
    * In both cases we auto-load the corresponding competition.
    */
+
+  const selectedFederation = React.useMemo(
+    () => federations.find((federation) => federation.id === selectedFederationId),
+    [federations, selectedFederationId],
+  );
+
+  const visibleTiers = React.useMemo(() => {
+    if (!selectedFederation) {
+      return tiers;
+    }
+
+    return tiers.filter((tier) => {
+      if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_LEAGUE) {
+        return true;
+      }
+
+      return Util.isLeagueTierEnabledForFederation(
+        tier.slug as Constants.TierSlug,
+        selectedFederation.slug as Constants.FederationSlug,
+      );
+    });
+  }, [tiers, selectedFederation]);
+
   React.useEffect(() => {
     if (!state.profile) return;
     if (selectedFederationId < 0) return;
-    if (!tiers.length) return;
+    if (!visibleTiers.length) return;
 
     // Don't override user choice
     if (selectedTierId > 0 && competition) return;
@@ -158,7 +181,7 @@ export default function () {
     if (state.profile.teamId && state.profile.team) {
       // Manager-style: use the team's current league tier.
       const desiredSlug = Constants.Prestige[state.profile.team.tier];
-      defaultTier = tiers.find((tier) => tier.slug === desiredSlug);
+      defaultTier = visibleTiers.find((tier) => tier.slug === desiredSlug);
     } else {
       // Player-style (teamless): pick the highest league tier in this federation.
       const preferredOrder = [
@@ -171,8 +194,8 @@ export default function () {
 
       defaultTier =
         preferredOrder
-          .map((slug) => tiers.find((tier) => tier.slug === slug))
-          .find(Boolean) || tiers[0];
+          .map((slug) => visibleTiers.find((tier) => tier.slug === slug))
+          .find(Boolean) || visibleTiers[0];
     }
 
     if (!defaultTier) return;
@@ -195,7 +218,7 @@ export default function () {
           setCompetition(result);
         }
       });
-  }, [state.profile, selectedFederationId, tiers, selectedTierId, competition]);
+  }, [state.profile, selectedFederationId, visibleTiers, selectedTierId, competition]);
 
   // Build seasons dropdown data
   const seasons = React.useMemo(
@@ -264,7 +287,7 @@ export default function () {
                   <option disabled value={-1}>
                     {t('main.competitions.select')}
                   </option>
-                  {tiers.map((tier) => (
+                  {visibleTiers.map((tier) => (
                     <option key={tier.id} value={tier.id}>
                       {tier.league.name} {Constants.IdiomaticTier[tier.slug]}
                     </option>

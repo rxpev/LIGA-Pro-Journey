@@ -20,7 +20,7 @@ type LeagueSeedData = Prisma.LeagueCreateInput & {
  */
 const data: Array<LeagueSeedData> = [
   {
-    name: 'Electronic Sports League',
+    name: 'ESEA',
     slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
     startOffsetDays: 60,
     federations: [
@@ -33,7 +33,7 @@ const data: Array<LeagueSeedData> = [
       {
         name: startCase(Constants.TierSlug.LEAGUE_OPEN),
         slug: Constants.TierSlug.LEAGUE_OPEN,
-        size: 20,
+        size: 40,
         groupSize: 20,
         triggerTierSlug: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
       },
@@ -46,7 +46,7 @@ const data: Array<LeagueSeedData> = [
       {
         name: startCase(Constants.TierSlug.LEAGUE_INTERMEDIATE),
         slug: Constants.TierSlug.LEAGUE_INTERMEDIATE,
-        size: 20,
+        size: 30,
         groupSize: 20,
         triggerTierSlug: Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
       },
@@ -98,7 +98,7 @@ const data: Array<LeagueSeedData> = [
     ],
   },
   {
-    name: 'Electronic Sports League',
+    name: 'ESEA',
     slug: Constants.LeagueSlug.ESPORTS_LEAGUE_CUP,
     startOffsetDays: 90,
     federations: [

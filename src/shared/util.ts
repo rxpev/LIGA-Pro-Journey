@@ -221,6 +221,38 @@ export function parseCupRounds(round: number, total: number) {
 }
 
 /**
+ * Returns the league tier size for the given federation,
+ * falling back to the provided default when no override exists.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @param fallback        The fallback size.
+ * @function
+ */
+export function getLeagueTierSize(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+  fallback: number,
+) {
+  return Constants.LeagueTierSizesByFederation[federationSlug]?.[tierSlug] ?? fallback;
+}
+
+/**
+ * Returns whether a league tier should be available in a federation.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @function
+ */
+export function isLeagueTierEnabledForFederation(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+) {
+  const disabled = Constants.LeagueTierDisabledByFederation[federationSlug] ?? [];
+  return !disabled.includes(tierSlug);
+}
+
+/**
  * Loads user reported issues.
  *
  * @param issues The issues string.

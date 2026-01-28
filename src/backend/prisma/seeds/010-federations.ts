@@ -20,22 +20,22 @@ type ContinentCode = keyof typeof continents;
  */
 export const data = [
   {
-    name: 'Electronic Sports Americas',
+    name: 'Americas',
     slug: Constants.FederationSlug.ESPORTS_AMERICAS,
     continents: ['an', 'na', 'sa'],
   },
   {
-    name: 'Electronic Sports Europa',
+    name: 'Europe',
     slug: Constants.FederationSlug.ESPORTS_EUROPA,
     continents: ['af', 'eu'],
   },
   {
-    name: 'Electronic Sports Asia',
+    name: 'Asia',
     slug: Constants.FederationSlug.ESPORTS_ASIA,
     continents: ['as'],
   },
   {
-    name: 'Electronic Sports Oceania',
+    name: 'Oceania',
     slug: Constants.FederationSlug.ESPORTS_OCE,
     continents: ['oc'],
   },
