@@ -616,14 +616,6 @@ export const Awards = [
   },
   {
     on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
-    type: AwardType.PROMOTION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: Zones.LEAGUE_PROMOTION_AUTO_START,
-    end: Zones.LEAGUE_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
     target: TierSlug.LEAGUE_PREMIER_PLAYOFFS,
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
@@ -1041,6 +1033,146 @@ export const TierZones: Record<string | 'default', number[][]> = {
 };
 
 /**
+ * League tier zones per federation.
+ *
+ * @constant
+ */
+export const LeagueTierZonesByFederation: Record<
+  FederationSlug,
+  Partial<Record<TierSlug, number[][]>>
+> = {
+  [FederationSlug.ESPORTS_AMERICAS]: {
+    [TierSlug.LEAGUE_OPEN]: [
+      [0, 0],
+      [1, 16],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_INTERMEDIATE]: [
+      [0, 0],
+      [1, 8],
+      [27, 30],
+    ],
+    [TierSlug.LEAGUE_MAIN]: [
+      [0, 0],
+      [1, 8],
+      [17, 20],
+    ],
+    [TierSlug.LEAGUE_ADVANCED]: [
+      [0, 0],
+      [1, 16],
+      [17, 20],
+    ],
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [
+      [1, 8],
+      [0, 0],
+      [0, 0],
+    ],
+  },
+  [FederationSlug.ESPORTS_ASIA]: {
+    [TierSlug.LEAGUE_OPEN]: [
+      [0, 0],
+      [1, 8],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED]: [
+      [0, 0],
+      [1, 8],
+      [19, 20],
+    ],
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
+      [1, 2],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [
+      [1, 3],
+      [0, 0],
+      [0, 0],
+    ],
+  },
+  [FederationSlug.ESPORTS_EUROPA]: {
+    [TierSlug.LEAGUE_OPEN]: [
+      [0, 0],
+      [1, 16],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_INTERMEDIATE]: [
+      [0, 0],
+      [1, 8],
+      [27, 30],
+    ],
+    [TierSlug.LEAGUE_MAIN]: [
+      [0, 0],
+      [1, 8],
+      [17, 20],
+    ],
+    [TierSlug.LEAGUE_ADVANCED]: [
+      [0, 0],
+      [1, 16],
+      [17, 20],
+    ],
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [
+      [1, 4],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [
+      [1, 8],
+      [0, 0],
+      [0, 0],
+    ],
+  },
+  [FederationSlug.ESPORTS_OCE]: {
+    [TierSlug.LEAGUE_OPEN]: [
+      [0, 0],
+      [1, 8],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED]: [
+      [0, 0],
+      [1, 8],
+      [15, 16],
+    ],
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
+      [1, 2],
+      [0, 0],
+      [0, 0],
+    ],
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [
+      [1, 1],
+      [0, 0],
+      [0, 0],
+    ],
+  },
+  [FederationSlug.ESPORTS_WORLD]: {},
+};
+
+/**
  * League tier sizes per federation.
  *
  * @constant
@@ -1054,20 +1186,32 @@ export const LeagueTierSizesByFederation: Record<
     [TierSlug.LEAGUE_INTERMEDIATE]: 30,
     [TierSlug.LEAGUE_MAIN]: 20,
     [TierSlug.LEAGUE_ADVANCED]: 20,
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 16,
+    [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_MAIN_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 16,
   },
   [FederationSlug.ESPORTS_ASIA]: {
     [TierSlug.LEAGUE_OPEN]: 30,
     [TierSlug.LEAGUE_ADVANCED]: 20,
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 8,
   },
   [FederationSlug.ESPORTS_EUROPA]: {
     [TierSlug.LEAGUE_OPEN]: 40,
     [TierSlug.LEAGUE_INTERMEDIATE]: 30,
     [TierSlug.LEAGUE_MAIN]: 20,
     [TierSlug.LEAGUE_ADVANCED]: 20,
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 16,
+    [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_MAIN_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 16,
   },
   [FederationSlug.ESPORTS_OCE]: {
     [TierSlug.LEAGUE_OPEN]: 20,
     [TierSlug.LEAGUE_ADVANCED]: 16,
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 8,
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 8,
   },
   [FederationSlug.ESPORTS_WORLD]: {},
 };
@@ -1078,21 +1222,34 @@ export const LeagueTierSizesByFederation: Record<
  * @constant
  */
 export const LeagueTierDisabledByFederation: Record<FederationSlug, TierSlug[]> = {
-  [FederationSlug.ESPORTS_AMERICAS]: [],
+  [FederationSlug.ESPORTS_AMERICAS]: [
+    TierSlug.LEAGUE_PREMIER,
+    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+  ],
   [FederationSlug.ESPORTS_ASIA]: [
     TierSlug.LEAGUE_INTERMEDIATE,
     TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
     TierSlug.LEAGUE_MAIN,
     TierSlug.LEAGUE_MAIN_PLAYOFFS,
+    TierSlug.LEAGUE_PREMIER,
+    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
   ],
-  [FederationSlug.ESPORTS_EUROPA]: [],
+  [FederationSlug.ESPORTS_EUROPA]: [
+    TierSlug.LEAGUE_PREMIER,
+    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+  ],
   [FederationSlug.ESPORTS_OCE]: [
     TierSlug.LEAGUE_INTERMEDIATE,
     TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
     TierSlug.LEAGUE_MAIN,
     TierSlug.LEAGUE_MAIN_PLAYOFFS,
+    TierSlug.LEAGUE_PREMIER,
+    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
   ],
-  [FederationSlug.ESPORTS_WORLD]: [],
+  [FederationSlug.ESPORTS_WORLD]: [
+    TierSlug.LEAGUE_PREMIER,
+    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
+  ],
 };
 
 /**

@@ -347,7 +347,10 @@ export default function () {
           zones={
             competition.status === Constants.CompetitionStatus.STARTED &&
             competition.tier.groupSize &&
-            (Constants.TierZones[competition.tier.slug] || Constants.TierZones.default)
+            Util.getTierZones(
+              competition.tier.slug as Constants.TierSlug,
+              competition.federation.slug as Constants.FederationSlug,
+            )
           }
         />
       </article>

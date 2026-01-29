@@ -2734,12 +2734,21 @@ export async function recordMatchResults() {
       //
       // this is done by checking if all
       // matches have not been scored
-      const newMatches = tournament.$base.currentRound(Constants.BracketIdentifier.UPPER);
-      const newRound = Array.isArray(newMatches) && newMatches.every((match) => !match.m);
+      const upperMatches = tournament.$base.currentRound(Constants.BracketIdentifier.UPPER);
+      const lowerMatches = tournament.$base.currentRound(Constants.BracketIdentifier.LOWER);
+      const upperRoundReady =
+        Array.isArray(upperMatches) && upperMatches.every((match) => !match.m);
+      const lowerRoundReady =
+        Array.isArray(lowerMatches) && lowerMatches.every((match) => !match.m);
 
-      if (tournament.brackets && newRound) {
-        Engine.Runtime.Instance.log.info('Generating next round of matches...');
-        await createMatchdays(newMatches, tournament, competition);
+      if (tournament.brackets && upperRoundReady) {
+        Engine.Runtime.Instance.log.info('Generating next round of upper bracket matches...');
+        await createMatchdays(upperMatches, tournament, competition);
+      }
+
+      if (tournament.brackets && lowerRoundReady) {
+        Engine.Runtime.Instance.log.info('Generating next round of lower bracket matches...');
+        await createMatchdays(lowerMatches, tournament, competition);
       }
 
       // check if competition is done and a start date must
@@ -3503,11 +3512,19 @@ export async function onCompetitionStart(entry: Calendar) {
       : competition.tier.size;
   const competitorCount = competition.competitors.length;
   const tournamentSize = Math.min(tierSize, competitorCount);
-  const tournament = new Tournament(tournamentSize, {
-    groupSize: competition.tier.groupSize,
-    meetTwice: false,
-    short: true,
-  });
+  const tournamentOptions = competition.tier.groupSize
+    ? {
+        groupSize: Math.min(competition.tier.groupSize, tournamentSize),
+        meetTwice: false,
+      }
+    : {
+        short: true,
+        ...(competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+        competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA
+          ? { last: Constants.BracketIdentifier.LOWER }
+          : {}),
+      };
+  const tournament = new Tournament(tournamentSize, tournamentOptions);
   tournament.addCompetitors(
     shuffle(competition.competitors)
       .slice(0, tournamentSize)

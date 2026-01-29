@@ -238,6 +238,21 @@ export function getLeagueTierSize(
 }
 
 /**
+ * Returns the promotion/relegation zones for a tier within a federation.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @function
+ */
+export function getTierZones(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+) {
+  const leagueZones = Constants.LeagueTierZonesByFederation[federationSlug]?.[tierSlug];
+  return leagueZones ?? Constants.TierZones[tierSlug] ?? Constants.TierZones.default;
+}
+
+/**
  * Returns whether a league tier should be available in a federation.
  *
  * @param tierSlug        The tier slug.
