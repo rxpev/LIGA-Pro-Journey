@@ -249,7 +249,15 @@ async function createMatchdays(
 
       // generate day of week for match
       const dayOfWeek = Chance.roll(Constants.MatchDayWeights[competition.tier.league.slug]);
-      const week = addWeeks(today, match.id.r);
+      const roundOffset =
+        tournament.brackets &&
+        tournament.options &&
+        'last' in tournament.options &&
+        tournament.options.last === Constants.BracketIdentifier.LOWER &&
+        match.id.s === Constants.BracketIdentifier.LOWER
+          ? match.id.r + 1
+          : match.id.r;
+      const week = addWeeks(today, roundOffset);
       const matchday = setDay(week, Number(dayOfWeek), { weekStartsOn: 1 });
 
       // assign map to match
@@ -3533,7 +3541,7 @@ export async function onCompetitionStart(entry: Calendar) {
         short: true,
         ...(competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
         competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA
-          ? { last: Constants.BracketIdentifier.LOWER as Clux.DuelBracketConfig }
+          ? { last: Constants.BracketIdentifier.LOWER }
           : {}),
       };
   const tournament = new Tournament(tournamentSize, tournamentOptions);

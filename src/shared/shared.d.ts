@@ -100,10 +100,10 @@ declare namespace Clux {
     LB = 2,
   }
 
-  interface DuelOptions {
-    last?: DuelBracketConfig;
-    short?: boolean;
-  }
+  type DuelOptions = {
+    short: boolean;
+    last?: Constants.BracketIdentifier;
+  };
 
   interface GroupStageOptions {
     groupSize: number;
