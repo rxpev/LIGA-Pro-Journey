@@ -3512,7 +3512,19 @@ export async function onCompetitionStart(entry: Calendar) {
       : competition.tier.size;
   const competitorCount = competition.competitors.length;
   const tournamentSize = Math.min(tierSize, competitorCount);
-  const tournamentOptions = competition.tier.groupSize
+  if (tournamentSize < 4) {
+    Engine.Runtime.Instance.log.warn(
+      'Skipping %s - %s due to insufficient competitors (%d).',
+      competition.federation.name,
+      competition.tier.name,
+      competitorCount,
+    );
+    return DatabaseClient.prisma.competition.update({
+      where: { id: competition.id },
+      data: { status: Constants.CompetitionStatus.COMPLETED },
+    });
+  }
+  const tournamentOptions: Clux.GroupStageOptions | Clux.DuelOptions = competition.tier.groupSize
     ? {
         groupSize: Math.min(competition.tier.groupSize, tournamentSize),
         meetTwice: false,
@@ -3521,7 +3533,7 @@ export async function onCompetitionStart(entry: Calendar) {
         short: true,
         ...(competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
         competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA
-          ? { last: Constants.BracketIdentifier.LOWER }
+          ? { last: Constants.BracketIdentifier.LOWER as Clux.DuelBracketConfig }
           : {}),
       };
   const tournament = new Tournament(tournamentSize, tournamentOptions);

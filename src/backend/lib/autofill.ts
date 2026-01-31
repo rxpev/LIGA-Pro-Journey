@@ -1271,11 +1271,16 @@ export async function parse(
 
   // fill competitors list using this autofill item's entries
   const competitors = [] as Array<Team>;
+  const entryMatchesFederation = (entry: Entry) =>
+    federation.slug === Constants.FederationSlug.ESPORTS_WORLD ||
+    !entry.federationSlug ||
+    entry.federationSlug === federation.slug;
+  const eligibleEntries = item.entries.filter(entryMatchesFederation);
 
   // collect competitors
   const includeList = await Promise.all(
     flatten(
-      item.entries
+      eligibleEntries
         .filter((entry) => entry.action === Action.INCLUDE)
         .map((entry) => handleIncludeAction(entry, federation)),
     ),
@@ -1284,7 +1289,7 @@ export async function parse(
   // exclude undesirables
   const excludeList = await Promise.all(
     flatten(
-      item.entries.filter((entry) => entry.action === Action.EXCLUDE).map(handleExcludeAction),
+      eligibleEntries.filter((entry) => entry.action === Action.EXCLUDE).map(handleExcludeAction),
     ),
   );
 
@@ -1295,6 +1300,7 @@ export async function parse(
   // if the required quota for the current tier is not met then
   // use the fallback entries to backfill the competitors list
   const quota = item.entries
+    .filter(entryMatchesFederation)
     .filter((entry) => entry.action === Action.INCLUDE)
     .map((entry) =>
       entry.start < 0
@@ -1312,7 +1318,7 @@ export async function parse(
     // fallback entry contains a season property
     fallbackList = flatten(
       await Promise.all(
-        item.entries
+        eligibleEntries
           .filter((entry) => entry.action === Action.FALLBACK && 'season' in entry)
           .map((entry) => handleIncludeAction(entry, federation)),
       ),
@@ -1322,7 +1328,7 @@ export async function parse(
     if (!fallbackList.length || fallbackList.length < requiredCount - competitors.length) {
       fallbackList = flatten(
         await Promise.all(
-          item.entries
+          eligibleEntries
             .filter((entry) => entry.action === Action.FALLBACK && !entry.season)
             .map((entry) => handleFallbackAction(entry, tier, federation)),
         ),
