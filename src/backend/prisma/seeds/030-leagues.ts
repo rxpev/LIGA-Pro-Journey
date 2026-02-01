@@ -159,6 +159,27 @@ const data: Array<LeagueSeedData> = [
     ],
   },
   {
+    name: 'ESL Pro League',
+    slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+    startOffsetDays: 280,
+    federations: [Constants.FederationSlug.ESPORTS_WORLD],
+    tiers: [
+      {
+        name: 'Group Stage',
+        slug: Constants.TierSlug.LEAGUE_PRO,
+        size: 32,
+        groupSize: 4,
+        triggerTierSlug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+      },
+      {
+        name: 'Playoffs',
+        slug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+        size: 16,
+        triggerOffsetDays: 7,
+      },
+    ],
+  },
+  {
     name: 'Electronic Sports World Cup',
     slug: Constants.LeagueSlug.ESPORTS_WORLD_CUP,
     federations: [Constants.FederationSlug.ESPORTS_WORLD],

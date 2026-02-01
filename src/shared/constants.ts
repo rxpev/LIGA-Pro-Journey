@@ -219,6 +219,7 @@ export enum LeagueSlug {
   ESPORTS_CIRCUIT = 'esc',
   ESPORTS_LEAGUE = 'esl',
   ESPORTS_LEAGUE_CUP = 'eslc',
+  ESPORTS_PRO_LEAGUE = 'espl',
   ESPORTS_WORLD_CUP = 'eswc',
 }
 
@@ -451,6 +452,8 @@ export enum TierSlug {
   LEAGUE_OPEN_PLAYOFFS = 'league:open:playoffs',
   LEAGUE_PREMIER = 'league:premier',
   LEAGUE_PREMIER_PLAYOFFS = 'league:premier:playoffs',
+  LEAGUE_PRO = 'league:pro',
+  LEAGUE_PRO_PLAYOFFS = 'league:pro:playoffs',
 }
 
 /**
@@ -787,6 +790,8 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'Advanced Division Playoffs',
   [TierSlug.LEAGUE_PREMIER]: 'Premier Division',
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: 'Premier Division Playoffs',
+  [TierSlug.LEAGUE_PRO]: 'Group Stage',
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: 'Playoffs',
 };
 
 /** @constant */
@@ -876,6 +881,11 @@ export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = 
     6: 'auto', // saturday
     0: 'auto', // sunday
   },
+  [LeagueSlug.ESPORTS_PRO_LEAGUE]: {
+    5: 20, // friday
+    6: 'auto', // saturday
+    0: 'auto', // sunday
+  },
 };
 
 /**
@@ -942,6 +952,8 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_PREMIER]: { total: 200_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: { total: 0, distribution: [] },
+  [TierSlug.LEAGUE_PRO]: { total: 1_000_000, distribution: [50, 35, 15] },
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
 };
 
 /**
@@ -999,6 +1011,7 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: [3, 3],
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: [3, 3],
 };
 
 /**
@@ -1156,7 +1169,7 @@ export const LeagueTierZonesByFederation: Record<
     [TierSlug.LEAGUE_ADVANCED]: [
       [0, 0],
       [1, 8],
-      [15, 16],
+      [14, 15],
     ],
     [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
       [1, 2],
@@ -1169,7 +1182,13 @@ export const LeagueTierZonesByFederation: Record<
       [0, 0],
     ],
   },
-  [FederationSlug.ESPORTS_WORLD]: {},
+  [FederationSlug.ESPORTS_WORLD]: {
+    [TierSlug.LEAGUE_PRO]: [
+      [1, 16],
+      [0, 0],
+      [17, 32],
+    ],
+  },
 };
 
 /**
@@ -1209,7 +1228,7 @@ export const LeagueTierSizesByFederation: Record<
   },
   [FederationSlug.ESPORTS_OCE]: {
     [TierSlug.LEAGUE_OPEN]: 20,
-    [TierSlug.LEAGUE_ADVANCED]: 16,
+    [TierSlug.LEAGUE_ADVANCED]: 15,
     [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 8,
     [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 8,
   },

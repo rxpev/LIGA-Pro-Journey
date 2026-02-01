@@ -61,70 +61,76 @@ export async function createCompetitions() {
     include: Eagers.tier.include,
   });
 
-  return Promise.all(
-    autofill.map(async (item) => {
-      const tier = tiers.find((tier) => tier.slug === item.tierSlug);
-      return Promise.all(
-        tier.league.federations.map(async (federation) => {
-          if (
-            tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE &&
-            !Util.isLeagueTierEnabledForFederation(
-              tier.slug as Constants.TierSlug,
-              federation.slug as Constants.FederationSlug,
-            )
-          ) {
-            return Promise.resolve();
-          }
+  const competitions = [];
 
-          // collect teams and create the competition
-          const teams = await Autofill.parse(item, tier, federation);
-          const competition = await DatabaseClient.prisma.competition.create({
-            data: {
-              status: Constants.CompetitionStatus.SCHEDULED,
-              season: profile.season,
-              federation: {
-                connect: {
-                  id: federation.id,
-                },
-              },
-              tier: {
-                connect: {
-                  id: tier.id,
-                },
-              },
-              competitors: {
-                create: teams.map((team) => ({ teamId: team.id })),
+  for (const item of autofill) {
+    const tier = tiers.find((tier) => tier.slug === item.tierSlug);
+    if (!tier) continue;
+
+    const created = await Promise.all(
+      tier.league.federations.map(async (federation) => {
+        if (
+          tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE &&
+          !Util.isLeagueTierEnabledForFederation(
+            tier.slug as Constants.TierSlug,
+            federation.slug as Constants.FederationSlug,
+          )
+        ) {
+          return Promise.resolve();
+        }
+
+        // collect teams and create the competition
+        const teams = await Autofill.parse(item, tier, federation);
+        const competition = await DatabaseClient.prisma.competition.create({
+          data: {
+            status: Constants.CompetitionStatus.SCHEDULED,
+            season: profile.season,
+            federation: {
+              connect: {
+                id: federation.id,
               },
             },
-            include: {
-              tier: true,
+            tier: {
+              connect: {
+                id: tier.id,
+              },
             },
-          });
-
-          // bail early if this competition relies on
-          // a trigger to schedule its start date
-          if (competition.tier.triggerOffsetDays) {
-            return Promise.resolve();
-          }
-
-          // create the calendar entry for when this competition starts
-          Engine.Runtime.Instance.log.debug(
-            'Scheduling start date for %s - %s...',
-            federation.name,
-            tier.name,
-          );
-
-          return DatabaseClient.prisma.calendar.create({
-            data: {
-              date: addDays(today, tier.league.startOffsetDays).toISOString(),
-              type: Constants.CalendarEntry.COMPETITION_START,
-              payload: competition.id.toString(),
+            competitors: {
+              create: teams.map((team) => ({ teamId: team.id })),
             },
-          });
-        }),
-      );
-    }),
-  );
+          },
+          include: {
+            tier: true,
+          },
+        });
+
+        // bail early if this competition relies on
+        // a trigger to schedule its start date
+        if (competition.tier.triggerOffsetDays) {
+          return Promise.resolve();
+        }
+
+        // create the calendar entry for when this competition starts
+        Engine.Runtime.Instance.log.debug(
+          'Scheduling start date for %s - %s...',
+          federation.name,
+          tier.name,
+        );
+
+        return DatabaseClient.prisma.calendar.create({
+          data: {
+            date: addDays(today, tier.league.startOffsetDays).toISOString(),
+            type: Constants.CalendarEntry.COMPETITION_START,
+            payload: competition.id.toString(),
+          },
+        });
+      }),
+    );
+
+    competitions.push(created);
+  }
+
+  return competitions;
 }
 
 /**
