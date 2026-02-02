@@ -12,6 +12,7 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Historial, PlayerCard, Standings } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 import { addDays, format } from 'date-fns';
+import { getTeamsTierLabel } from './labels';
 
 /** @constant */
 const NUM_PREVIOUS = 5;
@@ -97,6 +98,9 @@ export default function () {
     () => [...Array(Math.max(0, NUM_PREVIOUS - matches.length))],
     [matches.length],
   );
+  const isProLeagueStage =
+    competition?.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
+    competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
 
   if (!competition) {
     return (
@@ -149,10 +153,10 @@ export default function () {
             <tbody>
               <tr>
                 <td>
-                  {!!group.length && (
+                  {!!group.length && !isProLeagueStage && (
                     <span>{Util.toOrdinalSuffix(userTeam?.position)} in&nbsp;</span>
                   )}
-                  {Constants.IdiomaticTier[competition.tier.slug]}
+                  {getTeamsTierLabel(competition.tier.slug, competition.tier.league.name)}
                 </td>
               </tr>
             </tbody>
@@ -223,6 +227,15 @@ export default function () {
                           })
                       : null;
 
+                  const tierLabel = getTeamsTierLabel(
+                    match.competition.tier.slug,
+                    match.competition.tier.league?.name,
+                  );
+                  const competitionLabel =
+                    match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE
+                      ? tierLabel
+                      : `${match.competition.tier.league.name}: ${tierLabel}`;
+
                   return (
                     <tr
                       key={`${match.id}__match_previous`}
@@ -250,11 +263,8 @@ export default function () {
                         )}
                         <span>{opponent?.team.name || 'BYE'}</span>
                       </td>
-                      <td
-                        className="w-3/12 truncate"
-                        title={`${match.competition.tier.league.name}: ${Constants.IdiomaticTier[match.competition.tier.slug]}`}
-                      >
-                        {Constants.IdiomaticTier[match.competition.tier.slug]}
+                      <td className="w-3/12 truncate" title={competitionLabel}>
+                        {competitionLabel}
                       </td>
                     </tr>
                   );
@@ -291,7 +301,11 @@ export default function () {
             'select border-base-content/10 w-full rounded-none border-0 border-b',
             'disabled:bg-base-200 disabled:text-opacity-100',
           )}
-          value={group.length ? Constants.IdiomaticTier[competition.tier.slug] : -1}
+          value={
+            group.length
+              ? getTeamsTierLabel(competition.tier.slug, competition.tier.league?.name)
+              : -1
+          }
         >
           {!group.length && (
             <option disabled value={-1}>
@@ -299,8 +313,11 @@ export default function () {
             </option>
           )}
           {!!group.length && (
-            <option disabled value={Constants.IdiomaticTier[competition.tier.slug]}>
-              {Constants.IdiomaticTier[competition.tier.slug]}
+            <option
+              disabled
+              value={getTeamsTierLabel(competition.tier.slug, competition.tier.league?.name)}
+            >
+              {getTeamsTierLabel(competition.tier.slug, competition.tier.league?.name)}
             </option>
           )}
         </select>

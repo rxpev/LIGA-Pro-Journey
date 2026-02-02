@@ -12,6 +12,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
+import { getTeamsTierLabel } from './labels';
 
 /** @constant */
 const CHART_CONFIG: Pick<ChartConfiguration<'line'>, 'type' | 'options'> = {
@@ -46,7 +47,7 @@ const CHART_CONFIG: Pick<ChartConfiguration<'line'>, 'type' | 'options'> = {
         offset: true,
         ticks: {
           callback: (value: number) => {
-            const tierName = Constants.IdiomaticTier[Constants.Prestige[value]];
+            const tierName = getTeamsTierLabel(Constants.Prestige[value]);
             return tierName?.replace(/division/i, '');
           },
         },
@@ -165,6 +166,24 @@ export default function () {
     );
   }, [competitions]);
 
+  const buildCompetitionLabel = (
+    competition: Awaited<
+      ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
+    >[number],
+  ) => {
+    const tierLabel = getTeamsTierLabel(competition.tier.slug, competition.tier.league?.name);
+
+    if (competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+      return tierLabel;
+    }
+
+    if (competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD) {
+      return `${competition.tier.league.name}: ${tierLabel}`;
+    }
+
+    return `${competition.federation.name}: ${tierLabel}`;
+  };
+
   // build seasons dropdown data and select
   // the latest season by default
   const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
@@ -236,7 +255,7 @@ export default function () {
                   src={Util.getCompetitionLogo(tierSlug, federationSlug)}
                 />
                 <p className="text-4xl font-bold">{honors[honor]}</p>
-                <p className="text-sm">{Constants.IdiomaticTier[tierSlug]}</p>
+                <p className="text-sm">{getTeamsTierLabel(tierSlug)}</p>
               </aside>
             );
           })}
@@ -275,9 +294,9 @@ export default function () {
               <option key={idx + 1 + '__season'} value={idx + 1}>
                 {t('shared.season')} {idx + 1} -&nbsp;
                 {
-                  Constants.IdiomaticTier[
-                    findSeasonDivision(competitions, idx + 1) || Constants.Prestige[team.tier]
-                  ]
+                  getTeamsTierLabel(
+                    findSeasonDivision(competitions, idx + 1) || Constants.Prestige[team.tier],
+                  )
                 }
               </option>
             ))}
@@ -314,19 +333,11 @@ export default function () {
                     if (!competitor) {
                       return;
                     }
+                    const competitionLabel = buildCompetitionLabel(competition);
                     return (
                       <tr key={competition.id + '__competition__' + competitor.id + '__competitor'}>
-                        <td
-                          className="truncate"
-                          title={
-                            competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD
-                              ? `${competition.tier.league.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`
-                              : `${competition.federation.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`
-                          }
-                        >
-                          {competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD
-                            ? `${competition.tier.league.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`
-                            : `${competition.federation.name}: ${Constants.IdiomaticTier[competition.tier.slug]}`}
+                        <td className="truncate" title={competitionLabel}>
+                          {competitionLabel}
                         </td>
                         <td className="text-center">{Util.toOrdinalSuffix(competitor.position)}</td>
                         <td className="text-center">{competitor.win}</td>

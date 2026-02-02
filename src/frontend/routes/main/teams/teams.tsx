@@ -11,6 +11,7 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
+import { getTeamsTierLabel } from './labels';
 
 /** @enum */
 enum TabIdentifier {
@@ -106,7 +107,7 @@ export default function () {
       Constants.Prestige.filter((_, prestigeIdx) =>
         Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true,
       ).map((prestige) => ({
-        label: Constants.IdiomaticTier[prestige],
+        label: getTeamsTierLabel(prestige),
         options: teams
           .filter((team) => team.tier === Constants.Prestige.findIndex((tier) => tier === prestige))
           .map((team) => ({
@@ -181,7 +182,7 @@ export default function () {
                     <option value="">{t('shared.any')}</option>
                     {Constants.Prestige.map((prestige, prestigeId) => (
                       <option key={prestige} value={prestigeId}>
-                        {Constants.IdiomaticTier[prestige]}
+                        {getTeamsTierLabel(prestige)}
                       </option>
                     ))}
                   </select>

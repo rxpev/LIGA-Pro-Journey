@@ -626,6 +626,13 @@ export const Awards = [
   },
   {
     on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.LEAGUE_PRO_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
     target: TierSlug.LEAGUE_CUP,
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
