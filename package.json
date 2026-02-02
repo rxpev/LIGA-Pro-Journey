@@ -115,6 +115,7 @@
     "react-select": "5.7.0",
     "rehype-raw": "7.0.0",
     "sqlite3": "5.1.7",
-    "squirrelly": "9.1.0"
+    "squirrelly": "9.1.0",
+    "styled-components": "^6.3.8"
   }
 }

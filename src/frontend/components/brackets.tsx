@@ -10,16 +10,18 @@ import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import {
   SingleEliminationBracket,
   DoubleEliminationBracket,
-  Match,
   SVGViewer,
   MATCH_STATES,
   MatchType,
+  ParticipantType,
   createTheme,
 } from '@g-loot/react-tournament-brackets/dist/esm';
+import { TeamLogoMatch } from './brackets/match';
 
 /** @interface */
 interface Props {
   matches: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
+  onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
 }
 
 /**
@@ -117,6 +119,7 @@ function toMatchType(
     participants: match.competitors.map((competitor) => ({
       id: competitor.team.id,
       name: competitor.team.name,
+      logo: competitor.team.blazon,
       isWinner: competitor.result === Constants.MatchResult.WIN,
       resultText: competitor.score !== null ? String(competitor.score) : null,
       status: getParticipantState(match, competitor.score),
@@ -211,7 +214,8 @@ export default function (props: Props) {
       {isDoubleElim ? (
         <DoubleEliminationBracket
           matches={toDoubleElimData(tourney, props.matches, fmtDate)}
-          matchComponent={Match}
+          matchComponent={TeamLogoMatch}
+          onPartyClick={props.onPartyClick}
           theme={theme}
           options={{
             style: {
@@ -239,7 +243,8 @@ export default function (props: Props) {
       ) : (
         <SingleEliminationBracket
           matches={toSingleElimData(tourney, props.matches, fmtDate)}
-          matchComponent={Match}
+          matchComponent={TeamLogoMatch}
+          onPartyClick={props.onPartyClick}
           theme={theme}
           options={{
             style: {

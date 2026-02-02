@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { compact, inRange } from 'lodash';
 import { Eagers } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -30,6 +31,7 @@ interface Props {
   highlight?: number;
   limit?: number;
   offset?: number;
+  teamLink?: (team: Props['competitors'][number]['team']) => string;
   title?: React.ReactNode;
   zones?: Array<number[]>;
   onClick?: (competitor: Props['competitors'][number]) => void;
@@ -119,10 +121,25 @@ export default function (props: Props) {
             >
               <td>{idx + 1 + (props.offset || 0)}.</td>
               <td className="truncate">
-                {!!competitor.team.blazon && (
-                  <img src={competitor.team.blazon} className="mr-2 inline-block size-4" />
+                {props.teamLink ? (
+                  <Link
+                    to={props.teamLink(competitor.team)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="link link-hover inline-flex items-center"
+                  >
+                    {!!competitor.team.blazon && (
+                      <img src={competitor.team.blazon} className="mr-2 inline-block size-4" />
+                    )}
+                    {competitor.team.name}
+                  </Link>
+                ) : (
+                  <>
+                    {!!competitor.team.blazon && (
+                      <img src={competitor.team.blazon} className="mr-2 inline-block size-4" />
+                    )}
+                    {competitor.team.name}
+                  </>
                 )}
-                {competitor.team.name}
               </td>
               {!!props.compact && (
                 <td>

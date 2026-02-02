@@ -4,7 +4,7 @@
  * @module
  */
 import React from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { groupBy } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
@@ -18,7 +18,10 @@ import { Brackets, Standings } from '@liga/frontend/components';
  * @function
  */
 function PureBrackets(props: React.ComponentProps<typeof Brackets>) {
-  return React.useMemo(() => <Brackets matches={props.matches} />, [props.matches]);
+  return React.useMemo(
+    () => <Brackets matches={props.matches} onPartyClick={props.onPartyClick} />,
+    [props.matches, props.onPartyClick],
+  );
 }
 
 /**
@@ -29,11 +32,22 @@ function PureBrackets(props: React.ComponentProps<typeof Brackets>) {
 export default function () {
   const t = useTranslation();
   const { state } = React.useContext(AppStateContext);
+  const navigate = useNavigate();
   const { competition } = useOutletContext<RouteContextCompetitions>();
   const [bracket, setBracket] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const groups = React.useMemo(
     () => groupBy(competition.competitors, 'group'),
+    [competition.competitors],
+  );
+  const teamLinkById = React.useMemo(
+    () =>
+      new Map(
+        competition.competitors.map((competitor) => [
+          competitor.team.id,
+          `/teams?teamId=${competitor.team.id}`,
+        ]),
+      ),
     [competition.competitors],
   );
 
@@ -61,6 +75,7 @@ export default function () {
             key={group + '__standings'}
             highlight={state.profile.teamId}
             competitors={groups[group]}
+            teamLink={(team) => `/teams?teamId=${team.id}`}
             title={
               competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
                 ? Constants.IdiomaticTier[competition.tier.slug]
@@ -90,7 +105,15 @@ export default function () {
 
   return (
     <section className="h-full w-full">
-      <PureBrackets matches={bracket} />
+      <PureBrackets
+        matches={bracket}
+        onPartyClick={(party) => {
+          const route = teamLinkById.get(Number(party.id));
+          if (route) {
+            navigate(route);
+          }
+        }}
+      />
     </section>
   );
 }

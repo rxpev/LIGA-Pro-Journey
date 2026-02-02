@@ -4,7 +4,7 @@
  * @module
  */
 import React from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
@@ -28,6 +28,7 @@ enum TabIdentifier {
 export default function () {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
   const [federations, setFederations] = React.useState<
@@ -96,6 +97,19 @@ export default function () {
     setTeam(teams.find((tteam) => tteam.id === state.profile.teamId));
   }, [state.profile, teams, team]);
 
+  // load team from query params
+  React.useEffect(() => {
+    const teamId = Number(searchParams.get('teamId'));
+    if (!Number.isInteger(teamId) || !teams.length) {
+      return;
+    }
+
+    const matched = teams.find((tteam) => tteam.id === teamId);
+    if (matched) {
+      setTeam(matched);
+    }
+  }, [searchParams, teams]);
+
   // fallback: auto-select world #1 team when teamless
   React.useEffect(() => {
     // only run after main data loads
@@ -149,6 +163,18 @@ export default function () {
       })),
     [isTierEnabled, teams, selectedTierId],
   );
+
+  React.useEffect(() => {
+    const teamId = Number(searchParams.get('teamId'));
+    if (!Number.isInteger(teamId) || !teamSelectorData.length) {
+      return;
+    }
+
+    const selected = findTeamOptionByValue(teamSelectorData, teamId);
+    if (selected) {
+      setSelectedTeam(selected);
+    }
+  }, [searchParams, teamSelectorData]);
 
   return (
     <div className="dashboard">

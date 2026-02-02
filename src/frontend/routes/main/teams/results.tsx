@@ -6,7 +6,7 @@
 import React from 'react';
 import { random } from 'lodash';
 import { format } from 'date-fns';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
@@ -183,8 +183,14 @@ export default function () {
                     {fmtDate(match.date)}
                   </td>
                   <td className="truncate text-right" title={home.team.name}>
-                    <span>{home.team.name}</span>
-                    <img src={home.team.blazon} className="ml-2 inline-block size-4" />
+                    <Link
+                      to={`/teams?teamId=${home.team.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="link link-hover inline-flex items-center justify-end"
+                    >
+                      <span>{home.team.name}</span>
+                      <img src={home.team.blazon} className="ml-2 inline-block size-4" />
+                    </Link>
                   </td>
                   <td className="text-center">
                     {!away && '-'}
@@ -199,10 +205,14 @@ export default function () {
                   <td className="truncate" title={away?.team.name || 'BYE'}>
                     {!away && 'BYE'}
                     {!!away && (
-                      <>
+                      <Link
+                        to={`/teams?teamId=${away.team.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="link link-hover inline-flex items-center"
+                      >
                         <img src={away.team.blazon} className="mr-2 inline-block size-4" />
                         <span>{away.team.name}</span>
-                      </>
+                      </Link>
                     )}
                   </td>
                   <td className="truncate" title={getCompetitionLabel(match)}>
