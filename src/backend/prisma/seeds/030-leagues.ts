@@ -82,19 +82,6 @@ const data: Array<LeagueSeedData> = [
         size: 4,
         triggerOffsetDays: 7,
       },
-      {
-        name: startCase(Constants.TierSlug.LEAGUE_PREMIER),
-        slug: Constants.TierSlug.LEAGUE_PREMIER,
-        size: 20,
-        groupSize: 20,
-        triggerTierSlug: Constants.TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-      },
-      {
-        name: startCase(Constants.TierSlug.LEAGUE_PREMIER_PLAYOFFS),
-        slug: Constants.TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-        size: 4,
-        triggerOffsetDays: 7,
-      },
     ],
   },
   {

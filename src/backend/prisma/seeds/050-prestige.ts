@@ -6,7 +6,14 @@
 import log from 'electron-log';
 import { flatten, groupBy } from 'lodash';
 import { PrismaClient } from '@prisma/client';
-import { Constants, Bot, Util } from '@liga/shared';
+import { Constants, Util } from '@liga/shared';
+
+const PRO_SEED_COUNTS: Partial<Record<Constants.FederationSlug, number>> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 9,
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 4,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 2,
+  [Constants.FederationSlug.ESPORTS_OCE]: 1,
+};
 
 /**
  * The main seeder.
@@ -58,14 +65,25 @@ export default async function (prisma: PrismaClient) {
     .map((federationTeams) => {
       const federationSlug = federationTeams[0]?.country.continent.federation
         .slug as Constants.FederationSlug;
+      const proCount = PRO_SEED_COUNTS[federationSlug] ?? 0;
+      const sortedTeams = [...federationTeams].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+      const proTeams = sortedTeams.slice(0, proCount);
+      const remainingTeams = sortedTeams.slice(proCount);
       let offset = 0;
 
       // chunk the teams into the different levels of prestige
-      const chunks = tiersSorted.map((tier) => {
-        const enabled = Util.isLeagueTierEnabledForFederation(
-          tier.slug as Constants.TierSlug,
-          federationSlug,
-        );
+      const chunks = [
+        {
+          prestige: Constants.Prestige.findIndex(
+            (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
+          ),
+          teams: proTeams,
+        },
+        ...tiersSorted.map((tier) => {
+          const enabled = Util.isLeagueTierEnabledForFederation(
+            tier.slug as Constants.TierSlug,
+            federationSlug,
+          );
         const tierSize = enabled
           ? Util.getLeagueTierSize(
               tier.slug as Constants.TierSlug,
@@ -73,15 +91,16 @@ export default async function (prisma: PrismaClient) {
               tier.size,
             )
           : 0;
-        const sliceStart = offset;
-        const sliceEnd = offset + tierSize;
-        offset = sliceEnd;
+          const sliceStart = offset;
+          const sliceEnd = offset + tierSize;
+          offset = sliceEnd;
 
-        return {
-          prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
-          teams: federationTeams.slice(sliceStart, sliceEnd),
-        };
-      });
+          return {
+            prestige: Constants.Prestige.findIndex((prestige) => prestige === tier.slug),
+            teams: remainingTeams.slice(sliceStart, sliceEnd),
+          };
+        }),
+      ];
 
       log.info(
         chunks.map((chunk) => ({ prestige: chunk.prestige, totalTeams: chunk.teams.length })),

@@ -1741,7 +1741,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const idxInter = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_INTERMEDIATE);
   const idxMain = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_MAIN);
   const idxAdv = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_ADVANCED);
-  const idxPrem = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PREMIER);
+  const idxPro = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PRO);
 
   // Current tier from team; if teamless fall back to last stint tier; otherwise Open.
   const currentTierIdx =
@@ -1771,7 +1771,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
   const baselineTierIdx = Math.max(currentTierIdx, recentPeakTierIdx);
 
-  // If teamless, only allow scouting if the player recently played ADVANCED/PREMIER.
+  // If teamless, only allow scouting if the player recently played ADVANCED/PRO.
   // (Open/Intermediate/Main free agents should primarily be handled by FACEIT/offers.)
   const isTeamless = profile.teamId == null;
   if (isTeamless && baselineTierIdx < idxAdv) {
@@ -1839,14 +1839,14 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   // Always: lateral at baseline
   addTier(baselineTierIdx);
 
-  // Premier: always premier offers 
-  if (currentTierIdx >= idxPrem) addTier(idxPrem);
+  // Pro: always pro offers
+  if (currentTierIdx >= idxPro) addTier(idxPro);
 
   // Upward movement rules
   // - If baseline/current >= MAIN: allow MAIN lateral + occasional ADVANCED
-  // - If baseline/current >= ADVANCED: allow ADVANCED lateral + rare low-ranked PREMIER
+  // - If baseline/current >= ADVANCED: allow ADVANCED lateral + rare low-ranked PRO
   // - If current tier OPEN/INTERMEDIATE: allow MAIN only on exceptional performance
-  let premierLowRankOnly = false;
+  let proLowRankOnly = false;
 
   const isLowTier = currentTierIdx <= idxInter;
   if (isLowTier) {
@@ -1856,10 +1856,10 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     if (baselineTierIdx >= idxMain && baselineTierIdx < idxAdv) {
       if (leagueSignal >= 0.75) addTier(idxAdv);
     }
-    if (baselineTierIdx >= idxAdv && baselineTierIdx < idxPrem) {
+    if (baselineTierIdx >= idxAdv && baselineTierIdx < idxPro) {
       if (leagueSignal >= 0.85) {
-        addTier(idxPrem);
-        premierLowRankOnly = true;
+        addTier(idxPro);
+        proLowRankOnly = true;
       }
     }
   }
@@ -1872,12 +1872,12 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const eligibleTierSlugs = eligibleTierIdxs.map((i) => Constants.Prestige[i]);
 
   Engine.Runtime.Instance.log.debug(
-    "PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s premierLowRankOnly=%s",
+    "PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s proLowRankOnly=%s",
     Constants.Prestige[currentTierIdx],
     Constants.Prestige[recentPeakTierIdx],
     Constants.Prestige[baselineTierIdx],
     eligibleTierSlugs.join(","),
-    premierLowRankOnly ? "true" : "false",
+    proLowRankOnly ? "true" : "false",
   );
 
   try {
@@ -1979,7 +1979,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       [TierSlug.LEAGUE_INTERMEDIATE]: 28,
       [TierSlug.LEAGUE_MAIN]: 18,
       [TierSlug.LEAGUE_ADVANCED]: 12,
-      [TierSlug.LEAGUE_PREMIER]: 8,
+      [TierSlug.LEAGUE_PRO]: 8,
     };
 
     const base = basePbxByTier[pickedTierSlug] ?? 12;
@@ -2038,9 +2038,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     // Cross-federation chance depends on user's level (baseline tier)
     // - Open/Intermediate/Main: never
     // - Advanced: 5%
-    // - Premier: 10%
+    // - Pro: 10%
     const crossFedPbx =
-      pickedTierIdx >= idxPrem ? 10 :
+      pickedTierIdx >= idxPro ? 10 :
         pickedTierIdx >= idxAdv ? 5 :
           0;
 
@@ -2081,7 +2081,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     let pool = teams;
 
-    if (premierLowRankOnly && pickedTierIdx === idxPrem) {
+    if (proLowRankOnly && pickedTierIdx === idxPro) {
       const sortedAsc = [...teams].sort((a, b) => (a.elo ?? 0) - (b.elo ?? 0));
       const bottomCount = Math.max(3, Math.floor(sortedAsc.length * 0.30));
       pool = sortedAsc.slice(0, bottomCount);
@@ -3513,6 +3513,34 @@ export async function onCompetitionStart(entry: Calendar) {
       },
       include: Eagers.competition.include,
     });
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.LEAGUE_PRO) {
+    const proPrestige = Constants.Prestige.findIndex(
+      (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
+    );
+    const proElo = Constants.EloRatings[Constants.TierSlug.LEAGUE_PRO];
+    const eplTeams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        id: { in: competition.competitors.map((competitor) => competitor.teamId) },
+      },
+      select: {
+        id: true,
+        elo: true,
+      },
+    });
+    await DatabaseClient.prisma.$transaction(
+      eplTeams.map((team) =>
+        DatabaseClient.prisma.team.update({
+          where: { id: team.id },
+          data: {
+            tier: proPrestige,
+            prestige: proPrestige,
+            ...(proElo ? { elo: Math.max(team.elo ?? 0, proElo) } : {}),
+          },
+        }),
+      ),
+    );
   }
 
   // create and start the tournament

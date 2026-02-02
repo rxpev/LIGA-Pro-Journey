@@ -723,7 +723,7 @@ export const EloRatings: Partial<Record<TierSlug, number>> = {
   [TierSlug.LEAGUE_INTERMEDIATE]: 1250,
   [TierSlug.LEAGUE_MAIN]: 1500,
   [TierSlug.LEAGUE_ADVANCED]: 1750,
-  [TierSlug.LEAGUE_PREMIER]: 2000,
+  [TierSlug.LEAGUE_PRO]: 2500,
 };
 
 /**
@@ -902,7 +902,7 @@ export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = 
  */
 export const PlayerWages = {
   [TierSlug.LEAGUE_ADVANCED]: [{ percent: 20, low: 1_000, high: 5_000, multiplier: 2 }],
-  [TierSlug.LEAGUE_PREMIER]: [
+  [TierSlug.LEAGUE_PRO]: [
     { percent: 20, low: 5_000, high: 10_000, multiplier: 2 },
     { percent: 80, low: 10_000, high: 15_000, multiplier: 4 },
     { percent: 20, low: 15_000, high: 20_000, multiplier: 6 },
@@ -923,7 +923,7 @@ export const Prestige = [
   TierSlug.LEAGUE_INTERMEDIATE,
   TierSlug.LEAGUE_MAIN,
   TierSlug.LEAGUE_ADVANCED,
-  TierSlug.LEAGUE_PREMIER,
+  TierSlug.LEAGUE_PRO,
 ];
 
 /**
@@ -1169,7 +1169,7 @@ export const LeagueTierZonesByFederation: Record<
     [TierSlug.LEAGUE_ADVANCED]: [
       [0, 0],
       [1, 8],
-      [14, 15],
+      [15, 16],
     ],
     [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
       [1, 2],
@@ -1241,34 +1241,21 @@ export const LeagueTierSizesByFederation: Record<
  * @constant
  */
 export const LeagueTierDisabledByFederation: Record<FederationSlug, TierSlug[]> = {
-  [FederationSlug.ESPORTS_AMERICAS]: [
-    TierSlug.LEAGUE_PREMIER,
-    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-  ],
+  [FederationSlug.ESPORTS_AMERICAS]: [],
   [FederationSlug.ESPORTS_ASIA]: [
     TierSlug.LEAGUE_INTERMEDIATE,
     TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
     TierSlug.LEAGUE_MAIN,
     TierSlug.LEAGUE_MAIN_PLAYOFFS,
-    TierSlug.LEAGUE_PREMIER,
-    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
   ],
-  [FederationSlug.ESPORTS_EUROPA]: [
-    TierSlug.LEAGUE_PREMIER,
-    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-  ],
+  [FederationSlug.ESPORTS_EUROPA]: [],
   [FederationSlug.ESPORTS_OCE]: [
     TierSlug.LEAGUE_INTERMEDIATE,
     TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
     TierSlug.LEAGUE_MAIN,
     TierSlug.LEAGUE_MAIN_PLAYOFFS,
-    TierSlug.LEAGUE_PREMIER,
-    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
   ],
-  [FederationSlug.ESPORTS_WORLD]: [
-    TierSlug.LEAGUE_PREMIER,
-    TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-  ],
+  [FederationSlug.ESPORTS_WORLD]: [],
 };
 
 /**
@@ -1375,7 +1362,7 @@ export const UserOfferSettings = {
       { years: 2, weight: 80 },
       { years: 3, weight: 20 },
     ],
-    [TierSlug.LEAGUE_PREMIER]: [
+    [TierSlug.LEAGUE_PRO]: [
       { years: 2, weight: 50 },
       { years: 3, weight: 20 },
       { years: 4, weight: 15 },
@@ -1389,7 +1376,7 @@ export const UserOfferSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: { faceit: 0.6, league: 0.4 },
     [TierSlug.LEAGUE_MAIN]: { faceit: 0.2, league: 0.8 },
     [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
-    [TierSlug.LEAGUE_PREMIER]: { faceit: 0.05, league: 0.95 },
+    [TierSlug.LEAGUE_PRO]: { faceit: 0.05, league: 0.95 },
   },
 
   ROLE_OFFER_TUNING: {
@@ -1422,14 +1409,14 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.95,
     [TierSlug.LEAGUE_MAIN]: 1.00,
     [TierSlug.LEAGUE_ADVANCED]: 1.05,
-    [TierSlug.LEAGUE_PREMIER]: 1.10,
+    [TierSlug.LEAGUE_PRO]: 1.10,
   },
   BENCH_PBX_BY_TIER: {
     [TierSlug.LEAGUE_OPEN]: 30,
     [TierSlug.LEAGUE_INTERMEDIATE]: 35,
     [TierSlug.LEAGUE_MAIN]: 50,
     [TierSlug.LEAGUE_ADVANCED]: 65,
-    [TierSlug.LEAGUE_PREMIER]: 80,
+    [TierSlug.LEAGUE_PRO]: 80,
   },
 
   // Kick evaluation (early termination)
@@ -1440,14 +1427,14 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.75,
     [TierSlug.LEAGUE_MAIN]: 0.80,
     [TierSlug.LEAGUE_ADVANCED]: 0.90,
-    [TierSlug.LEAGUE_PREMIER]: 0.95,
+    [TierSlug.LEAGUE_PRO]: 0.95,
   },
   KICK_PBX_BY_TIER: {
     [TierSlug.LEAGUE_OPEN]: 50,
     [TierSlug.LEAGUE_INTERMEDIATE]: 20,
     [TierSlug.LEAGUE_MAIN]: 25,
     [TierSlug.LEAGUE_ADVANCED]: 30,
-    [TierSlug.LEAGUE_PREMIER]: 45,
+    [TierSlug.LEAGUE_PRO]: 45,
   },
 
   // Extension
@@ -1458,7 +1445,7 @@ export const PlayerContractSettings = {
     [TierSlug.LEAGUE_INTERMEDIATE]: 1.00,
     [TierSlug.LEAGUE_MAIN]: 1.05,
     [TierSlug.LEAGUE_ADVANCED]: 1.10,
-    [TierSlug.LEAGUE_PREMIER]: 1.15,
+    [TierSlug.LEAGUE_PRO]: 1.15,
   },
   EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER: 85,
   EXTENSION_PBX_BAD_TEAM_GOOD_PLAYER: 45,

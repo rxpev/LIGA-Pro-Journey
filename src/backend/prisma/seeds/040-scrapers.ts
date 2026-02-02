@@ -41,7 +41,7 @@ export default async function (prisma: PrismaClient, args: Record<string, string
     return Promise.resolve();
   }
 
-  const totalRequiredTeams = league.federations.reduce((total, federation) => {
+  let totalRequiredTeams = league.federations.reduce((total, federation) => {
     const federationTotal = league.tiers.reduce((tierTotal, tier) => {
       if (
         !Util.isLeagueTierEnabledForFederation(
@@ -62,6 +62,26 @@ export default async function (prisma: PrismaClient, args: Record<string, string
 
     return total + federationTotal;
   }, 0);
+
+  const proLeague = await prisma.league.findFirst({
+    where: {
+      slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+    },
+    include: {
+      tiers: true,
+    },
+  });
+
+  if (proLeague) {
+    const proTier = proLeague.tiers.find(
+      (tier) => tier.slug === Constants.TierSlug.LEAGUE_PRO,
+    );
+    if (proTier) {
+      totalRequiredTeams += proTier.size;
+    }
+  }
+
+  totalRequiredTeams = Math.ceil(totalRequiredTeams * 1.25);
 
   // run the scrapers
   await scrape('teams', {
