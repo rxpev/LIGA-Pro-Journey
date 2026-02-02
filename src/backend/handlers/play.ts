@@ -95,7 +95,7 @@ export default function () {
             team: team as Omit<typeof team, 'players' | 'country'>,
           })),
         },
-      } as Prisma.MatchGetPayload<typeof Eagers.match>;
+      } as unknown as Prisma.MatchGetPayload<typeof Eagers.match>;
 
       // start the server and play the match
       const gameServer = new Game.Server(profile, match);

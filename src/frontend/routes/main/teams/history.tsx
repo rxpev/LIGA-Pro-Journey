@@ -14,8 +14,14 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { getTeamsTierLabel } from './labels';
 
-/** @constant */
-const CHART_CONFIG: Pick<ChartConfiguration<'line'>, 'type' | 'options'> = {
+/**
+ * Builds chart configuration for a set of league tiers.
+ *
+ * @param prestige The tiers to display.
+ */
+const buildChartConfig = (
+  prestige: Constants.TierSlug[],
+): Pick<ChartConfiguration<'line'>, 'type' | 'options'> => ({
   type: 'line',
   options: {
     maintainAspectRatio: false,
@@ -42,19 +48,19 @@ const CHART_CONFIG: Pick<ChartConfiguration<'line'>, 'type' | 'options'> = {
           dash: [5, 5],
           display: false,
         },
-        max: Constants.Prestige.length - 1,
+        max: prestige.length - 1,
         min: 0,
         offset: true,
         ticks: {
           callback: (value: number) => {
-            const tierName = getTeamsTierLabel(Constants.Prestige[value]);
+            const tierName = getTeamsTierLabel(prestige[value]);
             return tierName?.replace(/division/i, '');
           },
         },
       },
     },
   },
-};
+});
 
 /**
  * Finds the domestic league division the team
@@ -64,9 +70,11 @@ const CHART_CONFIG: Pick<ChartConfiguration<'line'>, 'type' | 'options'> = {
  * @param season        The season.
  */
 function findSeasonDivision(
-  competitions: Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>,
+  competitions: Awaited<
+    ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
+  >,
   season: number,
-) {
+): Constants.TierSlug | undefined {
   const competition = competitions.find(
     (competition) =>
       competition.season === season &&
@@ -77,7 +85,7 @@ function findSeasonDivision(
     return;
   }
 
-  return competition.tier.slug;
+  return competition.tier.slug as Constants.TierSlug;
 }
 
 /**
@@ -92,18 +100,19 @@ function buildChartDataset(
   seasons: undefined[],
   competitions: Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>,
   team: RouteContextTeams['team'],
+  prestige: Constants.TierSlug[],
 ) {
   return seasons.map((_, idx) =>
-    Constants.Prestige.findIndex((prestige) => {
+    prestige.findIndex((tierSlug) => {
       const division = findSeasonDivision(competitions, idx + 1);
+      const defaultTier = prestige.includes(Constants.Prestige[team.tier])
+        ? Constants.Prestige[team.tier]
+        : prestige[0];
+      const selectedTier = division && prestige.includes(division) ? division : defaultTier;
 
       // if nothing was found, try to default
       // to the team's current division
-      if (!division) {
-        return prestige === Constants.Prestige[team.tier];
-      }
-
-      return prestige === division;
+      return tierSlug === selectedTier;
     }),
   );
 }
@@ -184,6 +193,17 @@ export default function () {
     return `${competition.federation.name}: ${tierLabel}`;
   };
 
+  const availablePrestige = React.useMemo(() => {
+    const federationSlug = team.country.continent?.federation?.slug as
+      | Constants.FederationSlug
+      | undefined;
+    const disabledTiers = federationSlug
+      ? Constants.LeagueTierDisabledByFederation[federationSlug]
+      : [];
+    const filtered = Constants.Prestige.filter((tier) => !disabledTiers.includes(tier));
+    return filtered.length ? filtered : Constants.Prestige;
+  }, [team]);
+
   // build seasons dropdown data and select
   // the latest season by default
   const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
@@ -203,13 +223,13 @@ export default function () {
     }
 
     const chart = new Chart(refCanvas.current, {
-      ...CHART_CONFIG,
+      ...buildChartConfig(availablePrestige),
       data: {
         labels: seasons.map((_, idx) => 'S' + (idx + 1)),
         datasets: [
           {
             borderWidth: 2,
-            data: buildChartDataset(seasons, competitions, team),
+            data: buildChartDataset(seasons, competitions, team, availablePrestige),
             tension: 0.0,
           },
         ],
@@ -217,7 +237,7 @@ export default function () {
     });
 
     return () => chart.destroy();
-  }, [competitions]);
+  }, [availablePrestige, competitions, seasons, team]);
 
   if (!competitions) {
     return (

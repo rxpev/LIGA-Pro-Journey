@@ -134,7 +134,7 @@ function toSingleElimData(
     return {
       ...toMatchType(tourney, match, matchId, fmtDate),
       tournamentRoundText: String(match.round),
-      nextLooserMatchId: null,
+      nextLooserMatchId: null as MatchType['nextLooserMatchId'],
     };
   });
 }

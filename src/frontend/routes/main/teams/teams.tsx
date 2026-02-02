@@ -42,6 +42,22 @@ export default function () {
   >([]);
   const [team, setTeam] = React.useState<(typeof teams)[number]>();
   const [rankings, setRankings] = React.useState<typeof teams>([]);
+  const selectedFederation = React.useMemo(
+    () => federations.find((federation) => federation.id === selectedFederationId),
+    [federations, selectedFederationId],
+  );
+  const isFederationSlug = (slug: string): slug is Constants.FederationSlug =>
+    Object.values(Constants.FederationSlug).includes(slug as Constants.FederationSlug);
+
+  const isTierEnabled = React.useCallback(
+    (tier: Constants.TierSlug) => {
+      const slug = selectedFederation?.slug;
+      return slug && isFederationSlug(slug)
+        ? Util.isLeagueTierEnabledForFederation(tier, slug)
+        : true;
+    },
+    [selectedFederation?.slug],
+  );
 
   // build team query
   const teamQuery = React.useMemo(
@@ -101,12 +117,27 @@ export default function () {
     api.teams.all<typeof Eagers.team>(teamQuery).then(setTeams);
   }, [teamQuery]);
 
+  // reset tier selection if the federation does not support it
+  React.useEffect(() => {
+    if (!Number.isInteger(selectedTierId)) {
+      return;
+    }
+
+    const tierSlug = Constants.Prestige[selectedTierId];
+    if (tierSlug && !isTierEnabled(tierSlug)) {
+      setSelectedTierId(undefined);
+    }
+  }, [isTierEnabled, selectedTierId]);
+
   // massage team data to team selector data structure
   const teamSelectorData = React.useMemo(
     () =>
-      Constants.Prestige.filter((_, prestigeIdx) =>
-        Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true,
-      ).map((prestige) => ({
+      Constants.Prestige.filter((prestige, prestigeIdx) => {
+        if (!isTierEnabled(prestige)) {
+          return false;
+        }
+        return Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true;
+      }).map((prestige) => ({
         label: getTeamsTierLabel(prestige),
         options: teams
           .filter((team) => team.tier === Constants.Prestige.findIndex((tier) => tier === prestige))
@@ -116,7 +147,7 @@ export default function () {
             label: team.name,
           })),
       })),
-    [teams, selectedTierId],
+    [isTierEnabled, teams, selectedTierId],
   );
 
   return (
@@ -180,11 +211,15 @@ export default function () {
                     value={selectedTierId}
                   >
                     <option value="">{t('shared.any')}</option>
-                    {Constants.Prestige.map((prestige, prestigeId) => (
-                      <option key={prestige} value={prestigeId}>
-                        {getTeamsTierLabel(prestige)}
-                      </option>
-                    ))}
+                    {Constants.Prestige.flatMap((prestige, prestigeId) =>
+                      isTierEnabled(prestige)
+                        ? [
+                            <option key={prestige} value={prestigeId}>
+                              {getTeamsTierLabel(prestige)}
+                            </option>,
+                          ]
+                        : [],
+                    )}
                   </select>
                 </article>
               </section>

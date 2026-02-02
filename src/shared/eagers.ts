@@ -138,7 +138,18 @@ export const shortlist = {
 
 /** @constant */
 export const team = {
-  include: { country: true, players: true },
+  include: {
+    country: {
+      include: {
+        continent: {
+          include: {
+            federation: true,
+          },
+        },
+      },
+    },
+    players: true,
+  },
 };
 
 /** @constant */
