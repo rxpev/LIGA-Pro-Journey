@@ -216,7 +216,13 @@ export default function () {
                     )}
                   </td>
                   <td className="truncate" title={getCompetitionLabel(match)}>
-                    {getCompetitionLabel(match)}
+                    <Link
+                      to={`/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="link link-hover"
+                    >
+                      {getCompetitionLabel(match)}
+                    </Link>
                   </td>
                   <td className="text-center">
                     {t('shared.season')} {match.competition.season}

@@ -41,8 +41,22 @@ export default function () {
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
   const [selectedTierId, setSelectedTierId] = React.useState<number>(-1);
 
+  const [initializedFromQuery, setInitializedFromQuery] = React.useState(false);
   // Used to ensure we only auto-initialize filters once from the profile.
   const [initializedFromProfile, setInitializedFromProfile] = React.useState(false);
+  const [initializedQueryCompetition, setInitializedQueryCompetition] = React.useState(false);
+
+  const queryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const queryFederationId = Number(queryParams.get('federationId'));
+  const querySeasonId = Number(queryParams.get('season'));
+  const queryTierId = Number(queryParams.get('tierId'));
+  const hasQueryParams =
+    Number.isFinite(queryFederationId) &&
+    Number.isFinite(querySeasonId) &&
+    Number.isFinite(queryTierId) &&
+    queryFederationId > 0 &&
+    querySeasonId > 0 &&
+    queryTierId > 0;
 
   // Build queries
   const tierQuery: Parameters<typeof api.tiers.all>[number] = React.useMemo(
@@ -95,6 +109,50 @@ export default function () {
     setSelectedTierId(-1);
   }, [selectedFederationId]);
 
+  React.useEffect(() => {
+    if (!hasQueryParams || initializedFromQuery) return;
+
+    setSelectedFederationId(queryFederationId);
+    setSelectedSeasonId(querySeasonId);
+    setSelectedTierId(queryTierId);
+    setInitializedFromQuery(true);
+  }, [
+    hasQueryParams,
+    initializedFromQuery,
+    queryFederationId,
+    querySeasonId,
+    queryTierId,
+  ]);
+
+  React.useEffect(() => {
+    if (!hasQueryParams || initializedQueryCompetition) return;
+    if (selectedFederationId <= 0 || selectedSeasonId <= 0 || selectedTierId <= 0) return;
+
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: {
+          federationId: selectedFederationId,
+          season: selectedSeasonId,
+          tier: {
+            id: selectedTierId,
+          },
+        },
+      })
+      .then((result) => {
+        if (result) {
+          setCompetition(result);
+        }
+        setInitializedQueryCompetition(true);
+      });
+  }, [
+    hasQueryParams,
+    initializedQueryCompetition,
+    selectedFederationId,
+    selectedSeasonId,
+    selectedTierId,
+  ]);
+
   /**
    * Auto-initialize federation/season filters from the user's profile.
    *
@@ -103,6 +161,7 @@ export default function () {
    * - Maps country → continent → federation.
    */
   React.useEffect(() => {
+    if (hasQueryParams) return;
     if (!state.profile || initializedFromProfile) return;
 
     // Prefer team country if available, otherwise player's country.
@@ -169,6 +228,7 @@ export default function () {
   }, [tiers, selectedFederation]);
 
   React.useEffect(() => {
+    if (hasQueryParams) return;
     if (!state.profile) return;
     if (selectedFederationId < 0) return;
     if (!visibleTiers.length) return;
