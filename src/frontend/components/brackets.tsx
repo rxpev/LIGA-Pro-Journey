@@ -173,12 +173,11 @@ function toDoubleElimData(
  * @exports
  */
 export default function (props: Props) {
-  // bail if no brackets data
-  const tourney = Tournament.restore(JSON.parse(props.matches[0].competition.tournament));
+  const tourney = React.useMemo(
+    () => Tournament.restore(JSON.parse(props.matches[0].competition.tournament)),
+    [props.matches],
+  );
   const fmtDate = useFormatAppDate();
-  if (!tourney.brackets) {
-    return null;
-  }
   type HasLast = { last: number };
 
   function hasLast(options: unknown): options is HasLast {
@@ -190,84 +189,100 @@ export default function (props: Props) {
     );
   }
 
+  if (!tourney.brackets) {
+    return null;
+  }
+
   const isDoubleElim = hasLast(tourney.options) && tourney.options.last === Constants.BracketIdentifier.LOWER;
 
   // grab the width and height of the parent component
   // dynamically to pass on to the canvas below
-  const refWrapper = React.useRef<HTMLDivElement>();
+  const refWrapper = React.useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = React.useState({
     width: 0,
     height: 0,
   });
 
   React.useEffect(() => {
-    if (refWrapper.current) {
+    if (!refWrapper.current) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (!refWrapper.current) {
+        return;
+      }
       setDimensions({
         width: refWrapper.current.offsetWidth,
         height: refWrapper.current.offsetHeight,
       });
-    }
+    });
+
+    resizeObserver.observe(refWrapper.current);
+
+    return () => resizeObserver.disconnect();
   }, []);
+
+  const singleMatches = React.useMemo(
+    () => toSingleElimData(tourney, props.matches, fmtDate),
+    [fmtDate, props.matches, tourney],
+  );
+  const doubleMatches = React.useMemo(
+    () => toDoubleElimData(tourney, props.matches, fmtDate),
+    [fmtDate, props.matches, tourney],
+  );
+
+  const bracketOptions = React.useMemo(
+    () => ({
+      style: {
+        connectorColor: 'color-mix(in oklch, transparent 90%, var(--color-base-content))',
+        connectorColorHighlight: 'var(--color-base-content)',
+        wonBywalkOverText: 'BYE',
+        roundHeader: {
+          fontColor: 'var(--color-base-content)',
+          roundTextGenerator: Util.parseCupRounds,
+        },
+      },
+    }),
+    [],
+  );
+
+  const svgWrapper = React.useCallback(
+    ({ children, ...props }: { children: React.ReactNode } & Record<string, unknown>) => (
+      <SVGViewer
+        width={dimensions.width}
+        height={dimensions.height}
+        bracketWidth={dimensions.width}
+        bracketHeight={dimensions.height}
+        miniatureProps={{ position: 'none' }}
+        SVGBackground="var(--color-base-100)"
+        {...props}
+      >
+        {children}
+      </SVGViewer>
+    ),
+    [dimensions.height, dimensions.width],
+  );
 
   return (
     <div ref={refWrapper} className="h-full w-full cursor-grab">
       {isDoubleElim ? (
         <DoubleEliminationBracket
-          matches={toDoubleElimData(tourney, props.matches, fmtDate)}
+          matches={doubleMatches}
           matchComponent={TeamLogoMatch}
           onPartyClick={props.onPartyClick}
           theme={theme}
-          options={{
-            style: {
-              connectorColor: 'color-mix(in oklch, transparent 90%, var(--color-base-content))',
-              connectorColorHighlight: 'var(--color-base-content)',
-              wonBywalkOverText: 'BYE',
-              roundHeader: {
-                fontColor: 'var(--color-base-content)',
-                roundTextGenerator: Util.parseCupRounds,
-              },
-            },
-          }}
-          svgWrapper={({ children, ...props }) => (
-            <SVGViewer
-              width={dimensions.width}
-              height={dimensions.height}
-              miniatureProps={{ position: 'none' }}
-              SVGBackground="var(--color-base-100)"
-              {...props}
-            >
-              {children}
-            </SVGViewer>
-          )}
+          options={bracketOptions}
+          svgWrapper={svgWrapper}
         />
       ) : (
         <SingleEliminationBracket
-          matches={toSingleElimData(tourney, props.matches, fmtDate)}
+          matches={singleMatches}
           matchComponent={TeamLogoMatch}
           onPartyClick={props.onPartyClick}
           theme={theme}
-          options={{
-            style: {
-              connectorColor: 'color-mix(in oklch, transparent 90%, var(--color-base-content))',
-              connectorColorHighlight: 'var(--color-base-content)',
-              wonBywalkOverText: 'BYE',
-              roundHeader: {
-                fontColor: 'var(--color-base-content)',
-                roundTextGenerator: Util.parseCupRounds,
-              },
-            },
-          }}
-          svgWrapper={({ children, ...props }) => (
-            <SVGViewer
-              width={dimensions.width}
-              height={dimensions.height}
-              miniatureProps={{ position: 'none' }}
-              SVGBackground="var(--color-base-100)"
-              {...props}
-            >
-              {children}
-            </SVGViewer>
-          )}
+          options={bracketOptions}
+          svgWrapper={svgWrapper}
         />
       )}
     </div>
