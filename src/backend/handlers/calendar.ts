@@ -176,16 +176,9 @@ export default function () {
 
     // First-run logic for competitions remains unchanged.
     if (!(await DatabaseClient.prisma.competition.count())) {
-      const circuit = await DatabaseClient.prisma.league.findFirst({
-        where: { slug: Constants.LeagueSlug.ESPORTS_CIRCUIT },
-      });
+      Engine.Runtime.Instance.log.debug("First run detected. Advancing 1 day...");
 
-      Engine.Runtime.Instance.log.debug(
-        "First run detected. Skipping %d days...",
-        circuit.startOffsetDays
-      );
-
-      return Engine.Runtime.Instance.start(circuit.startOffsetDays + 1, true);
+      return Engine.Runtime.Instance.start(1, true);
     }
 
     // Disable window actions during calendar advance.

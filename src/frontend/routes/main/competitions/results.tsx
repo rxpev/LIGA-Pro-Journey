@@ -35,8 +35,6 @@ function getCompetitionLabel(
   switch (match.competition.tier.league.slug) {
     case Constants.LeagueSlug.ESPORTS_WORLD_CUP:
       return `${match.competition.tier.league.name} ${tier}${suffix}`;
-    case Constants.LeagueSlug.ESPORTS_CIRCUIT:
-      return `${match.competition.tier.league.name} ${tier}${suffix}`;
     case Constants.LeagueSlug.ESPORTS_PRO_LEAGUE:
       return `${match.competition.tier.league.name} ${tier}${suffix}`;
     default:

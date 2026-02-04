@@ -85,67 +85,6 @@ const data: Array<LeagueSeedData> = [
     ],
   },
   {
-    name: 'ESEA',
-    slug: Constants.LeagueSlug.ESPORTS_LEAGUE_CUP,
-    startOffsetDays: 90,
-    federations: [
-      Constants.FederationSlug.ESPORTS_AMERICAS,
-      Constants.FederationSlug.ESPORTS_ASIA,
-      Constants.FederationSlug.ESPORTS_EUROPA,
-      Constants.FederationSlug.ESPORTS_OCE,
-    ],
-    tiers: [
-      {
-        name: startCase(Constants.TierSlug.LEAGUE_CUP),
-        slug: Constants.TierSlug.LEAGUE_CUP,
-        size: 100,
-      },
-    ],
-  },
-  {
-    name: 'Electronic Sports Circuit',
-    slug: Constants.LeagueSlug.ESPORTS_CIRCUIT,
-    startOffsetDays: 14,
-    federations: [
-      Constants.FederationSlug.ESPORTS_AMERICAS,
-      Constants.FederationSlug.ESPORTS_ASIA,
-      Constants.FederationSlug.ESPORTS_EUROPA,
-      Constants.FederationSlug.ESPORTS_OCE,
-    ],
-    tiers: [
-      {
-        name: startCase(Constants.TierSlug.CIRCUIT_OPEN),
-        slug: Constants.TierSlug.CIRCUIT_OPEN,
-        size: 64,
-        groupSize: 8,
-        triggerTierSlug: Constants.TierSlug.CIRCUIT_CLOSED,
-      },
-      {
-        name: startCase(Constants.TierSlug.CIRCUIT_CLOSED),
-        slug: Constants.TierSlug.CIRCUIT_CLOSED,
-        size: 32,
-        groupSize: 4,
-        triggerOffsetDays: 1,
-        triggerTierSlug: Constants.TierSlug.CIRCUIT_FINALS,
-      },
-      {
-        name: startCase(Constants.TierSlug.CIRCUIT_FINALS),
-        slug: Constants.TierSlug.CIRCUIT_FINALS,
-        size: 16,
-        groupSize: 4,
-        triggerOffsetDays: 1,
-        triggerTierSlug: Constants.TierSlug.CIRCUIT_PLAYOFFS,
-      },
-      {
-        name: startCase(Constants.TierSlug.CIRCUIT_PLAYOFFS),
-        slug: Constants.TierSlug.CIRCUIT_PLAYOFFS,
-        size: 8,
-        triggerOffsetDays: 1,
-        triggerTierSlug: Constants.TierSlug.ESWC_CHALLENGERS,
-      },
-    ],
-  },
-  {
     name: 'ESL Pro League',
     slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
     startOffsetDays: 280,

@@ -216,9 +216,7 @@ export enum Game {
  * @enum
  */
 export enum LeagueSlug {
-  ESPORTS_CIRCUIT = 'esc',
   ESPORTS_LEAGUE = 'esl',
-  ESPORTS_LEAGUE_CUP = 'eslc',
   ESPORTS_PRO_LEAGUE = 'espl',
   ESPORTS_WORLD_CUP = 'eswc',
 }
@@ -432,10 +430,6 @@ export enum SimulationMode {
  * @enum
  */
 export enum TierSlug {
-  CIRCUIT_OPEN = 'circuit:open',
-  CIRCUIT_CLOSED = 'circuit:closed',
-  CIRCUIT_FINALS = 'circuit:finals',
-  CIRCUIT_PLAYOFFS = 'circuit:playoffs',
   ESWC_CHALLENGERS = 'eswc:challengers',
   ESWC_LEGENDS = 'eswc:legends',
   ESWC_CHAMPIONS = 'eswc:champions',
@@ -443,7 +437,6 @@ export enum TierSlug {
   EXHIBITION_FRIENDLY = 'exhibition:friendly',
   LEAGUE_ADVANCED = 'league:advanced',
   LEAGUE_ADVANCED_PLAYOFFS = 'league:advanced:playoffs',
-  LEAGUE_CUP = 'league:cup',
   LEAGUE_INTERMEDIATE = 'league:intermediate',
   LEAGUE_INTERMEDIATE_PLAYOFFS = 'league:intermediate:playoffs',
   LEAGUE_MAIN = 'league:main',
@@ -543,14 +536,6 @@ export enum Zones {
   LEAGUE_MID_TABLE_END = 17,
   LEAGUE_RELEGATION_START = 18,
   LEAGUE_RELEGATION_END = 20,
-  CIRCUIT_OPEN_PROMOTION_AUTO_START = 1,
-  CIRCUIT_OPEN_PROMOTION_AUTO_END = 2,
-  CIRCUIT_CLOSED_PROMOTION_AUTO_START = 1,
-  CIRCUIT_CLOSED_PROMOTION_AUTO_END = 1,
-  CIRCUIT_FINALS_PROMOTION_AUTO_START = 1,
-  CIRCUIT_FINALS_PROMOTION_AUTO_END = 2,
-  CIRCUIT_PLAYOFFS_PROMOTION_AUTO_START = 1,
-  CIRCUIT_PLAYOFFS_PROMOTION_AUTO_END = 4,
   ESWC_CHALLENGERS_PROMOTION_AUTO_START = 1,
   ESWC_CHALLENGERS_PROMOTION_AUTO_END = 2,
   ESWC_LEGENDS_PROMOTION_AUTO_START = 1,
@@ -630,51 +615,6 @@ export const Awards = [
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
     start: Zones.LEAGUE_PROMOTION_AUTO_START,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.LEAGUE_CUP,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.CIRCUIT_OPEN,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: 0,
-    end: Zones.CIRCUIT_OPEN_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.CIRCUIT_CLOSED,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: Zones.CIRCUIT_CLOSED_PROMOTION_AUTO_START,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.CIRCUIT_FINALS,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: 0,
-    end: Zones.CIRCUIT_FINALS_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.CIRCUIT_PLAYOFFS,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: Zones.CIRCUIT_PLAYOFFS_PROMOTION_AUTO_START,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.CIRCUIT_PLAYOFFS,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: Zones.CIRCUIT_PLAYOFFS_PROMOTION_AUTO_START,
-    end: Zones.CIRCUIT_PLAYOFFS_PROMOTION_AUTO_END,
   },
   {
     on: CalendarEntry.COMPETITION_END,
@@ -777,10 +717,6 @@ export const GameSettings = {
  * @constant
  */
 export const IdiomaticTier: Record<TierSlug | string, string> = {
-  [TierSlug.CIRCUIT_OPEN]: 'Open Qualifiers',
-  [TierSlug.CIRCUIT_CLOSED]: 'Closed Qualifiers',
-  [TierSlug.CIRCUIT_FINALS]: 'Finals',
-  [TierSlug.CIRCUIT_PLAYOFFS]: 'Finals Playoffs',
   [TierSlug.ESWC_CHALLENGERS]: 'Challengers Stage',
   [TierSlug.ESWC_LEGENDS]: 'Legends Stage',
   [TierSlug.ESWC_CHAMPIONS]: 'Champions Stage',
@@ -788,7 +724,6 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.EXHIBITION_FRIENDLY]: 'Friendly',
   [TierSlug.LEAGUE_OPEN]: 'Open Division',
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 'Open Division Playoffs',
-  [TierSlug.LEAGUE_CUP]: 'Open Cup',
   [TierSlug.LEAGUE_INTERMEDIATE]: 'Intermediate Division',
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 'Intermediate Division Playoffs',
   [TierSlug.LEAGUE_MAIN]: 'Main Division',
@@ -871,14 +806,6 @@ export const MapVetoConfig: Record<number, Array<{ team: number; type: MapVetoAc
  * @constant
  */
 export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = {
-  [LeagueSlug.ESPORTS_LEAGUE_CUP]: {
-    1: 50, // monday
-    2: 'auto', // tuesday
-  },
-  [LeagueSlug.ESPORTS_CIRCUIT]: {
-    3: 50, // wednesday
-    4: 'auto', // thursday
-  },
   [LeagueSlug.ESPORTS_WORLD_CUP]: {
     3: 50, // wednesday
     4: 'auto', // thursday
@@ -940,17 +867,12 @@ export const Prestige = [
  */
 export const PrizePool: Record<TierSlug | string, { total: number; distribution: Array<number> }> =
 {
-  [TierSlug.CIRCUIT_OPEN]: { total: 0, distribution: [] },
-  [TierSlug.CIRCUIT_CLOSED]: { total: 0, distribution: [] },
-  [TierSlug.CIRCUIT_FINALS]: { total: 0, distribution: [] },
-  [TierSlug.CIRCUIT_PLAYOFFS]: { total: 50_000, distribution: [50, 35, 15] },
   [TierSlug.ESWC_CHALLENGERS]: { total: 0, distribution: [] },
   [TierSlug.ESWC_LEGENDS]: { total: 0, distribution: [] },
   [TierSlug.ESWC_CHAMPIONS]: { total: 0, distribution: [] },
   [TierSlug.ESWC_PLAYOFFS]: { total: 500_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_OPEN]: { total: 5_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_CUP]: { total: 30_000, distribution: [75, 25] },
   [TierSlug.LEAGUE_INTERMEDIATE]: { total: 15_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_MAIN]: { total: 30_000, distribution: [50, 35, 15] },
@@ -1010,10 +932,8 @@ export const Settings = {
  * @constant
  */
 export const TierMatchConfig: Record<string, Array<number>> = {
-  [TierSlug.CIRCUIT_PLAYOFFS]: [3, 3],
   [TierSlug.ESWC_PLAYOFFS]: [5, 3],
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [3, 3],
-  [TierSlug.LEAGUE_CUP]: [3, 3],
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
@@ -1031,15 +951,6 @@ export const TierZones: Record<string | 'default', number[][]> = {
     [Zones.LEAGUE_PROMOTION_AUTO_START, Zones.LEAGUE_PROMOTION_AUTO_END],
     [Zones.LEAGUE_PROMOTION_PLAYOFFS_START, Zones.LEAGUE_PROMOTION_PLAYOFFS_END],
     [Zones.LEAGUE_RELEGATION_START, Zones.LEAGUE_RELEGATION_END],
-  ],
-  [TierSlug.CIRCUIT_OPEN]: [
-    [Zones.CIRCUIT_OPEN_PROMOTION_AUTO_START, Zones.CIRCUIT_OPEN_PROMOTION_AUTO_END],
-  ],
-  [TierSlug.CIRCUIT_CLOSED]: [
-    [Zones.CIRCUIT_CLOSED_PROMOTION_AUTO_START, Zones.CIRCUIT_CLOSED_PROMOTION_AUTO_END],
-  ],
-  [TierSlug.CIRCUIT_FINALS]: [
-    [Zones.CIRCUIT_FINALS_PROMOTION_AUTO_START, Zones.CIRCUIT_FINALS_PROMOTION_AUTO_END],
   ],
   [TierSlug.ESWC_CHALLENGERS]: [
     [Zones.ESWC_CHALLENGERS_PROMOTION_AUTO_START, Zones.ESWC_CHALLENGERS_PROMOTION_AUTO_END],
