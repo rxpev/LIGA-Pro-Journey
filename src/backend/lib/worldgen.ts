@@ -1848,6 +1848,23 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   // - If current tier OPEN/INTERMEDIATE: allow MAIN only on exceptional performance
   let proLowRankOnly = false;
 
+  // User federation (prefer the profile include; fallback to country lookup)
+  let userFedId: number | null =
+    (profile as any)?.player?.country?.continent?.federationId ?? null;
+
+  const userFederation = await prisma.federation.findFirst({
+    where: { id: userFedId },
+    select: { slug: true },
+  });
+  const userFedSlug = userFederation?.slug as Constants.FederationSlug | undefined;
+  const disabledTiers = userFedSlug
+    ? Constants.LeagueTierDisabledByFederation[userFedSlug] ?? []
+    : [];
+  const midTiersDisabled =
+    disabledTiers.includes(TierSlug.LEAGUE_INTERMEDIATE) &&
+    disabledTiers.includes(TierSlug.LEAGUE_MAIN);
+
+
   const isLowTier = currentTierIdx <= idxInter;
   if (isLowTier) {
     const exceptional = leagueSignal >= 0.90;
@@ -2024,10 +2041,6 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       return Promise.resolve();
     }
 
-    // User federation (prefer the profile include; fallback to country lookup)
-    let userFedId: number | null =
-      (profile as any)?.player?.country?.continent?.federationId ?? null;
-
     if (!userFedId && player.countryId) {
       const country = await prisma.country.findFirst({
         where: { id: player.countryId },
@@ -2041,18 +2054,6 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       Engine.Runtime.Instance.log.debug("PlayerScoutingCheck: userFedId missing; skipping offer.");
       return Promise.resolve();
     }
-
-    const userFederation = await prisma.federation.findFirst({
-      where: { id: userFedId },
-      select: { slug: true },
-    });
-    const userFedSlug = userFederation?.slug as Constants.FederationSlug | undefined;
-    const disabledTiers = userFedSlug
-      ? Constants.LeagueTierDisabledByFederation[userFedSlug] ?? []
-      : [];
-    const midTiersDisabled =
-      disabledTiers.includes(TierSlug.LEAGUE_INTERMEDIATE) &&
-      disabledTiers.includes(TierSlug.LEAGUE_MAIN);
 
     // Cross-federation chance depends on user's level (baseline tier)
     // - Open/Intermediate/Main: never
