@@ -5,7 +5,6 @@
  */
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { countBy } from 'lodash';
 import { Chart, ChartConfiguration } from 'chart.js/auto';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -169,9 +168,17 @@ export default function () {
         ),
     );
 
-    return countBy(
-      found,
-      (competition) => competition.tier.slug + '-' + competition.federation.slug,
+    return found.reduce<Record<string, { count: number; seasons: number[] }>>(
+      (acc, competition) => {
+        const key = `${competition.tier.slug}-${competition.federation.slug}`;
+        if (!acc[key]) {
+          acc[key] = { count: 0, seasons: [] };
+        }
+        acc[key].count += 1;
+        acc[key].seasons.push(competition.season);
+        return acc;
+      },
+      {},
     );
   }, [competitions]);
 
@@ -267,14 +274,24 @@ export default function () {
           )}
           {Object.keys(honors).map((honor) => {
             const [tierSlug, federationSlug] = honor.split('-');
+            const honorData = honors[honor];
+            const seasonLabel = t('shared.season');
+            const seasonsList = [...honorData.seasons]
+              .sort((a, b) => a - b)
+              .map((season) => `${seasonLabel} ${season}`)
+              .join('\n');
             return (
-              <aside key={tierSlug + '__award'} className="flex flex-col items-center text-center">
+              <aside
+                key={tierSlug + '__award'}
+                className="flex flex-col items-center text-center"
+                title={seasonsList}
+              >
                 <Image
                   alt={tierSlug}
                   className="w-2/3"
                   src={Util.getCompetitionLogo(tierSlug, federationSlug)}
                 />
-                <p className="text-4xl font-bold">{honors[honor]}</p>
+                <p className="text-4xl font-bold">{honorData.count}</p>
                 <p className="text-sm">{getTeamsTierLabel(tierSlug)}</p>
               </aside>
             );
