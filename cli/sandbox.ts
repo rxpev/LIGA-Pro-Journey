@@ -130,7 +130,7 @@ async function sandboxScore() {
   const away = await DatabaseClient.prisma.team.findFirst({
     where: {
       prestige: Constants.Prestige.findIndex(
-        (prestige) => prestige === Constants.TierSlug.LEAGUE_PREMIER,
+        (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
       ),
     },
     include: { players: true },
@@ -178,7 +178,7 @@ async function sandboxTransfer() {
   const targetTeam = await DatabaseClient.prisma.team.findFirst({
     where: {
       prestige: Constants.Prestige.findIndex(
-        (prestige) => prestige === Constants.TierSlug.LEAGUE_PREMIER,
+        (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
       ),
     },
     include: {
