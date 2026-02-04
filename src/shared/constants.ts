@@ -443,8 +443,6 @@ export enum TierSlug {
   LEAGUE_MAIN_PLAYOFFS = 'league:main:playoffs',
   LEAGUE_OPEN = 'league:open',
   LEAGUE_OPEN_PLAYOFFS = 'league:open:playoffs',
-  LEAGUE_PREMIER = 'league:premier',
-  LEAGUE_PREMIER_PLAYOFFS = 'league:premier:playoffs',
   LEAGUE_PRO = 'league:pro',
   LEAGUE_PRO_PLAYOFFS = 'league:pro:playoffs',
 }
@@ -604,13 +602,6 @@ export const Awards = [
   },
   {
     on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.LEAGUE_PREMIER_PLAYOFFS,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: Zones.LEAGUE_PROMOTION_AUTO_START,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
     target: TierSlug.LEAGUE_PRO_PLAYOFFS,
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
@@ -730,8 +721,6 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: 'Main Division Playoffs',
   [TierSlug.LEAGUE_ADVANCED]: 'Advanced Division',
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'Advanced Division Playoffs',
-  [TierSlug.LEAGUE_PREMIER]: 'Premier Division',
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: 'Premier Division Playoffs',
   [TierSlug.LEAGUE_PRO]: 'Group Stage',
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: 'Playoffs',
 };
@@ -879,8 +868,6 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_ADVANCED]: { total: 70_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_PREMIER]: { total: 200_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_PRO]: { total: 1_000_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
 };
@@ -937,7 +924,6 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
-  [TierSlug.LEAGUE_PREMIER_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: [3, 3],
 };
 

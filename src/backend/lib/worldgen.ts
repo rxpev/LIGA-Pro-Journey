@@ -1851,7 +1851,14 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const isLowTier = currentTierIdx <= idxInter;
   if (isLowTier) {
     const exceptional = leagueSignal >= 0.90;
-    if (exceptional) addTier(idxMain);
+    if (exceptional) {
+      if (midTiersDisabled) {
+        const rareJump = leagueSignal >= 0.93 && Chance.rollD2(15);
+        if (rareJump) addTier(idxAdv);
+      } else {
+        addTier(idxMain);
+      }
+    }
   } else {
     if (baselineTierIdx >= idxMain && baselineTierIdx < idxAdv) {
       if (leagueSignal >= 0.75) addTier(idxAdv);
@@ -1989,7 +1996,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     pbx *= starterMult;
     pbx *= listedMult;
 
-    // Teamless Advanced/Premier scouting should be a bit rarer than contracted scouting
+    // Teamless Advanced/Pro League scouting should be a bit rarer than contracted scouting
     if (isTeamless) pbx *= 0.85;
 
     pbx *= tuning.pbxMultLeague;
@@ -2034,6 +2041,18 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       Engine.Runtime.Instance.log.debug("PlayerScoutingCheck: userFedId missing; skipping offer.");
       return Promise.resolve();
     }
+
+    const userFederation = await prisma.federation.findFirst({
+      where: { id: userFedId },
+      select: { slug: true },
+    });
+    const userFedSlug = userFederation?.slug as Constants.FederationSlug | undefined;
+    const disabledTiers = userFedSlug
+      ? Constants.LeagueTierDisabledByFederation[userFedSlug] ?? []
+      : [];
+    const midTiersDisabled =
+      disabledTiers.includes(TierSlug.LEAGUE_INTERMEDIATE) &&
+      disabledTiers.includes(TierSlug.LEAGUE_MAIN);
 
     // Cross-federation chance depends on user's level (baseline tier)
     // - Open/Intermediate/Main: never
