@@ -64,8 +64,8 @@ const Score = styled.div<{ won?: boolean }>`
   justify-content: center;
   background: ${({ theme, won }) =>
     won ? theme.score.background.wonColor : theme.score.background.lostColor};
-  color: ${({ theme, won }) =>
-    won ? theme.textColor.highlighted : theme.textColor.dark};
+  color: ${({ won }) =>
+    won === undefined ? 'var(--color-base-content)' : won ? 'var(--color-success)' : 'var(--color-error)'};
 `;
 
 const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
@@ -77,8 +77,8 @@ const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
   background: ${({ theme, won }) =>
     won ? theme.matchBackground.wonColor : theme.matchBackground.lostColor};
 
-- border-right: 4px solid ${({ theme }) => theme.border.color};
-- border-left: 4px solid ${({ theme }) => theme.border.color};
+  border-right: 4px solid ${({ theme }) => theme.border.color};
+  border-left: 4px solid ${({ theme }) => theme.border.color};
   border-top: 1px solid ${({ theme }) => theme.border.color};
   border-bottom: 1px solid ${({ theme }) => theme.border.color};
 
@@ -88,8 +88,8 @@ const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
     won ? theme.textColor.highlighted : theme.textColor.dark};
   }
   ${Score} {
-    color: ${({ theme, won }) =>
-    won ? theme.textColor.highlighted : theme.textColor.dark};
+    color: ${({ won }) =>
+    won === undefined ? 'var(--color-base-content)' : won ? 'var(--color-success)' : 'var(--color-error)'};
   }
   ${({ hovered, theme, won }) =>
     hovered &&
@@ -99,9 +99,11 @@ const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
         color: ${theme.textColor.highlighted};
       }
       ${Score} {
-        color: ${won
-        ? theme.score.text.highlightedWonColor
-        : theme.score.text.highlightedLostColor};
+        color: ${won === undefined
+        ? 'var(--color-base-content)'
+        : won
+          ? 'var(--color-success)'
+          : 'var(--color-error)'};
       }
     `}
 `;

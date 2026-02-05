@@ -277,7 +277,16 @@ async function createMatchdays(
       let num = 1;
 
       if (Constants.TierMatchConfig[competition.tier.slug]) {
-        num = Constants.TierMatchConfig[competition.tier.slug][totalRounds - match.id.r] || num;
+        const seriesByRound = Constants.TierMatchConfig[competition.tier.slug];
+
+        // bracket configs are ordered from grand-final backwards,
+        // while non-bracket tiers use a fixed series length
+        if (tournament.brackets) {
+          const reverseRoundIdx = totalRounds - match.id.r;
+          num = seriesByRound[reverseRoundIdx] ?? seriesByRound[seriesByRound.length - 1] ?? num;
+        } else {
+          num = seriesByRound[0] ?? num;
+        }
       }
 
       // create match record
@@ -3720,6 +3729,7 @@ export async function onMatchdayNPC(entry: Calendar) {
           tier: true,
         },
       },
+      games: true,
     },
   });
 
@@ -3753,7 +3763,10 @@ export async function onMatchdayNPC(entry: Calendar) {
 
   // sim the game
   const [home, away] = match.competitors;
-  const simulationResult = simulator.generate([home.team, away.team]);
+  const simulationResult =
+    match.games.length === 1
+      ? simulator.generate([home.team, away.team])
+      : simulator.generateSeries([home.team, away.team], match.games.length);
 
   // check if we need to award earnings to user for a win (only if user has a team)
   if (

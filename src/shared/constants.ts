@@ -920,11 +920,12 @@ export const Settings = {
  */
 export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.ESWC_PLAYOFFS]: [5, 3],
+  [TierSlug.LEAGUE_PRO]: [3],
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
-  [TierSlug.LEAGUE_PRO_PLAYOFFS]: [3, 3],
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: [5, 3, 3, 3],
 };
 
 /**

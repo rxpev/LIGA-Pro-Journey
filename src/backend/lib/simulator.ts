@@ -60,7 +60,7 @@ enum SimulationResult {
  */
 export function getMatchResult(
   id: number,
-  scores: ReturnType<InstanceType<typeof Score>['generate']>,
+  scores: Record<number, number>,
 ) {
   const competitorScore = scores[id];
   const opponentScore = scores[Number(Object.keys(scores).find((key) => Number(key) !== id))];
@@ -132,6 +132,32 @@ export class Score {
       .map((player) => Bot.Exp.getTotalXP(player.xp))
       .reduce((a, b) => a + b);
     return totalXp + team.prestige + team.tier;
+  }
+
+  /**
+   * Simulates a best-of series scoreline where each map
+   * win is decided by the same weighted probability model
+   * used by `generate`.
+   *
+   * @param teams The home and away teams.
+   * @param bestOf The series length (1/3/5).
+   * @function
+   */
+  public generateSeries(teams: Array<Team>, bestOf = 1) {
+    const [home, away] = teams;
+    const winsToClinch = Math.floor(bestOf / 2) + 1;
+    const score = {
+      [home.id]: 0,
+      [away.id]: 0,
+    };
+
+    while (score[home.id] < winsToClinch && score[away.id] < winsToClinch) {
+      const mapResult = this.generate(teams);
+      const winnerId = mapResult[home.id] > mapResult[away.id] ? home.id : away.id;
+      score[winnerId] += 1;
+    }
+
+    return score;
   }
 
   /**
