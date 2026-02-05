@@ -140,6 +140,7 @@ export async function createCompetitions() {
  * @param tournament  The tournament object the matches belong to.
  * @param competition The competition the matches belong to.
  * @param mapName     The round's map name.
+ * @param vetoMapName Placeholder map for IGL user matches that should always use veto.
  * @function
  */
 async function createMatchdays(
@@ -149,9 +150,12 @@ async function createMatchdays(
     include: { tier: { include: { league: true } }; competitors: true };
   }>,
   mapName?: string,
+  vetoMapName?: string,
 ) {
   // grab current profile
-  const profile = await DatabaseClient.prisma.profile.findFirst();
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    include: { player: true },
+  });
   const today = profile?.date || new Date();
 
   // grab user seed (teamless players will not match any competitor)
@@ -160,6 +164,9 @@ async function createMatchdays(
       ? competition.competitors.find((competitor) => competitor.teamId === profile.teamId)
       : undefined;
   const userSeed = tournament.getSeedByCompetitorId(userCompetitorId?.id);
+  const userIsIgl =
+    !!profile?.teamId &&
+    resolveUserRole(profile, profile?.player) === Constants.UserRole.IGL;
 
   // create the matchdays
   const totalRounds = tournament.$base.rounds().length;
@@ -266,11 +273,14 @@ async function createMatchdays(
       const week = addWeeks(today, roundOffset);
       const matchday = setDay(week, Number(dayOfWeek), { weekStartsOn: 1 });
 
+      const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
+      const roundMapName = isUserIglMatch ? vetoMapName || mapName : mapName;
+
       // assign map to match
       if (!match.data) {
-        match.data = { map: mapName };
+        match.data = { map: roundMapName };
       } else {
-        match.data['map'] = mapName;
+        match.data['map'] = roundMapName;
       }
 
       // how many games in this series?
@@ -308,7 +318,7 @@ async function createMatchdays(
           games: {
             create: Array.from({ length: num }).map((_, idx) => ({
               status,
-              map: mapName,
+              map: roundMapName,
               num: idx,
               teams: {
                 create: competitors,
@@ -917,10 +927,15 @@ export async function acceptTransferOffer(transferId: number) {
     const contractEndDate = format(contractEnd, Constants.Settings.calendar.calendarDateFormat);
 
     await sendEmail(
-      Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, { profile, team }),
+      Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, {
+        profile,
+        team,
+        transfer,
+      }),
       Sqrl.render(locale.templates.ContractExtensionAccepted.CONTENT, {
         profile,
         team,
+        transfer,
         years,
         contractEndDate,
       }),
@@ -3626,13 +3641,18 @@ export async function onCompetitionStart(entry: Calendar) {
         not: null,
       },
     },
+    orderBy: {
+      position: "asc",
+    },
     include: Eagers.mapPool.include,
   });
 
   // register matches
   await Promise.all(
     tournament.$base.rounds().map((round) => {
-      return createMatchdays(round, tournament, competition, sample(mapPool).gameMap.name);
+      const randomRoundMap = sample(mapPool)?.gameMap.name || mapPool[0]?.gameMap.name;
+      const vetoPlaceholderMap = mapPool[0]?.gameMap.name || randomRoundMap;
+      return createMatchdays(round, tournament, competition, randomRoundMap, vetoPlaceholderMap);
     }),
   );
 

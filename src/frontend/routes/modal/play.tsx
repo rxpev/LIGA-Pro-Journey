@@ -153,6 +153,10 @@ export default function () {
   // grab basic match info
   const game = React.useMemo(() => match && match.games[0], [match]);
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
+  const isIgl = React.useMemo(
+    () => state.profile?.player?.role === Constants.UserRole.IGL,
+    [state.profile],
+  );
 
   // load map veto info
   const vetoMapList = React.useMemo(
@@ -163,8 +167,22 @@ export default function () {
     [vetoHistory],
   );
   const vetoSequence = React.useMemo(
-    () => (match ? Constants.MapVetoConfig[match.games.length] : []),
-    [match],
+    () => {
+      if (!match) {
+        return [];
+      }
+
+      // best-of-one veto runs as alternating bans until one map is left.
+      if (match.games.length === 1) {
+        return Array.from({ length: Math.max(0, mapPool.length - 1) }, (_, idx) => ({
+          team: idx % 2,
+          type: Constants.MapVetoAction.BAN,
+        }));
+      }
+
+      return Constants.MapVetoConfig[match.games.length] || [];
+    },
+    [mapPool.length, match],
   );
   const vetoSequenceComplete = React.useMemo(
     () => match && vetoMapList.length >= match.games.length,
@@ -214,6 +232,12 @@ export default function () {
     () => !!match && !!cpu && match.competitors.findIndex((competitor) => competitor.id === cpu.id),
     [match, cpu],
   );
+  const userCompetitorIdx = React.useMemo(
+    () =>
+      !!match &&
+      match.competitors.findIndex((competitor) => competitor.teamId === state.profile.teamId),
+    [match, state.profile.teamId],
+  );
   const cpuPool = React.useMemo(
     () =>
       mapPool
@@ -221,8 +245,25 @@ export default function () {
         .map((map) => map.gameMap.name),
     [mapPool, vetoHistory],
   );
+  const previewMap = React.useMemo(() => {
+    if (vetoMapList.length > 0) {
+      return vetoMapList[0].map;
+    }
+
+    // In BO1, don't reveal a league-preselected map in pregame.
+    // Show the last unvetoed map (if available) while veto is in progress.
+    if (match?.games.length === 1 && cpuPool.length === 1) {
+      return cpuPool[0];
+    }
+
+    return mapPool[0]?.gameMap.name || game?.map;
+  }, [cpuPool, game?.map, mapPool, match?.games.length, vetoMapList]);
   React.useEffect(() => {
-    if (!vetoSequenceStep || vetoSequenceStep.team !== cpuIdx) {
+    const isCpuTurn = !!vetoSequenceStep && vetoSequenceStep.team === cpuIdx;
+    const isUserAutomatedTurn =
+      !!vetoSequenceStep && vetoSequenceStep.team === userCompetitorIdx && !isIgl;
+
+    if (!isCpuTurn && !isUserAutomatedTurn) {
       return;
     }
 
@@ -237,7 +278,7 @@ export default function () {
     );
 
     return () => clearTimeout(timeout);
-  }, [cpuIdx, cpuPool, vetoSequenceStep]);
+  }, [cpuIdx, cpuPool, isIgl, userCompetitorIdx, vetoSequenceStep]);
 
   // figure out the decider
   React.useEffect(() => {
@@ -293,7 +334,7 @@ export default function () {
         <figure>
           <Image
             className="h-full w-full"
-            src={Util.convertMapPool(game.map, settingsAll.general.game, true)}
+            src={Util.convertMapPool(previewMap || game.map, settingsAll.general.game, true)}
           />
         </figure>
         <header className="card-body grid grid-cols-3 place-items-center p-0">
@@ -333,10 +374,16 @@ export default function () {
             {!!vetoSequenceStep && (
               <React.Fragment>
                 <span className="loading loading-dots loading-sm"></span>
-                <span>
-                  &nbsp;Waiting on {match.competitors[vetoSequenceStep.team].team.name} to&nbsp;
-                </span>
-                <strong>{vetoSequenceStep.type.toUpperCase()}</strong> a map...
+                {vetoSequenceStep.team === userCompetitorIdx && isIgl ? (
+                  <span>
+                    &nbsp;Your turn to <strong>{vetoSequenceStep.type.toUpperCase()}</strong> a map.
+                  </span>
+                ) : (
+                  <span>
+                    &nbsp;Waiting on {match.competitors[vetoSequenceStep.team].team.name} to{' '}
+                    <strong>{vetoSequenceStep.type.toUpperCase()}</strong> a map...
+                  </span>
+                )}
               </React.Fragment>
             )}
             {!vetoSequenceComplete && !vetoSequenceStep && (
@@ -360,21 +407,23 @@ export default function () {
           >
             {mapPool.map((map) => {
               const picked = vetoHistory.find((item) => item.map === map.gameMap.name);
+              const isUsersTurn = !!vetoSequenceStep && vetoSequenceStep.team === userCompetitorIdx;
+              const canPick =
+                !picked &&
+                !vetoSequenceComplete &&
+                !working &&
+                isUsersTurn &&
+                isIgl;
 
               return (
                 <figure key={map.gameMap.name} className="relative h-full w-full">
                   <Image
                     title={Util.convertMapPool(map.gameMap.name, settingsAll.general.game)}
                     src={Util.convertMapPool(map.gameMap.name, settingsAll.general.game, true)}
-                    onClick={() =>
-                      !picked &&
-                      !vetoSequenceComplete &&
-                      !working &&
-                      onVetoSelection(map.gameMap.name)
-                    }
+                    onClick={() => canPick && onVetoSelection(map.gameMap.name)}
                     className={cx(
                       'h-full border object-cover shadow-md',
-                      !picked && !vetoSequenceComplete && !working && 'cursor-pointer',
+                      canPick && 'cursor-pointer',
                       picked
                         ? VETO_STYLES.border[picked.type]
                         : 'border-base-content/50 shadow-base-content/50',
@@ -429,8 +478,6 @@ export default function () {
             const starters = Util.getSquad(team, state.profile, isUserTeam);
             const bench = differenceBy(team.players, starters, 'id');
             const squad = { starters, bench };
-            console.log("USER ROW", starters.find(p => p.id === state.profile.playerId));
-
 
             return (
               <table key={competitor.id + '__competitor'} className="table-xs table table-fixed">

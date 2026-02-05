@@ -109,6 +109,10 @@ export function StatusBanner(props: StatusBannerProps) {
 export default function () {
   const t = useTranslation('windows');
   const { state, dispatch } = React.useContext(AppStateContext);
+  const isIgl = React.useMemo(
+    () => state.profile?.player?.role === Constants.UserRole.IGL,
+    [state.profile],
+  );
   const [settings, setSettings] = React.useState(Constants.Settings);
   const [upcoming, setUpcoming] = React.useState<
     Awaited<ReturnType<typeof api.matches.upcoming<typeof Eagers.match>>>
@@ -663,14 +667,17 @@ export default function () {
                       className="btn btn-primary join-item btn-wide"
                       disabled={disabled || !!state.appStatus}
                       onClick={() => {
-                        // jump directly into game if it's a bo1
-                        // or there is a map already in-progress
-                        if (
-                          spotlight.games.length === 1 ||
-                          spotlight.games.some(
-                            (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
-                          )
-                        ) {
+                        const hasMapInProgress = spotlight.games.some(
+                          (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
+                        );
+                        const shouldOpenVeto =
+                          spotlight.status !== Constants.MatchStatus.PLAYING &&
+                          spotlight.status !== Constants.MatchStatus.COMPLETED &&
+                          (spotlight.games.length > 1 || isIgl);
+
+                        // only jump directly into game when a map is already live,
+                        // or when no veto flow is required.
+                        if (!shouldOpenVeto || hasMapInProgress) {
                           return dispatch(play(spotlight.id));
                         }
 
