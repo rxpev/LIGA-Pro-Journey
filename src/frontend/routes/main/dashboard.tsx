@@ -570,11 +570,15 @@ export default function () {
                 <figure>
                   <Image
                     className="h-full w-full"
-                    src={Util.convertMapPool(
-                      spotlight.games[0].map,
-                      settings.general.game,
-                      true,
-                    )}
+                    src={
+                      isIgl && isMatchday
+                        ? 'resources://maps/allmaps.png'
+                        : Util.convertMapPool(
+                            spotlight.games[0].map,
+                            settings.general.game,
+                            true,
+                          )
+                    }
                   />
                 </figure>
                 <article className="card-body">
