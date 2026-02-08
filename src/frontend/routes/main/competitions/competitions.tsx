@@ -15,6 +15,7 @@ enum TabIdentifier {
   OVERVIEW = '/competitions',
   STANDINGS = '/competitions/standings',
   RESULTS = '/competitions/results',
+  PARTICIPANTS = '/competitions/participants',
 }
 
 /**
@@ -306,6 +307,12 @@ export default function () {
           onClick={() => navigate(TabIdentifier.RESULTS)}
         >
           {t('shared.results')}
+        </button>
+        <button
+          className={cx(location.pathname === TabIdentifier.PARTICIPANTS && 'btn-active!')}
+          onClick={() => navigate(TabIdentifier.PARTICIPANTS)}
+        >
+          Participants
         </button>
       </header>
       <main>

@@ -120,6 +120,10 @@ const routes = createMemoryRouter([
             path: 'results',
             element: <Routes.Main.Competitions.Results />,
           },
+          {
+            path: 'participants',
+            element: <Routes.Main.Competitions.Participants />,
+          },
         ],
       },
       {
