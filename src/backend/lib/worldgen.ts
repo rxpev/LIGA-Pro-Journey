@@ -260,8 +260,6 @@ async function createMatchdays(
         ]);
       }
 
-      // generate day of week for match
-      const dayOfWeek = Chance.roll(Constants.MatchDayWeights[competition.tier.league.slug]);
       const roundOffset =
         tournament.brackets &&
         tournament.options &&
@@ -270,8 +268,14 @@ async function createMatchdays(
         match.id.s === Constants.BracketIdentifier.LOWER
           ? match.id.r + 1
           : match.id.r;
-      const week = addWeeks(today, roundOffset);
-      const matchday = setDay(week, Number(dayOfWeek), { weekStartsOn: 1 });
+      const isMajorQualifier = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_MAJOR;
+      const matchday = isMajorQualifier
+        ? addDays(today, roundOffset)
+        : setDay(
+          addWeeks(today, roundOffset),
+          Number(Chance.roll(Constants.MatchDayWeights[competition.tier.league.slug])),
+          { weekStartsOn: 1 },
+        );
 
       const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
       const roundMapName = isUserIglMatch ? vetoMapName || mapName : mapName;

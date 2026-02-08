@@ -106,6 +106,26 @@ const data: Array<LeagueSeedData> = [
     ],
   },
   {
+    name: '',
+    slug: Constants.LeagueSlug.ESPORTS_MAJOR,
+    startOffsetDays: 14,
+    federations: [Constants.FederationSlug.ESPORTS_OCE],
+    tiers: [
+      {
+        name: 'RMR Open Qualifier #1',
+        slug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+        size: 36,
+        triggerTierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+      },
+      {
+        name: 'RMR Open Qualifier #2',
+        slug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+        size: 35,
+        triggerOffsetDays: 2,
+      },
+    ],
+  },
+  {
     name: 'Electronic Sports World Cup',
     slug: Constants.LeagueSlug.ESPORTS_WORLD_CUP,
     federations: [Constants.FederationSlug.ESPORTS_WORLD],

@@ -1025,6 +1025,59 @@ export const Items: Array<Item> = [
       },
     ],
   },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_OPEN,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 20,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 15,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 1,
+        season: 0,
+      },
+    ],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 2,
+        end: 36,
+        season: 0,
+      },
+    ],
+  },
 ];
 
 /**
@@ -1071,13 +1124,8 @@ async function handleIncludeAction(
     return Promise.resolve([]);
   }
 
-  const competitors = competition.competitors.slice(
-    entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
-    entry.end || undefined,
-  );
-
   if (isWorldLeagueEntry && entry.federationSlug) {
-    const teamIds = competitors.map((competitor) => competitor.teamId);
+    const teamIds = competition.competitors.map((competitor) => competitor.teamId);
     const regionTeams = await DatabaseClient.prisma.team.findMany({
       where: {
         id: {
@@ -1096,11 +1144,20 @@ async function handleIncludeAction(
       },
     });
     const regionTeamIds = new Set(regionTeams.map((team) => team.id));
-    return Promise.resolve(
-      competitors.filter((competitor) => regionTeamIds.has(competitor.teamId)).map((c) => c.team),
+    const regionCompetitors = competition.competitors.filter((competitor) =>
+      regionTeamIds.has(competitor.teamId),
     );
+    const slicedCompetitors = regionCompetitors.slice(
+      entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
+      entry.end || undefined,
+    );
+    return Promise.resolve(slicedCompetitors.map((competitor) => competitor.team));
   }
 
+  const competitors = competition.competitors.slice(
+    entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
+    entry.end || undefined,
+  );
   return Promise.resolve(competitors.map((competitor) => competitor.team));
 }
 
