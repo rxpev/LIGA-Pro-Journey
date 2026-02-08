@@ -38,14 +38,21 @@ export default function () {
   >({});
   const [loadingByTeamId, setLoadingByTeamId] = React.useState<Record<number, boolean>>({});
 
-  const participants = React.useMemo(() => {
+  const [worldRankingByTeamId, setWorldRankingByTeamId] = React.useState<Record<number, number>>(
+    {},
+  );
+  const [worldRankingLoadingByTeamId, setWorldRankingLoadingByTeamId] = React.useState<
+    Record<number, boolean>
+  >({});
+
+  const baseParticipants = React.useMemo(() => {
     const teamMap = new Map<number, (typeof competition.competitors)[number]['team']>();
 
     competition.competitors.forEach((competitor) => {
       teamMap.set(competitor.team.id, competitor.team);
     });
 
-    return Array.from(teamMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(teamMap.values());
   }, [competition.competitors]);
 
   const fetchStarters = React.useCallback(
@@ -74,17 +81,67 @@ export default function () {
     [startersByTeamId, loadingByTeamId],
   );
 
+  const fetchWorldRanking = React.useCallback(
+    (teamId: number) => {
+      if (worldRankingByTeamId[teamId] != null || worldRankingLoadingByTeamId[teamId]) {
+        return;
+      }
+
+      setWorldRankingLoadingByTeamId((prev) => ({ ...prev, [teamId]: true }));
+
+      api.team
+        .worldRanking(teamId)
+        .then((rank) => setWorldRankingByTeamId((prev) => ({ ...prev, [teamId]: rank })))
+        .finally(() =>
+          setWorldRankingLoadingByTeamId((prev) => ({ ...prev, [teamId]: false })),
+        );
+    },
+    [worldRankingByTeamId, worldRankingLoadingByTeamId],
+  );
+
   /**
    * When lineups are visible, eager-load all starters to prevent “pop-in” while browsing.
    */
   React.useEffect(() => {
     if (!isLineupsVisible) return;
-    participants.forEach((team) => fetchStarters(team.id));
-  }, [isLineupsVisible, participants, fetchStarters]);
+    baseParticipants.forEach((team) => fetchStarters(team.id));
+  }, [isLineupsVisible, baseParticipants, fetchStarters]);
+
+  /**
+   * Eager-load world ranking for all teams so the grid can be ordered by ranking.
+   */
+  React.useEffect(() => {
+    baseParticipants.forEach((team) => fetchWorldRanking(team.id));
+  }, [baseParticipants, fetchWorldRanking]);
 
   const onToggleLineups = React.useCallback(() => {
     setIsLineupsVisible((prev) => !prev);
   }, []);
+
+  const participants = React.useMemo(() => {
+    const getRankKey = (teamId: number) => {
+      const rank = worldRankingByTeamId[teamId];
+
+      // Treat missing/invalid ranks as "unranked" and push them to the bottom.
+      if (rank == null || !Number.isFinite(rank) || rank <= 0) {
+        return Number.POSITIVE_INFINITY;
+      }
+
+      return rank;
+    };
+
+    return [...baseParticipants].sort((a, b) => {
+      const aRank = getRankKey(a.id);
+      const bRank = getRankKey(b.id);
+
+      if (aRank !== bRank) {
+        return aRank - bRank; // lower rank number = better, goes first
+      }
+
+      // Stable fallback ordering.
+      return a.name.localeCompare(b.name);
+    });
+  }, [baseParticipants, worldRankingByTeamId]);
 
   return (
     <section>
@@ -101,6 +158,12 @@ export default function () {
           const isLoading = loadingByTeamId[team.id] === true;
           const starters = startersByTeamId[team.id] || [];
 
+          const ranking = worldRankingByTeamId[team.id];
+          const rankingLoading = worldRankingLoadingByTeamId[team.id] === true;
+
+          const showTopLeftRanking = !isExpanded;
+          const showBottomLeftRanking = isExpanded;
+
           return (
             <Link
               key={team.id}
@@ -116,9 +179,18 @@ export default function () {
                 if (!isLineupsVisible) {
                   fetchStarters(team.id);
                 }
+
+                // If a ranking hasn't been loaded yet (rare), fetch it on-demand.
+                fetchWorldRanking(team.id);
               }}
               onMouseLeave={() => setHoveredTeamId(null)}
             >
+              {showTopLeftRanking && (rankingLoading || ranking != null) && (
+                <span className="badge badge-sm absolute left-3 top-3 border-base-content/10 bg-base-300/70">
+                  {rankingLoading ? '…' : `#${ranking}`}
+                </span>
+              )}
+
               <div className={cx('flex w-full items-center justify-center', CARD_SLOT_HEIGHT_CLASS)}>
                 {!isExpanded && (
                   <figure className="flex h-16 w-16 items-center justify-center">
@@ -165,9 +237,17 @@ export default function () {
                 )}
               </div>
 
-              <span className="link link-hover mt-3 block truncate text-center font-semibold">
-                {team.name}
-              </span>
+              <div className="mt-3 flex items-center justify-center">
+                <span className="link link-hover block truncate text-center font-semibold">
+                  {team.name}
+                </span>
+              </div>
+
+              {showBottomLeftRanking && (rankingLoading || ranking != null) && (
+                <span className="badge badge-sm absolute bottom-3 left-3 border-base-content/10 bg-base-300/70">
+                  {rankingLoading ? '…' : `#${ranking}`}
+                </span>
+              )}
             </Link>
           );
         })}
