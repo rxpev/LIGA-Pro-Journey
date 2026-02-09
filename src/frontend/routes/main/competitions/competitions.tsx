@@ -225,7 +225,9 @@ export default function () {
         if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_ASIA) {
           return (
             tier.slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1 ||
-            tier.slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2
+            tier.slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2 ||
+            tier.slug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1 ||
+            tier.slug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2
           );
         }
 

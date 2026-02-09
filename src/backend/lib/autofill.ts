@@ -31,6 +31,7 @@ export interface Entry {
   end?: Constants.Zones | number;
   season?: number;
   federationSlug?: Constants.FederationSlug;
+  includeCountryCodes?: Array<string>;
   excludeCountryCodes?: Array<string>;
 }
 
@@ -1093,6 +1094,72 @@ export const Items: Array<Item> = [
     ],
   },
   {
+    tierSlug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_OPEN,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 40,
+        season: 0,
+        includeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 20,
+        season: 0,
+        includeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 2,
+        season: 0,
+        includeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 32,
+        season: -1,
+        includeCountryCodes: ['CN'],
+      },
+    ],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 2,
+        end: 32,
+        season: 0,
+      },
+    ],
+  },
+  {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
     entries: [
@@ -1170,6 +1237,18 @@ async function handleIncludeAction(
   const excludeCountryCodes = entry.excludeCountryCodes?.length
     ? new Set(entry.excludeCountryCodes)
     : null;
+  const includeCountryCodes = entry.includeCountryCodes?.length
+    ? new Set(entry.includeCountryCodes)
+    : null;
+  const countryFilter =
+    includeCountryCodes || excludeCountryCodes
+      ? {
+        code: {
+          ...(includeCountryCodes ? { in: [...includeCountryCodes] } : {}),
+          ...(excludeCountryCodes ? { notIn: [...excludeCountryCodes] } : {}),
+        },
+      }
+      : null;
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const isWorldLeagueEntry = entry.from === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
   const competition = await DatabaseClient.prisma.competition.findFirst({
@@ -1211,7 +1290,7 @@ async function handleIncludeAction(
           in: teamIds,
         },
         country: {
-          ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
+          ...(countryFilter ? countryFilter : {}),
           continent: {
             federation: {
               slug: entry.federationSlug,
@@ -1235,25 +1314,23 @@ async function handleIncludeAction(
   }
 
   let competitors = competition.competitors;
-  if (excludeCountryCodes) {
-    const excludedTeams = await DatabaseClient.prisma.team.findMany({
+  if (countryFilter) {
+    const filteredTeams = await DatabaseClient.prisma.team.findMany({
       where: {
         id: {
           in: competitors.map((competitor) => competitor.teamId),
         },
         country: {
-          code: {
-            in: [...excludeCountryCodes],
-          },
+          ...(countryFilter ? countryFilter : {}),
         },
       },
       select: {
         id: true,
       },
     });
-    if (excludedTeams.length) {
-      const excludedIds = new Set(excludedTeams.map((team) => team.id));
-      competitors = competitors.filter((competitor) => !excludedIds.has(competitor.teamId));
+    if (filteredTeams.length) {
+      const includedIds = new Set(filteredTeams.map((team) => team.id));
+      competitors = competitors.filter((competitor) => includedIds.has(competitor.teamId));
     }
   }
 
@@ -1292,6 +1369,18 @@ async function handleFallbackAction(
   const excludeCountryCodes = entry.excludeCountryCodes?.length
     ? new Set(entry.excludeCountryCodes)
     : null;
+  const includeCountryCodes = entry.includeCountryCodes?.length
+    ? new Set(entry.includeCountryCodes)
+    : null;
+  const countryFilter =
+    includeCountryCodes || excludeCountryCodes
+      ? {
+        code: {
+          ...(includeCountryCodes ? { in: [...includeCountryCodes] } : {}),
+          ...(excludeCountryCodes ? { notIn: [...excludeCountryCodes] } : {}),
+        },
+      }
+      : null;
   if (entry.target === Constants.TierSlug.LEAGUE_PRO) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const occupied = await DatabaseClient.prisma.competition.findMany({
@@ -1319,7 +1408,7 @@ async function handleFallbackAction(
           notIn: [...occupiedIds],
         },
         country: {
-          ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
+          ...(countryFilter ? countryFilter : {}),
           continent: {
             federation: {
               slug: entry.federationSlug || federation.slug,
@@ -1339,7 +1428,7 @@ async function handleFallbackAction(
     where: {
       prestige: Constants.Prestige.findIndex((prestige) => prestige === entry.target),
       country: {
-        ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
+        ...(countryFilter ? countryFilter : {}),
         continent: {
           federation: {
             slug: entry.federationSlug || federation.slug,

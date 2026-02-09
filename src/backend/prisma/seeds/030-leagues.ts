@@ -127,6 +127,18 @@ const data: Array<LeagueSeedData> = [
         triggerOffsetDays: 2,
       },
       {
+        name: 'RMR Open Qualifier #1 (CN)',
+        slug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        size: 32,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+      },
+      {
+        name: 'RMR Open Qualifier #2 (CN)',
+        slug: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+        size: 30,
+        triggerOffsetDays: 2,
+      },
+      {
         name: 'RMR Open Qualifier #1',
         slug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
         size: 36,
