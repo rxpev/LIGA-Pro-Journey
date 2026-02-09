@@ -218,7 +218,25 @@ export default function () {
 
     return tiers.filter((tier) => {
       if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_LEAGUE) {
-        return true;
+        if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_MAJOR) {
+          return true;
+        }
+
+        if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_ASIA) {
+          return (
+            tier.slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1 ||
+            tier.slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2
+          );
+        }
+
+        if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_OCE) {
+          return (
+            tier.slug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1 ||
+            tier.slug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2
+          );
+        }
+
+        return false;
       }
 
       return Util.isLeagueTierEnabledForFederation(

@@ -109,8 +109,23 @@ const data: Array<LeagueSeedData> = [
     name: '',
     slug: Constants.LeagueSlug.ESPORTS_MAJOR,
     startOffsetDays: 14,
-    federations: [Constants.FederationSlug.ESPORTS_OCE],
+    federations: [
+      Constants.FederationSlug.ESPORTS_ASIA,
+      Constants.FederationSlug.ESPORTS_OCE,
+    ],
     tiers: [
+      {
+        name: 'RMR Open Qualifier #1 AS',
+        slug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+        size: 62,
+        triggerTierSlug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+      },
+      {
+        name: 'RMR Open Qualifier #2 AS',
+        slug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+        size: 60,
+        triggerOffsetDays: 2,
+      },
       {
         name: 'RMR Open Qualifier #1',
         slug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,

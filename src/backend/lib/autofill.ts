@@ -31,6 +31,7 @@ export interface Entry {
   end?: Constants.Zones | number;
   season?: number;
   federationSlug?: Constants.FederationSlug;
+  excludeCountryCodes?: Array<string>;
 }
 
 /** @interface */
@@ -1026,6 +1027,72 @@ export const Items: Array<Item> = [
     ],
   },
   {
+    tierSlug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_OPEN,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 40,
+        season: 0,
+        excludeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_ADVANCED,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 20,
+        season: 0,
+        excludeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+        target: Constants.TierSlug.LEAGUE_PRO,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 2,
+        season: 0,
+        excludeCountryCodes: ['CN'],
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 62,
+        season: -1,
+        excludeCountryCodes: ['CN'],
+      },
+    ],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 3,
+        end: 62,
+        season: 0,
+      },
+    ],
+  },
+  {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
     entries: [
@@ -1100,6 +1167,9 @@ async function handleIncludeAction(
   entry: Entry,
   federation: Prisma.FederationGetPayload<unknown>,
 ): Promise<Array<Team>> {
+  const excludeCountryCodes = entry.excludeCountryCodes?.length
+    ? new Set(entry.excludeCountryCodes)
+    : null;
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const isWorldLeagueEntry = entry.from === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
   const competition = await DatabaseClient.prisma.competition.findFirst({
@@ -1141,6 +1211,7 @@ async function handleIncludeAction(
           in: teamIds,
         },
         country: {
+          ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
           continent: {
             federation: {
               slug: entry.federationSlug,
@@ -1163,7 +1234,30 @@ async function handleIncludeAction(
     return Promise.resolve(slicedCompetitors.map((competitor) => competitor.team));
   }
 
-  const competitors = competition.competitors.slice(
+  let competitors = competition.competitors;
+  if (excludeCountryCodes) {
+    const excludedTeams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        id: {
+          in: competitors.map((competitor) => competitor.teamId),
+        },
+        country: {
+          code: {
+            in: [...excludeCountryCodes],
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+    if (excludedTeams.length) {
+      const excludedIds = new Set(excludedTeams.map((team) => team.id));
+      competitors = competitors.filter((competitor) => !excludedIds.has(competitor.teamId));
+    }
+  }
+
+  competitors = competitors.slice(
     entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
     entry.end || undefined,
   );
@@ -1195,6 +1289,9 @@ async function handleFallbackAction(
   tier: Prisma.TierGetPayload<typeof Eagers.tier>,
   federation: Prisma.FederationGetPayload<unknown>,
 ) {
+  const excludeCountryCodes = entry.excludeCountryCodes?.length
+    ? new Set(entry.excludeCountryCodes)
+    : null;
   if (entry.target === Constants.TierSlug.LEAGUE_PRO) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const occupied = await DatabaseClient.prisma.competition.findMany({
@@ -1222,6 +1319,7 @@ async function handleFallbackAction(
           notIn: [...occupiedIds],
         },
         country: {
+          ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
           continent: {
             federation: {
               slug: entry.federationSlug || federation.slug,
@@ -1241,6 +1339,7 @@ async function handleFallbackAction(
     where: {
       prestige: Constants.Prestige.findIndex((prestige) => prestige === entry.target),
       country: {
+        ...(excludeCountryCodes ? { code: { notIn: [...excludeCountryCodes] } } : {}),
         continent: {
           federation: {
             slug: entry.federationSlug || federation.slug,

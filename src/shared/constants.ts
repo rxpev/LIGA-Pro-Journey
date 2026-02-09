@@ -446,6 +446,8 @@ export enum TierSlug {
   LEAGUE_OPEN_PLAYOFFS = 'league:open:playoffs',
   LEAGUE_PRO = 'league:pro',
   LEAGUE_PRO_PLAYOFFS = 'league:pro:playoffs',
+  MAJOR_ASIA_OPEN_QUALIFIER_1 = 'major:asia:open-qualifier:1',
+  MAJOR_ASIA_OPEN_QUALIFIER_2 = 'major:asia:open-qualifier:2',
   MAJOR_OCE_OPEN_QUALIFIER_1 = 'major:oce:open-qualifier:1',
   MAJOR_OCE_OPEN_QUALIFIER_2 = 'major:oce:open-qualifier:2',
 }
@@ -726,6 +728,8 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'Advanced Division Playoffs',
   [TierSlug.LEAGUE_PRO]: 'Group Stage',
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: 'Playoffs',
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
 };
@@ -880,6 +884,8 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_PRO]: { total: 1_000_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
 };
@@ -938,6 +944,8 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.LEAGUE_MAIN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_PRO_PLAYOFFS]: [5, 3, 3, 3],
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: [3, 3, 1],
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: [3, 3, 1],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: [3, 3, 1],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: [3, 3, 1],
 };
