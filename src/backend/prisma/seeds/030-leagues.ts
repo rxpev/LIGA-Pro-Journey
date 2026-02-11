@@ -150,6 +150,13 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
         size: 98,
         triggerOffsetDays: 2,
+        triggerTierSlug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+      },
+      {
+        name: 'RMR Americas',
+        slug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+        size: 16,
+        triggerOffsetDays: 30,
       },
       {
         name: 'RMR Open Qualifier #1',

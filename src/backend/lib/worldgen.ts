@@ -86,6 +86,13 @@ export async function createCompetitions() {
           return Promise.resolve();
         }
 
+        if (
+          tier.slug === Constants.TierSlug.MAJOR_AMERICAS_RMR &&
+          federation.slug !== Constants.FederationSlug.ESPORTS_AMERICAS
+        ) {
+          return Promise.resolve();
+        }
+
         // collect teams and create the competition
         const teams = await Autofill.parse(item, tier, federation);
         const competition = await DatabaseClient.prisma.competition.create({
@@ -163,6 +170,38 @@ async function createMatchdays(
   const profile = await DatabaseClient.prisma.profile.findFirst({
     include: { player: true },
   });
+
+  let resolvedMapName = mapName;
+  let resolvedVetoMapName = vetoMapName;
+
+  if (!resolvedMapName || !resolvedVetoMapName) {
+    const configuredGame = profile ? Util.loadSettings(profile.settings).general.game : undefined;
+    const fallbackMapPool = await DatabaseClient.prisma.mapPool.findMany({
+      where: {
+        gameVersion: configuredGame
+          ? {
+              slug: configuredGame,
+            }
+          : undefined,
+        position: {
+          not: null,
+        },
+      },
+      orderBy: {
+        position: 'asc',
+      },
+      include: {
+        gameMap: true,
+      },
+    });
+
+    const fallbackMapName =
+      sample(fallbackMapPool)?.gameMap.name || fallbackMapPool[0]?.gameMap.name || 'de_dust2';
+
+    resolvedMapName = resolvedMapName || fallbackMapName;
+    resolvedVetoMapName = resolvedVetoMapName || fallbackMapPool[0]?.gameMap.name || fallbackMapName;
+  }
+
   const today = profile?.date || new Date();
 
   // grab user seed (teamless players will not match any competitor)
@@ -285,7 +324,7 @@ async function createMatchdays(
         );
 
       const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
-      const roundMapName = isUserIglMatch ? vetoMapName || mapName : mapName;
+      const roundMapName = isUserIglMatch ? resolvedVetoMapName || resolvedMapName : resolvedMapName;
 
       // assign map to match
       if (!match.data) {

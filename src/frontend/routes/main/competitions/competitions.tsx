@@ -242,7 +242,8 @@ export default function () {
         if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_AMERICAS) {
           return (
             tier.slug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1 ||
-            tier.slug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2
+            tier.slug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2 ||
+            tier.slug === Constants.TierSlug.MAJOR_AMERICAS_RMR
           );
         }
 

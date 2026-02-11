@@ -1259,6 +1259,43 @@ export const Items: Array<Item> = [
       },
     ],
   },
+
+  {
+    tierSlug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+      },
+    ],
+  },
   {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
@@ -1500,6 +1537,26 @@ async function handleFallbackAction(
 
     const qualifierPool = teams.slice(8);
     return qualifierPool.slice(Math.max(0, entry.start - 1), entry.end || undefined);
+  }
+
+  if (entry.target === Constants.TierSlug.MAJOR_AMERICAS_RMR) {
+    const teams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        country: {
+          ...(countryFilter ? countryFilter : {}),
+          continent: {
+            federation: {
+              slug: Constants.FederationSlug.ESPORTS_AMERICAS,
+            },
+          },
+        },
+      },
+      orderBy: {
+        elo: 'desc',
+      },
+    });
+
+    return teams.slice(Math.max(0, entry.start - 1), entry.end || undefined);
   }
 
   if (entry.target === Constants.TierSlug.LEAGUE_PRO) {

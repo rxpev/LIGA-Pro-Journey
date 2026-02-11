@@ -455,6 +455,7 @@ export enum TierSlug {
   MAJOR_OCE_OPEN_QUALIFIER_2 = 'major:oce:open-qualifier:2',
   MAJOR_AMERICAS_OPEN_QUALIFIER_1 = 'major:americas:open-qualifier:1',
   MAJOR_AMERICAS_OPEN_QUALIFIER_2 = 'major:americas:open-qualifier:2',
+  MAJOR_AMERICAS_RMR = 'major:americas:rmr',
 }
 
 /**
@@ -742,6 +743,7 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
+  [TierSlug.MAJOR_AMERICAS_RMR]: 'RMR',
 };
 
 /** @constant */
@@ -903,6 +905,7 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_AMERICAS_RMR]: { total: 0, distribution: [] },
 };
 
 /**
@@ -968,6 +971,7 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: [3, 3, 1],
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: [3, 3, 3, 3, 1],
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: [3, 3, 3, 3, 1],
+  [TierSlug.MAJOR_AMERICAS_RMR]: [3, 3, 3],
 };
 
 /**
@@ -986,21 +990,9 @@ export const TierSwissConfig: Partial<
     }
   >
 > = {
-  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
-  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: {
-    maxLosses: 3,
-    maxRounds: 5,
-    maxTeams: 16,
-    maxWins: 3,
-  },
-  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: {
-    maxLosses: 3,
-    maxRounds: 5,
+  [TierSlug.MAJOR_AMERICAS_RMR]: {
+    maxLosses: 2,
+    maxRounds: 4,
     maxTeams: 16,
     maxWins: 3,
   },
