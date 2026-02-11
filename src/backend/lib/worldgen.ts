@@ -2820,6 +2820,15 @@ export async function recordMatchResults() {
         await createMatchdays(lowerMatches, tournament, competition);
       }
 
+      if (tournament.swiss && upperRoundReady) {
+        const swissMatches = tournament.swiss.generateNextRound();
+
+        if (swissMatches.length > 0) {
+          Engine.Runtime.Instance.log.info('Generating next swiss round matches...');
+          await createMatchdays(swissMatches, tournament, competition);
+        }
+      }
+
       // check if competition is done and a start date must
       // be scheduled for a dependent competition
       if (tournament.$base.isDone() && competition.tier.triggerTierSlug) {
@@ -3611,7 +3620,9 @@ export async function onCompetitionStart(entry: Calendar) {
         )
       : competition.tier.size;
   const competitorCount = competition.competitors.length;
-  const tournamentSize = Math.min(tierSize, competitorCount);
+  const swissConfig = Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug];
+  const swissTierSize = swissConfig ? Math.min(swissConfig.maxTeams, tierSize) : tierSize;
+  const tournamentSize = Math.min(swissTierSize, competitorCount);
   if (tournamentSize < 4) {
     Engine.Runtime.Instance.log.warn(
       'Skipping %s - %s due to insufficient competitors (%d).',
@@ -3624,19 +3635,31 @@ export async function onCompetitionStart(entry: Calendar) {
       data: { status: Constants.CompetitionStatus.COMPLETED },
     });
   }
-  const tournamentOptions: Clux.GroupStageOptions | Clux.DuelOptions = competition.tier.groupSize
+  const tournamentOptions: Clux.GroupStageOptions | Clux.DuelOptions | { swiss: {
+    maxLosses: number;
+    maxRounds: number;
+    maxWins: number;
+  } } = swissConfig
     ? {
-        groupSize: Math.min(competition.tier.groupSize, tournamentSize),
-        meetTwice: false,
+        swiss: {
+          maxLosses: swissConfig.maxLosses,
+          maxRounds: swissConfig.maxRounds,
+          maxWins: swissConfig.maxWins,
+        },
       }
-    : {
-        short: true,
-        ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
-        competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
-        competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
-          ? { last: Constants.BracketIdentifier.LOWER }
-          : {}),
-      };
+    : competition.tier.groupSize
+      ? {
+          groupSize: Math.min(competition.tier.groupSize, tournamentSize),
+          meetTwice: false,
+        }
+      : {
+          short: true,
+          ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+          competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
+          competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+            ? { last: Constants.BracketIdentifier.LOWER }
+            : {}),
+        };
   const tournament = new Tournament(tournamentSize, tournamentOptions);
   tournament.addCompetitors(
     shuffle(competition.competitors)

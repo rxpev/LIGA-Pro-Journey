@@ -971,6 +971,42 @@ export const TierMatchConfig: Record<string, Array<number>> = {
 };
 
 /**
+ * Swiss format options by tier.
+ *
+ * @constant
+ */
+export const TierSwissConfig: Partial<
+  Record<
+    TierSlug,
+    {
+      maxLosses: number;
+      maxRounds: number;
+      maxTeams: number;
+      maxWins: number;
+    }
+  >
+> = {
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { maxLosses: 3, maxRounds: 5, maxTeams: 16, maxWins: 3 },
+  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+};
+
+/**
  * Promotion and relegation zones per tier.
  *
  * @constant

@@ -30,6 +30,7 @@ interface Props {
   compact?: boolean;
   highlight?: number;
   limit?: number;
+  mode?: 'default' | 'swiss';
   offset?: number;
   teamLink?: (team: Props['competitors'][number]['team']) => string;
   title?: React.ReactNode;
@@ -37,24 +38,11 @@ interface Props {
   onClick?: (competitor: Props['competitors'][number]) => void;
 }
 
-/**
- * Gets the promotion and relegation color based off
- * of the provided zone config and positional value.
- *
- * @param value   The value of the position.
- * @param zones   The promotion/relegation zones config.
- * @function
- */
 function getZoneColorValue(value: number, zones?: Props['zones']) {
   if (!zones) {
     return null;
   }
 
-  // offsetting value by one because it is `0-based`
-  // while the zones are `1-based`.
-  //
-  // additionally, offsetting the `end`
-  // since `inRange` is exclusive
   return compact(
     zones.map((zone, zoneIdx) =>
       inRange(value + 1, zone[0], zone[1] + 1) ? ZoneColors[zoneIdx] : null,
@@ -62,14 +50,9 @@ function getZoneColorValue(value: number, zones?: Props['zones']) {
   )[0];
 }
 
-/**
- * Exports this module.
- *
- * @param props Root props.
- * @component
- * @exports
- */
 export default function (props: Props) {
+  const isSwiss = props.mode === 'swiss';
+
   return (
     <table className="table table-fixed">
       {!!props.title && <caption>{props.title}</caption>}
@@ -78,27 +61,29 @@ export default function (props: Props) {
           <th className="w-1/12">
             <p title="Ranking">#</p>
           </th>
-          <th className="w-6/12">Name</th>
+          <th className={cx(isSwiss ? 'w-5/12' : 'w-6/12')}>Name</th>
           {!!props.compact && (
-            <th className="w-3/12">
-              <p title="Win/Loss/Draw">W/L/D</p>
+            <th className={cx(isSwiss ? 'w-3/12' : 'w-3/12')}>
+              <p title={isSwiss ? 'Record' : 'Win/Loss/Draw'}>{isSwiss ? 'Record' : 'W/L/D'}</p>
             </th>
           )}
           {!props.compact && (
-            <React.Fragment>
+            <>
               <th className="w-1/12 text-center">
                 <p title="Win">Win</p>
               </th>
               <th className="w-1/12 text-center">
                 <p title="Loss">Loss</p>
               </th>
-              <th className="w-1/12 text-center">
-                <p title="Draw">Draw</p>
-              </th>
-            </React.Fragment>
+              {!isSwiss && (
+                <th className="w-1/12 text-center">
+                  <p title="Draw">Draw</p>
+                </th>
+              )}
+            </>
           )}
-          <th className="w-2/12">
-            <p title="Total Points">Pts.</p>
+          <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-2/12')}>
+            <p title={isSwiss ? 'Scoreline' : 'Total Points'}>{isSwiss ? 'Score' : 'Pts.'}</p>
           </th>
         </tr>
       </thead>
@@ -142,18 +127,18 @@ export default function (props: Props) {
                 )}
               </td>
               {!!props.compact && (
-                <td>
-                  {competitor.win}/{competitor.loss}/{competitor.draw}
-                </td>
+                <td>{isSwiss ? `${competitor.win}-${competitor.loss}` : `${competitor.win}/${competitor.loss}/${competitor.draw}`}</td>
               )}
               {!props.compact && (
-                <React.Fragment>
+                <>
                   <td className="text-center">{competitor.win}</td>
                   <td className="text-center">{competitor.loss}</td>
-                  <td className="text-center">{competitor.draw}</td>
-                </React.Fragment>
+                  {!isSwiss && <td className="text-center">{competitor.draw}</td>}
+                </>
               )}
-              <td>{competitor.win * 3 + competitor.draw}</td>
+              <td className={cx(isSwiss && 'text-center')}>
+                {isSwiss ? `${competitor.win}-${competitor.loss}` : competitor.win * 3 + competitor.draw}
+              </td>
             </tr>
           ))}
       </tbody>

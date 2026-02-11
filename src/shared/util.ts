@@ -221,6 +221,16 @@ export function parseCupRounds(round: number, total: number) {
 }
 
 /**
+ * Returns a swiss round label.
+ *
+ * @param round The current round number.
+ * @function
+ */
+export function parseSwissRound(round: number) {
+  return `Swiss Round #${round}`;
+}
+
+/**
  * Returns the league tier size for the given federation,
  * falling back to the provided default when no override exists.
  *

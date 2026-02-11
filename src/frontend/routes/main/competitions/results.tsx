@@ -30,7 +30,11 @@ function getCompetitionLabel(
   const tier = Constants.IdiomaticTier[match.competition.tier.slug];
   const suffix =
     match.competition.tier.groupSize === null
-      ? ' ' + Util.parseCupRounds(match.round, match.totalRounds)
+      ? ` ${
+          Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
+            ? Util.parseSwissRound(match.round)
+            : Util.parseCupRounds(match.round, match.totalRounds)
+        }`
       : '';
   switch (match.competition.tier.league.slug) {
     case Constants.LeagueSlug.ESPORTS_WORLD_CUP:

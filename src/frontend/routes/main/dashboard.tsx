@@ -377,7 +377,9 @@ export default function () {
                         <h5>
                           {spotlight.competition.tier.groupSize
                             ? `${t('shared.matchday')} ${spotlight.round}`
-                            : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
+                            : Constants.TierSwissConfig[spotlight.competition.tier.slug as Constants.TierSlug]
+                              ? Util.parseSwissRound(spotlight.round)
+                              : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
                         </h5>
                       </header>
                     </aside>
@@ -625,6 +627,8 @@ export default function () {
                           <span>
                             {spotlight.competition.tier.groupSize
                               ? `${t('shared.matchday')} ${spotlight.round}`
+                              : Constants.TierSwissConfig[spotlight.competition.tier.slug as Constants.TierSlug]
+                              ? Util.parseSwissRound(spotlight.round)
                               : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
                           </span>
                         </li>

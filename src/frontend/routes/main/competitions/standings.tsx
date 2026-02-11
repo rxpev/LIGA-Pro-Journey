@@ -51,9 +51,13 @@ export default function () {
     [competition.competitors],
   );
 
+  const isSwiss = Boolean(
+    Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug],
+  );
+
   // fetch matches when viewing bracket
   React.useEffect(() => {
-    if (competition.tier.groupSize) {
+    if (competition.tier.groupSize || isSwiss) {
       return;
     }
 
@@ -65,7 +69,7 @@ export default function () {
         include: Eagers.match.include,
       })
       .then(setBracket);
-  }, [competition]);
+  }, [competition, isSwiss]);
 
   if (competition.tier.groupSize) {
     return (
@@ -90,6 +94,20 @@ export default function () {
             }
           />
         ))}
+      </section>
+    );
+  }
+
+  if (isSwiss) {
+    return (
+      <section>
+        <Standings
+          highlight={state.profile.teamId}
+          competitors={competition.competitors}
+          mode="swiss"
+          teamLink={(team) => `/teams?teamId=${team.id}`}
+          title={Constants.IdiomaticTier[competition.tier.slug]}
+        />
       </section>
     );
   }
