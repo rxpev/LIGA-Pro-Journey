@@ -450,6 +450,7 @@ export enum TierSlug {
   MAJOR_ASIA_OPEN_QUALIFIER_2 = 'major:asia:open-qualifier:2',
   MAJOR_CHINA_OPEN_QUALIFIER_1 = 'major:china:open-qualifier:1',
   MAJOR_CHINA_OPEN_QUALIFIER_2 = 'major:china:open-qualifier:2',
+  MAJOR_ASIA_RMR = 'major:asia:rmr',
   MAJOR_OCE_OPEN_QUALIFIER_1 = 'major:oce:open-qualifier:1',
   MAJOR_OCE_OPEN_QUALIFIER_2 = 'major:oce:open-qualifier:2',
 }
@@ -734,6 +735,7 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1 (CN)',
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2 (CN)',
+  [TierSlug.MAJOR_ASIA_RMR]: 'RMR',
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
 };
@@ -892,6 +894,7 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_ASIA_RMR]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
 };
@@ -954,6 +957,7 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: [3, 3, 1],
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: [3, 3, 1],
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: [3, 3, 1],
+  [TierSlug.MAJOR_ASIA_RMR]: [3, 3, 3],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: [3, 3, 1],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: [3, 3, 1],
 };

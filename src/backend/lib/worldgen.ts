@@ -79,6 +79,13 @@ export async function createCompetitions() {
           return Promise.resolve();
         }
 
+        if (
+          tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR &&
+          federation.slug !== Constants.FederationSlug.ESPORTS_ASIA
+        ) {
+          return Promise.resolve();
+        }
+
         // collect teams and create the competition
         const teams = await Autofill.parse(item, tier, federation);
         const competition = await DatabaseClient.prisma.competition.create({
@@ -2826,6 +2833,9 @@ export async function recordMatchResults() {
               OR: [
                 { slug: competition.federation.slug },
                 { slug: Constants.FederationSlug.ESPORTS_WORLD },
+                ...(competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_ASIA_RMR
+                  ? [{ slug: Constants.FederationSlug.ESPORTS_ASIA }]
+                  : []),
               ],
             },
           },
@@ -3621,8 +3631,9 @@ export async function onCompetitionStart(entry: Calendar) {
       }
     : {
         short: true,
-        ...(competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
-        competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA
+        ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+        competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
+        competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
           ? { last: Constants.BracketIdentifier.LOWER }
           : {}),
       };

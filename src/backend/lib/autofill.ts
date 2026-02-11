@@ -1159,6 +1159,72 @@ export const Items: Array<Item> = [
       },
     ],
   },
+
+  {
+    tierSlug: Constants.TierSlug.MAJOR_ASIA_RMR,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_ASIA_RMR,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 2,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 2,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 1,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
+        start: 1,
+        end: 1,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 1,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_OCE,
+        start: 1,
+        end: 1,
+        season: 0,
+      },
+    ],
+  },
   {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
@@ -1474,7 +1540,11 @@ export async function parse(
 
   // fill competitors list using this autofill item's entries
   const competitors = [] as Array<Team>;
+  const allowsCrossFederationEntries =
+    item.tierSlug === Constants.TierSlug.MAJOR_ASIA_RMR &&
+    federation.slug === Constants.FederationSlug.ESPORTS_ASIA;
   const entryMatchesFederation = (entry: Entry) =>
+    allowsCrossFederationEntries ||
     federation.slug === Constants.FederationSlug.ESPORTS_WORLD ||
     !entry.federationSlug ||
     entry.federationSlug === federation.slug;
