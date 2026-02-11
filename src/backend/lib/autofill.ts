@@ -1226,6 +1226,40 @@ export const Items: Array<Item> = [
     ],
   },
   {
+    tierSlug: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 1,
+        end: 102,
+      },
+    ],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_AMERICAS,
+        start: 5,
+        end: 102,
+        season: 0,
+      },
+    ],
+  },
+  {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
     entries: [
@@ -1447,6 +1481,27 @@ async function handleFallbackAction(
         },
       }
       : null;
+  if (entry.target === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1) {
+    const teams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        country: {
+          ...(countryFilter ? countryFilter : {}),
+          continent: {
+            federation: {
+              slug: Constants.FederationSlug.ESPORTS_AMERICAS,
+            },
+          },
+        },
+      },
+      orderBy: {
+        elo: 'desc',
+      },
+    });
+
+    const qualifierPool = teams.slice(8);
+    return qualifierPool.slice(Math.max(0, entry.start - 1), entry.end || undefined);
+  }
+
   if (entry.target === Constants.TierSlug.LEAGUE_PRO) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const occupied = await DatabaseClient.prisma.competition.findMany({
