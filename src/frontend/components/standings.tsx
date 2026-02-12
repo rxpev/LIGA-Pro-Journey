@@ -30,12 +30,39 @@ interface Props {
   compact?: boolean;
   highlight?: number;
   limit?: number;
-  mode?: 'default' | 'swiss';
+  mode?: 'default' | 'swiss' | 'ranking';
   offset?: number;
   teamLink?: (team: Props['competitors'][number]['team']) => string;
   title?: React.ReactNode;
   zones?: Array<number[]>;
   onClick?: (competitor: Props['competitors'][number]) => void;
+}
+
+function getOrdinalSuffix(value: number) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) {
+    return 'th';
+  }
+
+  switch (value % 10) {
+    case 1:
+      return 'st';
+    case 2:
+      return 'nd';
+    case 3:
+      return 'rd';
+    default:
+      return 'th';
+  }
+}
+
+function getPlacementLabel(position: number, count: number) {
+  if (count <= 1) {
+    return `${position}${getOrdinalSuffix(position)}`;
+  }
+
+  const rangeEnd = position + count - 1;
+  return `${position}-${rangeEnd}${getOrdinalSuffix(rangeEnd)}`;
 }
 
 function getZoneColorValue(value: number, zones?: Props['zones']) {
@@ -52,6 +79,18 @@ function getZoneColorValue(value: number, zones?: Props['zones']) {
 
 export default function (props: Props) {
   const isSwiss = props.mode === 'swiss';
+  const isRanking = props.mode === 'ranking';
+  const positionCounts = React.useMemo(
+    () =>
+      props.competitors.reduce(
+        (acc, competitor) => {
+          acc.set(competitor.position, (acc.get(competitor.position) || 0) + 1);
+          return acc;
+        },
+        new Map<number, number>(),
+      ),
+    [props.competitors],
+  );
 
   return (
     <table className="table table-fixed">
@@ -61,21 +100,23 @@ export default function (props: Props) {
           <th className="w-1/12">
             <p title="Ranking">#</p>
           </th>
-          <th className={cx(isSwiss ? 'w-5/12' : 'w-8/12')}>Name</th>
-          {!!props.compact && (
+          <th className={cx(isRanking ? 'w-8/12' : isSwiss ? 'w-5/12' : 'w-8/12')}>Name</th>
+          {!isRanking && !!props.compact && (
             <th className={cx(isSwiss ? 'w-3/12' : 'w-2/12 text-right pr-1')}>
               <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
             </th>
           )}
-          {!props.compact && (
+          {!isRanking && !props.compact && (
             <>
               <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-2/12 text-right pr-1')}>
                 <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
               </th>
             </>
           )}
-          <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-1/12 text-right')}>
-            <p title={isSwiss ? 'Scoreline' : 'Total Points'}>{isSwiss ? 'Score' : 'Pts.'}</p>
+          <th className={cx(isRanking ? 'w-3/12 text-right' : isSwiss ? 'w-2/12 text-center' : 'w-1/12 text-right')}>
+            <p title={isRanking ? 'Finishing Position' : isSwiss ? 'Scoreline' : 'Total Points'}>
+              {isRanking ? 'Place' : isSwiss ? 'Score' : 'Pts.'}
+            </p>
           </th>
         </tr>
       </thead>
@@ -118,18 +159,25 @@ export default function (props: Props) {
                   </>
                 )}
               </td>
-              {!!props.compact && (
+              {!isRanking && !!props.compact && (
                 <td className={cx(!isSwiss && 'text-right pr-1')}>
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
-              {!props.compact && (
+              {!isRanking && !props.compact && (
                 <td className={cx(isSwiss ? 'text-center' : 'text-right pr-1')}>
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
               <td className={cx(isSwiss ? 'text-center' : 'text-right')}>
-                {isSwiss ? `${competitor.win}-${competitor.loss}` : competitor.win * 3 + competitor.draw}
+                {isRanking
+                  ? getPlacementLabel(
+                      competitor.position,
+                      positionCounts.get(competitor.position) || 1,
+                    )
+                  : isSwiss
+                    ? `${competitor.win}-${competitor.loss}`
+                    : competitor.win * 3 + competitor.draw}
               </td>
             </tr>
           ))}

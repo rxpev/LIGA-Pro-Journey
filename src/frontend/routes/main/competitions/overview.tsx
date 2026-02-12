@@ -119,6 +119,11 @@ export default function () {
     [competition],
   );
 
+  const isSwiss = Boolean(
+    Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug],
+  );
+  const isBracketStandings = !competition.tier.groupSize && !isSwiss;
+
   return (
     <section className="divide-base-content/10 grid grid-cols-2 divide-x">
       <article>
@@ -317,33 +322,36 @@ export default function () {
         <header className="heading prose max-w-none border-t-0!">
           <h2>{t('shared.standings')}</h2>
         </header>
-        <select
-          className={cx(
-            'select border-base-content/10 bg-base-200 w-full rounded-none border-0 border-b',
-            'disabled:bg-base-200 disabled:text-opacity-100 focus:border-0 focus:border-b',
-          )}
-          onChange={(event) => setSelectedGroup(Number(event.target.value))}
-          value={selectedGroup || userTeam?.group || -1}
-          disabled={!competition.competitors.some((competitor) => competitor.group > 1)}
-        >
-          {!group.length && (
-            <option disabled value={-1}>
-              {t('shared.competitionNotStarted')}
-            </option>
-          )}
-          {competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE ? (
-            <option>{Constants.IdiomaticTier[competition.tier.slug]}</option>
-          ) : (
-            Object.keys(groupBy(competition.competitors, 'group')).map((groupKey) => (
-              <option key={groupKey + '__select'} value={groupKey}>
-                {t('shared.group')} {Util.toAlpha(groupKey)}
+        {!isBracketStandings && (
+          <select
+            className={cx(
+              'select border-base-content/10 bg-base-200 w-full rounded-none border-0 border-b',
+              'disabled:bg-base-200 disabled:text-opacity-100 focus:border-0 focus:border-b',
+            )}
+            onChange={(event) => setSelectedGroup(Number(event.target.value))}
+            value={selectedGroup || userTeam?.group || -1}
+            disabled={!competition.competitors.some((competitor) => competitor.group > 1)}
+          >
+            {!group.length && (
+              <option disabled value={-1}>
+                {t('shared.competitionNotStarted')}
               </option>
-            ))
-          )}
-        </select>
+            )}
+            {competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE ? (
+              <option>{Constants.IdiomaticTier[competition.tier.slug]}</option>
+            ) : (
+              Object.keys(groupBy(competition.competitors, 'group')).map((groupKey) => (
+                <option key={groupKey + '__select'} value={groupKey}>
+                  {t('shared.group')} {Util.toAlpha(groupKey)}
+                </option>
+              ))
+            )}
+          </select>
+        )}
         <Standings
           highlight={state.profile.teamId}
-          competitors={group}
+          competitors={isBracketStandings ? competition.competitors : group}
+          mode={isBracketStandings ? 'ranking' : undefined}
           zones={
             competition.status === Constants.CompetitionStatus.STARTED &&
             competition.tier.groupSize &&
