@@ -100,24 +100,26 @@ export default function (props: Props) {
           <th className="w-1/12">
             <p title="Ranking">#</p>
           </th>
-          <th className={cx(isRanking ? 'w-8/12' : isSwiss ? 'w-5/12' : 'w-8/12')}>Name</th>
+          <th className={cx(isRanking ? 'w-8/12' : isSwiss ? 'w-9/12' : 'w-8/12')}>Name</th>
           {!isRanking && !!props.compact && (
-            <th className={cx(isSwiss ? 'w-3/12' : 'w-2/12 text-right pr-1')}>
+            <th className={cx(isSwiss ? 'w-2/12 text-right pr-6' : 'w-2/12 text-right pr-1')}>
               <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
             </th>
           )}
           {!isRanking && !props.compact && (
             <>
-              <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-2/12 text-right pr-1')}>
+              <th className={cx(isSwiss ? 'w-2/12 text-right pr-6' : 'w-2/12 text-right pr-1')}>
                 <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
               </th>
             </>
           )}
-          <th className={cx(isRanking ? 'w-3/12 text-right' : isSwiss ? 'w-2/12 text-center' : 'w-1/12 text-right')}>
-            <p title={isRanking ? 'Finishing Position' : isSwiss ? 'Scoreline' : 'Total Points'}>
-              {isRanking ? 'Place' : isSwiss ? 'Score' : 'Pts.'}
-            </p>
-          </th>
+          {!isSwiss && (
+            <th className={cx(isRanking ? 'w-3/12 text-right' : 'w-1/12 text-right')}>
+              <p title={isRanking ? 'Finishing Position' : 'Total Points'}>
+                {isRanking ? 'Place' : 'Pts.'}
+              </p>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -160,25 +162,25 @@ export default function (props: Props) {
                 )}
               </td>
               {!isRanking && !!props.compact && (
-                <td className={cx(!isSwiss && 'text-right pr-1')}>
+                <td className={cx(isSwiss ? 'text-right pr-6' : 'text-right pr-1')}>
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
               {!isRanking && !props.compact && (
-                <td className={cx(isSwiss ? 'text-center' : 'text-right pr-1')}>
+                <td className={cx(isSwiss ? 'text-right pr-6' : 'text-right pr-1')}>
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
-              <td className={cx(isSwiss ? 'text-center' : 'text-right')}>
-                {isRanking
-                  ? getPlacementLabel(
-                      competitor.position,
-                      positionCounts.get(competitor.position) || 1,
-                    )
-                  : isSwiss
-                    ? `${competitor.win}-${competitor.loss}`
+              {!isSwiss && (
+                <td className={cx('text-right')}>
+                  {isRanking
+                    ? getPlacementLabel(
+                        competitor.position,
+                        positionCounts.get(competitor.position) || 1,
+                      )
                     : competitor.win * 3 + competitor.draw}
-              </td>
+                </td>
+              )}
             </tr>
           ))}
       </tbody>

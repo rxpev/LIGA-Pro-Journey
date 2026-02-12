@@ -351,7 +351,7 @@ export default function () {
         <Standings
           highlight={state.profile.teamId}
           competitors={isBracketStandings ? competition.competitors : group}
-          mode={isBracketStandings ? 'ranking' : undefined}
+          mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
           zones={
             competition.status === Constants.CompetitionStatus.STARTED &&
             competition.tier.groupSize &&
