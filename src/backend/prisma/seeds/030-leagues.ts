@@ -112,6 +112,7 @@ const data: Array<LeagueSeedData> = [
     federations: [
       Constants.FederationSlug.ESPORTS_AMERICAS,
       Constants.FederationSlug.ESPORTS_ASIA,
+      Constants.FederationSlug.ESPORTS_EUROPA,
       Constants.FederationSlug.ESPORTS_OCE,
     ],
     tiers: [
@@ -157,6 +158,32 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
         size: 16,
         triggerOffsetDays: 30,
+      },
+      {
+        name: 'RMR Open Qualifier #1 (EU)',
+        slug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        size: 94,
+        triggerTierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+      },
+      {
+        name: 'RMR Open Qualifier #2 (EU)',
+        slug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+        size: 90,
+        triggerOffsetDays: 2,
+        triggerTierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+      },
+      {
+        name: 'RMR Open Qualifier #3 (EU)',
+        slug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+        size: 86,
+        triggerOffsetDays: 2,
+        triggerTierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+      },
+      {
+        name: 'RMR Open Qualifier #4 (EU)',
+        slug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+        size: 82,
+        triggerOffsetDays: 2,
       },
       {
         name: 'RMR Open Qualifier #1',

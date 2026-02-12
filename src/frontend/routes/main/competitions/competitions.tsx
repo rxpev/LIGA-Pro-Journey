@@ -247,6 +247,15 @@ export default function () {
           );
         }
 
+        if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_EUROPA) {
+          return (
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1 ||
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2 ||
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3 ||
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4
+          );
+        }
+
         return false;
       }
 
