@@ -61,28 +61,20 @@ export default function (props: Props) {
           <th className="w-1/12">
             <p title="Ranking">#</p>
           </th>
-          <th className={cx(isSwiss ? 'w-5/12' : 'w-6/12')}>Name</th>
+          <th className={cx(isSwiss ? 'w-5/12' : 'w-8/12')}>Name</th>
           {!!props.compact && (
-            <th className={cx(isSwiss ? 'w-3/12' : 'w-3/12')}>
-              <p title={isSwiss ? 'Record' : 'Win/Loss/Draw'}>{isSwiss ? 'Record' : 'W/L/D'}</p>
+            <th className={cx(isSwiss ? 'w-3/12' : 'w-2/12 text-right pr-1')}>
+              <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
             </th>
           )}
           {!props.compact && (
             <>
-              <th className="w-1/12 text-center">
-                <p title="Win">Win</p>
+              <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-2/12 text-right pr-1')}>
+                <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
               </th>
-              <th className="w-1/12 text-center">
-                <p title="Loss">Loss</p>
-              </th>
-              {!isSwiss && (
-                <th className="w-1/12 text-center">
-                  <p title="Draw">Draw</p>
-                </th>
-              )}
             </>
           )}
-          <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-2/12')}>
+          <th className={cx(isSwiss ? 'w-2/12 text-center' : 'w-1/12 text-right')}>
             <p title={isSwiss ? 'Scoreline' : 'Total Points'}>{isSwiss ? 'Score' : 'Pts.'}</p>
           </th>
         </tr>
@@ -127,16 +119,16 @@ export default function (props: Props) {
                 )}
               </td>
               {!!props.compact && (
-                <td>{isSwiss ? `${competitor.win}-${competitor.loss}` : `${competitor.win}/${competitor.loss}/${competitor.draw}`}</td>
+                <td className={cx(!isSwiss && 'text-right pr-1')}>
+                  {`${competitor.win}-${competitor.loss}`}
+                </td>
               )}
               {!props.compact && (
-                <>
-                  <td className="text-center">{competitor.win}</td>
-                  <td className="text-center">{competitor.loss}</td>
-                  {!isSwiss && <td className="text-center">{competitor.draw}</td>}
-                </>
+                <td className={cx(isSwiss ? 'text-center' : 'text-right pr-1')}>
+                  {`${competitor.win}-${competitor.loss}`}
+                </td>
               )}
-              <td className={cx(isSwiss && 'text-center')}>
+              <td className={cx(isSwiss ? 'text-center' : 'text-right')}>
                 {isSwiss ? `${competitor.win}-${competitor.loss}` : competitor.win * 3 + competitor.draw}
               </td>
             </tr>
