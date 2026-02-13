@@ -7,7 +7,7 @@
  */
 import log from 'electron-log';
 import DatabaseClient from './database-client';
-import { differenceBy, flatten, xorBy } from 'lodash';
+import { differenceBy, flatten } from 'lodash';
 import { Prisma, Team } from '@prisma/client';
 import { Constants, Eagers, Util } from '@liga/shared';
 
@@ -1300,6 +1300,11 @@ export const Items: Array<Item> = [
   {
     tierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+    on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
         action: Action.FALLBACK,
@@ -1321,13 +1326,21 @@ export const Items: Array<Item> = [
     on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 5,
-        end: 94,
+        start: 1,
+        end: 4,
         season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 94,
       },
     ],
   },
@@ -1341,22 +1354,30 @@ export const Items: Array<Item> = [
     on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 9,
-        end: 94,
+        start: 1,
+        end: 4,
         season: 0,
       },
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 5,
-        end: 90,
+        start: 1,
+        end: 4,
         season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 94,
       },
     ],
   },
@@ -1370,31 +1391,39 @@ export const Items: Array<Item> = [
     on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 13,
-        end: 94,
+        start: 1,
+        end: 4,
         season: 0,
       },
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 9,
-        end: 90,
+        start: 1,
+        end: 4,
         season: 0,
       },
       {
-        action: Action.INCLUDE,
+        action: Action.EXCLUDE,
         from: Constants.LeagueSlug.ESPORTS_MAJOR,
         target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
         federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
-        start: 5,
-        end: 86,
+        start: 1,
+        end: 4,
         season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 94,
       },
     ],
   },
@@ -1462,14 +1491,7 @@ export const Items: Array<Item> = [
   },
 ];
 
-/**
- * Include only teams that meet the specific criteria.
- *
- * @param entry       The autofill entry.
- * @param federation  Federation database record.
- * @function
- */
-async function handleIncludeAction(
+async function getTeamsFromCompetitionEntry(
   entry: Entry,
   federation: Prisma.FederationGetPayload<unknown>,
 ): Promise<Array<Team>> {
@@ -1488,11 +1510,12 @@ async function handleIncludeAction(
         },
       }
       : null;
+
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const isWorldLeagueEntry = entry.from === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
   const competition = await DatabaseClient.prisma.competition.findFirst({
     where: {
-      season: profile.season + entry.season,
+      season: profile.season + (entry.season || 0),
       tier: {
         slug: entry.target,
         league: {
@@ -1581,15 +1604,30 @@ async function handleIncludeAction(
 }
 
 /**
+ * Include only teams that meet the specific criteria.
+ *
+ * @param entry       The autofill entry.
+ * @param federation  Federation database record.
+ * @function
+ */
+async function handleIncludeAction(
+  entry: Entry,
+  federation: Prisma.FederationGetPayload<unknown>,
+): Promise<Array<Team>> {
+  return getTeamsFromCompetitionEntry(entry, federation);
+}
+
+/**
  * Do not consider teams that meet the criteria.
  *
  * @param entry The autofill entry.
  * @function
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function handleExcludeAction(entry: Entry) {
-  // e.g.: ignore top 3 of last season's major
-  return Promise.resolve([]);
+async function handleExcludeAction(
+  entry: Entry,
+  federation: Prisma.FederationGetPayload<unknown>,
+) {
+  return getTeamsFromCompetitionEntry(entry, federation);
 }
 
 /**
@@ -1797,13 +1835,16 @@ export async function parse(
   // exclude undesirables
   const excludeList = await Promise.all(
     flatten(
-      eligibleEntries.filter((entry) => entry.action === Action.EXCLUDE).map(handleExcludeAction),
+      eligibleEntries.filter((entry) => entry.action === Action.EXCLUDE)
+        .map((entry) => handleExcludeAction(entry, federation)),
     ),
   );
 
+  const excludedCompetitors = flatten(excludeList);
+
   // create unique list of competitors by
   // filtering out the excludes
-  competitors.push(...xorBy(flatten(includeList), flatten(excludeList), 'id'));
+  competitors.push(...differenceBy(flatten(includeList), excludedCompetitors, 'id'));
 
   if (tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
@@ -1870,7 +1911,9 @@ export async function parse(
       );
     }
 
-    competitors.push(...differenceBy(fallbackList, competitors, 'id'));
+    competitors.push(
+      ...differenceBy(fallbackList, [...competitors, ...excludedCompetitors], 'id'),
+    );
   }
 
   log.info(
