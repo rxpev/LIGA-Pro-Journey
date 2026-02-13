@@ -3865,6 +3865,18 @@ export async function onMatchdayNPC(entry: Calendar) {
       ? simulator.generate([home.team, away.team])
       : simulator.generateSeries([home.team, away.team], match.games.length);
 
+  // Defensive guard: cup matches cannot end in a draw. In edge cases where
+  // sim inputs produce an equal scoreline (e.g. malformed probability table),
+  // force a 1-score margin so the bracket can progress deterministically.
+  if (!simulator.allowDraw && simulationResult[home.team.id] === simulationResult[away.team.id]) {
+    const homeWinsTiebreak = home.team.elo >= away.team.elo;
+    if (homeWinsTiebreak) {
+      simulationResult[home.team.id] += 1;
+    } else {
+      simulationResult[away.team.id] += 1;
+    }
+  }
+
   // check if we need to award earnings to user for a win (only if user has a team)
   if (
     entry.type === Constants.CalendarEntry.MATCHDAY_USER &&
