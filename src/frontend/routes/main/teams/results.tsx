@@ -34,7 +34,10 @@ function getCompetitionLabel(
   );
   const suffix =
     match.competition.tier.groupSize === null
-      ? ' ' + Util.parseCupRounds(match.round, match.totalRounds)
+      ? ` ${Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
+        ? Util.parseSwissRound(match.round)
+        : Util.parseCupRounds(match.round, match.totalRounds)
+      }`
       : '';
   if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
     return `${tierLabel}${suffix}`;
