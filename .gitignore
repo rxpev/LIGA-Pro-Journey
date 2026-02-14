@@ -48,3 +48,9 @@ typings/
 !.vscode/extensions.json
 !.vscode/settings.json
 .vs/
+codex.patch
+.vs/slnx.sqlite
+.vs/slnx.sqlite
+.vs/VSWorkspaceState.json
+/.vs
+/.vs

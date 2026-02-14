@@ -184,6 +184,19 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
         size: 82,
         triggerOffsetDays: 2,
+        triggerTierSlug: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+      },
+      {
+        name: 'RMR Europe A',
+        slug: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+        size: 16,
+        triggerOffsetDays: 30,
+      },
+      {
+        name: 'RMR Europe B',
+        slug: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+        size: 16,
+        triggerOffsetDays: 30,
       },
       {
         name: 'RMR Open Qualifier #1',

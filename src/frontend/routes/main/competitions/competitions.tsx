@@ -252,7 +252,9 @@ export default function () {
             tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1 ||
             tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2 ||
             tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3 ||
-            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4 ||
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_A ||
+            tier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
           );
         }
 

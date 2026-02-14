@@ -460,6 +460,8 @@ export enum TierSlug {
   MAJOR_EUROPE_OPEN_QUALIFIER_2 = 'major:europe:open-qualifier:2',
   MAJOR_EUROPE_OPEN_QUALIFIER_3 = 'major:europe:open-qualifier:3',
   MAJOR_EUROPE_OPEN_QUALIFIER_4 = 'major:europe:open-qualifier:4',
+  MAJOR_EUROPE_RMR_A = 'major:europe:rmr:a',
+  MAJOR_EUROPE_RMR_B = 'major:europe:rmr:b',
 }
 
 /**
@@ -752,6 +754,8 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: 'RMR Open Qualifier #3',
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: 'RMR Open Qualifier #4',
+  [TierSlug.MAJOR_EUROPE_RMR_A]: 'RMR A',
+  [TierSlug.MAJOR_EUROPE_RMR_B]: 'RMR B',
 };
 
 /** @constant */
@@ -918,6 +922,8 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_EUROPE_RMR_A]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_EUROPE_RMR_B]: { total: 0, distribution: [] },
 };
 
 /**
@@ -988,6 +994,8 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: [3, 3, 3, 3, 3, 1],
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: [3, 3, 3, 3, 3, 1],
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: [3, 3, 3, 3, 3, 1],
+  [TierSlug.MAJOR_EUROPE_RMR_A]: [3, 3, 3],
+  [TierSlug.MAJOR_EUROPE_RMR_B]: [3, 3, 3],
 };
 
 /**
@@ -1009,6 +1017,18 @@ export const TierSwissConfig: Partial<
   [TierSlug.MAJOR_AMERICAS_RMR]: {
     maxLosses: 2,
     maxRounds: 4,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+  [TierSlug.MAJOR_EUROPE_RMR_A]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+  [TierSlug.MAJOR_EUROPE_RMR_B]: {
+    maxLosses: 3,
+    maxRounds: 5,
     maxTeams: 16,
     maxWins: 3,
   },

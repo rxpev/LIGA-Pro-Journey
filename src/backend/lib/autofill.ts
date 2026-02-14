@@ -1427,6 +1427,115 @@ export const Items: Array<Item> = [
       },
     ],
   },
+
+  {
+    tierSlug: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.EXCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.EXCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+      },
+    ],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+    on: Constants.CalendarEntry.SEASON_START,
+    entries: [],
+  },
+  {
+    tierSlug: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+    on: Constants.CalendarEntry.COMPETITION_START,
+    entries: [
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.EXCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.EXCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+        end: 4,
+        season: 0,
+      },
+      {
+        action: Action.FALLBACK,
+        from: Constants.LeagueSlug.ESPORTS_MAJOR,
+        target: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+        federationSlug: Constants.FederationSlug.ESPORTS_EUROPA,
+        start: 1,
+      },
+    ],
+  },
   {
     tierSlug: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
@@ -1718,6 +1827,51 @@ async function handleFallbackAction(
     });
 
     return teams.slice(Math.max(0, entry.start - 1), entry.end || undefined);
+  }
+
+
+  if (entry.target === Constants.TierSlug.MAJOR_EUROPE_RMR_A) {
+    const teams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        country: {
+          ...(countryFilter ? countryFilter : {}),
+          continent: {
+            federation: {
+              slug: Constants.FederationSlug.ESPORTS_EUROPA,
+            },
+          },
+        },
+      },
+      orderBy: {
+        elo: 'desc',
+      },
+    });
+
+    return teams
+      .filter((_, idx) => idx % 2 === 0)
+      .slice(Math.max(0, entry.start - 1), entry.end || undefined);
+  }
+
+  if (entry.target === Constants.TierSlug.MAJOR_EUROPE_RMR_B) {
+    const teams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        country: {
+          ...(countryFilter ? countryFilter : {}),
+          continent: {
+            federation: {
+              slug: Constants.FederationSlug.ESPORTS_EUROPA,
+            },
+          },
+        },
+      },
+      orderBy: {
+        elo: 'desc',
+      },
+    });
+
+    return teams
+      .filter((_, idx) => idx % 2 === 1)
+      .slice(Math.max(0, entry.start - 1), entry.end || undefined);
   }
 
   if (entry.target === Constants.TierSlug.LEAGUE_PRO) {

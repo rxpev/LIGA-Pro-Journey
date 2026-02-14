@@ -93,6 +93,14 @@ export async function createCompetitions() {
           return Promise.resolve();
         }
 
+        if (
+          [Constants.TierSlug.MAJOR_EUROPE_RMR_A, Constants.TierSlug.MAJOR_EUROPE_RMR_B].includes(
+            tier.slug as Constants.TierSlug,
+          ) && federation.slug !== Constants.FederationSlug.ESPORTS_EUROPA
+        ) {
+          return Promise.resolve();
+        }
+
         // collect teams and create the competition
         const teams = await Autofill.parse(item, tier, federation);
         const competition = await DatabaseClient.prisma.competition.create({
@@ -2895,40 +2903,69 @@ export async function recordMatchResults() {
 
         if (triggeredCompetition) {
           const date = addDays(today, triggeredCompetition.tier.triggerOffsetDays);
-          const existingEntry = await DatabaseClient.prisma.calendar.findFirst({
-            where: {
-              date: {
-                gte: today.toISOString(),
-                lte: date.toISOString(),
-              },
-              type: Constants.CalendarEntry.COMPETITION_START,
-              payload: triggeredCompetition.id.toString(),
-            },
-          });
-
-          if (existingEntry) {
-            return Promise.resolve();
-          }
-
-          Engine.Runtime.Instance.log.debug(
-            'Scheduling start date for %s on %s...',
-            triggeredCompetition.tier.name,
-            format(date, Constants.Settings.calendar.calendarDateFormat),
-          );
-
-          try {
-            await DatabaseClient.prisma.calendar.create({
-              data: {
-                date: date.toISOString(),
+          const scheduleCompetitionStart = async (
+            targetCompetition: typeof triggeredCompetition,
+            scheduledDate: Date,
+          ) => {
+            const existingEntry = await DatabaseClient.prisma.calendar.findFirst({
+              where: {
+                date: {
+                  gte: today.toISOString(),
+                  lte: scheduledDate.toISOString(),
+                },
                 type: Constants.CalendarEntry.COMPETITION_START,
-                payload: triggeredCompetition.id.toString(),
+                payload: targetCompetition.id.toString(),
               },
             });
-          } catch (_) {
-            Engine.Runtime.Instance.log.warn(
-              'Existing start date for %s found. Skipping...',
-              triggeredCompetition.tier.name,
+
+            if (existingEntry) {
+              return;
+            }
+
+            Engine.Runtime.Instance.log.debug(
+              'Scheduling start date for %s on %s...',
+              targetCompetition.tier.name,
+              format(scheduledDate, Constants.Settings.calendar.calendarDateFormat),
             );
+
+            try {
+              await DatabaseClient.prisma.calendar.create({
+                data: {
+                  date: scheduledDate.toISOString(),
+                  type: Constants.CalendarEntry.COMPETITION_START,
+                  payload: targetCompetition.id.toString(),
+                },
+              });
+            } catch (_) {
+              Engine.Runtime.Instance.log.warn(
+                'Existing start date for %s found. Skipping...',
+                targetCompetition.tier.name,
+              );
+            }
+          };
+
+          await scheduleCompetitionStart(triggeredCompetition, date);
+
+          if (competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A) {
+            const europeRmrBCompetition = await DatabaseClient.prisma.competition.findFirst({
+              where: {
+                season: competition.season,
+                tier: {
+                  slug: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+                },
+                federation: {
+                  slug: Constants.FederationSlug.ESPORTS_EUROPA,
+                },
+              },
+              include: {
+                federation: true,
+                tier: true,
+              },
+            });
+
+            if (europeRmrBCompetition) {
+              await scheduleCompetitionStart(europeRmrBCompetition, date);
+            }
           }
         }
       }
