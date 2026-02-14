@@ -156,9 +156,12 @@ export default function () {
       return {};
     }
 
-    const awards = Constants.Awards.filter(
-      (award) => award.type === Constants.AwardType.CHAMPION,
-    ).map((award) => award.target);
+    const awards = [
+      ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
+        (award) => award.target,
+      ),
+      Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    ];
 
     const found = competitions.filter(
       (competition) =>
@@ -170,7 +173,7 @@ export default function () {
 
     return found.reduce<Record<string, { count: number; seasons: number[] }>>(
       (acc, competition) => {
-        const key = `${competition.tier.slug}-${competition.federation.slug}`;
+        const key = `${competition.tier.slug}__${competition.federation.slug}`;
         if (!acc[key]) {
           acc[key] = { count: 0, seasons: [] };
         }
@@ -273,7 +276,7 @@ export default function () {
             </footer>
           )}
           {Object.keys(honors).map((honor) => {
-            const [tierSlug, federationSlug] = honor.split('-');
+            const [tierSlug, federationSlug] = honor.split('__');
             const honorData = honors[honor];
             const seasonLabel = t('shared.season');
             const seasonsList = [...honorData.seasons]
@@ -282,7 +285,7 @@ export default function () {
               .join('\n');
             return (
               <aside
-                key={tierSlug + '__award'}
+                key={honor + '__award'}
                 className="flex flex-col items-center text-center"
                 title={seasonsList}
               >

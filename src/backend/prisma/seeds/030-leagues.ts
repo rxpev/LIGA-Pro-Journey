@@ -226,14 +226,14 @@ const data: Array<LeagueSeedData> = [
         name: 'Major Challengers Stage',
         slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
         size: 16,
-        triggerOffsetDays: 80,
+        triggerOffsetDays: 170,
         triggerTierSlug: Constants.TierSlug.MAJOR_LEGENDS_STAGE,
       },
       {
         name: 'Major Legends Stage',
         slug: Constants.TierSlug.MAJOR_LEGENDS_STAGE,
         size: 16,
-        triggerOffsetDays: 3,
+        triggerOffsetDays: 1,
         triggerTierSlug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
       },
       {
