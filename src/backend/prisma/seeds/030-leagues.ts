@@ -114,6 +114,7 @@ const data: Array<LeagueSeedData> = [
       Constants.FederationSlug.ESPORTS_ASIA,
       Constants.FederationSlug.ESPORTS_EUROPA,
       Constants.FederationSlug.ESPORTS_OCE,
+      Constants.FederationSlug.ESPORTS_WORLD,
     ],
     tiers: [
       {
@@ -158,6 +159,7 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_AMERICAS_RMR,
         size: 16,
         triggerOffsetDays: 30,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
       },
       {
         name: 'RMR Open Qualifier #1 (EU)',
@@ -191,12 +193,14 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
         size: 16,
         triggerOffsetDays: 30,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
       },
       {
         name: 'RMR Europe B',
         slug: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
         size: 16,
         triggerOffsetDays: 30,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
       },
       {
         name: 'RMR Open Qualifier #1',
@@ -216,6 +220,27 @@ const data: Array<LeagueSeedData> = [
         slug: Constants.TierSlug.MAJOR_ASIA_RMR,
         size: 8,
         triggerOffsetDays: 30,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+      },
+      {
+        name: 'Major Challengers Stage',
+        slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+        size: 16,
+        triggerOffsetDays: 80,
+        triggerTierSlug: Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+      },
+      {
+        name: 'Major Legends Stage',
+        slug: Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+        size: 16,
+        triggerOffsetDays: 3,
+        triggerTierSlug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+      },
+      {
+        name: 'Major Champions Stage',
+        slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        size: 8,
+        triggerOffsetDays: 3,
       },
     ],
   },

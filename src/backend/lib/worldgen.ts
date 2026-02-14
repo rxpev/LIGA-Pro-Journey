@@ -101,6 +101,27 @@ export async function createCompetitions() {
           return Promise.resolve();
         }
 
+        const majorStageTiers = [
+          Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+          Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+          Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        ];
+
+        if (
+          tier.league.slug === Constants.LeagueSlug.ESPORTS_MAJOR &&
+          federation.slug === Constants.FederationSlug.ESPORTS_WORLD &&
+          !majorStageTiers.includes(tier.slug as Constants.TierSlug)
+        ) {
+          return Promise.resolve();
+        }
+
+        if (
+          majorStageTiers.includes(tier.slug as Constants.TierSlug) &&
+          federation.slug !== Constants.FederationSlug.ESPORTS_WORLD
+        ) {
+          return Promise.resolve();
+        }
+
         // collect teams and create the competition
         const teams = await Autofill.parse(item, tier, federation);
         const competition = await DatabaseClient.prisma.competition.create({
@@ -2879,21 +2900,30 @@ export async function recordMatchResults() {
       // check if competition is done and a start date must
       // be scheduled for a dependent competition
       if (tournament.$base.isDone() && competition.tier.triggerTierSlug) {
+        const majorStageTiers = [
+          Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+          Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+          Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        ];
         const triggeredCompetition = await DatabaseClient.prisma.competition.findFirst({
           where: {
             season: competition.season,
             tier: {
               slug: competition.tier.triggerTierSlug,
             },
-            federation: {
-              OR: [
-                { slug: competition.federation.slug },
-                { slug: Constants.FederationSlug.ESPORTS_WORLD },
-                ...(competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_ASIA_RMR
-                  ? [{ slug: Constants.FederationSlug.ESPORTS_ASIA }]
-                  : []),
-              ],
-            },
+            ...(majorStageTiers.includes(competition.tier.triggerTierSlug as Constants.TierSlug)
+              ? {}
+              : {
+                federation: {
+                  OR: [
+                    { slug: competition.federation.slug },
+                    { slug: Constants.FederationSlug.ESPORTS_WORLD },
+                    ...(competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_ASIA_RMR
+                      ? [{ slug: Constants.FederationSlug.ESPORTS_ASIA }]
+                      : []),
+                  ],
+                },
+              }),
           },
           include: {
             federation: true,

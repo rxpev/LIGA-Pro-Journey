@@ -457,6 +457,9 @@ export enum TierSlug {
   MAJOR_EUROPE_OPEN_QUALIFIER_4 = 'major:europe:open-qualifier:4',
   MAJOR_EUROPE_RMR_A = 'major:europe:rmr:a',
   MAJOR_EUROPE_RMR_B = 'major:europe:rmr:b',
+  MAJOR_CHALLENGERS_STAGE = 'major:challengers-stage',
+  MAJOR_LEGENDS_STAGE = 'major:legends-stage',
+  MAJOR_CHAMPIONS_STAGE = 'major:champions-stage',
 }
 
 /**
@@ -710,6 +713,9 @@ export const IdiomaticTier: Record<TierSlug | string, string> = {
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: 'RMR Open Qualifier #4',
   [TierSlug.MAJOR_EUROPE_RMR_A]: 'RMR A',
   [TierSlug.MAJOR_EUROPE_RMR_B]: 'RMR B',
+  [TierSlug.MAJOR_CHALLENGERS_STAGE]: 'Major Challengers Stage',
+  [TierSlug.MAJOR_LEGENDS_STAGE]: 'Major Legends Stage',
+  [TierSlug.MAJOR_CHAMPIONS_STAGE]: 'Major Champions Stage',
 };
 
 /** @constant */
@@ -870,6 +876,9 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_EUROPE_RMR_A]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_EUROPE_RMR_B]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_CHALLENGERS_STAGE]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_LEGENDS_STAGE]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_CHAMPIONS_STAGE]: { total: 0, distribution: [] },
 };
 
 /**
@@ -941,6 +950,9 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: [3, 3, 3, 3, 3, 1],
   [TierSlug.MAJOR_EUROPE_RMR_A]: [3, 3, 3],
   [TierSlug.MAJOR_EUROPE_RMR_B]: [3, 3, 3],
+  [TierSlug.MAJOR_CHALLENGERS_STAGE]: [3, 3, 3],
+  [TierSlug.MAJOR_LEGENDS_STAGE]: [3, 3, 3],
+  [TierSlug.MAJOR_CHAMPIONS_STAGE]: [5, 3, 3],
 };
 
 /**
@@ -972,6 +984,18 @@ export const TierSwissConfig: Partial<
     maxWins: 3,
   },
   [TierSlug.MAJOR_EUROPE_RMR_B]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+  [TierSlug.MAJOR_CHALLENGERS_STAGE]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
+  [TierSlug.MAJOR_LEGENDS_STAGE]: {
     maxLosses: 3,
     maxRounds: 5,
     maxTeams: 16,
