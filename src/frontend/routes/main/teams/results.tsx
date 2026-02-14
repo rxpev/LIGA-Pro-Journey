@@ -39,12 +39,7 @@ function getCompetitionLabel(
   if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
     return `${tierLabel}${suffix}`;
   }
-  switch (match.competition.tier.league.slug) {
-    case Constants.LeagueSlug.ESPORTS_WORLD_CUP:
-      return `${match.competition.tier.league.name} ${tierLabel}${suffix}`;
-    default:
-      return `${match.competition.federation.name} ${tierLabel}${suffix}`;
-  }
+  return `${match.competition.federation.name} ${tierLabel}${suffix}`;
 }
 
 /**

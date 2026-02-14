@@ -219,43 +219,6 @@ const data: Array<LeagueSeedData> = [
       },
     ],
   },
-  {
-    name: 'Electronic Sports World Cup',
-    slug: Constants.LeagueSlug.ESPORTS_WORLD_CUP,
-    federations: [Constants.FederationSlug.ESPORTS_WORLD],
-    tiers: [
-      {
-        name: startCase(Constants.TierSlug.ESWC_CHALLENGERS),
-        slug: Constants.TierSlug.ESWC_CHALLENGERS,
-        size: 16,
-        groupSize: 4,
-        triggerOffsetDays: 7,
-        triggerTierSlug: Constants.TierSlug.ESWC_LEGENDS,
-      },
-      {
-        name: startCase(Constants.TierSlug.ESWC_LEGENDS),
-        slug: Constants.TierSlug.ESWC_LEGENDS,
-        size: 16,
-        groupSize: 4,
-        triggerOffsetDays: 3,
-        triggerTierSlug: Constants.TierSlug.ESWC_CHAMPIONS,
-      },
-      {
-        name: startCase(Constants.TierSlug.ESWC_CHAMPIONS),
-        slug: Constants.TierSlug.ESWC_CHAMPIONS,
-        size: 16,
-        groupSize: 4,
-        triggerOffsetDays: 3,
-        triggerTierSlug: Constants.TierSlug.ESWC_PLAYOFFS,
-      },
-      {
-        name: startCase(Constants.TierSlug.ESWC_PLAYOFFS),
-        slug: Constants.TierSlug.ESWC_PLAYOFFS,
-        size: 8,
-        triggerOffsetDays: 3,
-      },
-    ],
-  },
 ];
 
 /**

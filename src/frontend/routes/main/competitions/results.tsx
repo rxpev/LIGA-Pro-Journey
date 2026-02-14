@@ -36,14 +36,11 @@ function getCompetitionLabel(
             : Util.parseCupRounds(match.round, match.totalRounds)
         }`
       : '';
-  switch (match.competition.tier.league.slug) {
-    case Constants.LeagueSlug.ESPORTS_WORLD_CUP:
-      return `${match.competition.tier.league.name} ${tier}${suffix}`;
-    case Constants.LeagueSlug.ESPORTS_PRO_LEAGUE:
-      return `${match.competition.tier.league.name} ${tier}${suffix}`;
-    default:
-      return `${match.competition.federation.name} ${tier}${suffix}`;
+  if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    return `${match.competition.tier.league.name} ${tier}${suffix}`;
   }
+
+  return `${match.competition.federation.name} ${tier}${suffix}`;
 }
 
 /**

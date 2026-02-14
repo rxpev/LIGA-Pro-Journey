@@ -218,7 +218,6 @@ export enum Game {
 export enum LeagueSlug {
   ESPORTS_LEAGUE = 'esl',
   ESPORTS_PRO_LEAGUE = 'espl',
-  ESPORTS_WORLD_CUP = 'eswc',
   ESPORTS_MAJOR = 'major',
 }
 
@@ -431,10 +430,6 @@ export enum SimulationMode {
  * @enum
  */
 export enum TierSlug {
-  ESWC_CHALLENGERS = 'eswc:challengers',
-  ESWC_LEGENDS = 'eswc:legends',
-  ESWC_CHAMPIONS = 'eswc:champions',
-  ESWC_PLAYOFFS = 'eswc:playoffs',
   EXHIBITION_FRIENDLY = 'exhibition:friendly',
   LEAGUE_ADVANCED = 'league:advanced',
   LEAGUE_ADVANCED_PLAYOFFS = 'league:advanced:playoffs',
@@ -551,12 +546,6 @@ export enum Zones {
   LEAGUE_MID_TABLE_END = 17,
   LEAGUE_RELEGATION_START = 18,
   LEAGUE_RELEGATION_END = 20,
-  ESWC_CHALLENGERS_PROMOTION_AUTO_START = 1,
-  ESWC_CHALLENGERS_PROMOTION_AUTO_END = 2,
-  ESWC_LEGENDS_PROMOTION_AUTO_START = 1,
-  ESWC_LEGENDS_PROMOTION_AUTO_END = 2,
-  ESWC_CHAMPIONS_PROMOTION_AUTO_START = 1,
-  ESWC_CHAMPIONS_PROMOTION_AUTO_END = 2,
 }
 
 /**
@@ -623,37 +612,6 @@ export const Awards = [
     type: AwardType.CHAMPION,
     action: [AwardAction.CONFETTI, AwardAction.EMAIL],
     start: Zones.LEAGUE_PROMOTION_AUTO_START,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.ESWC_CHALLENGERS,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: 0,
-    end: Zones.ESWC_CHALLENGERS_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.ESWC_LEGENDS,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: 0,
-    end: Zones.ESWC_LEGENDS_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.ESWC_CHAMPIONS,
-    type: AwardType.QUALIFY,
-    action: [AwardAction.EMAIL],
-    start: 0,
-    end: Zones.ESWC_CHAMPIONS_PROMOTION_AUTO_END,
-  },
-  {
-    on: CalendarEntry.COMPETITION_END,
-    target: TierSlug.ESWC_PLAYOFFS,
-    type: AwardType.CHAMPION,
-    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
-    start: 1,
   },
 ];
 
@@ -725,10 +683,6 @@ export const GameSettings = {
  * @constant
  */
 export const IdiomaticTier: Record<TierSlug | string, string> = {
-  [TierSlug.ESWC_CHALLENGERS]: 'Challengers Stage',
-  [TierSlug.ESWC_LEGENDS]: 'Legends Stage',
-  [TierSlug.ESWC_CHAMPIONS]: 'Champions Stage',
-  [TierSlug.ESWC_PLAYOFFS]: 'Champions Stage Playoffs',
   [TierSlug.EXHIBITION_FRIENDLY]: 'Friendly',
   [TierSlug.LEAGUE_OPEN]: 'Open Division',
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 'Open Division Playoffs',
@@ -828,10 +782,6 @@ export const MapVetoConfig: Record<number, Array<{ team: number; type: MapVetoAc
  * @constant
  */
 export const MatchDayWeights: Record<string, Record<number, number | 'auto'>> = {
-  [LeagueSlug.ESPORTS_WORLD_CUP]: {
-    3: 50, // wednesday
-    4: 'auto', // thursday
-  },
   [LeagueSlug.ESPORTS_LEAGUE]: {
     5: 20, // friday
     6: 'auto', // saturday
@@ -894,10 +844,6 @@ export const Prestige = [
  */
 export const PrizePool: Record<TierSlug | string, { total: number; distribution: Array<number> }> =
 {
-  [TierSlug.ESWC_CHALLENGERS]: { total: 0, distribution: [] },
-  [TierSlug.ESWC_LEGENDS]: { total: 0, distribution: [] },
-  [TierSlug.ESWC_CHAMPIONS]: { total: 0, distribution: [] },
-  [TierSlug.ESWC_PLAYOFFS]: { total: 500_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_OPEN]: { total: 5_000, distribution: [50, 35, 15] },
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { total: 0, distribution: [] },
   [TierSlug.LEAGUE_INTERMEDIATE]: { total: 15_000, distribution: [50, 35, 15] },
@@ -973,7 +919,6 @@ export const Settings = {
  * @constant
  */
 export const TierMatchConfig: Record<string, Array<number>> = {
-  [TierSlug.ESWC_PLAYOFFS]: [5, 3],
   [TierSlug.LEAGUE_PRO]: [3],
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
@@ -1044,15 +989,6 @@ export const TierZones: Record<string | 'default', number[][]> = {
     [Zones.LEAGUE_PROMOTION_AUTO_START, Zones.LEAGUE_PROMOTION_AUTO_END],
     [Zones.LEAGUE_PROMOTION_PLAYOFFS_START, Zones.LEAGUE_PROMOTION_PLAYOFFS_END],
     [Zones.LEAGUE_RELEGATION_START, Zones.LEAGUE_RELEGATION_END],
-  ],
-  [TierSlug.ESWC_CHALLENGERS]: [
-    [Zones.ESWC_CHALLENGERS_PROMOTION_AUTO_START, Zones.ESWC_CHALLENGERS_PROMOTION_AUTO_END],
-  ],
-  [TierSlug.ESWC_LEGENDS]: [
-    [Zones.ESWC_LEGENDS_PROMOTION_AUTO_START, Zones.ESWC_LEGENDS_PROMOTION_AUTO_END],
-  ],
-  [TierSlug.ESWC_CHAMPIONS]: [
-    [Zones.ESWC_CHAMPIONS_PROMOTION_AUTO_START, Zones.ESWC_CHAMPIONS_PROMOTION_AUTO_END],
   ],
 };
 
