@@ -176,6 +176,33 @@ export async function createCompetitions() {
   return competitions;
 }
 
+
+function getSwissMatchSeriesLength(match: Clux.Match, tournament: Tournament) {
+  if (!tournament.swiss || match.p[1] < 0) {
+    return 1;
+  }
+
+  const { options, records } = tournament.swiss.metadata();
+
+  const isDeciderMatch = match.p.some((seed) => {
+    if (seed < 1) {
+      return false;
+    }
+
+    const record = records[seed];
+
+    if (!record) {
+      return false;
+    }
+
+    const canAdvance = record.wins + 1 >= options.maxWins;
+    const canBeEliminated = record.losses + 1 >= options.maxLosses;
+    return canAdvance || canBeEliminated;
+  });
+
+  return isDeciderMatch ? 3 : 1;
+}
+
 /**
  * Creates matchdays.
  *
@@ -363,9 +390,9 @@ async function createMatchdays(
       }
 
       // how many games in this series?
-      let num = 1;
+      let num = tournament.swiss ? getSwissMatchSeriesLength(match, tournament) : 1;
 
-      if (Constants.TierMatchConfig[competition.tier.slug]) {
+      if (!tournament.swiss && Constants.TierMatchConfig[competition.tier.slug]) {
         const seriesByRound = Constants.TierMatchConfig[competition.tier.slug];
 
         // bracket configs are ordered from grand-final backwards,
