@@ -1,6 +1,6 @@
 {
   "name": "liga",
-  "productName": "LIGA Esports Manager",
+  "productName": "LIGA Pro Journey",
   "version": "3.0.0-beta.73",
   "description": "An immersive CS:GO Esports Simulator",
   "main": ".webpack/main",

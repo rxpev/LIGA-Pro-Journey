@@ -51,7 +51,7 @@ export interface Manager {
  */
 export function getPath() {
   return process.env['NODE_ENV'] === 'cli'
-    ? path.join(process.env.APPDATA, 'LIGA Esports Manager', Constants.Application.CUSTOM_DIR)
+    ? path.join(process.env.APPDATA, 'LIGA Pro Journey', Constants.Application.CUSTOM_DIR)
     : path.join(app.getPath('userData'), Constants.Application.CUSTOM_DIR);
 }
 

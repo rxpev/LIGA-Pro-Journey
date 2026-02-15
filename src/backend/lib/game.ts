@@ -625,7 +625,7 @@ End\n
     // Build the export path inside LIGA's local server directory
     const exportDir = path.join(
       process.env.APPDATA || '',
-      'LIGA Esports Manager',
+      'LIGA Pro Journey',
       'plugins',
       'csgo',
       'addons',
@@ -674,10 +674,9 @@ End\n
     lines.push('}');
 
     // Ensure correct directory:
-    // %AppData%\LIGA Esports Manager\plugins\csgo\addons\sourcemod\configs
     const exportDir = path.join(
       process.env.APPDATA || '',
-      'LIGA Esports Manager',
+      'LIGA Pro Journey',
       'plugins',
       'csgo',
       'addons',
@@ -973,7 +972,7 @@ End\n
           process.env['NODE_ENV'] === 'cli'
             ? path.join(
               process.env.APPDATA as string,
-              'LIGA Esports Manager',
+              'LIGA Pro Journey',
               protocol,
               filePath,
             )
@@ -1104,7 +1103,6 @@ End\n
    */
   private async prepare() {
     const localGameDir = this.gameDir;
-    // source: LIGA's plugin files (e.g. %APPDATA%\LIGA Esports Manager\plugins\csgo)
     const from = path.join(PluginManager.getPath(), localGameDir);
 
     // decide where to copy files to
