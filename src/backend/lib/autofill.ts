@@ -57,7 +57,7 @@ export const Items: Array<Item> = [
         end: 16,
         season: -1,
       },
-      // First-season fallback: seed by top ELO per federation
+      // First-season fallback: seed by top prestige per federation
       {
         action: Action.FALLBACK,
         from: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
@@ -1744,6 +1744,9 @@ async function handleFallbackAction(
 
     const teams = await DatabaseClient.prisma.team.findMany({
       where: {
+        prestige: Constants.Prestige.findIndex(
+          (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
+        ),
         id: {
           notIn: [...occupiedIds],
         },
@@ -1757,7 +1760,7 @@ async function handleFallbackAction(
         },
       },
       orderBy: {
-        elo: 'desc',
+        prestige: 'desc',
       },
     });
 

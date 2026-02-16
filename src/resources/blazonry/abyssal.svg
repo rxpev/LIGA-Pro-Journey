@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="89"
+   height="99"
+   viewBox="0 0 89 99"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="e595c44710f65514536364e17f5ecd7d.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs9" />
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0" />
+  <path
+     class="fallback-shield"
+     fill-rule="evenodd"
+     clip-rule="evenodd"
+     d="M 46.4682,1.14524 C 54.5852,5.89864 63.5628,11.1553 87.7789,11.1553 88.1861,12.1748 89,17.7612 89,31.9515 89,49.6893 87.2042,75.6699 44.5,99 1.79581,75.6699 0,49.6893 0,31.9515 0,17.7612 0.81386,12.1748 1.22115,11.1553 25.4372,11.1553 34.4148,5.89806 42.5318,1.14524 43.1912,0.759029 43.8442,0.376311 44.5,0 c 0.6558,0.376311 1.3088,0.759029 1.9682,1.14524 z"
+     fill="#4f657d"
+     id="path2" />
+  <text
+     id="letter"
+     class="fallback-text"
+     fill="#d9e1e9"
+     text-anchor="middle"
+     font-size="50px"
+     y="48"
+     x="44"
+     dominant-baseline="central"
+     font-family="Arial, sans-serif"
+     font-weight="bold">A</text>
+</svg>
