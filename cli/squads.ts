@@ -16,6 +16,7 @@ interface CLIArguments {
   federationSlug: string;
   tier: string;
   out: string;
+  in: string;
 }
 
 /**
@@ -36,6 +37,7 @@ const DEFAULT_ARGS: CLIArguments = {
     (tier) => tier === Constants.TierSlug.LEAGUE_PRO,
   ).toString(),
   out: null,
+  in: null,
 };
 
 /**
@@ -76,7 +78,71 @@ async function squadsExport(args: typeof DEFAULT_ARGS) {
  * @param args CLI args.
  */
 async function squadsImport(args: typeof DEFAULT_ARGS) {
-  // @todo
+  interface ImportedPlayer {
+    age: number;
+    avatar: string;
+    countryId: number;
+    elo: number;
+    id: number;
+    name: string;
+    personality: string;
+    role: string;
+    starter: number | boolean;
+    transferListed: number | boolean;
+    xp: number;
+  }
+
+  const raw = await fs.promises.readFile(args.in, 'utf8');
+  const normalized = raw
+    .replace(/"avatar"\s*:\s*(resources:\/\/[^,}\]\n\r]+)/g, '"avatar": "$1"')
+    .replace(/,\s*([}\]])/g, '$1');
+  const data = JSON.parse(normalized) as Array<ImportedPlayer>;
+
+  if (!Array.isArray(data)) {
+    return Promise.reject('Import file must be a JSON array of player records.');
+  }
+
+  const playersByTeam = new Map<number, Array<ImportedPlayer>>();
+
+  for (const player of data) {
+    if (!playersByTeam.has(player.id)) {
+      playersByTeam.set(player.id, []);
+    }
+
+    const teamPlayers = playersByTeam.get(player.id);
+
+    if (teamPlayers) {
+      teamPlayers.push(player);
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    for (const [teamId, players] of playersByTeam.entries()) {
+      await tx.player.deleteMany({
+        where: {
+          teamId,
+        },
+      });
+
+      for (const player of players) {
+        await tx.player.create({
+          data: {
+            age: player.age,
+            avatar: player.avatar,
+            countryId: player.countryId,
+            elo: player.elo,
+            name: player.name,
+            personality: player.personality,
+            role: player.role,
+            starter: Boolean(player.starter),
+            teamId,
+            transferListed: Boolean(player.transferListed),
+            xp: player.xp,
+          },
+        });
+      }
+    }
+  });
 }
 
 /**
@@ -129,6 +195,7 @@ export default {
       .option('-f --federation <slug>', 'Federation slug', DEFAULT_ARGS.federationSlug)
       .option('-t --tier <number>', 'Tier/Division number', DEFAULT_ARGS.tier)
       .option('-o --out <string>', 'Where to save exports', DEFAULT_ARGS.out)
+      .option('-i --in <string>', 'Where to load data from', DEFAULT_ARGS.in)
       .action(handler);
   },
 };
