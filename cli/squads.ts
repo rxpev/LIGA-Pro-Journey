@@ -146,6 +146,48 @@ async function squadsImport(args: typeof DEFAULT_ARGS) {
 }
 
 /**
+ * Import team values subcommand.
+ *
+ * @function
+ * @param args CLI args.
+ */
+async function squadsImportTeams(args: typeof DEFAULT_ARGS) {
+  interface ImportedTeam {
+    blazon: string;
+    elo: number;
+    id: number;
+    name: string;
+    slug: string;
+  }
+
+  const raw = await fs.promises.readFile(args.in, 'utf8');
+  const normalized = raw
+    .replace(/"blazon"\s*:\s*(resources:\/\/[^,}\]\n\r]+)/g, '"blazon": "$1"')
+    .replace(/,\s*([}\]])/g, '$1');
+  const data = JSON.parse(normalized) as Array<ImportedTeam>;
+
+  if (!Array.isArray(data)) {
+    return Promise.reject('Import file must be a JSON array of team records.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    for (const team of data) {
+      await tx.team.update({
+        where: {
+          id: team.id,
+        },
+        data: {
+          blazon: team.blazon,
+          elo: team.elo,
+          name: team.name,
+          slug: team.slug,
+        },
+      });
+    }
+  });
+}
+
+/**
  * Exports and imports squads.
  *
  * @function
@@ -154,10 +196,14 @@ async function squadsImport(args: typeof DEFAULT_ARGS) {
  */
 export async function handler(type: string, args: typeof DEFAULT_ARGS) {
   // bail early if provided function type is not supported
-  const acceptedFnTypes = ['export', 'import'];
-  const fns: Record<string, typeof squadsExport | typeof squadsImport> = {
+  const acceptedFnTypes = ['export', 'import', 'import-teams'];
+  const fns: Record<
+    string,
+    typeof squadsExport | typeof squadsImport | typeof squadsImportTeams
+  > = {
     squadsExport,
     squadsImport,
+    squadsImportTeams,
   };
 
   if (!acceptedFnTypes.includes(type)) {
