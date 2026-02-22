@@ -14,6 +14,7 @@
  */
 import AppInfo from 'package.json';
 import claude from './claude';
+import contracts from './contracts';
 import sandbox from './sandbox';
 import scraper from './scraper';
 import stats from './stats';
@@ -23,9 +24,10 @@ import { Command } from 'commander';
 /** @constant */
 const COMMAND_MAP: Record<
   string,
-  typeof claude | typeof sandbox | typeof scraper | typeof stats | typeof squads
+  typeof claude | typeof contracts | typeof sandbox | typeof scraper | typeof stats | typeof squads
 > = {
   claude,
+  contracts,
   sandbox,
   scraper,
   stats,

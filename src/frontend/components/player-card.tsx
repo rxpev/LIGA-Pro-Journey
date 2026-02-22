@@ -141,11 +141,11 @@ export default function (props: PlayerCardProps) {
         props.className,
       )}
     >
-      <header className="flex gap-4 px-10">
-        <figure className="center w-1/3">
+      <header className="flex items-end gap-4 px-10">
+        <figure className="flex w-1/3 items-end justify-center">
           <img
             src={props.player.avatar || 'resources://avatars/empty.png'}
-            className="h-12 w-auto"
+            className="h-18 w-auto"
           />
         </figure>
         <nav className="w-2/3 py-4">
