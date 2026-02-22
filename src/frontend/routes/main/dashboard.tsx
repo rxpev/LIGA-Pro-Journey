@@ -341,9 +341,14 @@ export default function () {
                         zones={
                           standings.competition.status ===
                           Constants.CompetitionStatus.STARTED &&
-                          Util.getTierZones(
+                          Util.getTierZonesByGroup(
                             standings.competition.tier.slug as Constants.TierSlug,
                             standings.competition.federation.slug as Constants.FederationSlug,
+                            new Set(
+                              standings.competition.competitors.map(
+                                (competitor) => competitor.group,
+                              ),
+                            ).size,
                           )
                         }
                       />

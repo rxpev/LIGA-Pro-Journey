@@ -87,9 +87,10 @@ export default function () {
             }
             zones={
               competition.status === Constants.CompetitionStatus.STARTED &&
-              Util.getTierZones(
+              Util.getTierZonesByGroup(
                 competition.tier.slug as Constants.TierSlug,
                 competition.federation.slug as Constants.FederationSlug,
+                Object.keys(groups).length,
               )
             }
           />

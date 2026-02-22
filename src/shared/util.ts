@@ -263,6 +263,35 @@ export function getTierZones(
 }
 
 /**
+ * Returns promotion/relegation zones adjusted for grouped standings.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @param groupCount      Number of groups shown as separate tables.
+ * @function
+ */
+export function getTierZonesByGroup(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+  groupCount: number,
+) {
+  const zones = getTierZones(tierSlug, federationSlug);
+  if (groupCount <= 1) {
+    return zones;
+  }
+
+  return zones.map(([start, end]) => {
+    if (!start || !end || end < start) {
+      return [0, 0];
+    }
+
+    const groupedStart = Math.ceil(start / groupCount);
+    const groupedEnd = Math.max(groupedStart, Math.floor(end / groupCount));
+    return [groupedStart, groupedEnd];
+  });
+}
+
+/**
  * Returns whether a league tier should be available in a federation.
  *
  * @param tierSlug        The tier slug.
