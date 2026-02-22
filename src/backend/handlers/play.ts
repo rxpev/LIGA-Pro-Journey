@@ -390,9 +390,7 @@ export default function () {
             id: match.competitors[teamIdx].team.id,
           },
           data: {
-            elo: {
-              increment: delta,
-            },
+            elo: Util.clampElo(match.competitors[teamIdx].team.elo + delta),
           },
         }),
       ),

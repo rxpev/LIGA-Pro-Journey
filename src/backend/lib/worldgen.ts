@@ -3734,14 +3734,12 @@ export async function onCompetitionStart(entry: Calendar) {
     const proPrestige = Constants.Prestige.findIndex(
       (prestige) => prestige === Constants.TierSlug.LEAGUE_PRO,
     );
-    const proElo = Constants.EloRatings[Constants.TierSlug.LEAGUE_PRO];
     const eplTeams = await DatabaseClient.prisma.team.findMany({
       where: {
         id: { in: competition.competitors.map((competitor) => competitor.teamId) },
       },
       select: {
         id: true,
-        elo: true,
       },
     });
     await DatabaseClient.prisma.$transaction(
@@ -3751,7 +3749,6 @@ export async function onCompetitionStart(entry: Calendar) {
           data: {
             tier: proPrestige,
             prestige: proPrestige,
-            ...(proElo ? { elo: Math.max(team.elo ?? 0, proElo) } : {}),
           },
         }),
       ),
@@ -4037,9 +4034,7 @@ export async function onMatchdayNPC(entry: Calendar) {
           id: match.competitors[teamIdx].team.id,
         },
         data: {
-          elo: {
-            increment: delta,
-          },
+          elo: Util.clampElo(match.competitors[teamIdx].team.elo + delta),
         },
       }),
     ),
