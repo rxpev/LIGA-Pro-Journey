@@ -456,5 +456,17 @@ export function getEloWinProbability(ratingA: number, ratingB: number, scaling =
  * @function
  */
 export function getEloRatingDelta(actualScore: number, expectedScore: number, k = 32) {
-  return k * (actualScore - expectedScore);
+  return Math.round(k * (actualScore - expectedScore));
+}
+
+/**
+ * Clamps an Elo value to the configured team range.
+ *
+ * @param rating Elo value to clamp.
+ * @param min Minimum allowed Elo.
+ * @param max Maximum allowed Elo.
+ * @function
+ */
+export function clampElo(rating: number, min = 1, max = 2000) {
+  return Math.max(min, Math.min(max, Math.round(rating)));
 }

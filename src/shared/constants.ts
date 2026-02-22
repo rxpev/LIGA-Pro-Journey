@@ -639,7 +639,7 @@ export const EloRatings: Partial<Record<TierSlug, number>> = {
   [TierSlug.LEAGUE_INTERMEDIATE]: 1250,
   [TierSlug.LEAGUE_MAIN]: 1500,
   [TierSlug.LEAGUE_ADVANCED]: 1750,
-  [TierSlug.LEAGUE_PRO]: 2500,
+  [TierSlug.LEAGUE_PRO]: 2000,
 };
 
 /**
