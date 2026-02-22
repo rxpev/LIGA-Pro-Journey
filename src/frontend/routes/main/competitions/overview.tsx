@@ -352,6 +352,7 @@ export default function () {
           highlight={state.profile.teamId}
           competitors={isBracketStandings ? competition.competitors : group}
           mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
+          teamLink={(team) => `/teams?teamId=${team.id}`}
           zones={
             competition.status === Constants.CompetitionStatus.STARTED &&
             competition.tier.groupSize &&

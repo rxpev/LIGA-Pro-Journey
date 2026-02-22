@@ -324,6 +324,7 @@ export default function () {
         <Standings
           competitors={group}
           highlight={team.id}
+          teamLink={(memberTeam) => `/teams?teamId=${memberTeam.id}`}
           zones={
             competition.status === Constants.CompetitionStatus.STARTED &&
             competition.tier.groupSize &&
