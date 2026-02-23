@@ -683,7 +683,7 @@ export default function () {
                     <button
                       title={t('main.dashboard.matchSetup')}
                       className="btn join-item"
-                      disabled={disabled || !!state.appStatus}
+                      disabled={disabled}
                       onClick={() =>
                         api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                           target: '/pregame',
@@ -695,7 +695,7 @@ export default function () {
                     </button>
                     <button
                       className="btn btn-primary join-item btn-wide"
-                      disabled={disabled || !!state.appStatus}
+                      disabled={disabled}
                       onClick={() => {
                         const hasMapInProgress = spotlight.games.some(
                           (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
@@ -732,7 +732,7 @@ export default function () {
                     <button
                       title={t('main.dashboard.spectateMatch')}
                       className="btn btn-secondary join-item"
-                      disabled={disabled || !!state.appStatus}
+                      disabled={disabled}
                       onClick={() => dispatch(play(spotlight.id, true))}
                     >
                       <FaTv />
