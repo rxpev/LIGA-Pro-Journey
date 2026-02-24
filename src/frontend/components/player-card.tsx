@@ -117,12 +117,22 @@ export default function (props: PlayerCardProps) {
             className="h-12 w-auto"
           />
         </figure>
-        <aside className="col-span-2 px-4">
+        <aside className="px-4">
           <h3>{props.player.name}</h3>
           <p className="line-clamp-1 text-sm">
             <span className={cx('fp', props.player.country.code.toLowerCase())} />
             <span>&nbsp;{props.player.country.name}</span>
           </p>
+        </aside>
+        <aside className="center px-2">
+          <span
+            className={cx(
+              'inline-flex h-6 min-w-[76px] items-center justify-center rounded px-2 text-[10px] leading-none font-semibold tracking-wide uppercase',
+              props.player.starter ? 'bg-[#2f4660] text-[#9fc9f3]' : 'bg-[#7a2430] text-[#ffdce3]',
+            )}
+          >
+            {props.player.starter ? 'STARTER' : 'BENCHED'}
+          </span>
         </aside>
         <aside className="stack-y center gap-0 px-2">
           <p className="text-muted text-xs">{t('playerCard.totalXP')}</p>

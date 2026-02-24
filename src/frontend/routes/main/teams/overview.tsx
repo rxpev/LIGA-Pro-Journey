@@ -106,6 +106,11 @@ export default function () {
     competition?.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
     competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
 
+  const sortedSquad = React.useMemo(
+    () => [...squad].sort((a, b) => Number(b.starter) - Number(a.starter)),
+    [squad],
+  );
+
   if (!competition) {
     return (
       <section className="center h-full">
@@ -185,7 +190,7 @@ export default function () {
           </header>
           <table className="table-xs table table-fixed">
             <tbody>
-              {squad.map((player) => (
+              {sortedSquad.map((player) => (
                 <tr key={player.id + '__squad'}>
                   <td
                     title={player.id === state.profile.playerId ? t('shared.you') : undefined}
@@ -202,7 +207,7 @@ export default function () {
                   </td>
                 </tr>
               ))}
-              {squad.length === 0 && (
+              {sortedSquad.length === 0 && (
                 <tr>
                   <td className="h-[70px] text-center">
                     <b>{team.name}</b> {t('shared.noBench')}
