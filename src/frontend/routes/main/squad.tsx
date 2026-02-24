@@ -72,7 +72,7 @@ export default function () {
         {/* Teamless blazonry */}
         <div className="relative">
           <Image
-            src="resources://blazonry/009399.svg"
+            src="resources://blazonry/noteam.svg"
             className="h-40 w-40 rounded-full border-4 border-base-300 shadow-md object-contain bg-base-100 p-4"
           />
         </div>

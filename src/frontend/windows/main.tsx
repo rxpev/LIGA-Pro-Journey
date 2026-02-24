@@ -307,7 +307,7 @@ function Root() {
               src={
                 state.profile?.team?.blazon
                   ? state.profile.team.blazon
-                  : 'resources://blazonry/009399.svg'
+                  : 'resources://blazonry/noteam.svg'
               }
               className="h-full w-auto"
             />
