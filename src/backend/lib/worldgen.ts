@@ -3601,6 +3601,17 @@ function selectBenchVictim(params: {
 }) {
   const { teamPlayers, incomingPlayerId, incomingRole, incomingXp } = params;
 
+  // Hard rule for snipers: bench a starter sniper so teams don't field two starter snipers.
+  if (incomingRole === "SNIPER") {
+    const starterSnipers = teamPlayers
+      .filter(
+        (p) => p.starter && p.id !== incomingPlayerId && normalizeRole(p.role) === "SNIPER",
+      )
+      .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0));
+
+    return starterSnipers[0] ?? null;
+  }
+
   let candidates = teamPlayers.filter(
     (p) => p.starter && p.id !== incomingPlayerId && normalizeRole(p.role) === incomingRole,
   );
@@ -4431,7 +4442,8 @@ export async function onTransferParse(entry: Calendar) {
     incomingXp: transfer.target.xp || 0,
   });
 
-  // strict rule: incoming player must bench one lower-XP player at destination
+  // strict rule: incoming non-snipers must bench one lower-XP player at destination
+  // (snipers always replace a starter sniper to keep a single starter sniper)
   if (!victim) {
     return Promise.resolve();
   }
