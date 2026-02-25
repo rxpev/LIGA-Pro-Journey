@@ -256,7 +256,14 @@ export default function TransferModal() {
                 {player.team ? (
                   <>
                     <img src={player.team.blazon} className="inline-block size-6" />
-                    <span>&nbsp;{player.team.name}</span>
+                    <span className="inline-flex items-baseline gap-1">
+                      {player.team.name}
+                      {!player.starter && (
+                        <span className="text-[8px] uppercase text-red-400">
+                          (BENCHED)
+                        </span>
+                      )}
+                    </span>
                   </>
                 ) : (
                   'Free Agent'
