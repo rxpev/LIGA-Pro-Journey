@@ -52,6 +52,12 @@ interface PrismaMigration {
   started_at: Date;
 }
 
+/** @interface */
+interface InitSaveResult {
+  path: string;
+  created: boolean;
+}
+
 /** @type {PrismaClientExtended} */
 type PrismaClientExtended = ReturnType<(typeof DatabaseClient)['clientExtensions']>;
 
@@ -113,25 +119,37 @@ export default class DatabaseClient {
         profile: {
           // @todo: fix typings for eager loaded relations
           async findFirst({ args, query }) {
-            if (pool[activeId].records.profile) {
+            const cache = pool[activeId]?.records;
+
+            if (cache?.profile) {
               DatabaseClient.log.silly('cache hit for profile.');
-              return pool[activeId].records.profile;
+              return cache.profile;
             }
 
             DatabaseClient.log.silly('cache miss for profile.');
-            pool[activeId].records.profile = await query({
+            const profile = await query({
               ...args,
               ...Eagers.profile,
             });
-            return pool[activeId].records.profile;
+
+            if (cache) {
+              cache.profile = profile;
+            }
+
+            return profile;
           },
           async update({ args, query }) {
             DatabaseClient.log.silly('hydrating profile cache...');
-            pool[activeId].records.profile = await query({
+            const profile = await query({
               ...args,
               ...Eagers.profile,
             });
-            return pool[activeId].records.profile;
+
+            if (pool[activeId]?.records) {
+              pool[activeId].records.profile = profile;
+            }
+
+            return profile;
           },
         },
       },
@@ -155,10 +173,10 @@ export default class DatabaseClient {
     }
 
     // initialize the save file
-    let newSavePath: string;
+    let saveMeta: InitSaveResult;
 
     try {
-      newSavePath = await this.initSave(id);
+      saveMeta = await this.initSave(id);
     } catch (error) {
       this.log.error(error);
       return Promise.reject();
@@ -171,19 +189,89 @@ export default class DatabaseClient {
     const prisma = new PrismaClient({
       datasources: {
         db: {
-          url: `file:${newSavePath}?connection_limit=1`,
+          url: `file:${saveMeta.path}?connection_limit=1`,
         },
       },
     });
     pool[id] = {
       client: DatabaseClient.clientExtensions(prisma),
-      path: newSavePath,
+      path: saveMeta.path,
       records: {},
     };
 
     // update the active db id
     activeId = id;
+
+    if (saveMeta.created && id !== 0) {
+      await DatabaseClient.ensureInitialCareerStints(pool[id].client);
+    }
+
     return pool[id].client;
+  }
+
+  /**
+   * Ensures players have at least one career stint in newly created saves.
+   *
+   * @param prisma The prisma client instance.
+   * @method
+   */
+  private static async ensureInitialCareerStints(prisma: PrismaClientExtended) {
+    const [players, existingStints] = await Promise.all([
+      prisma.player.findMany({
+        select: {
+          id: true,
+          teamId: true,
+          team: {
+            select: {
+              tier: true,
+            },
+          },
+        },
+      }),
+      prisma.careerStint.findMany({
+        distinct: ['playerId'],
+        select: {
+          playerId: true,
+        },
+      }),
+    ]);
+
+    if (players.length === 0) {
+      return;
+    }
+
+    const existing = new Set(existingStints.map((stint) => stint.playerId));
+    const startedAt = new Date();
+
+    const missingStints: Array<{
+      playerId: number;
+      teamId: number | null;
+      tier: number | null;
+      startedAt: Date;
+      endedAt: Date | null;
+    }> = players
+      .filter((player) => !existing.has(player.id))
+      .map((player) => ({
+        playerId: player.id,
+        teamId: player.teamId,
+        tier: player.team?.tier ?? null,
+        startedAt,
+        endedAt: null as Date | null,
+      }));
+
+    if (missingStints.length === 0) {
+      return;
+    }
+
+    await prisma.$transaction(
+      missingStints.map((stint) =>
+        prisma.careerStint.create({
+          data: stint,
+        }),
+      ),
+    );
+
+    DatabaseClient.log.info('Initialized %d player career stints for save bootstrap.', missingStints.length);
   }
 
   /**
@@ -265,7 +353,7 @@ export default class DatabaseClient {
    * @param id The database id.
    * @method
    */
-  public static async initSave(id = activeId) {
+  public static async initSave(id = activeId): Promise<InitSaveResult> {
     const rootSaveName = Util.getSaveFileName(0);
     const rootSavePath = path.join(DatabaseClient.localBasePath, rootSaveName);
     const newSaveName = Util.getSaveFileName(id);
@@ -275,7 +363,7 @@ export default class DatabaseClient {
     // we build the file tree to the save file
     try {
       await fs.promises.access(newSavePath, fs.constants.F_OK);
-      return Promise.resolve(newSavePath);
+      return Promise.resolve({ path: newSavePath, created: false });
     } catch (_) {
       await fs.promises.mkdir(path.dirname(newSavePath), { recursive: true });
     }
@@ -283,7 +371,7 @@ export default class DatabaseClient {
     // bail early if we're using a modded save
     try {
       await DatabaseClient.initModdedDatabase(newSavePath);
-      return Promise.resolve(newSavePath);
+      return Promise.resolve({ path: newSavePath, created: true });
     } catch (error) {
       this.log.info(error);
     }
@@ -291,7 +379,7 @@ export default class DatabaseClient {
     // make a copy of the root save
     try {
       await fs.promises.copyFile(rootSavePath, newSavePath);
-      return Promise.resolve(newSavePath);
+      return Promise.resolve({ path: newSavePath, created: true });
     } catch (error) {
       return Promise.reject(error);
     }

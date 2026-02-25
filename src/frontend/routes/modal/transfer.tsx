@@ -1,64 +1,70 @@
 /**
- * Dedicated modal for transfer offers (Player Career Only).
+ * Dedicated modal for player team history.
  *
- * This modal now ONLY supports:
- * - Viewing incoming PLAYER_PENDING offers for the user.
- * - Accepting or rejecting those offers.
- * - Viewing past offers.
- *
- * All Manager Career logic has been removed.
+ * Transfer offer tabs have been replaced with a compact team history view.
  */
 
 import React from 'react';
-import { flatten } from 'lodash';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
-import { AppStateContext } from '@liga/frontend/redux';
 import { Image } from '@liga/frontend/components';
 import { XPBar } from '@liga/frontend/components/player-card';
-import { FaBan, FaCheck } from 'react-icons/fa';
-
-/** @enum */
-enum Tab {
-  REVIEW_OFFERS,
-  PAST_OFFERS,
-}
 
 /** @type {Player} */
 type Player = (NonNullable<Awaited<ReturnType<typeof api.players.find<typeof Eagers.player>>>> & {
-  careerStints?: Array<{ teamId: number | null; startedAt: Date; endedAt: Date | null }>;
+  careerStints?: Array<{
+    id: number;
+    teamId: number | null;
+    startedAt: Date;
+    endedAt: Date | null;
+    team?: {
+      id: number;
+      name: string;
+      blazon: string;
+    } | null;
+  }>;
 }) | null;
 
-/** @type {Transfer} */
-type Transfer = Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>[number];
-
-
-const TransferStatusBadgeColor: Record<number, string> = {
-  [Constants.TransferStatus.PLAYER_ACCEPTED]: 'badge-success',
-  [Constants.TransferStatus.PLAYER_PENDING]: 'badge-warning',
-  [Constants.TransferStatus.PLAYER_REJECTED]: 'badge-error',
-  [Constants.TransferStatus.TEAM_ACCEPTED]: 'badge-success',
-  [Constants.TransferStatus.TEAM_PENDING]: 'badge-warning',
-  [Constants.TransferStatus.TEAM_REJECTED]: 'badge-error',
+type HonorOccurrence = {
+  key: string;
+  teamId: number;
+  season: number;
+  date: Date;
+  tierSlug: string;
+  federationSlug: string;
 };
 
-function fetchTransfers(playerId: number) {
-  return api.transfers.all({
-    where: { target: { id: playerId } },
-    include: Eagers.transfer.include,
+type HonorGroup = {
+  key: string;
+  count: number;
+  seasons: number[];
+  tierSlug: string;
+  federationSlug: string;
+};
+
+function formatStintDate(input: Date | string) {
+  const date = new Date(input);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
   });
+}
+
+function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | string | null) {
+  const start = new Date(startedAt);
+  start.setHours(0, 0, 0, 0);
+
+  const end = endedAt ? new Date(endedAt) : null;
+  if (end) end.setHours(23, 59, 59, 999);
+
+  return start <= date && (!end || end >= date);
 }
 
 export default function TransferModal() {
   const location = useLocation();
-  const { state } = React.useContext(AppStateContext);
-
-  const [activeTab, setActiveTab] = React.useState<Tab>(Tab.PAST_OFFERS);
   const [player, setPlayer] = React.useState<Player>();
-  const [transfers, setTransfers] = React.useState<Array<Transfer>>([]);
-
-  const isUserPlayer = player?.id === state.profile.playerId;
+  const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
 
   React.useEffect(() => {
     if (!location.state) return;
@@ -69,36 +75,23 @@ export default function TransferModal() {
       .find({
         include: {
           ...Eagers.player.include,
-          careerStints: true,
+          careerStints: {
+            include: {
+              team: true,
+            },
+          },
         },
         where: { id: playerId },
       })
       .then((foundPlayer) => setPlayer(foundPlayer ?? undefined));
-
-    fetchTransfers(playerId).then(setTransfers);
   }, []);
 
-  React.useEffect(() => {
-    if (!player) return;
-    setActiveTab(isUserPlayer ? Tab.REVIEW_OFFERS : Tab.PAST_OFFERS);
-  }, [player, isUserPlayer]);
-
-  const offers = React.useMemo(() => {
-    if (!transfers) return [];
-    return flatten(transfers.map((t) => t.offers));
-  }, [transfers]);
-
-  const pendingTransfers = React.useMemo(() => {
-    if (!isUserPlayer) return [];
-    return (transfers ?? []).filter(
-      (t) => t.status === Constants.TransferStatus.PLAYER_PENDING,
+  const teamHistory = React.useMemo(() => {
+    const stints = player?.careerStints ?? [];
+    return [...stints].sort(
+      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );
-  }, [transfers, isUserPlayer]);
-
-  const [majorWinCount, setMajorWinCount] = React.useState(0);
-  const [honors, setHonors] = React.useState<
-    Record<string, { count: number; seasons: number[]; tierSlug: string; federationSlug: string }>
-  >({});
+  }, [player?.careerStints]);
 
   React.useEffect(() => {
     if (!player) return;
@@ -123,9 +116,6 @@ export default function TransferModal() {
           matches: {
             include: {
               competitors: true;
-              players: {
-                select: { id: true };
-              };
             };
           };
         };
@@ -147,9 +137,6 @@ export default function TransferModal() {
           matches: {
             include: {
               competitors: true,
-              players: {
-                select: { id: true },
-              },
             },
           },
         },
@@ -158,16 +145,16 @@ export default function TransferModal() {
       .then((competitions) => {
         const stints = player.careerStints ?? [];
 
-        const awarded = competitions.filter((competition) => {
+        const occurrences = competitions.reduce<HonorOccurrence[]>((acc, competition) => {
           const championshipMatch = competition.matches.reduce<(typeof competition.matches)[number] | null>(
-            (latest, match) => {
+            (latest: (typeof competition.matches)[number] | null, match: (typeof competition.matches)[number]) => {
               if (!latest || match.date > latest.date) return match;
               return latest;
             },
             null,
           );
 
-          if (!championshipMatch) return false;
+          if (!championshipMatch) return acc;
 
           let winnerTeamId = competition.competitors.find((c) => c.position === 1)?.teamId;
           if (!winnerTeamId && championshipMatch.competitors.length >= 2) {
@@ -176,58 +163,56 @@ export default function TransferModal() {
             );
             winnerTeamId = ordered[0]?.teamId;
           }
-          if (!winnerTeamId) return false;
+
+          if (!winnerTeamId) return acc;
 
           const championshipDate = new Date(championshipMatch.date);
-          const wasOnWinnerViaStint = stints.some((stint) => {
-            if (stint.teamId !== winnerTeamId) return false;
+          const wonTitle = stints.some(
+            (stint) =>
+              stint.teamId === winnerTeamId &&
+              isWithinStint(championshipDate, stint.startedAt, stint.endedAt),
+          );
 
-            const startedAt = new Date(stint.startedAt);
-            startedAt.setHours(0, 0, 0, 0);
+          if (!wonTitle) return acc;
 
-            const endedAt = stint.endedAt ? new Date(stint.endedAt) : null;
-            if (endedAt) endedAt.setHours(23, 59, 59, 999);
-
-            return startedAt <= championshipDate && (!endedAt || endedAt >= championshipDate);
+          acc.push({
+            key: `${competition.tier.slug}__${competition.federation.slug}`,
+            teamId: winnerTeamId,
+            season: competition.season,
+            date: championshipDate,
+            tierSlug: competition.tier.slug,
+            federationSlug: competition.federation.slug,
           });
 
-          const everOnWinnerTeam = stints.some((stint) => stint.teamId === winnerTeamId);
-          const appearedInCompetition = competition.matches.some((match) =>
-            match.players.some((p) => p.id === player.id),
-          );
-
-          return (
-            wasOnWinnerViaStint ||
-            everOnWinnerTeam ||
-            (stints.length === 0 && (appearedInCompetition || player.teamId === winnerTeamId))
-          );
-        });
-
-        setMajorWinCount(
-          awarded.filter((c) => c.tier.slug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
-        );
-
-        const grouped = awarded.reduce<
-          Record<string, { count: number; seasons: number[]; tierSlug: string; federationSlug: string }>
-        >((acc, competition) => {
-          const key = `${competition.tier.slug}__${competition.federation.slug}`;
-          if (!acc[key]) {
-            acc[key] = {
-              count: 0,
-              seasons: [],
-              tierSlug: competition.tier.slug,
-              federationSlug: competition.federation.slug,
-            };
-          }
-
-          acc[key].count += 1;
-          acc[key].seasons.push(competition.season);
           return acc;
-        }, {});
+        }, []);
 
-        setHonors(grouped);
+        setHonors(occurrences);
       });
   }, [player]);
+
+  const honorGroups = React.useMemo(() => {
+    return honors.reduce<Record<string, HonorGroup>>((acc, honor) => {
+      if (!acc[honor.key]) {
+        acc[honor.key] = {
+          key: honor.key,
+          count: 0,
+          seasons: [],
+          tierSlug: honor.tierSlug,
+          federationSlug: honor.federationSlug,
+        };
+      }
+
+      acc[honor.key].count += 1;
+      acc[honor.key].seasons.push(honor.season);
+      return acc;
+    }, {});
+  }, [honors]);
+
+  const majorWinCount = React.useMemo(
+    () => honors.filter((honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
+    [honors],
+  );
 
   if (!player) {
     return (
@@ -309,19 +294,17 @@ export default function TransferModal() {
         </table>
       </section>
 
-
       <section className="border-base-content/10 flex min-h-12 items-center gap-4 border-t px-4 py-2">
-        {Object.keys(honors).length === 0 && <span className="text-sm opacity-60">No honors yet.</span>}
-        {Object.values(honors).map((honor) => {
+        {Object.keys(honorGroups).length === 0 && <span className="text-sm opacity-60">No honors yet.</span>}
+        {Object.values(honorGroups).map((honor) => {
           const seasonsList = [...honor.seasons]
             .sort((a, b) => a - b)
             .map((season) => `Season ${season}`)
             .join(', ');
 
           return (
-            <div key={`${honor.tierSlug}__${honor.federationSlug}`} className="tooltip flex items-center gap-2" data-tip={seasonsList}>
+            <div key={honor.key} className="tooltip flex items-center gap-2" data-tip={seasonsList}>
               <Image
-                alt={honor.tierSlug}
                 className="h-12 w-12 object-contain"
                 src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug)}
               />
@@ -331,160 +314,75 @@ export default function TransferModal() {
         })}
       </section>
 
-      {/* TAB BAR (Player Career Only: REVIEW_OFFERS + PAST_OFFERS) */}
-      <section role="tablist" className="tabs-box tabs rounded-none border-t-0!">
-        {Object.keys(Tab)
-          .filter((k) => isNaN(Number(k)))
-          .filter((tabKey: keyof typeof Tab) => {
-            const tab = Tab[tabKey];
-            if (isUserPlayer) {
-              return tab === Tab.REVIEW_OFFERS || tab === Tab.PAST_OFFERS;
-            }
-            return tab === Tab.PAST_OFFERS;
-          })
-          .map((tabKey: keyof typeof Tab) => (
-            <a
-              key={tabKey}
-              role="tab"
-              className={cx('tab capitalize', Tab[tabKey] === activeTab && 'tab-active')}
-              onClick={() => setActiveTab(Tab[tabKey])}
-            >
-              {tabKey.replace('_', ' ').toLowerCase()}
-            </a>
-          ))}
-      </section>
+      <section className="flex-1 overflow-y-scroll">
+        <table className="table table-fixed table-pin-rows">
+          <thead>
+            <tr>
+              <th className="w-4/12">Time period</th>
+              <th className="w-5/12">Team</th>
+              <th className="w-3/12">Honors</th>
+            </tr>
+          </thead>
 
-      {/* REVIEW OFFERS (Only PLAYER_PENDING for YOU) */}
-      {activeTab === Tab.REVIEW_OFFERS && isUserPlayer && (
-        <section className="flex-1 overflow-y-scroll">
-          <table className="table table-fixed table-pin-rows">
-            <thead>
+          <tbody>
+            {teamHistory.length === 0 && (
               <tr>
-                <th>From</th>
-                <th className="text-center">Fee</th>
-                <th className="text-right">Accept / Reject</th>
+                <td colSpan={3} className="py-8 text-center opacity-60">
+                  No team history available.
+                </td>
               </tr>
-            </thead>
+            )}
 
-            <tbody>
-              {pendingTransfers.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-8 text-center opacity-60">
-                    No pending offers.
-                  </td>
-                </tr>
-              )}
+            {teamHistory.map((stint) => {
+              const stintHonors = honors.filter(
+                (honor) =>
+                  honor.teamId === stint.teamId &&
+                  isWithinStint(honor.date, stint.startedAt, stint.endedAt),
+              );
 
-              {pendingTransfers.map((transfer) => (
-                <tr key={transfer.id}>
+              return (
+                <tr key={stint.id}>
                   <td className="truncate">
-                    <img src={transfer.from.blazon} className="inline-block size-6" />
-                    <span>&nbsp;{transfer.from.name}</span>
+                    {formatStintDate(stint.startedAt)} -{' '}
+                    {stint.endedAt ? formatStintDate(stint.endedAt) : 'Present'}
+                  </td>
+                  <td>
+                    {stint.team ? (
+                      <div className="flex items-center gap-2">
+                        <img src={stint.team.blazon} className="inline-block size-6" />
+                        <span>{stint.team.name}</span>
+                      </div>
+                    ) : (
+                      <span className="opacity-70">Free Agent</span>
+                    )}
                   </td>
 
-                  <td className="text-center">
-                    {Util.formatCurrency(transfer.offers[0].cost)}
-                  </td>
-
-                  <td className="join w-full justify-end text-center">
-                    <button
-                      title="Accept Offer"
-                      className="btn btn-success join-item btn-sm"
-                      onClick={() =>
-                        api.transfers
-                          .accept(transfer.id)
-                          .then(() => fetchTransfers(player.id))
-                          .then(setTransfers)
-                      }
-                    >
-                      <FaCheck />
-                    </button>
-
-                    <button
-                      title="Reject Offer"
-                      className="btn btn-error join-item btn-sm"
-                      onClick={() =>
-                        api.transfers
-                          .reject(transfer.id)
-                          .then(() => fetchTransfers(player.id))
-                          .then(setTransfers)
-                      }
-                    >
-                      <FaBan />
-                    </button>
+                  <td>
+                    {stintHonors.length === 0 ? (
+                      <span className="opacity-60">—</span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {stintHonors.map((honor, idx) => (
+                          <div
+                            key={`${stint.id}-${honor.key}-${honor.season}-${idx}`}
+                            className="tooltip"
+                            data-tip={`Season ${honor.season}`}
+                          >
+                            <Image
+                              className="h-9 w-9 object-contain"
+                              src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      {/* PAST OFFERS */}
-      {activeTab === Tab.PAST_OFFERS && (
-        <section className="flex-1 overflow-y-scroll">
-          <table className="table table-fixed table-pin-rows">
-            <thead>
-              <tr>
-                <th>From</th>
-                <th className="text-center">Fee</th>
-                <th className="text-center">Wages</th>
-                <th className="w-3/12 text-center">Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {offers.map((offer) => {
-                const transfer = transfers.find((t) => t.id === offer.transferId);
-                const team = transfer?.from;
-
-                if (!team) return null;
-
-                return (
-                  <tr key={offer.id}>
-                    <td>
-                      <img src={team.blazon} className="inline-block size-6" />
-                      <span>&nbsp;</span>
-                      <Link
-                        to={`/teams?teamId=${team.id}`}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          api.window.send(Constants.WindowIdentifier.Main, {
-                            target: `/teams?teamId=${team.id}`,
-                          });
-                          api.window.close(Constants.WindowIdentifier.Modal);
-                        }}
-                        className="hover:underline"
-                      >
-                        {team.name}
-                      </Link>
-                    </td>
-
-                    <td className="text-center">
-                      {Util.formatCurrency(offer.cost)}
-                    </td>
-
-                    <td className="text-center">
-                      {Util.formatCurrency(offer.wages)}
-                    </td>
-
-                    <td className="text-center">
-                      <span
-                        className={cx(
-                          'badge w-full capitalize',
-                          TransferStatusBadgeColor[offer.status],
-                        )}
-                      >
-                        {Constants.IdiomaticTransferStatus[offer.status]}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-      )}
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
     </main>
   );
 }
