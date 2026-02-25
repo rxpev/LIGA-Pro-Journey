@@ -806,6 +806,20 @@ End\n
       ];
     }
 
+    const resolveTeamBlazonName = (team: { blazon?: string | null; slug?: string | null }, fallback: string) => {
+      const blazon = team.blazon?.trim();
+
+      if (!blazon) {
+        return fallback;
+      }
+
+      const match = /^(?<protocol>.+):\/\/(?<filePath>.+)$/g.exec(blazon);
+      const filePath = match?.groups?.filePath || blazon;
+      const blazonName = path.parse(filePath).name;
+
+      return blazonName || fallback;
+    };
+
     const serverCfgData = this.isFaceit
       ? {
         demo: true,
@@ -855,8 +869,8 @@ End\n
         match_stat: this.match.competition.tier.name,
         teamflag_t: home.team.country.code,
         teamflag_ct: away.team.country.code,
-        shortname_t: home.team.slug,
-        shortname_ct: away.team.slug,
+        shortname_t: resolveTeamBlazonName(home.team, home.team.slug),
+        shortname_ct: resolveTeamBlazonName(away.team, away.team.slug),
         stat_t: Util.toOrdinalSuffix(homeStats.position),
         stat_ct: Util.toOrdinalSuffix(awayStats.position),
       };
