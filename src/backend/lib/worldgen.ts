@@ -39,6 +39,77 @@ export async function bumpSeasonNumber() {
 }
 
 /**
+ * Rotates one active map with one reserve map for the configured game.
+ *
+ * @function
+ */
+export async function rotateMapPoolForNewSeason() {
+  const profile = await DatabaseClient.prisma.profile.findFirst();
+
+  if (!profile || (profile.season ?? 0) <= 1) {
+    Engine.Runtime.Instance.log.info(
+      'Season start: skipping map pool rotation for initial season (season=%d).',
+      profile?.season ?? 0,
+    );
+    return Promise.resolve();
+  }
+
+  const gameVersionSlug = Util.loadSettings(profile.settings).general.game;
+  const mapPool = await DatabaseClient.prisma.mapPool.findMany({
+    where: {
+      gameVersion: {
+        slug: gameVersionSlug,
+      },
+    },
+    include: {
+      gameMap: true,
+    },
+  });
+
+  const activeMaps = mapPool.filter((poolEntry) => poolEntry.position != null);
+  const reserveMaps = mapPool.filter((poolEntry) => poolEntry.position == null);
+
+  const demotedMap = sample(activeMaps);
+  const promotedMap = sample(reserveMaps);
+
+  if (!demotedMap || !promotedMap) {
+    Engine.Runtime.Instance.log.warn(
+      'Skipping map pool rotation for %s. Active maps: %d, reserve maps: %d.',
+      gameVersionSlug,
+      activeMaps.length,
+      reserveMaps.length,
+    );
+    return Promise.resolve();
+  }
+
+  await DatabaseClient.prisma.$transaction([
+    DatabaseClient.prisma.mapPool.update({
+      where: {
+        id: demotedMap.id,
+      },
+      data: {
+        position: null,
+      },
+    }),
+    DatabaseClient.prisma.mapPool.update({
+      where: {
+        id: promotedMap.id,
+      },
+      data: {
+        position: demotedMap.position,
+      },
+    }),
+  ]);
+
+  Engine.Runtime.Instance.log.info(
+    'Rotated map pool for %s: moved %s into active and %s into reserve.',
+    gameVersionSlug,
+    promotedMap.gameMap.name,
+    demotedMap.gameMap.name,
+  );
+}
+
+/**
  * Creates competitions at the start of a new season.
  *
  * @function
@@ -4856,6 +4927,7 @@ export async function onSeasonStart() {
   return createWelcomeEmail()
     .then(scheduleNextSeasonStart)
     .then(bumpSeasonNumber)
+    .then(rotateMapPoolForNewSeason)
     .then(createCompetitions)
     .then(incrementAgesSeasonal)
     .then(syncTiers)
