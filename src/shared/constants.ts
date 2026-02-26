@@ -255,6 +255,7 @@ export enum LocaleIdentifier {
  */
 export enum IPCRoute {
   APP_DETECT_GAME = '/app/detect/game',
+  APP_DETECT_DEDICATED_SERVER = '/app/detect/dedicated-server',
   APP_DETECT_STEAM = '/app/detect/steam',
   APP_DIALOG = '/app/dialog',
   APP_EXTERNAL = '/app/external',
@@ -664,6 +665,7 @@ export const GameSettings = {
 
   // csgo settings
   CSGO_APPID: 730,
+  CSGO_DS_APPID: 740,
   CSGO_BETTER_BOTS_NAMES_FILE: 'addons/sourcemod/configs/bot_names.txt',
   CSGO_BOT_COMMAND_FILE: 'cfg/liga-bots.cfg',
   CSGO_BOT_CONFIG: 'botprofile.db',

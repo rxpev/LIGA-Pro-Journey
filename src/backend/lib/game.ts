@@ -118,6 +118,96 @@ export async function discoverGamePath(enumId: string, steamPath?: string) {
   return Promise.resolve(library.path as string);
 }
 
+
+/**
+ * Detects the CSGO dedicated server installation root.
+ *
+ * @param steamPath The steam path.
+ * @function
+ */
+export async function discoverDedicatedServerPath(steamPath?: string) {
+  if (!steamPath) {
+    steamPath = await discoverSteamPath();
+  }
+
+  const appId = String(Constants.GameSettings.CSGO_DS_APPID);
+  const fallbackDirs = [
+    'Counter-Strike Global Offensive Dedicated Server',
+    'Counter-Strike Global Offensive Beta - Dedicated Server',
+  ];
+
+  const libraryPaths = new Set<string>();
+
+  if (steamPath) {
+    try {
+      const librariesFileContent = await fs.promises.readFile(
+        path.join(steamPath, Constants.GameSettings.STEAM_LIBRARIES_FILE),
+        'utf8',
+      );
+      const { libraryfolders } = VDF.parse(librariesFileContent) as {
+        libraryfolders?: Record<string, Record<string, unknown>>;
+      };
+
+      const libraries = Object.values(libraryfolders || {}) as Array<Record<string, unknown>>;
+      libraries.forEach((library) => {
+        if (typeof library.path === 'string' && library.path.trim()) {
+          libraryPaths.add(path.normalize(library.path));
+        }
+      });
+    } catch (error) {
+      log.warn('failed to parse steam libraryfolders.vdf: %s', error);
+    }
+
+    // include Steam root as an additional fallback library path
+    libraryPaths.add(path.normalize(steamPath));
+  }
+
+  // explicit fallback for common custom-library location on Windows
+  if (process.platform === 'win32') {
+    libraryPaths.add(path.normalize('D:/SteamLibrary'));
+  }
+
+  for (const libraryPath of libraryPaths) {
+    const steamAppsPath = path.join(libraryPath, 'steamapps');
+    const manifestPath = path.join(steamAppsPath, `appmanifest_${appId}.acf`);
+
+    try {
+      const manifestContent = await fs.promises.readFile(manifestPath, 'utf8');
+      const parsed = VDF.parse(manifestContent) as {
+        AppState?: { installdir?: string };
+      };
+      const installDir = parsed.AppState?.installdir;
+
+      if (installDir) {
+        const resolvedPath = path.join(steamAppsPath, 'common', installDir);
+        const srcdsPath = path.join(resolvedPath, 'srcds.exe');
+
+        await fs.promises.access(srcdsPath, fs.constants.F_OK);
+        log.info('detected dedicated server via appmanifest at: %s', resolvedPath);
+        return resolvedPath;
+      }
+    } catch (_) {
+      // appmanifest not found or malformed in this library, continue fallbacks
+    }
+
+    for (const directory of fallbackDirs) {
+      const resolvedPath = path.join(steamAppsPath, 'common', directory);
+      const srcdsPath = path.join(resolvedPath, 'srcds.exe');
+
+      try {
+        await fs.promises.access(srcdsPath, fs.constants.F_OK);
+        log.info('detected dedicated server via fallback directory at: %s', resolvedPath);
+        return resolvedPath;
+      } catch (_) {
+        // try next fallback
+      }
+    }
+  }
+
+  throw Error('CSGO dedicated server not found!');
+}
+
+
 /**
  * Gets the specified game's executable.
  *
@@ -705,6 +795,11 @@ End\n
    * @function
    */
   private async generateScoreboardConfig() {
+    if (!this.settings.general.gamePath) {
+      this.log.warn('No gamePath set, skipping scoreboard language patch');
+      return;
+    }
+
     const original = path.join(
       this.settings.general.gamePath,
       this.baseDir,

@@ -30,6 +30,8 @@ export default {
   app: {
     detectGame: (game: Constants.Game) =>
       ipcRenderer.invoke(Constants.IPCRoute.APP_DETECT_GAME, game) as Promise<string>,
+    detectDedicatedServer: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.APP_DETECT_DEDICATED_SERVER) as Promise<string | false>,
     detectSteam: () => ipcRenderer.invoke(Constants.IPCRoute.APP_DETECT_STEAM) as Promise<string>,
     dialog: (parentId: string, options: Electron.OpenDialogOptions) =>
       ipcRenderer.invoke(

@@ -68,6 +68,14 @@ export function IPCGenericHandler() {
       return false;
     }
   });
+  ipcMain.handle(Constants.IPCRoute.APP_DETECT_DEDICATED_SERVER, async () => {
+    try {
+      const dedicatedServerPath = await Game.discoverDedicatedServerPath();
+      return dedicatedServerPath;
+    } catch (_) {
+      return false;
+    }
+  });
   ipcMain.handle(
     Constants.IPCRoute.APP_DIALOG,
     (_, parentId: string, options: Electron.OpenDialogOptions) =>
@@ -91,11 +99,35 @@ export function IPCGenericHandler() {
       settings = Util.loadSettings(profile.settings);
     }
 
-    const steamPath = path.join(settings.general.steamPath || '', Constants.GameSettings.STEAM_EXE);
+    const steamCandidates = [
+      settings.general.steamPath,
+      await Game.discoverSteamPath(),
+    ].filter((candidate): candidate is string => Boolean(candidate));
+
+    let steamExecutablePath: string | undefined;
+
+    for (const candidate of steamCandidates) {
+      const executablePath = path.join(candidate, Constants.GameSettings.STEAM_EXE);
+
+      try {
+        await fs.promises.access(executablePath, fs.constants.F_OK);
+        steamExecutablePath = executablePath;
+        break;
+      } catch (_) {
+        // try next candidate
+      }
+    }
+
     const gamePath = Game.getGameExecutable(settings.general.game, settings.general.gamePath || '');
 
     try {
-      await fs.promises.access(steamPath, fs.constants.F_OK);
+      if (!steamExecutablePath) {
+        const error = new Error('steam.exe not found') as NodeJS.ErrnoException;
+        error.code = Constants.ErrorCode.ENOENT;
+        error.path = path.join(settings.general.steamPath || '', Constants.GameSettings.STEAM_EXE);
+        throw error;
+      }
+
       await fs.promises.access(gamePath, fs.constants.F_OK);
       await fs.promises.access(Plugins.getPath(), fs.constants.F_OK);
       await Game.isRunningAndThrow(gamePath);

@@ -30,6 +30,7 @@ export default function () {
   const [activeTab, setActiveTab] = React.useState(Tab.GENERAL);
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
+  const hasAttemptedDedicatedDetection = React.useRef(false);
   const GAME_SLUG = Constants.Game.CSGO;
 
   // load settings
@@ -57,6 +58,10 @@ export default function () {
 
     setSettings(localSettings);
   }, [state.profile]);
+
+  React.useEffect(() => {
+    hasAttemptedDedicatedDetection.current = false;
+  }, [state.profile?.id]);
 
   // validate game installation path
   React.useEffect(() => {
@@ -95,6 +100,22 @@ export default function () {
       data: { settings: json },
     });
   };
+
+  React.useEffect(() => {
+    if (!state.profile || settings.general.dedicatedServerPath || hasAttemptedDedicatedDetection.current) {
+      return;
+    }
+
+    hasAttemptedDedicatedDetection.current = true;
+
+    api.app.detectDedicatedServer().then((detectedPath) => {
+      if (!detectedPath) {
+        return;
+      }
+
+      onSettingsUpdate('general.dedicatedServerPath', detectedPath);
+    });
+  }, [state.profile, settings.general.dedicatedServerPath]);
 
   // steam and game path validation
   const steamPathError = React.useMemo(() => {

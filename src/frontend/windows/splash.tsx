@@ -12,6 +12,18 @@ import { Constants, Util } from '@liga/shared';
 import '@liga/frontend/assets/styles.css';
 
 /**
+ * Dedicated server status messages.
+ *
+ * @enum
+ */
+enum DedicatedServerStatus {
+  Checking = 'Locating CSGO dedicated server...',
+  PromptingInstall = 'CSGO dedicated server is required.',
+  Installing = 'Downloading CSGO dedicated server...',
+  Installed = 'CSGO dedicated server detected.',
+}
+
+/**
  * Database status messages.
  *
  * @enum
@@ -56,17 +68,78 @@ const FAUX_TIMEOUT = 500;
  * @component
  */
 function Index() {
-  const [status, setStatus] = React.useState<DatabaseStatus | UpdaterStatus | PluginStatus>(
-    UpdaterStatus.Checking,
-  );
+  const [status, setStatus] = React.useState<
+    DedicatedServerStatus | DatabaseStatus | UpdaterStatus | PluginStatus
+  >(DedicatedServerStatus.Checking);
   const [progress, setProgress] = React.useState<number>();
+  const [dedicatedServerPath, setDedicatedServerPath] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const detectDedicatedServer = async () => {
+      try {
+        const path = await api.app.detectDedicatedServer();
+
+        if (path) {
+          setDedicatedServerPath(path);
+          setStatus(DedicatedServerStatus.Installed);
+          return;
+        }
+
+        setStatus(DedicatedServerStatus.PromptingInstall);
+
+        const { response } = await api.app.messageBox(Constants.WindowIdentifier.Splash, {
+          type: 'info',
+          buttons: ['Install', 'Exit'],
+          defaultId: 0,
+          cancelId: 1,
+          title: 'CSGO Dedicated Server Required',
+          message: 'LIGA: Pro Journey requires a CSGO dedicated server to run matches.',
+          detail:
+            'Click Install to open Steam and install the dedicated server.',
+        });
+
+        if (response !== 0) {
+          await api.app.quit();
+          return;
+        }
+
+        setStatus(DedicatedServerStatus.Installing);
+        await api.app.external(`steam://install/${Constants.GameSettings.CSGO_DS_APPID}`);
+
+        const waitForInstall = async () => {
+          while (true) {
+            const detectedPath = await api.app.detectDedicatedServer();
+
+            if (detectedPath) {
+              setDedicatedServerPath(detectedPath);
+              setStatus(DedicatedServerStatus.Installed);
+              return;
+            }
+
+            await Util.sleep(2500);
+          }
+        };
+
+        await waitForInstall();
+      } catch (_) {
+        await api.app.quit();
+      }
+    };
+
+    detectDedicatedServer();
+  }, []);
 
   // the updater is heavily event-driven so wrap it in a promise
   // to hold the app here while it runs through its lifecycle
   React.useEffect(() => {
+    if (status !== DedicatedServerStatus.Installed) {
+      return;
+    }
+
     Util.sleep(FAUX_TIMEOUT).then(
       () =>
         new Promise((resolve) => {
+          setStatus(UpdaterStatus.Checking);
           api.updater.start();
           api.ipc.on(Constants.IPCRoute.UPDATER_NO_UPDATE, () =>
             resolve(setStatus(UpdaterStatus.NoUpdates)),
@@ -79,7 +152,7 @@ function Index() {
           );
         }),
     );
-  }, []);
+  }, [status]);
 
   // if there was an update download then
   // trigger a restart of the application
@@ -140,6 +213,30 @@ function Index() {
         return Util.sleep(FAUX_TIMEOUT);
       })
       .then(() => api.database.connect())
+      .then(async () => {
+        if (!dedicatedServerPath) {
+          return;
+        }
+
+        const profile = await api.profiles.current();
+
+        if (!profile) {
+          return;
+        }
+
+        const settings = JSON.parse(profile.settings) as typeof Constants.Settings;
+
+        if (settings.general.dedicatedServerPath === dedicatedServerPath) {
+          return;
+        }
+
+        settings.general.dedicatedServerPath = dedicatedServerPath;
+
+        await api.profiles.update({
+          where: { id: profile.id },
+          data: { settings: JSON.stringify(settings) },
+        });
+      })
       .then(() => Util.sleep(FAUX_TIMEOUT))
       .then(() => {
         return Promise.resolve(setStatus(DatabaseStatus.Connected));
@@ -149,7 +246,7 @@ function Index() {
         api.window.open(Constants.WindowIdentifier.Landing);
         api.window.close(Constants.WindowIdentifier.Splash);
       });
-  }, [status]);
+  }, [status, dedicatedServerPath]);
 
   return (
     <React.StrictMode>
