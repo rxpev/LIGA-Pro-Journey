@@ -318,10 +318,17 @@ export default function () {
             <tbody>
               {transfers.slice(0, NUM_PREVIOUS).map((transfer) => {
                 const latestOffer = transfer.offers[0];
+                const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
                 const isFreeAgentTransfer =
                   transfer.status === Constants.TransferStatus.TEAM_ACCEPTED &&
                   (latestOffer?.cost || 0) === 0;
-                const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
+                const destinationTeam = isContractExpiry ? transfer.from : transfer.to;
+                const isNoTeam =
+                  isFreeAgentTransfer ||
+                  !destinationTeam ||
+                  destinationTeam.id == null ||
+                  destinationTeam.name?.toLowerCase() === 'no team' ||
+                  destinationTeam.blazon?.includes('noteam.svg');
 
                 return (
                   <tr key={transfer.id + '__transfer'}>
@@ -338,18 +345,18 @@ export default function () {
                           src={transfer.target.avatar || 'resources://avatars/empty.png'}
                         />
                       </button>
-                      {isFreeAgentTransfer ? (
+                      {isNoTeam ? (
                         <img
                           title="No Team"
                           className="inline-block size-12"
                           src="resources://blazonry/noteam.svg"
                         />
                       ) : (
-                        <Link to={`/teams?teamId=${isContractExpiry ? transfer.from.id : transfer.to?.id || ''}`}>
+                        <Link to={`/teams?teamId=${destinationTeam.id}`}>
                           <img
-                            title={isContractExpiry ? transfer.from.name : transfer.to?.name || '-'}
+                            title={destinationTeam.name}
                             className="inline-block size-12"
-                            src={isContractExpiry ? transfer.from.blazon : transfer.to?.blazon || 'resources://blazonry/009400.png'}
+                            src={destinationTeam.blazon}
                           />
                         </Link>
                       )}
