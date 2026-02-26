@@ -1910,7 +1910,11 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       player: {
         include: {
           country: {
-            include: { continent: true },
+            include: {
+              continent: {
+                include: { federation: true },
+              },
+            },
           },
         },
       },
@@ -3418,12 +3422,28 @@ function rollContractYears(tier: TierSlug): number {
   return options[pickedIdx]?.years ?? 1;
 }
 
-function getFaceitOfferChanceByMatchCount(matchCount: number) {
-  const idx = Math.min(
-    matchCount,
-    UserOfferSettings.FACEIT_OFFER_PBX_BY_MATCH_INDEX.length - 1,
+function getFaceitOfferChanceByMatchCount(matchCount: number, minMatches: number, maxMatches: number) {
+  if (matchCount < minMatches) {
+    return 0;
+  }
+
+  const clamped = Math.max(minMatches, Math.min(matchCount, maxMatches));
+  const progress = (clamped - minMatches + 1) / (maxMatches - minMatches + 1);
+
+  // Keep growth gradual while still rewarding each additional match.
+  return Math.round(12 + progress * 48);
+}
+
+type FaceitRegionalFederationSlug =
+  keyof typeof UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION;
+
+function isFaceitRegionalFederationSlug(
+  slug: Constants.FederationSlug,
+): slug is FaceitRegionalFederationSlug {
+  return Object.prototype.hasOwnProperty.call(
+    UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION,
+    slug,
   );
-  return UserOfferSettings.FACEIT_OFFER_PBX_BY_MATCH_INDEX[idx] ?? 0;
 }
 
 function tierFromElo(elo: number): TierSlug | null {
@@ -3443,7 +3463,11 @@ export async function sendUserFaceitOffer() {
       player: {
         include: {
           country: {
-            include: { continent: true },
+            include: {
+              continent: {
+                include: { federation: true },
+              },
+            },
           },
         },
       },
@@ -3487,14 +3511,25 @@ export async function sendUserFaceitOffer() {
   const recentMatches = recent20.matchesPlayed ?? 0;
   const matchCount = Math.max(lifetimeMatches, recentMatches);
 
-  if (matchCount < UserOfferSettings.FACEIT_MIN_MATCHES_BEFORE_OFFERS) {
+  const userFederationSlug = profile.player.country?.continent?.federation?.slug as
+    | Constants.FederationSlug
+    | undefined;
+
+  if (!userFederationSlug || !isFaceitRegionalFederationSlug(userFederationSlug)) {
     return Promise.resolve();
   }
 
-  // Ramp in the first window (3–10). After that still allow offers but much rarer
-  const maxWindow = UserOfferSettings.FACEIT_MAX_MATCHES_FIRST_WINDOW;
+  const matchGateway = UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION[userFederationSlug];
 
-  const pbxBase = getFaceitOfferChanceByMatchCount(Math.min(matchCount, maxWindow));
+  const minWindow = matchGateway.minMatches;
+  const maxWindow = matchGateway.maxMatches;
+
+  if (matchCount < minWindow) {
+    return Promise.resolve();
+  }
+
+  // Ramp in the regional first window. After that still allow offers but much rarer.
+  const pbxBase = getFaceitOfferChanceByMatchCount(matchCount, minWindow, maxWindow);
 
   const lifetimeKd = lifetime.kdRatio ?? 1;
   const recentKd = recent20.kdRatio ?? 1;

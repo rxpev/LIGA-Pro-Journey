@@ -1325,17 +1325,18 @@ export const TransferSettings = {
  * @constant
  */
 export const UserOfferSettings = {
-  FACEIT_MIN_MATCHES_BEFORE_OFFERS: 3,
-  FACEIT_MAX_MATCHES_FIRST_WINDOW: 10,
+  FACEIT_MATCH_GATEWAY_BY_FEDERATION: {
+    [FederationSlug.ESPORTS_EUROPA]: { minMatches: 7, maxMatches: 15 },
+    [FederationSlug.ESPORTS_AMERICAS]: { minMatches: 5, maxMatches: 12 },
+    [FederationSlug.ESPORTS_ASIA]: { minMatches: 5, maxMatches: 15 },
+    [FederationSlug.ESPORTS_OCE]: { minMatches: 5, maxMatches: 10 },
+  } as Record<FederationSlug.ESPORTS_EUROPA | FederationSlug.ESPORTS_AMERICAS | FederationSlug.ESPORTS_ASIA | FederationSlug.ESPORTS_OCE, { minMatches: number; maxMatches: number }>,
 
   FACEIT_ELO_THRESHOLDS: {
     OPEN_MAX: 2000,
     INTERMEDIATE_MAX: 2200,
   },
   FACEIT_ELIGIBLE_DIVISIONS: [TierSlug.LEAGUE_OPEN, TierSlug.LEAGUE_INTERMEDIATE],
-
-  // ramp probability from match 3 to 10 (initial window)
-  FACEIT_OFFER_PBX_BY_MATCH_INDEX: [0, 0, 0, 15, 25, 35, 45, 55, 65, 75],
 
   TEAMLESS_OFFER_COOLDOWN_DAYS: 10,
   TEAM_OFFER_COOLDOWN_DAYS: 50,
