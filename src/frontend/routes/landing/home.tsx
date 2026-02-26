@@ -40,18 +40,6 @@ export default function () {
       disabled: !state.profiles.length,
     },
     {
-      path: '/exhibition',
-      label: t('landing.home.exhibition'),
-    },
-    {
-      label: t('landing.home.mods'),
-      onClick: () =>
-        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-          target: '/mods',
-          payload: { parentId: Constants.WindowIdentifier.Landing },
-        }),
-    },
-    {
       type: 'divider',
     },
     {
@@ -130,7 +118,7 @@ export default function () {
       </nav>
       <footer className="w-full px-2">
         <p>
-          <small>{'v' + state.appInfo?.version}</small>
+          <small>LIGA: Pro Journey - Beta 0.1</small>
         </p>
       </footer>
     </main>
