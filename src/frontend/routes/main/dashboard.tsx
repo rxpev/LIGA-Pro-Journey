@@ -128,6 +128,8 @@ export default function () {
     Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>
   >([]);
 
+  const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
+
   const openPlayerTransferModal = React.useCallback((playerId: number) => {
     api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
       target: '/transfer',
@@ -143,6 +145,11 @@ export default function () {
 
     setSettings(Util.loadSettings(state.profile.settings));
   }, [state.profile]);
+
+  // reset one-time warning after switching profiles/saves
+  React.useEffect(() => {
+    setDismissedNoTeamAdvanceWarning(false);
+  }, [state.profile?.id]);
 
   // fetch upcoming list of matches
   React.useEffect(() => {
@@ -476,9 +483,25 @@ export default function () {
                 title={t('main.dashboard.advanceCalendar')}
                 className="day day-btn border-t-0"
                 disabled={!state.profile || state.working || (isMatchday && !isBenched)}
-                onClick={() => {
+                onClick={async () => {
                   if (state.working || !state.profile) {
                     return;
+                  }
+
+                  if (!state.profile.teamId && !dismissedNoTeamAdvanceWarning) {
+                    const profileData = await api.faceit.profile();
+
+                    if (profileData.lifetime.matchesPlayed < 10) {
+                      await api.app.messageBox(Constants.WindowIdentifier.Main, {
+                        type: 'warning',
+                        message: 'Are you sure you want to advance the calendar?',
+                        detail:
+                          "You have not found a team to compete with yet!\n\nPlay FACEIT to get a team's attention.",
+                        buttons: ['OK'],
+                      });
+            setDismissedNoTeamAdvanceWarning(true);
+            return;
+                    }
                   }
 
                   if (isMatchday && isBenched) {
