@@ -1,7 +1,7 @@
 {
   "name": "liga",
   "productName": "LIGA Pro Journey",
-  "version": "alpha-0.1.0",
+  "version": "0.1.0-alpha",
   "description": "Full revamp mod for LIGA Esports Manager",
   "main": ".webpack/main",
   "author": "Rxpev",
