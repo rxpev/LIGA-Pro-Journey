@@ -118,7 +118,7 @@ export default function () {
       </nav>
       <footer className="w-full px-2">
         <p>
-          <small>{'v' + state.appInfo?.version}</small>
+          <small>{state.appInfo?.version}</small>
         </p>
       </footer>
     </main>
