@@ -15,7 +15,6 @@ import { ReduxActions } from '@liga/frontend/redux/actions';
 /** @enum */
 enum Tab {
   GENERAL,
-  MATCH_RULES,
   CALENDAR,
 }
 
@@ -343,28 +342,6 @@ export default function () {
                   value={settings.general.volume}
                   onChange={(event) => onSettingsUpdate('general.volume', event.target.value)}
                 />
-              </article>
-            </section>
-          </fieldset>
-        )}
-        {activeTab === Tab.MATCH_RULES && (
-          <fieldset>
-            <section>
-              <header>
-                <p>{t('shared.maxRoundsTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => onSettingsUpdate('matchRules.maxRounds', event.target.value)}
-                  value={settings.matchRules.maxRounds}
-                >
-                  {[2, 6, 12, 24, 30].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
               </article>
             </section>
           </fieldset>
