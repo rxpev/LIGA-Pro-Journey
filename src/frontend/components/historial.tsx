@@ -27,18 +27,19 @@ interface Props {
 export default function (props: Props) {
   const badgeStyle = 'badge badge-xs';
   const fmtDate = useFormatAppDate();
+  const matches = props.matches || [];
 
   // fill in data until it meets the minimum
-  const data = React.useMemo<typeof props.matches>(() => {
-    if (props.matches.length < Constants.Application.SQUAD_MIN_LENGTH) {
+  const data = React.useMemo<Array<Match | undefined>>(() => {
+    if (matches.length < Constants.Application.SQUAD_MIN_LENGTH) {
       return [
-        ...props.matches,
-        ...Array(Constants.Application.SQUAD_MIN_LENGTH - props.matches.length),
+        ...matches,
+        ...Array(Constants.Application.SQUAD_MIN_LENGTH - matches.length),
       ];
     }
 
-    return props.matches;
-  }, [props.matches]);
+    return matches;
+  }, [matches]);
 
   return (
     <div className={cx('stack-x gap-1!', props.className)}>

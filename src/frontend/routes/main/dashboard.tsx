@@ -608,7 +608,26 @@ export default function () {
             // the suffix is either the current position
             // or their league tier if it's a cup
             const disabled = state.working || !isMatchday || isBenched;
-            const [home, away] = spotlight.competitors;
+            const spotlightCompetitors = spotlight.competitors.filter((competitor) => !!competitor?.team);
+            const [home, away] = spotlightCompetitors;
+
+            if (!home || !away) {
+              return (
+                <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none! before:opacity-50!">
+                  <figure>
+                    <Image
+                      className="h-full w-full"
+                      src={Util.convertMapPool('de_dust2', Constants.Game.CSGO, true)}
+                    />
+                  </figure>
+                  <article className="card-body items-center justify-center text-center">
+                    {t('main.dashboard.noMatchScheduled')}
+                  </article>
+                </section>
+              );
+            }
+
+            const spotlightGames = spotlight.games || [];
             const [homeHistorial, awayHistorial] = matchHistorial;
             const [homeWorldRanking, awayWorldRanking] = worldRankings;
             const [homeSuffix, awaySuffix] = [home, away].map((competitor) => {
@@ -650,7 +669,7 @@ export default function () {
                       isIgl && isMatchday
                         ? 'resources://maps/allmaps.png'
                         : Util.convertMapPool(
-                            spotlight.games[0].map,
+                            spotlightGames[0]?.map || 'de_dust2',
                             settings.general.game,
                             true,
                           )
@@ -691,7 +710,7 @@ export default function () {
                           <FaMapSigns />
                           <span>
                             {Util.convertMapPool(
-                              spotlight.games[0].map,
+                              spotlightGames[0]?.map || 'de_dust2',
                               settings.general.game,
                             )}
                           </span>
@@ -710,7 +729,7 @@ export default function () {
                           <FaStream />
                           <span>
                             {t('shared.bestOf')}&nbsp;
-                            {spotlight.games.length}
+                            {spotlightGames.length || 1}
                           </span>
                         </li>
                       </ul>
@@ -749,13 +768,13 @@ export default function () {
                       className="btn btn-primary join-item btn-wide"
                       disabled={disabled}
                       onClick={() => {
-                        const hasMapInProgress = spotlight.games.some(
+                        const hasMapInProgress = spotlightGames.some(
                           (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
                         );
                         const shouldOpenVeto =
                           spotlight.status !== Constants.MatchStatus.PLAYING &&
                           spotlight.status !== Constants.MatchStatus.COMPLETED &&
-                          (spotlight.games.length > 1 || isIgl);
+                          (spotlightGames.length > 1 || isIgl);
 
                         // only jump directly into game when a map is already live,
                         // or when no veto flow is required.
@@ -866,7 +885,7 @@ export default function () {
             {((!!spotlight && spotlight.competitors) || [...Array(2)]).map(
               (competitor, competitorIdx) => {
                 const teamId = competitor?.teamId;
-                const matches = competitor ? matchHistorial[competitorIdx] : [];
+                const matches = competitor ? (matchHistorial[competitorIdx] || []) : [];
                 const previousFiller = [...Array(Math.max(0, NUM_PREVIOUS - matches.length))];
                 return (
                   <article
