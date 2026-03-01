@@ -28,21 +28,29 @@ const PAGE_SIZE = 50;
 function getCompetitionLabel(
   match: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number],
 ) {
+  const tier = match.competition?.tier;
+  const league = tier?.league;
+  const federationName = match.competition?.federation?.name;
+
+  if (!tier) {
+    return federationName ?? 'Unknown competition';
+  }
+
   const tierLabel = getTeamsTierLabel(
-    match.competition.tier.slug,
-    match.competition.tier.league?.name,
+    tier.slug,
+    league?.name,
   );
   const suffix =
-    match.competition.tier.groupSize === null
-      ? ` ${Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
+    tier.groupSize === null
+      ? ` ${Constants.TierSwissConfig[tier.slug as Constants.TierSlug]
         ? Util.parseSwissRound(match.round)
         : Util.parseCupRounds(match.round, match.totalRounds)
       }`
       : '';
-  if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+  if (league?.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
     return `${tierLabel}${suffix}`;
   }
-  return `${match.competition.federation.name} ${tierLabel}${suffix}`;
+  return `${federationName ?? ''} ${tierLabel}${suffix}`.trim();
 }
 
 /**
@@ -72,6 +80,8 @@ export default function () {
       ...(orderBy ? { orderBy } : {}),
       where: {
         status: Constants.MatchStatus.COMPLETED,
+        competitionId: { not: null },
+        matchType: { not: 'FACEIT_PUG' },
         competitors: {
           some: {
             teamId: team.id,
@@ -154,6 +164,12 @@ export default function () {
           {!working &&
             matches.map((match) => {
               const [home, away] = match.competitors;
+              const competition = match.competition;
+              const competitionLabel = getCompetitionLabel(match);
+              const hasCompetitionTier = Boolean(competition?.tier);
+              const competitionLink = hasCompetitionTier
+                ? `/competitions?federationId=${competition.federationId}&season=${competition.season}&tierId=${competition.tier.id}`
+                : null;
               const onClick =
                 match._count.events > 0
                   ? () =>
@@ -211,17 +227,20 @@ export default function () {
                       </Link>
                     )}
                   </td>
-                  <td className="truncate" title={getCompetitionLabel(match)}>
-                    <Link
-                      to={`/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`}
-                      onClick={(event) => event.stopPropagation()}
-                      className="link link-hover"
-                    >
-                      {getCompetitionLabel(match)}
-                    </Link>
+                  <td className="truncate" title={competitionLabel}>
+                    {!competitionLink && competitionLabel}
+                    {!!competitionLink && (
+                      <Link
+                        to={competitionLink}
+                        onClick={(event) => event.stopPropagation()}
+                        className="link link-hover"
+                      >
+                        {competitionLabel}
+                      </Link>
+                    )}
                   </td>
                   <td className="text-center">
-                    {t('shared.season')} {match.competition.season}
+                    {t('shared.season')} {competition?.season ?? '-'}
                   </td>
                 </tr>
               );
