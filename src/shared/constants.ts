@@ -914,6 +914,10 @@ export const Settings = {
     maxRoundsOvertime: 6,
     overtime: true,
   },
+  gameSettings: {
+    isM4A1: false,
+    isUSP: false,
+  },
 };
 
 /**

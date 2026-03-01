@@ -917,6 +917,8 @@ End\n
     });
 
     const isAWP = !this.spectating && user?.role === "AWPER" ? 1 : 0;
+    const isM4A1 = this.settings.gameSettings?.isM4A1 ? 1 : 0;
+    const isUSP = this.settings.gameSettings?.isUSP ? 1 : 0;
     const isIGL = !this.spectating && user?.role === "IGL";
     const bot_defer_to_human_items = this.isFaceit ? 0 : (isIGL ? 1 : 0);
 
@@ -1006,6 +1008,8 @@ End\n
         spectating: +this.spectating,
         damage_prints: 0,
         isAWP,
+        isM4A1,
+        isUSP,
         isFaceit: 1,
         bot_defer_to_human_items,
 
@@ -1035,6 +1039,8 @@ End\n
         spectating: +this.spectating,
         damage_prints: 0,
         isAWP,
+        isM4A1,
+        isUSP,
         isFaceit: 0,
         bot_defer_to_human_items,
         humanteam,

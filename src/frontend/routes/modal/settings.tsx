@@ -16,6 +16,7 @@ import { ReduxActions } from '@liga/frontend/redux/actions';
 enum Tab {
   GENERAL,
   CALENDAR,
+  GAME_SETTINGS,
 }
 
 /**
@@ -361,6 +362,42 @@ export default function () {
                   step={0.01}
                   value={settings.general.volume}
                   onChange={(event) => onSettingsUpdate('general.volume', event.target.value)}
+                />
+              </article>
+            </section>
+          </fieldset>
+        )}
+        {activeTab === Tab.GAME_SETTINGS && (
+          <fieldset>
+            <section>
+              <header>
+                <p>Equip USP-S</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  onChange={(event) =>
+                    onSettingsUpdate('gameSettings.isUSP', event.target.checked)
+                  }
+                  checked={settings.gameSettings.isUSP}
+                  value={String(settings.gameSettings.isUSP)}
+                />
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>Equip M4A1-S</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  onChange={(event) =>
+                    onSettingsUpdate('gameSettings.isM4A1', event.target.checked)
+                  }
+                  checked={settings.gameSettings.isM4A1}
+                  value={String(settings.gameSettings.isM4A1)}
                 />
               </article>
             </section>
