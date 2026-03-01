@@ -897,6 +897,7 @@ export const Settings = {
     steamPath: null as string,
     gamePath: null as string,
     dedicatedServerPath: null as string,
+    gameLaunchTimeout: 10,
     gameLaunchOptions: null as string,
     theme: ThemeType.SYSTEM,
     locale: null as LocaleIdentifier,

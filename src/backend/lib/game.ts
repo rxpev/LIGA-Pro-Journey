@@ -1280,7 +1280,12 @@ End\n
    * @function
    */
   private async waitForLogFile(logRoot: string, markerTime: Date) {
-    const maxAttempts = 80;
+    const retryIntervalMs = 500;
+    const configuredTimeoutSeconds = Number(this.settings.general.gameLaunchTimeout);
+    const timeoutSeconds = Number.isFinite(configuredTimeoutSeconds)
+      ? Math.max(1, configuredTimeoutSeconds)
+      : 10;
+    const maxAttempts = Math.ceil((timeoutSeconds * 1000) / retryIntervalMs);
 
     for (let logsRetryNum = 0; logsRetryNum < maxAttempts; logsRetryNum++) {
       this.log.debug('Waiting for new server log file (attempt #%d)...', logsRetryNum + 1);
@@ -1295,14 +1300,14 @@ End\n
       );
 
       if (!logFilePath) {
-        await Util.sleep(500);
+        await Util.sleep(retryIntervalMs);
         continue;
       }
 
       const logFileStat = await fs.promises.stat(logFilePath);
 
       if (logFileStat.mtime <= markerTime) {
-        await Util.sleep(500);
+        await Util.sleep(retryIntervalMs);
         continue;
       }
 
@@ -1310,7 +1315,7 @@ End\n
 
       if (isClosed) {
         this.log.debug(`Skipping closed log candidate: ${logFilePath}`);
-        await Util.sleep(500);
+        await Util.sleep(retryIntervalMs);
         continue;
       }
 

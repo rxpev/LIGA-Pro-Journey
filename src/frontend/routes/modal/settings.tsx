@@ -296,6 +296,26 @@ export default function () {
             </section>
             <section>
               <header>
+                <p>Game Launch Timeout</p>
+                <p>Increase if your game generally needs more time to start up.</p>
+              </header>
+              <article>
+                <input
+                  type="number"
+                  min={1}
+                  className="input join-item bg-base-200 text-sm"
+                  value={settings.general.gameLaunchTimeout}
+                  onChange={(event) =>
+                    onSettingsUpdate(
+                      'general.gameLaunchTimeout',
+                      Math.max(1, Number(event.target.value) || Constants.Settings.general.gameLaunchTimeout),
+                    )
+                  }
+                />
+              </article>
+            </section>
+            <section>
+              <header>
                 <p>{t('settings.launchOptionsTitle')}</p>
                 <p>{t('settings.launchOptionsSubtitle')}</p>
               </header>
