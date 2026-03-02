@@ -55,8 +55,8 @@ const config: ForgeConfig = {
         draft: false,
         prerelease: false,
         repository: {
-          owner: 'playliga',
-          name: 'application',
+          owner: 'rxpev',
+          name: 'LIGA-Pro-Journey',
         },
       },
     },
