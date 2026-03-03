@@ -582,7 +582,8 @@ function NormalFaceitBody({
   const lastHsPercent = last20 ? Math.round(last20.hsPercent) : 0;
   const lastKdRatio = last20 ? last20.kdRatio.toFixed(2) : "—";
   const lastWinRate = last20 ? Math.round(last20.winRate) : "—";
-  const lastMatchesPlayed = last20 ? last20.matchesPlayed : "—";
+  const lastAverageKills =
+    last20 && last20.matchesPlayed > 0 ? Math.floor(last20.kills / last20.matchesPlayed) : "—";
 
   return (
     <div className="grid grid-cols-3 gap-6 p-6 h-[calc(100vh-160px)]">
@@ -682,10 +683,10 @@ function NormalFaceitBody({
             <div className="text-xs opacity-60 mt-1">Win Rate</div>
           </div>
 
-          {/* MATCHES PLAYED */}
+          {/* AVERAGE KILLS */}
           <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{lastMatchesPlayed}</div>
-            <div className="text-xs opacity-60 mt-1">Matches</div>
+            <div className="text-xl font-bold">{lastAverageKills}</div>
+            <div className="text-xs opacity-60 mt-1">Avg Kills</div>
           </div>
         </div>
       </div>
