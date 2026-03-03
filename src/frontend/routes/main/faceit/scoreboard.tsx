@@ -132,12 +132,12 @@ export default function Scoreboard({ matchId }: ScoreboardProps) {
   // ------------------------------
 
   const stats = players.map((p) => {
-    const kills = events.filter((e) => e.attackerId === p.id).length;
-    const deaths = events.filter((e) => e.victimId === p.id).length;
-    const assists = events.filter((e) => e.assistId === p.id).length;
+    const kills = events.filter((e) => e.type === "playerkilled" && e.attackerId === p.id).length;
+    const deaths = events.filter((e) => e.type === "playerkilled" && e.victimId === p.id).length;
+    const assists = events.filter((e) => e.type === "playerassisted" && e.assistId === p.id).length;
 
     const headshots = events.filter(
-      (e) => e.attackerId === p.id && e.headshot
+      (e) => e.type === "playerkilled" && e.attackerId === p.id && e.headshot
     ).length;
 
     const hsPercent = kills > 0 ? Math.round((headshots / kills) * 100) : 0;
