@@ -24,6 +24,9 @@ type MatchPlayer = {
   personality: string | null;
   userControlled: boolean;
   countryId: number;
+  teamId: number | null;
+  queueId?: string;
+  queueType?: "COUNTRY" | "TEAM" | "BOTH";
 };
 
 export type MatchRoom = {

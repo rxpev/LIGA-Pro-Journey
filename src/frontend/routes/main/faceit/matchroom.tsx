@@ -28,6 +28,9 @@ export type MatchPlayer = {
   // From backend handler MatchPlayer
   userControlled?: boolean;
   personality?: string | null;
+  teamId?: number | null;
+  queueId?: string;
+  queueType?: "COUNTRY" | "TEAM" | "BOTH";
 };
 
 export interface MatchRoomData {
@@ -83,6 +86,76 @@ function getTeamAvgLevel(team: MatchPlayer[]): number {
   return levelFromElo(getTeamAvgElo(team));
 }
 
+function orderTeamForDisplay(team: MatchPlayer[]): MatchPlayer[] {
+  if (!team.length) return team;
+
+  const captain = team[0];
+  const queueLookup = new Map<string, MatchPlayer[]>();
+
+  for (const player of team) {
+    if (!player.queueId) continue;
+    const players = queueLookup.get(player.queueId) ?? [];
+    players.push(player);
+    queueLookup.set(player.queueId, players);
+  }
+
+  const ordered: MatchPlayer[] = [];
+  const added = new Set<number>();
+
+  const pushPlayer = (player: MatchPlayer) => {
+    if (added.has(player.id)) return;
+    ordered.push(player);
+    added.add(player.id);
+  };
+
+  pushPlayer(captain);
+
+  if (captain.queueId) {
+    for (const player of queueLookup.get(captain.queueId) ?? []) {
+      if (player.id !== captain.id) pushPlayer(player);
+    }
+  }
+
+  for (const player of team) {
+    if (added.has(player.id)) continue;
+    if (!player.queueId) {
+      pushPlayer(player);
+      continue;
+    }
+
+    for (const queuePlayer of queueLookup.get(player.queueId) ?? []) {
+      pushPlayer(queuePlayer);
+    }
+  }
+
+  return ordered;
+}
+
+function buildQueuePositionLookup(team: MatchPlayer[]) {
+  const byQueue = new Map<string, MatchPlayer[]>();
+
+  for (const player of team) {
+    if (!player.queueId) continue;
+    const queue = byQueue.get(player.queueId) ?? [];
+    queue.push(player);
+    byQueue.set(player.queueId, queue);
+  }
+
+  const positionByPlayerId = new Map<number, { index: number; size: number; type: string }>();
+
+  for (const queue of byQueue.values()) {
+    queue.forEach((player, index) => {
+      positionByPlayerId.set(player.id, {
+        index,
+        size: queue.length,
+        type: player.queueType ?? "COUNTRY",
+      });
+    });
+  }
+
+  return positionByPlayerId;
+}
+
 // ------------------------------
 // COMPONENT
 // ------------------------------
@@ -109,8 +182,10 @@ export default function MatchRoom({
     eloLoss,
   } = room;
 
-  const shuffledTeamA = teamA;
-  const shuffledTeamB = teamB;
+  const shuffledTeamA = useMemo(() => orderTeamForDisplay(teamA), [teamA]);
+  const shuffledTeamB = useMemo(() => orderTeamForDisplay(teamB), [teamB]);
+  const queueLookupA = useMemo(() => buildQueuePositionLookup(shuffledTeamA), [shuffledTeamA]);
+  const queueLookupB = useMemo(() => buildQueuePositionLookup(shuffledTeamB), [shuffledTeamB]);
 
   // Captains = first player in each team (after shuffle)
   const captainA = shuffledTeamA[0];
@@ -503,32 +578,54 @@ export default function MatchRoom({
                 </div>
 
                 <div className="space-y-2">
-                  {shuffledTeamA.map((p) => (
-                    <div
-                      key={p.id}
-                      className="bg-neutral-800 p-3 rounded flex justify-between items-center"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`fp ${countryMap.get(p.countryId)}`} />
-                        <span>
-                          {p.name}
-                          {p.id === captainA?.id && (
-                            <span className="ml-1 text-xs text-blue-400">
-                              [C]
-                            </span>
-                          )}
-                        </span>
-                      </div>
+                  {shuffledTeamA.map((p) => {
+                    const queue = queueLookupA.get(p.id);
+                    const isQueued = !!queue && queue.size >= 2;
+                    const showTop = isQueued && queue.index > 0;
+                    const showBottom = isQueued && queue.index < queue.size - 1;
 
-                      <div className="flex items-center gap-2">
-                        <span className="opacity-70">{p.elo}</span>
-                        <img
-                          src={LEVEL_IMAGES[p.level]}
-                          className="w-8 h-8"
-                        />
+                    return (
+                      <div
+                        key={p.id}
+                        className="bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
+                      >
+                        {isQueued && (
+                          <>
+                            <span className="absolute -left-[10px] top-1/2 -translate-y-1/2 w-[10px] border-t-[3px] border-neutral-600 pointer-events-none" />
+                            <div className="absolute -left-4 top-0 w-3 h-full pointer-events-none">
+                              <span
+                                className="absolute left-1/2 -translate-x-1/2 border-l-[3px] border-neutral-600"
+                                style={{
+                                  top: showTop ? "calc(-0.5rem - 1px)" : "50%",
+                                  bottom: showBottom ? "calc(-0.5rem - 1px)" : "50%",
+                                }}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <span className={`fp ${countryMap.get(p.countryId)}`} />
+                          <span>
+                            {p.name}
+                            {p.id === captainA?.id && (
+                              <span className="ml-1 text-xs text-blue-400">
+                                [C]
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="opacity-70">{p.elo}</span>
+                          <img
+                            src={LEVEL_IMAGES[p.level]}
+                            className="w-8 h-8"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -729,31 +826,53 @@ export default function MatchRoom({
                 </div>
 
                 <div className="space-y-2">
-                  {shuffledTeamB.map((p) => (
-                    <div
-                      key={p.id}
-                      className="bg-neutral-800 p-3 rounded flex justify-between items-center"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`fp ${countryMap.get(p.countryId)}`} />
-                        <span>
-                          {p.name}
-                          {p.id === captainB?.id && (
-                            <span className="ml-1 text-xs text-blue-400">
-                              [C]
-                            </span>
-                          )}
-                        </span>
+                  {shuffledTeamB.map((p) => {
+                    const queue = queueLookupB.get(p.id);
+                    const isQueued = !!queue && queue.size >= 2;
+                    const showTop = isQueued && queue.index > 0;
+                    const showBottom = isQueued && queue.index < queue.size - 1;
+
+                    return (
+                      <div
+                        key={p.id}
+                        className="bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`fp ${countryMap.get(p.countryId)}`} />
+                          <span>
+                            {p.name}
+                            {p.id === captainB?.id && (
+                              <span className="ml-1 text-xs text-blue-400">
+                                [C]
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="opacity-70">{p.elo}</span>
+                          <img
+                            src={LEVEL_IMAGES[p.level]}
+                            className="w-8 h-8"
+                          />
+                        </div>
+
+                        {isQueued && (
+                          <>
+                            <span className="absolute -right-[10px] top-1/2 -translate-y-1/2 w-[10px] border-t-[3px] border-neutral-600 pointer-events-none" />
+                            <div className="absolute -right-4 top-0 w-3 h-full pointer-events-none">
+                              <span
+                                className="absolute left-1/2 -translate-x-1/2 border-l-[3px] border-neutral-600"
+                                style={{
+                                  top: showTop ? "calc(-0.5rem - 1px)" : "50%",
+                                  bottom: showBottom ? "calc(-0.5rem - 1px)" : "50%",
+                                }}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="opacity-70">{p.elo}</span>
-                        <img
-                          src={LEVEL_IMAGES[p.level]}
-                          className="w-8 h-8"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

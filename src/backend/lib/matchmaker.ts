@@ -12,6 +12,9 @@ export interface MatchPlayer {
   personality: string | null;
   userControlled: boolean;
   countryId: number;
+  teamId: number | null;
+  queueId?: string;
+  queueType?: "COUNTRY" | "TEAM" | "BOTH";
 }
 
 export interface MatchRoom {
@@ -25,7 +28,7 @@ export interface MatchRoom {
 }
 
 export class FaceitMatchmaker {
-  static BASE_ELO_RANGE = 300;
+  static BASE_ELO_RANGE = 450;
 
   private static async getBotsNearElo(
     prisma: PrismaClient,
@@ -37,7 +40,7 @@ export class FaceitMatchmaker {
     let range = this.BASE_ELO_RANGE;
     let bots: (Player & { country: { code: string } })[] = [];
 
-    while (bots.length < needed && range <= 2000) {
+    while (bots.length < needed && range <= 3000) {
       bots = await prisma.player.findMany({
         where: {
           userControlled: false,
@@ -56,7 +59,7 @@ export class FaceitMatchmaker {
       });
 
       if (bots.length >= needed) break;
-      range += 200;
+      range += 250;
     }
 
     return bots;
@@ -79,6 +82,66 @@ export class FaceitMatchmaker {
     }
 
     return { gain, loss };
+  }
+
+  private static annotateStacks(team: MatchPlayer[], teamTag: "A" | "B") {
+    const queueByPlayer = new Map<number, { id: string; type: "COUNTRY" | "TEAM" | "BOTH" }>();
+    const used = new Set<number>();
+
+    const findGroups = (
+      keyFn: (p: MatchPlayer) => string | null,
+      type: "COUNTRY" | "TEAM" | "BOTH"
+    ) => {
+      const grouped = new Map<string, MatchPlayer[]>();
+
+      for (const player of team) {
+        if (used.has(player.id)) continue;
+        if (player.userControlled) continue;
+        const key = keyFn(player);
+        if (!key) continue;
+        const bucket = grouped.get(key) ?? [];
+        bucket.push(player);
+        grouped.set(key, bucket);
+      }
+
+      const groups = [...grouped.values()]
+        .filter((group) => group.length >= 2)
+        .sort((a, b) => b.length - a.length)
+        .map((group) => group.slice(0, 5));
+
+      return { groups, type };
+    };
+
+    const priority = [
+      findGroups((p) => (p.teamId ? `${p.countryId}:${p.teamId}` : null), "BOTH"),
+      findGroups((p) => (p.teamId ? `${p.teamId}` : null), "TEAM"),
+      findGroups((p) => `${p.countryId}`, "COUNTRY"),
+    ];
+
+    let queueIndex = 1;
+
+    for (const entry of priority) {
+      for (const group of entry.groups) {
+        const available = group.filter((p) => !used.has(p.id));
+        if (available.length < 2) continue;
+
+        const queueId = `${teamTag}-Q${queueIndex++}`;
+        for (const player of available) {
+          used.add(player.id);
+          queueByPlayer.set(player.id, { id: queueId, type: entry.type });
+        }
+      }
+    }
+
+    return team.map((player) => {
+      const queue = queueByPlayer.get(player.id);
+      if (!queue) return player;
+      return {
+        ...player,
+        queueId: queue.id,
+        queueType: queue.type,
+      };
+    });
   }
 
   static async createMatchRoom(
@@ -191,6 +254,7 @@ export class FaceitMatchmaker {
       personality: b.personality,
       userControlled: false,
       countryId: b.countryId,
+      teamId: b.teamId,
     });
 
     const userPlayer: MatchPlayer = {
@@ -203,18 +267,22 @@ export class FaceitMatchmaker {
       personality: userDb.personality,
       userControlled: true,
       countryId: userDb.countryId,
+      teamId: userDb.teamId,
     };
 
-    const teamA: MatchPlayer[] = [
+    const rawTeamA: MatchPlayer[] = [
       userPlayer,
       ...userTeamSnipers.map(convert),
       ...userTeamRiflers.map(convert),
     ];
 
-    const teamB: MatchPlayer[] = [
+    const rawTeamB: MatchPlayer[] = [
       ...enemyTeamSnipers.map(convert),
       ...enemyTeamRiflers.map(convert),
     ];
+
+    const teamA = this.annotateStacks(rawTeamA, "A");
+    const teamB = this.annotateStacks(rawTeamB, "B");
 
     // -------------------------------------------------
     // 9. Elo math
