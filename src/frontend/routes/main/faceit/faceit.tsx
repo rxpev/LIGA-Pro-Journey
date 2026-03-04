@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import MatchRoom from "./matchroom";
 import { AppStateContext } from "@liga/frontend/redux";
 import {faceitRoomSet,faceitRoomClear,faceitQueueSet,faceitQueueClear,faceitQueueResolving,} from "@liga/frontend/redux/actions";
@@ -33,6 +34,8 @@ import headshotIcon from "../../../assets/faceit/headshot.png";
 import { Image } from "@liga/frontend/components";
 import { Constants, Util } from "@liga/shared";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
+import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from "react-icons/fa";
 
 export const LEVEL_IMAGES = [
   null,
@@ -80,8 +83,11 @@ type MatchPlayer = {
   id: number;
   name: string;
   elo: number;
-  level: number;
+  level?: number;
   countryId: number;
+  userControlled?: boolean;
+  queueId?: string;
+  queueType?: "COUNTRY" | "TEAM" | "BOTH";
 };
 
 type MatchRoomData = {
@@ -376,11 +382,114 @@ export default function Faceit(): JSX.Element {
         refreshProfile();
         return;
       }
+      const applyPartyToTeams = (room: any) => {
+        try {
+          const storedParty = localStorage.getItem("faceit-party-members");
+          if (!storedParty) return room;
+
+          const parsed = JSON.parse(storedParty);
+          if (!Array.isArray(parsed) || parsed.length === 0) return room;
+
+          const userId = state.profile?.playerId ?? state.profile?.player?.id;
+
+          const userOnTeamAById = userId
+            ? room.teamA.findIndex((player: MatchPlayer) => player.id === userId)
+            : -1;
+          const userOnTeamBById = userId
+            ? room.teamB.findIndex((player: MatchPlayer) => player.id === userId)
+            : -1;
+
+          const userOnTeamAByFlag = room.teamA.findIndex((player: MatchPlayer) => player.userControlled);
+          const userOnTeamBByFlag = room.teamB.findIndex((player: MatchPlayer) => player.userControlled);
+
+          const isUserTeamA = userOnTeamAById !== -1 || userOnTeamAByFlag !== -1;
+          const isUserTeamB = userOnTeamBById !== -1 || userOnTeamBByFlag !== -1;
+
+          if (!isUserTeamA && !isUserTeamB) return room;
+
+          const teamKey = isUserTeamA ? "teamA" : "teamB";
+          const enemyKey = isUserTeamA ? "teamB" : "teamA";
+
+          const userTeam = [...room[teamKey]] as MatchPlayer[];
+          const enemyTeam = [...room[enemyKey]] as MatchPlayer[];
+
+          const userIdx = userTeam.findIndex(
+            (player: MatchPlayer) => player.id === userId || player.userControlled
+          );
+          if (userIdx === -1) return room;
+
+          const normalizedParty = parsed
+            .filter((member: any) => member && member.name)
+            .slice(0, 4)
+            .map((member: any) => {
+              const existing = [...userTeam, ...enemyTeam].find(
+                (player) =>
+                  player.id === member.id ||
+                  player.name.toLowerCase() === String(member.name).toLowerCase()
+              );
+              return {
+                ...(existing ?? {}),
+                ...member,
+              } as MatchPlayer;
+            });
+
+          if (!normalizedParty.length) return room;
+
+          const partyIdSet = new Set(normalizedParty.map((member) => member.id));
+          const partyNameSet = new Set(normalizedParty.map((member) => member.name.toLowerCase()));
+
+          const playerInParty = (player: MatchPlayer) =>
+            partyIdSet.has(player.id) || partyNameSet.has(player.name.toLowerCase());
+
+          const basePool = [...userTeam, ...enemyTeam].filter(
+            (player) => !(player.id === userId || player.userControlled) && !playerInParty(player)
+          );
+
+          const partyQueueId = `PARTY-${userTeam[userIdx].id}-${normalizedParty
+            .map((member) => member.id)
+            .join("-")}`;
+
+          const lockedUser = {
+            ...userTeam[userIdx],
+            queueId: partyQueueId,
+            queueType: "TEAM" as const,
+          };
+
+          const maxPartyInUserTeam = Math.min(normalizedParty.length, userTeam.length - 1);
+          const selectedParty = normalizedParty.slice(0, maxPartyInUserTeam).map((member) => ({
+            ...member,
+            queueId: partyQueueId,
+            queueType: "TEAM" as const,
+          }));
+
+          const rebuiltUserTeam: MatchPlayer[] = [lockedUser, ...selectedParty];
+          while (rebuiltUserTeam.length < userTeam.length && basePool.length > 0) {
+            const next = basePool.shift();
+            if (next) rebuiltUserTeam.push(next);
+          }
+
+          const rebuiltEnemyTeam: MatchPlayer[] = [];
+          while (rebuiltEnemyTeam.length < enemyTeam.length && basePool.length > 0) {
+            const next = basePool.shift();
+            if (next) rebuiltEnemyTeam.push(next);
+          }
+
+          if (rebuiltUserTeam.length !== userTeam.length || rebuiltEnemyTeam.length !== enemyTeam.length) {
+            return room;
+          }
+
+          return { ...room, [teamKey]: rebuiltUserTeam, [enemyKey]: rebuiltEnemyTeam };
+        } catch {
+          return room;
+        }
+      };
+
       const shuffledTeamA = shuffle(res.teamA);
       const shuffledTeamB = shuffle(res.teamB);
+      const partyAdjusted = applyPartyToTeams({ ...res, teamA: shuffledTeamA, teamB: shuffledTeamB });
       dispatch(
         faceitRoomSet(
-          { ...res, teamA: shuffledTeamA, teamB: shuffledTeamB },
+          partyAdjusted,
           null
         )
       );
@@ -447,7 +556,23 @@ export default function Faceit(): JSX.Element {
         />
       ) : (
         <>
-          <FaceitHeader elo={elo} level={level} pct={pct} low={low} high={high} />
+          <FaceitHeader
+            elo={elo}
+            level={level}
+            pct={pct}
+            low={low}
+            high={high}
+            activeMatch={activeMatch}
+            currentPlayerId={state.profile?.playerId ?? state.profile?.player?.id ?? null}
+            profileTeammates={(state.profile?.team?.players ?? []).map((player: any) => ({
+              id: player.id,
+              name: player.name,
+              countryId: player.countryId ?? player.country?.id ?? 0,
+              elo: player.elo ?? 1000,
+              level: player.level,
+            }))}
+            currentDate={state.profile?.date ?? new Date()}
+          />
 
           <NormalFaceitBody
             recent={recent}
@@ -486,16 +611,441 @@ interface FaceitHeaderProps {
   pct: number;
   low: number;
   high: number;
+  activeMatch: MatchRoomData | null;
+  currentPlayerId: number | null;
+  profileTeammates: MatchPlayer[];
+  currentDate: Date | string | number | null;
 }
 
-export function FaceitHeader({ elo, level, pct, low, high }: FaceitHeaderProps) {
+export function FaceitHeader({
+  elo,
+  level,
+  pct,
+  low,
+  high,
+  activeMatch,
+  currentPlayerId,
+  profileTeammates,
+  currentDate,
+}: FaceitHeaderProps) {
   const displayPct = level === 10 ? 100 : pct;
+  const [friendsDropdownOpen, setFriendsDropdownOpen] = useState(false);
+  const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
+  const [friends, setFriends] = useState<MatchPlayer[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<number[]>([]);
+  const [friendsTab, setFriendsTab] = useState<"suggestions">("suggestions");
+  const friendsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const [friendsHydrated, setFriendsHydrated] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 320,
+  });
+  const partyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const partyDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [partyPos, setPartyPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 340,
+  });
+  const [partyMembers, setPartyMembers] = useState<MatchPlayer[]>([]);
+  const [partyHydrated, setPartyHydrated] = useState(false);
+  const [dailyFriendStatus, setDailyFriendStatus] = useState<Record<number, { online: boolean; accepts: boolean }>>({});
+  const safeCurrentDate = React.useMemo(() => {
+    const parsed = currentDate ? new Date(currentDate) : new Date();
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date();
+    }
+    return parsed;
+  }, [currentDate]);
+  const dayKey = safeCurrentDate.toISOString().slice(0, 10);
+  const partyLocked = !!activeMatch;
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("faceit-friends");
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setFriends(parsed);
+      }
+    } catch {
+      setFriends([]);
+    } finally {
+      setFriendsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!friendsHydrated) return;
+    localStorage.setItem("faceit-friends", JSON.stringify(friends));
+  }, [friends, friendsHydrated]);
+
+  useEffect(() => {
+    try {
+      const storedParty = localStorage.getItem("faceit-party-members");
+      if (!storedParty) return;
+      const parsed = JSON.parse(storedParty);
+      if (Array.isArray(parsed)) {
+        setPartyMembers(parsed);
+      }
+    } catch {
+      setPartyMembers([]);
+    } finally {
+      setPartyHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!partyHydrated) return;
+    localStorage.setItem("faceit-party-members", JSON.stringify(partyMembers));
+  }, [partyMembers, partyHydrated]);
+
+  useEffect(() => {
+    const statusKey = `faceit-friends-status-${dayKey}`;
+    let existing: Record<number, { online: boolean; accepts: boolean }> = {};
+
+    try {
+      const storedStatus = localStorage.getItem(statusKey);
+      if (storedStatus) {
+        existing = JSON.parse(storedStatus) || {};
+      }
+    } catch {
+      existing = {};
+    }
+
+    const merged = { ...existing };
+    for (const friend of friends) {
+      if (!merged[friend.id]) {
+        merged[friend.id] = {
+          online: Math.random() >= 0.5,
+          accepts: Math.random() >= 0.35,
+        };
+      }
+    }
+
+    setDailyFriendStatus(merged);
+    localStorage.setItem(statusKey, JSON.stringify(merged));
+  }, [dayKey, friends]);
+
+  useEffect(() => {
+    if (!partyLocked) return;
+    setPartyDropdownOpen(false);
+  }, [partyLocked]);
+
+  useEffect(() => {
+    if (!friendsDropdownOpen && !partyDropdownOpen) return;
+
+    const syncDropdownPosition = () => {
+      if (friendsDropdownOpen && friendsButtonRef.current) {
+        const rect = friendsButtonRef.current.getBoundingClientRect();
+        setDropdownPos({
+          top: rect.bottom + 8,
+          left: rect.right - 320,
+          width: 320,
+        });
+      }
+
+      if (partyDropdownOpen && partyButtonRef.current) {
+        const rect = partyButtonRef.current.getBoundingClientRect();
+        setPartyPos({
+          top: rect.bottom + 8,
+          left: rect.left,
+          width: 340,
+        });
+      }
+    };
+
+    const onDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      const clickedFriendsButton = friendsButtonRef.current?.contains(target);
+      const clickedFriendsDropdown = dropdownRef.current?.contains(target);
+      if (!clickedFriendsButton && !clickedFriendsDropdown) {
+        setFriendsDropdownOpen(false);
+      }
+
+      const clickedPartyButton = partyButtonRef.current?.contains(target);
+      const clickedPartyDropdown = partyDropdownRef.current?.contains(target);
+      if (!clickedPartyButton && !clickedPartyDropdown) {
+        setPartyDropdownOpen(false);
+      }
+    };
+
+    syncDropdownPosition();
+    window.addEventListener("resize", syncDropdownPosition);
+    window.addEventListener("scroll", syncDropdownPosition, true);
+    document.addEventListener("mousedown", onDocumentClick);
+
+    return () => {
+      window.removeEventListener("resize", syncDropdownPosition);
+      window.removeEventListener("scroll", syncDropdownPosition, true);
+      document.removeEventListener("mousedown", onDocumentClick);
+    };
+  }, [friendsDropdownOpen, partyDropdownOpen]);
+
+  const currentTeammates = React.useMemo(() => {
+    if (activeMatch && currentPlayerId) {
+      const inTeamA = activeMatch.teamA.some((player) => player.id === currentPlayerId);
+      const inTeamB = activeMatch.teamB.some((player) => player.id === currentPlayerId);
+
+      if (inTeamA || inTeamB) {
+        const yourTeam = inTeamA ? activeMatch.teamA : activeMatch.teamB;
+        return yourTeam.filter((player) => player.id !== currentPlayerId);
+      }
+    }
+
+    if (!currentPlayerId) return [];
+    return profileTeammates.filter((player) => player.id !== currentPlayerId);
+  }, [activeMatch, currentPlayerId, profileTeammates]);
+
+  const resolvePlayerLevel = (player: Pick<MatchPlayer, "level" | "elo">) => {
+    if (player.level >= 1 && player.level <= 10) return player.level;
+
+    const eloValue = Number(player.elo || 0);
+    const derived = Object.entries(LEVEL_RANGES).find(([, [lowRange, highRange]]) => {
+      return eloValue >= lowRange && eloValue <= highRange;
+    });
+
+    if (derived) return Number(derived[0]);
+    return eloValue > LEVEL_RANGES[10][0] ? 10 : 1;
+  };
+
+  const suggestions = React.useMemo(
+    () => currentTeammates.filter((teammate) => !friends.some((friend) => friend.id === teammate.id)),
+    [currentTeammates, friends]
+  );
+
+  const removeFriend = (friendId: number) => {
+    if (partyLocked) return;
+    setFriends((prev) => prev.filter((friend) => friend.id !== friendId));
+    setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
+  };
+
+  const inviteFriendToParty = (friend: MatchPlayer) => {
+    if (partyLocked) {
+      toast.error("Party changes are locked during an active match.");
+      return;
+    }
+
+    const status = dailyFriendStatus[friend.id];
+
+    if (!status?.online) {
+      toast.error(`${friend.name} is offline today.`);
+      return;
+    }
+
+    if (!status.accepts) {
+      toast.error(`${friend.name} declined your party invite today.`);
+      return;
+    }
+
+    setPartyMembers((prev) => {
+      if (prev.some((member) => member.id === friend.id)) return prev;
+      if (prev.length >= 4) {
+        toast.error("Party is full (you + 4 friends max).");
+        return prev;
+      }
+      toast.success(`${friend.name} joined your party.`);
+      return [...prev, friend];
+    });
+  };
+
+  const removeFromParty = (friendId: number) => {
+    if (partyLocked) return;
+    setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
+  };
+
+  const sendFriendRequest = (teammate: MatchPlayer) => {
+    if (pendingRequests.includes(teammate.id)) return;
+    if (friends.length >= 30) {
+      toast.error("Friend list is full (30 max).");
+      return;
+    }
+
+    setPendingRequests((prev) => [...prev, teammate.id]);
+    toast(`Sent friend request to ${teammate.name}`);
+
+    window.setTimeout(() => {
+      setPendingRequests((prev) => prev.filter((id) => id !== teammate.id));
+      let accepted = false;
+      setFriends((prev) => {
+        if (prev.some((friend) => friend.id === teammate.id) || prev.length >= 30) return prev;
+        accepted = true;
+        return [...prev, teammate];
+      });
+      if (accepted) {
+        toast.success(`${teammate.name} accepted your request!`);
+      }
+    }, 1500 + Math.round(Math.random() * 1500));
+  };
 
   return (
     <div className="w-full bg-[#0f0f0f] border-b border-[#ff7300]/60 py-4 shadow-lg flex items-center justify-between">
       <img src={faceitLogo} className="h-10 ml-4 select-none" />
 
-      <div className="flex items-center gap-3 mr-6 px-4 py-2 rounded-md bg-[#0b0b0b]/70 border border-[#ffffff15] shadow-lg shadow-black/40 backdrop-blur-sm">
+      <div className="relative isolate flex items-center gap-3 mr-6 px-4 py-2 rounded-md bg-[#0b0b0b]/70 border border-[#ffffff15] shadow-lg shadow-black/40 backdrop-blur-sm">
+        {partyMembers.length === 0 ? (
+          <button
+            ref={partyButtonRef}
+            type="button"
+            onClick={() => {
+              setPartyDropdownOpen((open) => !open);
+              setFriendsDropdownOpen(false);
+            }}
+            disabled={partyLocked}
+            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
+          >
+            <FaUsers className="text-[#d4d4d4]" />
+            Create Party
+          </button>
+        ) : (
+          <button
+            ref={partyButtonRef}
+            type="button"
+            onClick={() => {
+              setPartyDropdownOpen((open) => !open);
+              setFriendsDropdownOpen(false);
+            }}
+            disabled={partyLocked}
+            className="h-10 px-2 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 flex items-center gap-1"
+            title="Open party"
+          >
+            <div className="w-6 h-6 rounded bg-[#1a1a1a] border border-[#ffffff20] flex items-center justify-center text-[#ff7300] text-xs font-bold">
+              P
+            </div>
+            {[0, 1, 2, 3].map((slot) => {
+              const member = partyMembers[slot];
+              return (
+                <React.Fragment key={`party-slot-bar-${slot}`}>
+                  <div className="w-6 h-6 rounded bg-[#101010] border border-[#ffffff15] text-neutral-500 flex items-center justify-center text-xs">
+                    {member ? member.name.slice(0, 1).toUpperCase() : "+"}
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </button>
+        )}
+
+        <div className="relative">
+          <button
+            ref={friendsButtonRef}
+            type="button"
+            onClick={() => {
+              setFriendsDropdownOpen((open) => !open);
+              setPartyDropdownOpen(false);
+            }}
+            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
+          >
+            <FaUserFriends className="text-[#d4d4d4]" />
+            Friends
+            <span className="text-[#7cd75c]">{friends.length}</span>
+            <FaChevronDown className="text-xs opacity-70" />
+          </button>
+
+
+        </div>
+
+        {friendsDropdownOpen &&
+          createPortal(
+            <div
+              ref={dropdownRef}
+              style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+              className="fixed rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl z-[9999]"
+            >
+              <div className="text-sm font-semibold mb-2">Friends</div>
+
+              <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                {friends.length === 0 ? (
+                  <div className="text-xs text-neutral-400">No friends yet.</div>
+                ) : (
+                  friends.map((friend) => (
+                    <div
+                      key={friend.id}
+                      className="flex items-center justify-between rounded border border-[#ffffff15] px-2 py-1 text-sm"
+                    >
+                      <span>{friend.name}</span>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={LEVEL_IMAGES[resolvePlayerLevel(friend)]}
+                          className="h-5 w-5"
+                          alt={`Level ${resolvePlayerLevel(friend)}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeFriend(friend.id)}
+                          disabled={partyLocked}
+                          className="text-[10px] uppercase tracking-wide text-neutral-400 hover:text-white disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-3 border-t border-[#ffffff10] pt-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setFriendsTab("suggestions")}
+                    className={`text-xs uppercase px-2 py-1 rounded border ${
+                      friendsTab === "suggestions"
+                        ? "border-[#ff7300] text-[#ff7300]"
+                        : "border-[#ffffff20] text-neutral-400"
+                    }`}
+                  >
+                    Suggestions
+                  </button>
+                  <span className="text-[10px] text-neutral-500">{friends.length}/30</span>
+                </div>
+
+                {friendsTab === "suggestions" && (
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                    {suggestions.length === 0 ? (
+                      <div className="text-xs text-neutral-500">No teammate suggestions right now.</div>
+                    ) : (
+                      suggestions.map((teammate) => {
+                        const requestPending = pendingRequests.includes(teammate.id);
+                        const atLimit = friends.length >= 30;
+                        return (
+                          <div
+                            key={teammate.id}
+                            className="flex items-center justify-between rounded border border-[#ffffff15] px-2 py-1"
+                          >
+                            <div>
+                              <div className="text-sm">{teammate.name}</div>
+                              <div className="mt-1 flex items-center">
+                                <img
+                                  src={LEVEL_IMAGES[resolvePlayerLevel(teammate)]}
+                                  className="h-5 w-5"
+                                  alt={`Level ${resolvePlayerLevel(teammate)}`}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => sendFriendRequest(teammate)}
+                              disabled={requestPending || atLimit}
+                              className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40 flex items-center gap-1"
+                            >
+                              <FaUserPlus />
+                              {requestPending ? "Pending" : atLimit ? "Full" : "Add"}
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )}
+
         <img src={LEVEL_IMAGES[level]} className="h-10 w-10" />
 
         <div className="flex flex-col w-56">
@@ -516,6 +1066,87 @@ export function FaceitHeader({ elo, level, pct, low, high }: FaceitHeaderProps) 
             <span>{level === 10 ? "∞" : high}</span>
           </div>
         </div>
+
+        {partyDropdownOpen &&
+          createPortal(
+            <div
+              ref={partyDropdownRef}
+              style={{ top: partyPos.top, left: partyPos.left, width: partyPos.width }}
+              className="fixed rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl z-[9999]"
+            >
+              <div className="text-sm font-semibold mb-2">Party</div>
+
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded bg-[#1a1a1a] border border-[#ffffff20] flex items-center justify-center text-[#ff7300]">P</div>
+                {[0, 1, 2, 3].map((slot) => {
+                  const member = partyMembers[slot];
+                  return member ? (
+                    <button
+                      key={member.id}
+                      type="button"
+                      title={`Remove ${member.name}`}
+                      onClick={() => removeFromParty(member.id)}
+                      disabled={partyLocked}
+                      className="w-8 h-8 rounded bg-[#1a1a1a] border border-[#ffffff20] text-xs disabled:opacity-40"
+                    >
+                      {member.name.slice(0, 1).toUpperCase()}
+                    </button>
+                  ) : (
+                    <div
+                      key={`empty-${slot}`}
+                      className="w-8 h-8 rounded bg-[#101010] border border-[#ffffff15] text-neutral-500 flex items-center justify-center"
+                    >
+                      +
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="text-xs text-neutral-400 mb-2">Invite friends ({partyMembers.length}/4)</div>
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {friends.length === 0 ? (
+                  <div className="text-xs text-neutral-500">Add friends first to build a party.</div>
+                ) : (
+                  friends.map((friend) => {
+                    const status = dailyFriendStatus[friend.id];
+                    const inParty = partyMembers.some((member) => member.id === friend.id);
+                    const partyFull = partyMembers.length >= 4;
+                    const canInvite = Boolean(status?.online) && !inParty && !partyFull;
+                    const statusLabel = !status?.online ? "Offline" : status?.accepts ? "Likely to join" : "May decline";
+
+                    return (
+                      <div
+                        key={`party-invite-${friend.id}`}
+                        className="flex items-center justify-between rounded border border-[#ffffff15] px-2 py-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={LEVEL_IMAGES[resolvePlayerLevel(friend)]}
+                            className="h-5 w-5"
+                            alt={`Level ${resolvePlayerLevel(friend)}`}
+                          />
+                          <div>
+                            <div className="text-sm">{friend.name}</div>
+                            <div className="text-[10px] text-neutral-500">{statusLabel}</div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => inviteFriendToParty(friend)}
+                          disabled={!canInvite || partyLocked}
+                          className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40"
+                        >
+                          {inParty ? "In party" : status?.online ? "Invite" : "Offline"}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );

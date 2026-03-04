@@ -503,7 +503,23 @@ export default function MatchRoom({
 
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-white flex flex-col">
-      <FaceitHeader elo={elo} level={level} pct={pct} low={low} high={high} />
+      <FaceitHeader
+        elo={elo}
+        level={level}
+        pct={pct}
+        low={low}
+        high={high}
+        activeMatch={room as any}
+        currentPlayerId={state.profile?.playerId ?? state.profile?.player?.id ?? null}
+        profileTeammates={((state.profile?.team?.players as any[]) ?? []).map((player: any) => ({
+          id: player.id,
+          name: player.name,
+          countryId: player.countryId ?? player.country?.id ?? 0,
+          elo: player.elo ?? 1000,
+          level: player.level,
+        }))}
+        currentDate={state.profile?.date ?? new Date()}
+      />
 
       <div className="p-6 overflow-y-auto">
         {/* TOP BAR */}
