@@ -99,6 +99,7 @@ export default {
   database: {
     connect: (id?: string) => ipcRenderer.invoke(Constants.IPCRoute.DATABASE_CONNECT, id),
     disconnect: () => ipcRenderer.invoke(Constants.IPCRoute.DATABASE_DISCONNECT),
+    current: () => ipcRenderer.invoke(Constants.IPCRoute.DATABASE_CURRENT) as Promise<number>,
   },
   emails: {
     all: <T = typeof Eagers.email>(query: Prisma.EmailFindManyArgs = Eagers.email) =>

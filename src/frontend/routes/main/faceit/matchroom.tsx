@@ -214,6 +214,15 @@ export default function MatchRoom({
   // Persisted backend match ID
   const storedMatchId = state.faceitMatchId;
 
+  const [currentSaveId, setCurrentSaveId] = useState<number | null>(() => {
+    try {
+      const cached = Number(localStorage.getItem("liga-active-save-id") || 0);
+      return Number.isFinite(cached) && cached > 0 ? cached : null;
+    } catch {
+      return null;
+    }
+  });
+
   // ------------------------------
   // SETTINGS / MAP POOL FOR VETO
   // ------------------------------
@@ -493,6 +502,19 @@ export default function MatchRoom({
     }
   }, [state.faceitMatchCompleted]);
 
+  useEffect(() => {
+    api.database
+      .current()
+      .then((id) => {
+        const normalized = Number.isFinite(id) && id > 0 ? id : null;
+        setCurrentSaveId(normalized);
+        if (normalized) {
+          localStorage.setItem("liga-active-save-id", String(normalized));
+        }
+      })
+      .catch(() => setCurrentSaveId(null));
+  }, [state.profile?.name, state.profile?.updatedAt]);
+
   // ------------------------------
   // RENDER HELPERS
   // ------------------------------
@@ -526,7 +548,20 @@ export default function MatchRoom({
           countryId: player.countryId ?? player.country?.id ?? 0,
           elo: player.elo ?? 1000,
           level: player.level,
+          role: player.role,
+          teamId: player.teamId ?? state.profile?.teamId ?? null,
+          teamCountryId: player.team?.countryId ?? state.profile?.team?.countryId ?? null,
         }))}
+        currentPlayerRole={state.profile?.player?.role ?? null}
+        currentSaveId={currentSaveId}
+        currentTeamId={state.profile?.teamId ?? null}
+        currentPlayerCountryId={state.profile?.player?.countryId ?? null}
+        currentTeamCountryId={state.profile?.team?.countryId ?? null}
+        countryRegionById={Object.fromEntries(
+          (state.continents as any[]).flatMap((continent: any) =>
+            (continent.countries ?? []).map((country: any) => [country.id, continent.id])
+          )
+        )}
         currentDate={state.profile?.date ?? new Date()}
       />
 

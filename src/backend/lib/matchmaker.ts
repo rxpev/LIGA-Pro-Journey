@@ -34,7 +34,8 @@ export interface MatchRoom {
 }
 
 export class FaceitMatchmaker {
-  static BASE_ELO_RANGE = 450;
+  static BASE_ELO_RANGE = 250;
+  static MAX_ELO_RANGE = 700;
 
   private static async getBotsNearElo(
     prisma: PrismaClient,
@@ -46,7 +47,7 @@ export class FaceitMatchmaker {
     let range = this.BASE_ELO_RANGE;
     let bots: BotCandidate[] = [];
 
-    while (bots.length < needed && range <= 3000) {
+    while (bots.length < needed && range <= this.MAX_ELO_RANGE) {
       const candidates = await prisma.player.findMany({
         where: {
           userControlled: false,
@@ -71,17 +72,21 @@ export class FaceitMatchmaker {
             },
           },
         },
-        take: needed * 8,
+        take: needed * 30,
       });
 
-      bots = candidates.filter((bot) => {
+      const sortedByEloDistance = [...candidates].sort(
+        (a, b) => Math.abs(a.elo - targetElo) - Math.abs(b.elo - targetElo)
+      );
+
+      bots = sortedByEloDistance.filter((bot) => {
         const botFederationId =
           bot.team?.country?.continent?.federationId ?? bot.country.continent.federationId;
         return botFederationId === federationId;
       });
 
       if (bots.length >= needed) break;
-      range += 250;
+      range += 100;
     }
 
     return bots;
@@ -222,7 +227,7 @@ export class FaceitMatchmaker {
     const bots = await this.getBotsNearElo(prisma, userElo, 20, federationId);
 
     if (bots.length < 10) {
-      throw new Error("Not enough regional players to create a match");
+      throw new Error("FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS");
     }
 
     // -------------------------------------------------

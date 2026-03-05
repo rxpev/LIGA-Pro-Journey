@@ -281,6 +281,7 @@ export enum IPCRoute {
   CONTINENTS_ALL = '/continents/all',
   DATABASE_CONNECT = '/database/connect',
   DATABASE_DISCONNECT = '/database/disconnect',
+  DATABASE_CURRENT = '/database/current',
   EMAILS_ALL = '/emails/all',
   EMAILS_DELETE = '/emails/delete',
   EMAILS_NEW = '/emails/new',

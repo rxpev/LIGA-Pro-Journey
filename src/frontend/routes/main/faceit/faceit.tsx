@@ -85,9 +85,12 @@ type MatchPlayer = {
   elo: number;
   level?: number;
   countryId: number;
+  teamId?: number | null;
+  teamCountryId?: number | null;
   userControlled?: boolean;
   queueId?: string;
   queueType?: "COUNTRY" | "TEAM" | "BOTH";
+  role?: "RIFLER" | "AWPER" | "IGL" | string;
 };
 
 type MatchRoomData = {
@@ -129,6 +132,12 @@ const LEVEL_RANGES: Record<number, [number, number]> = {
   10: [2001, 10000],
 };
 
+const isAwperRole = (role?: string | null) => {
+  if (!role) return false;
+  const normalized = String(role).toUpperCase();
+  return normalized === "AWPER" || normalized === "SNIPER";
+};
+
 // ---------------------------------------------------------------------------
 // MAIN COMPONENT
 // ---------------------------------------------------------------------------
@@ -142,6 +151,14 @@ export default function Faceit(): JSX.Element {
   const [showMatchRoom, setShowMatchRoom] = useState(false);
   const [daily, setDaily] = useState<DailyState | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [currentSaveId, setCurrentSaveId] = useState<number | null>(() => {
+    try {
+      const cached = Number(localStorage.getItem("liga-active-save-id") || 0);
+      return Number.isFinite(cached) && cached > 0 ? cached : null;
+    } catch {
+      return null;
+    }
+  });
 
   // PROFILE + STATS
   const [elo, setElo] = useState(0);
@@ -292,6 +309,19 @@ export default function Faceit(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    api.database
+      .current()
+      .then((id) => {
+        const normalized = Number.isFinite(id) && id > 0 ? id : null;
+        setCurrentSaveId(normalized);
+        if (normalized) {
+          localStorage.setItem("liga-active-save-id", String(normalized));
+        }
+      })
+      .catch(() => setCurrentSaveId(null));
+  }, [state.profile?.name, state.profile?.updatedAt]);
+
+  useEffect(() => {
     if (!viewMatchId) return;
     setLoadingScoreboard(true);
 
@@ -376,6 +406,8 @@ export default function Faceit(): JSX.Element {
           );
         } else if (msg.includes("FACEIT_BLOCKED_DAILY_LIMIT")) {
           setQueueError("Daily FACEIT limit reached.");
+        } else if (msg.includes("FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS")) {
+          setQueueError("Not enough similarly skilled players in your region right now.");
         } else {
           setQueueError("Unable to queue FACEIT match.");
         }
@@ -384,7 +416,13 @@ export default function Faceit(): JSX.Element {
       }
       const applyPartyToTeams = (room: any) => {
         try {
-          const storedParty = localStorage.getItem("faceit-party-members");
+          const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
+          const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
+          const saveScopedKey = resolvedSaveId ? `faceit-save-${resolvedSaveId}:party-members` : null;
+
+          const storedParty =
+            (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
+            localStorage.getItem("faceit-party-members");
           if (!storedParty) return room;
 
           const parsed = JSON.parse(storedParty);
@@ -570,7 +608,20 @@ export default function Faceit(): JSX.Element {
               countryId: player.countryId ?? player.country?.id ?? 0,
               elo: player.elo ?? 1000,
               level: player.level,
+              role: player.role,
+              teamId: player.teamId ?? state.profile?.teamId ?? null,
+              teamCountryId: player.team?.countryId ?? state.profile?.team?.countryId ?? null,
             }))}
+            currentPlayerRole={state.profile?.player?.role ?? null}
+            currentSaveId={currentSaveId}
+            currentTeamId={state.profile?.teamId ?? null}
+            currentPlayerCountryId={state.profile?.player?.countryId ?? null}
+            currentTeamCountryId={state.profile?.team?.countryId ?? null}
+            countryRegionById={Object.fromEntries(
+              (state.continents as any[]).flatMap((continent: any) =>
+                (continent.countries ?? []).map((country: any) => [country.id, continent.id])
+              )
+            )}
             currentDate={state.profile?.date ?? new Date()}
           />
 
@@ -614,6 +665,12 @@ interface FaceitHeaderProps {
   activeMatch: MatchRoomData | null;
   currentPlayerId: number | null;
   profileTeammates: MatchPlayer[];
+  currentPlayerRole: string | null;
+  currentSaveId: number | null;
+  currentTeamId: number | null;
+  currentPlayerCountryId: number | null;
+  currentTeamCountryId: number | null;
+  countryRegionById: Record<number, number>;
   currentDate: Date | string | number | null;
 }
 
@@ -626,6 +683,12 @@ export function FaceitHeader({
   activeMatch,
   currentPlayerId,
   profileTeammates,
+  currentPlayerRole,
+  currentSaveId,
+  currentTeamId,
+  currentPlayerCountryId,
+  currentTeamCountryId,
+  countryRegionById,
   currentDate,
 }: FaceitHeaderProps) {
   const displayPct = level === 10 ? 100 : pct;
@@ -652,6 +715,12 @@ export function FaceitHeader({
   const [partyMembers, setPartyMembers] = useState<MatchPlayer[]>([]);
   const [partyHydrated, setPartyHydrated] = useState(false);
   const [dailyFriendStatus, setDailyFriendStatus] = useState<Record<number, { online: boolean; accepts: boolean }>>({});
+  const [partyLeaveCountdown, setPartyLeaveCountdown] = useState<Record<number, number>>({});
+  const [declinedSuggestionIds, setDeclinedSuggestionIds] = useState<number[]>([]);
+  const previousActiveMatchIdRef = useRef<string | null>(null);
+  const previousDayKeyRef = useRef<string | null>(null);
+  const [lastPugTeammates, setLastPugTeammates] = useState<MatchPlayer[]>([]);
+  const [latestTrackedPugId, setLatestTrackedPugId] = useState<string | null>(null);
   const safeCurrentDate = React.useMemo(() => {
     const parsed = currentDate ? new Date(currentDate) : new Date();
     if (Number.isNaN(parsed.getTime())) {
@@ -661,10 +730,12 @@ export function FaceitHeader({
   }, [currentDate]);
   const dayKey = safeCurrentDate.toISOString().slice(0, 10);
   const partyLocked = !!activeMatch;
+  const storagePrefix = React.useMemo(() => `faceit-save-${currentSaveId ?? "default"}`, [currentSaveId]);
+  const storageKey = React.useCallback((suffix: string) => `${storagePrefix}:${suffix}`, [storagePrefix]);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("faceit-friends");
+      const stored = localStorage.getItem(storageKey("friends"));
       if (!stored) return;
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
@@ -675,35 +746,108 @@ export function FaceitHeader({
     } finally {
       setFriendsHydrated(true);
     }
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!friendsHydrated) return;
-    localStorage.setItem("faceit-friends", JSON.stringify(friends));
-  }, [friends, friendsHydrated]);
+    localStorage.setItem(storageKey("friends"), JSON.stringify(friends));
+  }, [friends, friendsHydrated, storageKey]);
 
   useEffect(() => {
     try {
-      const storedParty = localStorage.getItem("faceit-party-members");
-      if (!storedParty) return;
-      const parsed = JSON.parse(storedParty);
-      if (Array.isArray(parsed)) {
-        setPartyMembers(parsed);
+      const storedParty = localStorage.getItem(storageKey("party-members"));
+      if (storedParty) {
+        const parsed = JSON.parse(storedParty);
+        if (Array.isArray(parsed)) {
+          setPartyMembers(parsed);
+        }
+      }
+
+      const storedCountdown = localStorage.getItem(storageKey("party-leave-countdown"));
+      if (storedCountdown) {
+        const parsedCountdown = JSON.parse(storedCountdown);
+        if (parsedCountdown && typeof parsedCountdown === "object") {
+          setPartyLeaveCountdown(parsedCountdown);
+        }
+      }
+
+      const storedPartyDayKey = localStorage.getItem(storageKey("party-day-key"));
+      if (storedPartyDayKey && storedPartyDayKey !== dayKey) {
+        setPartyMembers([]);
+        setPartyLeaveCountdown({});
       }
     } catch {
       setPartyMembers([]);
+      setPartyLeaveCountdown({});
     } finally {
       setPartyHydrated(true);
     }
-  }, []);
+  }, [dayKey, storageKey]);
 
   useEffect(() => {
     if (!partyHydrated) return;
-    localStorage.setItem("faceit-party-members", JSON.stringify(partyMembers));
-  }, [partyMembers, partyHydrated]);
+    localStorage.setItem(storageKey("party-members"), JSON.stringify(partyMembers));
+  }, [partyMembers, partyHydrated, storageKey]);
 
   useEffect(() => {
-    const statusKey = `faceit-friends-status-${dayKey}`;
+    if (!partyHydrated) return;
+    localStorage.setItem(storageKey("party-leave-countdown"), JSON.stringify(partyLeaveCountdown));
+  }, [partyLeaveCountdown, partyHydrated, storageKey]);
+
+  useEffect(() => {
+    try {
+      const storedDeclined = localStorage.getItem(storageKey("declined-suggestions"));
+      if (!storedDeclined) return;
+      const parsed = JSON.parse(storedDeclined);
+      if (Array.isArray(parsed)) {
+        setDeclinedSuggestionIds(parsed);
+      }
+    } catch {
+      setDeclinedSuggestionIds([]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey("last-pug-teammates"));
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setLastPugTeammates(parsed);
+      }
+    } catch {
+      setLastPugTeammates([]);
+    }
+
+    try {
+      const storedPugId = localStorage.getItem(storageKey("last-pug-id"));
+      setLatestTrackedPugId(storedPugId || null);
+    } catch {
+      setLatestTrackedPugId(null);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!activeMatch || !currentPlayerId) return;
+
+    const inTeamA = activeMatch.teamA.some((player) => player.id === currentPlayerId);
+    const inTeamB = activeMatch.teamB.some((player) => player.id === currentPlayerId);
+    if (!inTeamA && !inTeamB) return;
+
+    if (latestTrackedPugId === activeMatch.fakeRoomId) return;
+
+    const yourTeam = inTeamA ? activeMatch.teamA : activeMatch.teamB;
+    const teammates = yourTeam.filter((player) => player.id !== currentPlayerId);
+
+    setLastPugTeammates(teammates);
+    setLatestTrackedPugId(activeMatch.fakeRoomId);
+    setDeclinedSuggestionIds([]);
+    localStorage.setItem(storageKey("last-pug-teammates"), JSON.stringify(teammates));
+    localStorage.setItem(storageKey("last-pug-id"), activeMatch.fakeRoomId);
+  }, [activeMatch, currentPlayerId, latestTrackedPugId, storageKey]);
+
+  useEffect(() => {
+    const statusKey = storageKey(`friends-status-${dayKey}`);
     let existing: Record<number, { online: boolean; accepts: boolean }> = {};
 
     try {
@@ -727,12 +871,22 @@ export function FaceitHeader({
 
     setDailyFriendStatus(merged);
     localStorage.setItem(statusKey, JSON.stringify(merged));
-  }, [dayKey, friends]);
+  }, [dayKey, friends, storageKey]);
 
   useEffect(() => {
     if (!partyLocked) return;
     setPartyDropdownOpen(false);
+    setFriendsDropdownOpen(false);
   }, [partyLocked]);
+
+  useEffect(() => {
+    if (!friendsHydrated) return;
+    localStorage.setItem(storageKey(`friends-status-${dayKey}`), JSON.stringify(dailyFriendStatus));
+  }, [dayKey, dailyFriendStatus, friendsHydrated, storageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKey("declined-suggestions"), JSON.stringify(declinedSuggestionIds));
+  }, [declinedSuggestionIds, storageKey]);
 
   useEffect(() => {
     if (!friendsDropdownOpen && !partyDropdownOpen) return;
@@ -785,20 +939,88 @@ export function FaceitHeader({
     };
   }, [friendsDropdownOpen, partyDropdownOpen]);
 
-  const currentTeammates = React.useMemo(() => {
-    if (activeMatch && currentPlayerId) {
-      const inTeamA = activeMatch.teamA.some((player) => player.id === currentPlayerId);
-      const inTeamB = activeMatch.teamB.some((player) => player.id === currentPlayerId);
+  const randomLeaveAfterMatches = () => 1 + Math.floor(Math.random() * 3);
 
-      if (inTeamA || inTeamB) {
-        const yourTeam = inTeamA ? activeMatch.teamA : activeMatch.teamB;
-        return yourTeam.filter((player) => player.id !== currentPlayerId);
-      }
+  useEffect(() => {
+    if (!partyHydrated) return;
+
+    const previousDayKey = previousDayKeyRef.current;
+    if (previousDayKey && previousDayKey !== dayKey) {
+      setPartyMembers([]);
+      setPartyLeaveCountdown({});
+      setPartyDropdownOpen(false);
     }
 
-    if (!currentPlayerId) return [];
-    return profileTeammates.filter((player) => player.id !== currentPlayerId);
-  }, [activeMatch, currentPlayerId, profileTeammates]);
+    previousDayKeyRef.current = dayKey;
+    localStorage.setItem(storageKey("party-day-key"), dayKey);
+  }, [dayKey, partyHydrated, storageKey]);
+
+  useEffect(() => {
+    if (!partyHydrated) return;
+
+    setPartyLeaveCountdown((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      for (const member of partyMembers) {
+        if (!next[member.id]) {
+          next[member.id] = randomLeaveAfterMatches();
+          changed = true;
+        }
+      }
+
+      for (const memberId of Object.keys(next)) {
+        if (!partyMembers.some((member) => member.id === Number(memberId))) {
+          delete next[Number(memberId)];
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [partyMembers, partyHydrated]);
+
+  useEffect(() => {
+    const previousActiveMatchId = previousActiveMatchIdRef.current;
+    const currentActiveMatchId = activeMatch?.fakeRoomId ?? null;
+
+    if (previousActiveMatchId && !currentActiveMatchId && partyMembers.length > 0) {
+      const leavingIds: number[] = [];
+      const nextCountdown = { ...partyLeaveCountdown };
+
+      for (const member of partyMembers) {
+        const remaining = (nextCountdown[member.id] ?? randomLeaveAfterMatches()) - 1;
+        if (remaining <= 0) {
+          leavingIds.push(member.id);
+          delete nextCountdown[member.id];
+        } else {
+          nextCountdown[member.id] = remaining;
+        }
+      }
+
+      if (leavingIds.length > 0) {
+        setPartyMembers((prev) => prev.filter((member) => !leavingIds.includes(member.id)));
+        setDailyFriendStatus((prev) => {
+          const next = { ...prev };
+          for (const id of leavingIds) {
+            next[id] = { online: false, accepts: false };
+          }
+          return next;
+        });
+
+        for (const id of leavingIds) {
+          const member = partyMembers.find((player) => player.id === id);
+          if (member) {
+            toast(`${member.name} left your party and went offline for today.`);
+          }
+        }
+      }
+
+      setPartyLeaveCountdown(nextCountdown);
+    }
+
+    previousActiveMatchIdRef.current = currentActiveMatchId;
+  }, [activeMatch, partyMembers, partyLeaveCountdown]);
 
   const resolvePlayerLevel = (player: Pick<MatchPlayer, "level" | "elo">) => {
     if (player.level >= 1 && player.level <= 10) return player.level;
@@ -812,52 +1034,207 @@ export function FaceitHeader({
     return eloValue > LEVEL_RANGES[10][0] ? 10 : 1;
   };
 
-  const suggestions = React.useMemo(
-    () => currentTeammates.filter((teammate) => !friends.some((friend) => friend.id === teammate.id)),
-    [currentTeammates, friends]
+  const suggestions = React.useMemo(() => {
+    const completedPugTeammates = activeMatch ? [] : lastPugTeammates;
+    const combined = [...profileTeammates, ...completedPugTeammates];
+    const deduped = combined.filter(
+      (teammate, index, arr) => arr.findIndex((candidate) => candidate.id === teammate.id) === index
+    );
+
+    return deduped.filter(
+      (teammate) =>
+        teammate.id !== currentPlayerId &&
+        !friends.some((friend) => friend.id === teammate.id) &&
+        !declinedSuggestionIds.includes(teammate.id)
+    );
+  }, [profileTeammates, activeMatch, lastPugTeammates, currentPlayerId, friends, declinedSuggestionIds]);
+
+
+  const knownPlayersById = React.useMemo(() => {
+    const all = [
+      ...profileTeammates,
+      ...lastPugTeammates,
+      ...(activeMatch?.teamA ?? []),
+      ...(activeMatch?.teamB ?? []),
+      ...friends,
+    ];
+
+    const map = new Map<number, MatchPlayer>();
+    for (const player of all) {
+      if (!player?.id) continue;
+      const existing = map.get(player.id);
+      if (!existing) {
+        map.set(player.id, player);
+        continue;
+      }
+
+      map.set(player.id, {
+        ...existing,
+        ...player,
+        teamId: player.teamId ?? existing.teamId,
+        teamCountryId: player.teamCountryId ?? existing.teamCountryId,
+      });
+    }
+    return map;
+  }, [profileTeammates, lastPugTeammates, activeMatch, friends]);
+
+  useEffect(() => {
+    setFriends((prev) => {
+      let changed = false;
+      const next = prev.map((friend) => {
+        const enriched = knownPlayersById.get(friend.id);
+        if (!enriched) return friend;
+
+        const teamId = enriched.teamId ?? friend.teamId;
+        const teamCountryId = enriched.teamCountryId ?? friend.teamCountryId;
+        if (teamId === friend.teamId && teamCountryId === friend.teamCountryId) {
+          return friend;
+        }
+
+        changed = true;
+        return {
+          ...friend,
+          teamId,
+          teamCountryId,
+        };
+      });
+
+      return changed ? next : prev;
+    });
+  }, [knownPlayersById]);
+
+
+  const resolveRegionId = React.useCallback(
+    (player: Pick<MatchPlayer, "teamId" | "teamCountryId" | "countryId">) => {
+      // Team assignment takes precedence over nationality.
+      if (player.teamId) {
+        if (!player.teamCountryId) return null;
+        return countryRegionById[player.teamCountryId] ?? null;
+      }
+
+      return countryRegionById[player.countryId] ?? null;
+    },
+    [countryRegionById]
   );
+
+  const userRegionId = React.useMemo(() => {
+    const effectiveCountryId = currentTeamCountryId ?? currentPlayerCountryId;
+    if (!effectiveCountryId) return null;
+    return countryRegionById[effectiveCountryId] ?? null;
+  }, [currentTeamCountryId, currentPlayerCountryId, countryRegionById]);
+
+  const userIsAwper = isAwperRole(currentPlayerRole);
+  const partyHasAwper = partyMembers.some((member) => isAwperRole(member.role));
+  const lobbyHasBotAwper = React.useMemo(() => {
+    if (!activeMatch || !currentPlayerId) return false;
+
+    const onTeamA = activeMatch.teamA.some((player) => player.id === currentPlayerId);
+    const onTeamB = activeMatch.teamB.some((player) => player.id === currentPlayerId);
+    if (!onTeamA && !onTeamB) return false;
+
+    const yourTeam = onTeamA ? activeMatch.teamA : activeMatch.teamB;
+    return yourTeam.some((player) => isAwperRole(player.role) && !player.userControlled);
+  }, [activeMatch, currentPlayerId]);
+
+  const awperSlotTaken = userIsAwper || partyHasAwper || lobbyHasBotAwper;
+
+  const hydrateFriendRegionInfo = async (friend: MatchPlayer): Promise<MatchPlayer> => {
+    try {
+      const full = await api.players.find({
+        where: { id: friend.id },
+        include: {
+          team: { include: { country: { include: { continent: true } } } },
+          country: { include: { continent: true } },
+        },
+      } as any);
+
+      if (!full) return friend;
+
+      return {
+        ...friend,
+        teamId: full.teamId ?? friend.teamId ?? null,
+        teamCountryId: full.team?.countryId ?? friend.teamCountryId ?? null,
+        countryId: full.countryId ?? friend.countryId,
+      };
+    } catch {
+      return friend;
+    }
+  };
 
   const removeFriend = (friendId: number) => {
     if (partyLocked) return;
     setFriends((prev) => prev.filter((friend) => friend.id !== friendId));
     setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
+    setPartyLeaveCountdown((prev) => {
+      if (!prev[friendId]) return prev;
+      const next = { ...prev };
+      delete next[friendId];
+      return next;
+    });
   };
 
-  const inviteFriendToParty = (friend: MatchPlayer) => {
+  const inviteFriendToParty = async (friend: MatchPlayer) => {
     if (partyLocked) {
       toast.error("Party changes are locked during an active match.");
       return;
     }
 
     const status = dailyFriendStatus[friend.id];
+    const resolvedFriend = await hydrateFriendRegionInfo(friend);
+
+    setFriends((prev) =>
+      prev.map((entry) => (entry.id === resolvedFriend.id ? { ...entry, ...resolvedFriend } : entry))
+    );
+
+    if (isAwperRole(resolvedFriend.role) && awperSlotTaken) {
+      toast.error("AWPer slot is already taken in your party/lobby.");
+      return;
+    }
+
+    const friendRegionId = resolveRegionId(resolvedFriend);
+    if (userRegionId && friendRegionId && friendRegionId !== userRegionId) {
+      toast.error("Cannot invite player - player isn't located in your region.");
+      return;
+    }
 
     if (!status?.online) {
-      toast.error(`${friend.name} is offline today.`);
+      toast.error(`${resolvedFriend.name} is offline today.`);
       return;
     }
 
     if (!status.accepts) {
-      toast.error(`${friend.name} declined your party invite today.`);
+      toast.error(`${resolvedFriend.name} declined your party invite today.`);
       return;
     }
 
     setPartyMembers((prev) => {
-      if (prev.some((member) => member.id === friend.id)) return prev;
+      if (prev.some((member) => member.id === resolvedFriend.id)) return prev;
       if (prev.length >= 4) {
         toast.error("Party is full (you + 4 friends max).");
         return prev;
       }
-      toast.success(`${friend.name} joined your party.`);
-      return [...prev, friend];
+      toast.success(`${resolvedFriend.name} joined your party.`);
+      setPartyLeaveCountdown((counts) => {
+        if (counts[resolvedFriend.id]) return counts;
+        return { ...counts, [resolvedFriend.id]: randomLeaveAfterMatches() };
+      });
+      return [...prev, resolvedFriend];
     });
   };
 
   const removeFromParty = (friendId: number) => {
     if (partyLocked) return;
     setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
+    setPartyLeaveCountdown((prev) => {
+      if (!prev[friendId]) return prev;
+      const next = { ...prev };
+      delete next[friendId];
+      return next;
+    });
   };
 
   const sendFriendRequest = (teammate: MatchPlayer) => {
+    if (partyLocked) return;
     if (pendingRequests.includes(teammate.id)) return;
     if (friends.length >= 30) {
       toast.error("Friend list is full (30 max).");
@@ -869,6 +1246,15 @@ export function FaceitHeader({
 
     window.setTimeout(() => {
       setPendingRequests((prev) => prev.filter((id) => id !== teammate.id));
+
+      const isCurrentLeagueTeammate = Boolean(currentTeamId && teammate.teamId === currentTeamId);
+      const declined = isCurrentLeagueTeammate ? false : Math.random() < 0.6;
+      if (declined) {
+        toast.error(`${teammate.name} declined your friend request.`);
+        setDeclinedSuggestionIds((prev) => (prev.includes(teammate.id) ? prev : [...prev, teammate.id]));
+        return;
+      }
+
       let accepted = false;
       setFriends((prev) => {
         if (prev.some((friend) => friend.id === teammate.id) || prev.length >= 30) return prev;
@@ -933,10 +1319,12 @@ export function FaceitHeader({
             ref={friendsButtonRef}
             type="button"
             onClick={() => {
+              if (partyLocked) return;
               setFriendsDropdownOpen((open) => !open);
               setPartyDropdownOpen(false);
             }}
-            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
+            disabled={partyLocked}
+            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
           >
             <FaUserFriends className="text-[#d4d4d4]" />
             Friends
@@ -1029,7 +1417,7 @@ export function FaceitHeader({
                             <button
                               type="button"
                               onClick={() => sendFriendRequest(teammate)}
-                              disabled={requestPending || atLimit}
+                              disabled={requestPending || atLimit || partyLocked}
                               className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40 flex items-center gap-1"
                             >
                               <FaUserPlus />
@@ -1111,9 +1499,8 @@ export function FaceitHeader({
                     const status = dailyFriendStatus[friend.id];
                     const inParty = partyMembers.some((member) => member.id === friend.id);
                     const partyFull = partyMembers.length >= 4;
-                    const canInvite = Boolean(status?.online) && !inParty && !partyFull;
-                    const statusLabel = !status?.online ? "Offline" : status?.accepts ? "Likely to join" : "May decline";
-
+                    const awperBlocked = isAwperRole(friend.role) && awperSlotTaken;
+                    const canInvite = Boolean(status?.online) && !inParty && !partyFull && !awperBlocked;
                     return (
                       <div
                         key={`party-invite-${friend.id}`}
@@ -1125,10 +1512,7 @@ export function FaceitHeader({
                             className="h-5 w-5"
                             alt={`Level ${resolvePlayerLevel(friend)}`}
                           />
-                          <div>
-                            <div className="text-sm">{friend.name}</div>
-                            <div className="text-[10px] text-neutral-500">{statusLabel}</div>
-                          </div>
+                          <div className="text-sm">{friend.name}</div>
                         </div>
 
                         <button
@@ -1137,7 +1521,7 @@ export function FaceitHeader({
                           disabled={!canInvite || partyLocked}
                           className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40"
                         >
-                          {inParty ? "In party" : status?.online ? "Invite" : "Offline"}
+                          {inParty ? "In party" : awperBlocked ? "AWPer blocked" : status?.online ? "Invite" : "Offline"}
                         </button>
                       </div>
                     );

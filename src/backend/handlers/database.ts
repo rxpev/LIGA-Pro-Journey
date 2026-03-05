@@ -38,6 +38,12 @@ export default function registerDatabaseHandlers() {
     return DatabaseClient.disconnect();
   });
 
+
+  ipcMain.handle(Constants.IPCRoute.DATABASE_CURRENT, async () => {
+    const dbPath = DatabaseClient.path || '';
+    const match = dbPath.match(/save_(\d+)\.db$/);
+    return match ? Number(match[1]) : 0;
+  });
   // GENERIC QUERIES
   ipcMain.handle(
     Constants.IPCRoute.COMPETITIONS_ALL,
