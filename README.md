@@ -62,7 +62,7 @@ The better you play the more likely the team you are playing for is going to wan
 
 ---
 
-### **Advanced Bot Behaviors (BetterBotsPlus)**
+### **Advanced Bot Behaviors ([BetterBotsPlus](https://github.com/rxpev/BetterBotsPlus))**
 Powered by my custom bot enhancer:
 - Smarter enemy desicions (ECO rounds, bots drop guns for each other and **much** more!) 
 - Realistic utility usage (over 800 grenades on 10 maps)  
@@ -82,21 +82,13 @@ Powered by my custom bot enhancer:
 
 # 🛠️ Development
 
-### This Mod is still in development.
-**Currently, I am focusing on restructuring most of the game. This includes:**
+### This Mod has entered the Alpha phase.
 
-- Stripping it of a lot of unused code for my goals
-- Changing most frontend tabs to fit a player career
-- Changing most of the transfer logic
-- Big overhaul on the worlgen and simulation side
+**Some new features are planned for the future:**
 
-**Some new features are also planned:**
-
-- Expanding LIGA's seasons with realistic tournaments
-- Creating a realistic player database
 - Adding an 'Agents' tab -> these will help you get contracts from Organizations
 
-Currently, my modification of LIGA is **only playable** on my setup. I am actively working on it, but it will take a lot of time. Here is a rough plan of what I want to achieve & have already achieved:
+Here is a rough plan of what I want to achieve & have already achieved:
 
 - Career model refactor: “Manager” → “Player Career” foundation ✅
 - New save creation flow: create you (name/country/role) & start as teamless ✅
