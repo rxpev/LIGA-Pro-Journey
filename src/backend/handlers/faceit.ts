@@ -417,7 +417,7 @@ export default function registerFaceitHandlers() {
   // ------------------------------------------------------
   // QUEUE PUG
   // ------------------------------------------------------
-  ipcMain.handle("faceit:queuePug", async () => {
+  ipcMain.handle("faceit:queuePug", async (_, payload?: { queueElo?: number; maxPartyEloDelta?: number }) => {
     try {
       await DatabaseClient.connect();
       const prisma = DatabaseClient.prisma;
@@ -447,10 +447,22 @@ export default function registerFaceitHandlers() {
         );
       }
 
+      const requestedQueueElo = Number(payload?.queueElo);
+      const queueElo = Number.isFinite(requestedQueueElo)
+        ? Math.max(100, Math.min(5000, Math.round(requestedQueueElo)))
+        : undefined;
+
+      const requestedMaxPartyDelta = Number(payload?.maxPartyEloDelta);
+      const maxPartyEloDelta = Number.isFinite(requestedMaxPartyDelta)
+        ? Math.max(0, Math.min(5000, Math.round(requestedMaxPartyDelta)))
+        : undefined;
+
       const user = {
         id: profile.player.id,
         name: profile.player.name,
         elo: profile.faceitElo,
+        queueElo,
+        maxPartyEloDelta,
       };
 
       const room = await FaceitMatchmaker.createMatchRoom(prisma, user);

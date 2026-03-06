@@ -1,4 +1,4 @@
-import type { PrismaClient, Player } from "@prisma/client";
+import type { PrismaClient, Player, Prisma } from "@prisma/client";
 import { shuffle } from "lodash";
 import { levelFromElo } from "@liga/backend/lib/levels";
 
@@ -45,7 +45,7 @@ export class FaceitMatchmaker {
     federationId: number
   ): Promise<BotCandidate[]> {
 
-    const regionalWhere = {
+    const regionalWhere: Prisma.PlayerWhereInput = {
       OR: [
         {
           team: {
@@ -147,7 +147,11 @@ export class FaceitMatchmaker {
     return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
   }
 
-  private static calcEloAdjustment(expWin: number) {
+  private static calcEloAdjustment(expWin: number, maxPartyEloDelta?: number) {
+    if (Number.isFinite(maxPartyEloDelta) && (maxPartyEloDelta as number) >= 1500) {
+      return { gain: 15, loss: 35 };
+    }
+
     let gain = 25;
     let loss = 25;
 
@@ -230,7 +234,7 @@ export class FaceitMatchmaker {
 
   static async createMatchRoom(
     prisma: any,
-    user: { id: number }
+    user: { id: number; queueElo?: number; maxPartyEloDelta?: number }
   ): Promise<MatchRoom> {
 
     // -------------------------------------------------
@@ -274,6 +278,7 @@ export class FaceitMatchmaker {
 
     const userDb = fullPlayer;
     const userElo = baseProfile.faceitElo;
+    const queueElo = Number.isFinite(user.queueElo) ? Math.round(user.queueElo as number) : userElo;
     const federationId =
       userDb.team?.country?.continent?.federation?.id ??
       userDb.country.continent.federation.id;
@@ -281,7 +286,7 @@ export class FaceitMatchmaker {
     // -------------------------------------------------
     // 3. Get bots in region & Elo range
     // -------------------------------------------------
-    const bots = await this.getBotsNearElo(prisma, userElo, 20, federationId);
+    const bots = await this.getBotsNearElo(prisma, queueElo, 20, federationId);
 
     if (bots.length < 10) {
       throw new Error("FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS");
@@ -398,7 +403,7 @@ export class FaceitMatchmaker {
 
     const userExpected = userIsTeamA ? expectedA : expectedB;
 
-    const { gain, loss } = this.calcEloAdjustment(userExpected);
+    const { gain, loss } = this.calcEloAdjustment(userExpected, user.maxPartyEloDelta);
 
     return {
       matchId: `${Date.now()}`,

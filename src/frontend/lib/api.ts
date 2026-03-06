@@ -150,8 +150,8 @@ export default {
         }>;
         daily?: DailyState | null;
       }>,
-    queue: () =>
-      ipcRenderer.invoke('faceit:queuePug') as Promise<any>,
+    queue: (payload?: { queueElo?: number; maxPartyEloDelta?: number }) =>
+      ipcRenderer.invoke('faceit:queuePug', payload) as Promise<any>,
     leaderboard: (
       page = 1,
       perPage = 50,

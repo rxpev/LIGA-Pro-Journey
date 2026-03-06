@@ -397,7 +397,33 @@ export default function Faceit(): JSX.Element {
     try {
       let res;
       try {
-        res = await api.faceit.queue();
+        const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
+        const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
+        const saveScopedKey = resolvedSaveId ? `faceit-save-${resolvedSaveId}:party-members` : null;
+
+        const storedParty =
+          (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
+          localStorage.getItem("faceit-party-members");
+
+        let queueElo = elo;
+        let maxPartyEloDelta = 0;
+        if (storedParty) {
+          const parsedParty = JSON.parse(storedParty);
+          if (Array.isArray(parsedParty) && parsedParty.length > 0) {
+            const partyElos = parsedParty
+              .map((member: any) => Number(member?.elo))
+              .filter((memberElo: number) => Number.isFinite(memberElo) && memberElo > 0);
+
+            if (partyElos.length > 0) {
+              const totalElo = elo + partyElos.reduce((sum: number, memberElo: number) => sum + memberElo, 0);
+              queueElo = Math.round(totalElo / (partyElos.length + 1));
+              const highestPartyElo = Math.max(...partyElos);
+              maxPartyEloDelta = Math.max(0, Math.round(highestPartyElo - elo));
+            }
+          }
+        }
+
+        res = await api.faceit.queue({ queueElo, maxPartyEloDelta });
       } catch (e: any) {
         const msg = String(e?.message ?? e);
         if (msg.includes("FACEIT_BLOCKED_MATCHDAY_USER_TODAY")) {
