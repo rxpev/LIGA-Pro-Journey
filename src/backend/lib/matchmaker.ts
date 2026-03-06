@@ -36,6 +36,7 @@ export interface MatchRoom {
 export class FaceitMatchmaker {
   static BASE_ELO_RANGE = 250;
   static MAX_ELO_RANGE = 700;
+  static ELO_RANGE_STEP = 100;
 
   private static async getBotsNearElo(
     prisma: PrismaClient,
@@ -44,13 +45,62 @@ export class FaceitMatchmaker {
     federationId: number
   ): Promise<BotCandidate[]> {
 
+    const regionalWhere = {
+      OR: [
+        {
+          team: {
+            country: {
+              continent: {
+                federationId,
+              },
+            },
+          },
+        },
+        {
+          teamId: null,
+          country: {
+            continent: {
+              federationId,
+            },
+          },
+        },
+      ],
+    };
+
+    const [lowestEloBot, highestEloBot] = await Promise.all([
+      prisma.player.findFirst({
+        where: {
+          userControlled: false,
+          ...regionalWhere,
+        },
+        select: { elo: true },
+        orderBy: { elo: "asc" },
+      }),
+      prisma.player.findFirst({
+        where: {
+          userControlled: false,
+          ...regionalWhere,
+        },
+        select: { elo: true },
+        orderBy: { elo: "desc" },
+      }),
+    ]);
+
+    if (!lowestEloBot || !highestEloBot) return [];
+
+    const maxNeededRange = Math.max(
+      Math.abs(targetElo - lowestEloBot.elo),
+      Math.abs(highestEloBot.elo - targetElo)
+    );
+
     let range = this.BASE_ELO_RANGE;
     let bots: BotCandidate[] = [];
 
-    while (bots.length < needed && range <= this.MAX_ELO_RANGE) {
+    while (bots.length < needed) {
       const candidates = await prisma.player.findMany({
         where: {
           userControlled: false,
+          ...regionalWhere,
           elo: {
             gte: targetElo - range,
             lte: targetElo + range,
@@ -75,18 +125,19 @@ export class FaceitMatchmaker {
         take: needed * 30,
       });
 
-      const sortedByEloDistance = [...candidates].sort(
+      bots = [...candidates].sort(
         (a, b) => Math.abs(a.elo - targetElo) - Math.abs(b.elo - targetElo)
       );
 
-      bots = sortedByEloDistance.filter((bot) => {
-        const botFederationId =
-          bot.team?.country?.continent?.federationId ?? bot.country.continent.federationId;
-        return botFederationId === federationId;
-      });
-
       if (bots.length >= needed) break;
-      range += 100;
+      if (range >= maxNeededRange) break;
+
+      const nextRange =
+        range < this.MAX_ELO_RANGE
+          ? Math.min(range + this.ELO_RANGE_STEP, this.MAX_ELO_RANGE)
+          : range + this.ELO_RANGE_STEP;
+
+      range = Math.min(nextRange, maxNeededRange);
     }
 
     return bots;
@@ -100,7 +151,13 @@ export class FaceitMatchmaker {
     let gain = 25;
     let loss = 25;
 
-    if (expWin > 0.6) {
+    if (expWin > 0.8) {
+      gain = 10;
+      loss = 40;
+    } else if (expWin > 0.7) {
+      gain = 15;
+      loss = 35;
+    } else if (expWin > 0.6) {
       gain = 20;
       loss = 30;
     } else if (expWin < 0.4) {
