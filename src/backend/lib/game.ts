@@ -1188,6 +1188,50 @@ End\n
     return logoPath;
   }
 
+
+  /**
+   * Triggers a one-time delayed steam://connect attempt after the
+   * game process has already been launched.
+   *
+   * @function
+   */
+  private scheduleSteamConnectCSGOOnce() {
+    const connectAddress = `${this.getLocalIP()}:${Constants.GameSettings.RCON_PORT}`;
+    const connectURI = `steam://connect/${connectAddress}`;
+    const handoffDelayMs = 15000;
+
+    const openURI = (uri: string) => {
+      if (is.osx()) {
+        const process = spawn('open', [uri], { detached: true, stdio: 'ignore' });
+        process.unref();
+        return;
+      }
+
+      if (is.win()) {
+        const process = spawn('cmd', ['/c', 'start', '', uri], { detached: true, stdio: 'ignore' });
+        process.unref();
+        return;
+      }
+
+      const process = spawn('xdg-open', [uri], { detached: true, stdio: 'ignore' });
+      process.unref();
+    };
+
+    setTimeout(() => {
+      if (gameClientProcess?.exitCode !== null) {
+        this.log.warn('Skipping delayed steam://connect because client process has already exited.');
+        return;
+      }
+
+      try {
+        this.log.debug('Steam connect handoff after 30s: opening %s', connectURI);
+        openURI(connectURI);
+      } catch (error) {
+        this.log.warn('Delayed steam://connect attempt failed: %s', error);
+      }
+    }, handoffDelayMs);
+  }
+
   /**
    * Launches the CSGO game client.
    *
@@ -1197,12 +1241,11 @@ End\n
     this.clientLaunchedViaSteam = false;
 
     const defaultArgs = [
+      '-insecure',
       '-novid',
-      '+connect',
-      `${this.getLocalIP()}:${Constants.GameSettings.RCON_PORT}`,
     ];
 
-    defaultArgs.unshift('-insecure');
+    const launchArgs = [...defaultArgs, ...this.userArgs];
 
     if (is.osx()) {
       this.clientLaunchedViaSteam = true;
@@ -1227,7 +1270,6 @@ End\n
           // fallback to Steam launch below
         }
       }
-
       if (gameLibrary) {
         const gameInstallPath = path.join(gameLibrary, Constants.GameSettings.CSGO_BASEDIR);
         const gameExecutable = path.join(gameInstallPath, Constants.GameSettings.CSGO_EXE);
@@ -1236,10 +1278,7 @@ End\n
           await fs.promises.access(gameExecutable, fs.constants.F_OK);
           gameClientProcess = spawn(
             gameExecutable,
-            [
-              ...defaultArgs,
-              ...this.userArgs,
-            ],
+            launchArgs,
             { cwd: gameInstallPath },
           );
         } catch (_) {
@@ -1254,8 +1293,7 @@ End\n
         const steamArgs = [
           '-applaunch',
           Constants.GameSettings.CSGO_APPID.toString(),
-          ...defaultArgs,
-          ...this.userArgs,
+          ...launchArgs,
         ];
 
         if (steamExecutable) {
@@ -1277,6 +1315,8 @@ End\n
     this.log.debug(gameClientProcess.spawnargs);
     return Promise.resolve();
   }
+
+
 
   /**
    * Waits for the server to create a fresh log file newer than the
@@ -1425,6 +1465,11 @@ End\n
     // copy plain files
     await FileManager.copy('**/!(*.zip)', from, to);
 
+    // CS:GO client + server both require steam.inf from plugin package.
+    if (this.settings.general.game === Constants.Game.CSGO) {
+      await this.copySteamInfForCSGO(from);
+    }
+
     // generate server and bot configs
     await this.generateServerConfig();
     await this.generateBotConfig();
@@ -1433,6 +1478,49 @@ End\n
     await this.generateScoreboardConfig();
 
     this.log.info('Server preparation complete.');
+  }
+
+
+  /**
+   * Copies CS:GO `steam.inf` from the plugin package into both
+   * the dedicated server and client game directories.
+   *
+   * @param from Source plugins/csgo directory.
+   * @function
+   */
+  private async copySteamInfForCSGO(from: string) {
+    const steamInfName = 'steam.inf';
+    const source = path.join(from, steamInfName);
+
+    try {
+      await fs.promises.access(source, fs.constants.F_OK);
+    } catch (_) {
+      this.log.warn(`steam.inf not found in plugin source: ${source}`);
+      return;
+    }
+
+    const targets = [
+      path.join(this.getDedicatedServerRoot(), Constants.GameSettings.CSGO_GAMEDIR, steamInfName),
+    ];
+
+    if (this.settings.general.gamePath) {
+      targets.push(
+        path.join(
+          this.settings.general.gamePath,
+          Constants.GameSettings.CSGO_BASEDIR,
+          Constants.GameSettings.CSGO_GAMEDIR,
+          steamInfName,
+        ),
+      );
+    } else {
+      this.log.warn('No gamePath set; skipping client steam.inf copy.');
+    }
+
+    for (const target of targets) {
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.copyFile(source, target);
+      this.log.info(`Copied steam.inf to: ${target}`);
+    }
   }
 
   /**
@@ -1501,6 +1589,11 @@ End\n
 
     // 5) now launch the client (after server log is ready)
     await this.launchClientCSGO();
+
+    // 5b) Perform one delayed steam://connect handoff after client launch.
+    // We intentionally avoid startup +connect to prevent overlapping connect
+    // attempts while loading, which can destabilize some client installs.
+    this.scheduleSteamConnectCSGOOnce();
 
     // 6) Attach client process handlers
     if (gameClientProcess) {

@@ -30,3 +30,9 @@ export const osx = () => process.platform === 'darwin';
 
 /** @constant */
 export const production = () => !dev();
+
+/** @constant */
+export const win = () => process.platform === 'win32';
+
+/** @constant */
+export const linux = () => process.platform === 'linux';
