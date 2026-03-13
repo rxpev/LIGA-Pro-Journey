@@ -95,10 +95,18 @@ function resolvePlayerLevel(player: Pick<MatchPlayer, "level" | "elo">): number 
   return Math.max(1, Math.min(10, fallback));
 }
 
-function orderTeamForDisplay(team: MatchPlayer[]): MatchPlayer[] {
+function pickCaptain(team: MatchPlayer[], seed: string): MatchPlayer | undefined {
+  if (!team.length) return undefined;
+  const seedValue = seed
+    .split("")
+    .reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7);
+  return team[seedValue % team.length];
+}
+
+function orderTeamForDisplay(team: MatchPlayer[], captainId: number): MatchPlayer[] {
   if (!team.length) return team;
 
-  const captain = team[0];
+  const captain = team.find((player) => player.id === captainId) ?? team[0];
   const queueLookup = new Map<string, MatchPlayer[]>();
 
   for (const player of team) {
@@ -191,14 +199,12 @@ export default function MatchRoom({
     eloLoss,
   } = room;
 
-  const shuffledTeamA = useMemo(() => orderTeamForDisplay(teamA), [teamA]);
-  const shuffledTeamB = useMemo(() => orderTeamForDisplay(teamB), [teamB]);
+  const captainA = useMemo(() => pickCaptain(teamA, `${matchId}-A`), [matchId, teamA]);
+  const captainB = useMemo(() => pickCaptain(teamB, `${matchId}-B`), [matchId, teamB]);
+  const shuffledTeamA = useMemo(() => orderTeamForDisplay(teamA, captainA?.id ?? teamA[0]?.id ?? 0), [captainA?.id, teamA]);
+  const shuffledTeamB = useMemo(() => orderTeamForDisplay(teamB, captainB?.id ?? teamB[0]?.id ?? 0), [captainB?.id, teamB]);
   const queueLookupA = useMemo(() => buildQueuePositionLookup(shuffledTeamA), [shuffledTeamA]);
   const queueLookupB = useMemo(() => buildQueuePositionLookup(shuffledTeamB), [shuffledTeamB]);
-
-  // Captains = first player in each team (after shuffle)
-  const captainA = shuffledTeamA[0];
-  const captainB = shuffledTeamB[0];
 
   // Determine if the user is the captain of Team A
   // The backend marks the user with `userControlled: true`.
