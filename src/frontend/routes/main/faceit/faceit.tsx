@@ -396,6 +396,59 @@ export default function Faceit(): JSX.Element {
 
     try {
       let res;
+      const hydrateStoredPartyMembers = async (storedPartyRaw: string | null) => {
+        if (!storedPartyRaw) return [] as MatchPlayer[];
+
+        let parsedParty: any[] = [];
+        try {
+          const parsed = JSON.parse(storedPartyRaw);
+          parsedParty = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          parsedParty = [];
+        }
+
+        if (!parsedParty.length) return [] as MatchPlayer[];
+
+        const partyIds = parsedParty
+          .map((member: any) => Number(member?.id))
+          .filter((id: number) => Number.isFinite(id) && id > 0);
+
+        if (!partyIds.length) {
+          return parsedParty.filter((member: any) => member && member.name) as MatchPlayer[];
+        }
+
+        try {
+          const freshPlayers = await api.players.all({
+            where: { id: { in: partyIds } },
+            include: { team: true },
+          } as any);
+
+          const freshById = new Map<number, any>();
+          for (const player of freshPlayers || []) {
+            freshById.set(player.id, player);
+          }
+
+          return parsedParty
+            .filter((member: any) => member && member.name)
+            .map((member: any) => {
+              const fresh = freshById.get(Number(member?.id));
+              if (!fresh) return member as MatchPlayer;
+
+              return {
+                ...member,
+                elo: Number.isFinite(Number(fresh.elo)) ? Number(fresh.elo) : member.elo,
+                level: Number.isFinite(Number(fresh.level)) ? Number(fresh.level) : member.level,
+                role: fresh.role ?? member.role,
+                countryId: fresh.countryId ?? member.countryId,
+                teamId: fresh.teamId ?? member.teamId,
+                teamCountryId: fresh.team?.countryId ?? member.teamCountryId,
+              } as MatchPlayer;
+            });
+        } catch {
+          return parsedParty.filter((member: any) => member && member.name) as MatchPlayer[];
+        }
+      };
+
       try {
         const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
         const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
@@ -404,6 +457,14 @@ export default function Faceit(): JSX.Element {
         const storedParty =
           (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
           localStorage.getItem("faceit-party-members");
+        const hydratedParty = await hydrateStoredPartyMembers(storedParty);
+        if (hydratedParty.length > 0) {
+          const serializedParty = JSON.stringify(hydratedParty);
+          if (saveScopedKey) {
+            localStorage.setItem(saveScopedKey, serializedParty);
+          }
+          localStorage.setItem("faceit-party-members", serializedParty);
+        }
 
         const profileQueueElo = Number(state.profile?.faceitElo);
         const baseQueueElo = Number.isFinite(elo) && elo > 0
@@ -414,19 +475,16 @@ export default function Faceit(): JSX.Element {
 
         let queueElo = baseQueueElo;
         let maxPartyEloDelta = 0;
-        if (storedParty) {
-          const parsedParty = JSON.parse(storedParty);
-          if (Array.isArray(parsedParty) && parsedParty.length > 0) {
-            const partyElos = parsedParty
-              .map((member: any) => Number(member?.elo))
-              .filter((memberElo: number) => Number.isFinite(memberElo) && memberElo > 0);
+        if (hydratedParty.length > 0) {
+          const partyElos = hydratedParty
+            .map((member: any) => Number(member?.elo))
+            .filter((memberElo: number) => Number.isFinite(memberElo) && memberElo > 0);
 
-            if (partyElos.length > 0 && baseQueueElo) {
-              const totalElo = baseQueueElo + partyElos.reduce((sum: number, memberElo: number) => sum + memberElo, 0);
-              queueElo = Math.round(totalElo / (partyElos.length + 1));
-              const highestPartyElo = Math.max(...partyElos);
-              maxPartyEloDelta = Math.max(0, Math.round(highestPartyElo - baseQueueElo));
-            }
+          if (partyElos.length > 0 && baseQueueElo) {
+            const totalElo = baseQueueElo + partyElos.reduce((sum: number, memberElo: number) => sum + memberElo, 0);
+            queueElo = Math.round(totalElo / (partyElos.length + 1));
+            const highestPartyElo = Math.max(...partyElos);
+            maxPartyEloDelta = Math.max(0, Math.round(highestPartyElo - baseQueueElo));
           }
         }
 
@@ -450,7 +508,7 @@ export default function Faceit(): JSX.Element {
         refreshProfile();
         return;
       }
-      const applyPartyToTeams = (room: any) => {
+      const applyPartyToTeams = async (room: any) => {
         try {
           const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
           const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
@@ -459,9 +517,7 @@ export default function Faceit(): JSX.Element {
           const storedParty =
             (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
             localStorage.getItem("faceit-party-members");
-          if (!storedParty) return room;
-
-          const parsed = JSON.parse(storedParty);
+          const parsed = await hydrateStoredPartyMembers(storedParty);
           if (!Array.isArray(parsed) || parsed.length === 0) return room;
 
           const userId = state.profile?.playerId ?? state.profile?.player?.id;
@@ -502,8 +558,8 @@ export default function Faceit(): JSX.Element {
                   player.name.toLowerCase() === String(member.name).toLowerCase()
               );
               return {
-                ...(existing ?? {}),
                 ...member,
+                ...(existing ?? {}),
               } as MatchPlayer;
             });
 
@@ -579,7 +635,7 @@ export default function Faceit(): JSX.Element {
 
       const shuffledTeamA = shuffle(res.teamA);
       const shuffledTeamB = shuffle(res.teamB);
-      const partyAdjusted = applyPartyToTeams({ ...res, teamA: shuffledTeamA, teamB: shuffledTeamB });
+      const partyAdjusted = await applyPartyToTeams({ ...res, teamA: shuffledTeamA, teamB: shuffledTeamB });
       dispatch(
         faceitRoomSet(
           partyAdjusted,
@@ -776,6 +832,7 @@ export function FaceitHeader({
   const previousDayKeyRef = useRef<string | null>(null);
   const [lastPugTeammates, setLastPugTeammates] = useState<MatchPlayer[]>([]);
   const [latestTrackedPugId, setLatestTrackedPugId] = useState<string | null>(null);
+  const [dbPlayerSnapshotById, setDbPlayerSnapshotById] = useState<Map<number, MatchPlayer>>(new Map());
   const safeCurrentDate = React.useMemo(() => {
     const parsed = currentDate ? new Date(currentDate) : new Date();
     if (Number.isNaN(parsed.getTime())) {
@@ -1105,6 +1162,64 @@ export function FaceitHeader({
   }, [profileTeammates, activeMatch, lastPugTeammates, currentPlayerId, friends, declinedSuggestionIds]);
 
 
+  const snapshotRefreshKey = React.useMemo(() => {
+    const ids = new Set<number>();
+    for (const player of [...friends, ...partyMembers, ...profileTeammates, ...lastPugTeammates]) {
+      if (Number.isFinite(Number(player?.id)) && Number(player.id) > 0) {
+        ids.add(Number(player.id));
+      }
+    }
+
+    return Array.from(ids).sort((a, b) => a - b).join(",");
+  }, [friends, partyMembers, profileTeammates, lastPugTeammates]);
+
+  useEffect(() => {
+    const ids = snapshotRefreshKey
+      .split(",")
+      .map((entry) => Number(entry))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (!ids.length) {
+      setDbPlayerSnapshotById(new Map());
+      return;
+    }
+
+    let disposed = false;
+
+    api.players
+      .all({
+        where: { id: { in: ids } },
+        include: { team: true },
+      } as any)
+      .then((players: any[]) => {
+        if (disposed) return;
+
+        const next = new Map<number, MatchPlayer>();
+        for (const player of players || []) {
+          next.set(player.id, {
+            id: player.id,
+            name: player.name,
+            countryId: player.countryId ?? 0,
+            elo: Number(player.elo ?? 1000),
+            level: Number(player.level ?? 0),
+            role: player.role,
+            teamId: player.teamId ?? null,
+            teamCountryId: player.team?.countryId ?? null,
+          });
+        }
+
+        setDbPlayerSnapshotById(next);
+      })
+      .catch(() => {
+        if (disposed) return;
+        setDbPlayerSnapshotById(new Map());
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [snapshotRefreshKey, activeMatch?.fakeRoomId]);
+
   const knownPlayersById = React.useMemo(() => {
     const all = [
       ...profileTeammates,
@@ -1112,6 +1227,8 @@ export function FaceitHeader({
       ...(activeMatch?.teamA ?? []),
       ...(activeMatch?.teamB ?? []),
       ...friends,
+      ...partyMembers,
+      ...Array.from(dbPlayerSnapshotById.values()),
     ];
 
     const map = new Map<number, MatchPlayer>();
@@ -1131,7 +1248,7 @@ export function FaceitHeader({
       });
     }
     return map;
-  }, [profileTeammates, lastPugTeammates, activeMatch, friends]);
+  }, [profileTeammates, lastPugTeammates, activeMatch, friends, partyMembers, dbPlayerSnapshotById]);
 
   useEffect(() => {
     setFriends((prev) => {
@@ -1140,18 +1257,54 @@ export function FaceitHeader({
         const enriched = knownPlayersById.get(friend.id);
         if (!enriched) return friend;
 
-        const teamId = enriched.teamId ?? friend.teamId;
-        const teamCountryId = enriched.teamCountryId ?? friend.teamCountryId;
-        if (teamId === friend.teamId && teamCountryId === friend.teamCountryId) {
-          return friend;
-        }
-
-        changed = true;
-        return {
+        const merged: MatchPlayer = {
           ...friend,
-          teamId,
-          teamCountryId,
+          ...enriched,
+          teamId: enriched.teamId ?? friend.teamId,
+          teamCountryId: enriched.teamCountryId ?? friend.teamCountryId,
         };
+
+        const same =
+          merged.elo === friend.elo &&
+          merged.level === friend.level &&
+          merged.role === friend.role &&
+          merged.countryId === friend.countryId &&
+          merged.teamId === friend.teamId &&
+          merged.teamCountryId === friend.teamCountryId;
+
+        if (!same) changed = true;
+        return same ? friend : merged;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [knownPlayersById]);
+
+  useEffect(() => {
+    setPartyMembers((prev) => {
+      let changed = false;
+
+      const next = prev.map((member) => {
+        const enriched = knownPlayersById.get(member.id);
+        if (!enriched) return member;
+
+        const merged: MatchPlayer = {
+          ...member,
+          ...enriched,
+          teamId: enriched.teamId ?? member.teamId,
+          teamCountryId: enriched.teamCountryId ?? member.teamCountryId,
+        };
+
+        const same =
+          merged.elo === member.elo &&
+          merged.level === member.level &&
+          merged.role === member.role &&
+          merged.countryId === member.countryId &&
+          merged.teamId === member.teamId &&
+          merged.teamCountryId === member.teamCountryId;
+
+        if (!same) changed = true;
+        return same ? member : merged;
       });
 
       return changed ? next : prev;
