@@ -189,15 +189,22 @@ export default function Scoreboard({ matchId }: ScoreboardProps) {
   const sortedUserTeam = sortPlayers(userTeamStats);
   const sortedOppTeam = sortPlayers(oppTeamStats);
 
+  const payloadTeamA = Array.isArray(payload.teamA) ? payload.teamA : [];
+  const payloadTeamB = Array.isArray(payload.teamB) ? payload.teamB : [];
+
   const teamAName =
-    teammatesRaw.length > 0
-      ? `Team_${teammatesRaw[0]?.name ?? "A"}`
-      : "Team A";
+    payloadTeamA.length > 0
+      ? `Team_${payloadTeamA[0]?.name ?? "A"}`
+      : teammatesRaw.length > 0
+        ? `Team_${teammatesRaw[0]?.name ?? "A"}`
+        : "Team A";
 
   const teamBName =
-    opponentsRaw.length > 0
-      ? `Team_${opponentsRaw[0]?.name ?? "B"}`
-      : "Team B";
+    payloadTeamB.length > 0
+      ? `Team_${payloadTeamB[0]?.name ?? "B"}`
+      : opponentsRaw.length > 0
+        ? `Team_${opponentsRaw[0]?.name ?? "B"}`
+        : "Team B";
 
   const leftName = isUserTeam1 ? teamAName : teamBName;
   const rightName = isUserTeam1 ? teamBName : teamAName;
