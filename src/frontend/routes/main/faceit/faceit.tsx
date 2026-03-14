@@ -728,9 +728,9 @@ export default function Faceit(): JSX.Element {
             currentTeamId={state.profile?.teamId ?? null}
             currentPlayerCountryId={state.profile?.player?.countryId ?? null}
             currentTeamCountryId={state.profile?.team?.countryId ?? null}
-            countryRegionById={Object.fromEntries(
+            countryFederationById={Object.fromEntries(
               (state.continents as any[]).flatMap((continent: any) =>
-                (continent.countries ?? []).map((country: any) => [country.id, continent.id])
+                (continent.countries ?? []).map((country: any) => [country.id, continent.federationId])
               )
             )}
             currentDate={state.profile?.date ?? new Date()}
@@ -781,7 +781,7 @@ interface FaceitHeaderProps {
   currentTeamId: number | null;
   currentPlayerCountryId: number | null;
   currentTeamCountryId: number | null;
-  countryRegionById: Record<number, number>;
+  countryFederationById: Record<number, number>;
   currentDate: Date | string | number | null;
 }
 
@@ -799,7 +799,7 @@ export function FaceitHeader({
   currentTeamId,
   currentPlayerCountryId,
   currentTeamCountryId,
-  countryRegionById,
+  countryFederationById,
   currentDate,
 }: FaceitHeaderProps) {
   const displayPct = level === 10 ? 100 : pct;
@@ -1312,24 +1312,25 @@ export function FaceitHeader({
   }, [knownPlayersById]);
 
 
-  const resolveRegionId = React.useCallback(
+  const resolveFederationId = React.useCallback(
     (player: Pick<MatchPlayer, "teamId" | "teamCountryId" | "countryId">) => {
       // Team assignment takes precedence over nationality.
       if (player.teamId) {
         if (!player.teamCountryId) return null;
-        return countryRegionById[player.teamCountryId] ?? null;
+        return countryFederationById[player.teamCountryId] ?? null;
       }
 
-      return countryRegionById[player.countryId] ?? null;
+      // For teamless players, FACEIT compatibility follows federation (not country).
+      return countryFederationById[player.countryId] ?? null;
     },
-    [countryRegionById]
+    [countryFederationById]
   );
 
-  const userRegionId = React.useMemo(() => {
+  const userFederationId = React.useMemo(() => {
     const effectiveCountryId = currentTeamCountryId ?? currentPlayerCountryId;
     if (!effectiveCountryId) return null;
-    return countryRegionById[effectiveCountryId] ?? null;
-  }, [currentTeamCountryId, currentPlayerCountryId, countryRegionById]);
+    return countryFederationById[effectiveCountryId] ?? null;
+  }, [currentTeamCountryId, currentPlayerCountryId, countryFederationById]);
 
   const userIsAwper = isAwperRole(currentPlayerRole);
   const partyHasAwper = partyMembers.some((member) => isAwperRole(member.role));
@@ -1399,8 +1400,8 @@ export function FaceitHeader({
       return;
     }
 
-    const friendRegionId = resolveRegionId(resolvedFriend);
-    if (userRegionId && friendRegionId && friendRegionId !== userRegionId) {
+    const friendFederationId = resolveFederationId(resolvedFriend);
+    if (userFederationId && friendFederationId && friendFederationId !== userFederationId) {
       toast.error("Cannot invite player - player isn't located in your region.");
       return;
     }
