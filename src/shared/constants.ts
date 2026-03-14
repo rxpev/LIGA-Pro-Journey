@@ -882,7 +882,7 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
   [TierSlug.MAJOR_EUROPE_RMR_B]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_CHALLENGERS_STAGE]: { total: 0, distribution: [] },
   [TierSlug.MAJOR_LEGENDS_STAGE]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_CHAMPIONS_STAGE]: { total: 0, distribution: [] },
+  [TierSlug.MAJOR_CHAMPIONS_STAGE]: { total: 2_500_000, distribution: [50, 35, 15] },
 };
 
 /**

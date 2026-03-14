@@ -288,6 +288,96 @@ function getSwissMatchSeriesLength(match: Clux.Match, tournament: Tournament) {
   return isDeciderMatch ? 3 : 1;
 }
 
+const SUCCESSIVE_ROUND_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+]);
+
+const MAJOR_RMR_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+  Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+  Constants.TierSlug.MAJOR_AMERICAS_RMR,
+  Constants.TierSlug.MAJOR_ASIA_RMR,
+]);
+
+const ESEA_DIVISION_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+]);
+
+async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants.TierSlug) {
+  const existingMatchday = await DatabaseClient.prisma.calendar.findFirst({
+    where: {
+      type: Constants.CalendarEntry.MATCHDAY_USER,
+      date: matchday.toISOString(),
+      completed: false,
+    },
+  });
+
+  if (!existingMatchday) {
+    return matchday;
+  }
+
+  const existingMatch = await DatabaseClient.prisma.match.findFirst({
+    where: {
+      id: Number(existingMatchday.payload),
+    },
+    include: {
+      competition: {
+        include: {
+          tier: true,
+        },
+      },
+    },
+  });
+
+  const existingTier = existingMatch?.competition?.tier?.slug as Constants.TierSlug | undefined;
+
+  if (!existingTier) {
+    return addDays(matchday, 1);
+  }
+
+  const rescheduleTarget =
+    MAJOR_RMR_TIERS.has(existingTier) && ESEA_DIVISION_TIERS.has(targetTier)
+      ? targetTier
+      : MAJOR_RMR_TIERS.has(targetTier) && ESEA_DIVISION_TIERS.has(existingTier)
+        ? existingTier
+        : targetTier;
+
+  // Always avoid two user matchdays on the same day.
+  // Prefer moving ESEA division matches over RMR matches when they collide.
+  if (rescheduleTarget === targetTier) {
+    return addDays(matchday, 1);
+  }
+
+  await DatabaseClient.prisma.calendar.update({
+    where: { id: existingMatchday.id },
+    data: {
+      date: addDays(matchday, 1).toISOString(),
+    },
+  });
+
+  await DatabaseClient.prisma.match.update({
+    where: { id: Number(existingMatchday.payload) },
+    data: {
+      date: addDays(matchday, 1).toISOString(),
+    },
+  });
+
+  return matchday;
+}
+
 /**
  * Creates matchdays.
  *
@@ -456,13 +546,23 @@ async function createMatchdays(
           ? match.id.r + 1
           : match.id.r;
       const isMajorQualifier = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_MAJOR;
-      const matchday = isMajorQualifier
+      const hasSuccessivePlayoffSchedule = SUCCESSIVE_ROUND_TIERS.has(
+        competition.tier.slug as Constants.TierSlug,
+      );
+      let matchday = isMajorQualifier || hasSuccessivePlayoffSchedule
         ? addDays(today, roundOffset)
         : setDay(
           addWeeks(today, roundOffset),
           Number(Chance.roll(Constants.MatchDayWeights[competition.tier.league.slug])),
           { weekStartsOn: 1 },
         );
+
+      if (userSeed != null && match.p.includes(userSeed)) {
+        matchday = await resolveUserMatchdayConflict(
+          matchday,
+          competition.tier.slug as Constants.TierSlug,
+        );
+      }
 
       const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
       const roundMapName = isUserIglMatch ? resolvedVetoMapName || resolvedMapName : resolvedMapName;
