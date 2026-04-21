@@ -647,6 +647,8 @@ export default function LeagueStatsConcept(): JSX.Element {
           ownTeam,
           opponent,
           didWin,
+          ownScore: ownGameTeam?.score ?? 0,
+          oppScore: oppGameTeam?.score ?? 0,
           plusMinus,
           rating,
         };
@@ -657,12 +659,12 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     return (
       <article className="border border-base-content/10 rounded-none">
-        <header className="border-b border-base-content/10 px-4 py-3 text-sm font-semibold">Match-by-match performance</header>
+        <header className="border-b border-base-content/10 px-4 py-3 text-sm font-semibold">Match History</header>
         <div className="overflow-x-auto">
           <table className="table table-zebra table-sm">
             <thead>
               <tr>
-                <th>Team</th><th>Match Details</th><th>Date</th><th>Map</th><th>Opponent</th><th>Result</th><th>+ / -</th><th>Rating</th>
+                <th>Team</th><th className="text-center">Match Details</th><th>Date</th><th>Map</th><th>Opponent</th><th className="text-center">Result</th><th className="text-center">Score</th><th className="text-center">+ / -</th><th className="text-center">Rating</th>
               </tr>
             </thead>
             <tbody>
@@ -696,7 +698,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                       <span>{row.opponent?.team?.name || 'TBD'}</span>
                     </span>
                   </td>
-                  <td>
+                  <td className="text-center">
                     <span
                       className={`badge badge-sm border-0 text-white ${row.didWin ? 'bg-success/80' : 'bg-error/80'
                         }`}
@@ -704,18 +706,21 @@ export default function LeagueStatsConcept(): JSX.Element {
                       {row.didWin ? 'Win' : 'Loss'}
                     </span>
                   </td>
+                  <td className="text-center text-base-content/80">
+                    {row.ownScore}-{row.oppScore}
+                  </td>
                   <td className={row.plusMinus > 0 ? 'text-success font-semibold text-center' : row.plusMinus < 0 ? 'text-error font-semibold text-center' : 'text-inherit font-semibold text-center'}>
                     {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(row.plusMinus)}
                   </td>
                   <td
-                    className={`font-semibold ${row.rating > 1 ? 'text-success' : row.rating < 1 ? 'text-error' : 'text-inherit'
+                    className={`font-semibold text-center ${row.rating > 1 ? 'text-success' : row.rating < 1 ? 'text-error' : 'text-inherit'
                       }`}
                   >
                     {row.rating.toFixed(2)}
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={8} className="text-center py-8 text-sm text-base-content/60">No matches for selected filters.</td></tr>}
+              {!rows.length && <tr><td colSpan={9} className="text-center py-8 text-sm text-base-content/60">No matches for selected filters.</td></tr>}
             </tbody>
           </table>
         </div>
