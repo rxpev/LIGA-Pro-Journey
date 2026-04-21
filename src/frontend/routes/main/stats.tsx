@@ -366,6 +366,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const ownPlayerPerformances = React.useMemo(() => {
     const playerId = state.profile?.player?.id;
     if (!playerId) return [] as MatchPerformance[];
+    const scopedSelectedMap = activeTab === StatsTab.TOURNAMENTS ? '' : selectedMap;
 
     return matchesByFilters.flatMap((match: any) => {
       const played = (match.players || []).some((player: any) => player.id === playerId);
@@ -373,8 +374,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const gamesForStats = selectedMap
-        ? (match.games || []).filter((game: any) => game.map === selectedMap && isPlayedGame(game))
+      const gamesForStats = scopedSelectedMap
+        ? (match.games || []).filter((game: any) => game.map === scopedSelectedMap && isPlayedGame(game))
         : (match.games || []).filter((game: any) => isPlayedGame(game));
       if (!gamesForStats.length) {
         return [];
@@ -382,14 +383,14 @@ export default function LeagueStatsConcept(): JSX.Element {
 
       const allEvents = match.events || [];
       const eventsForStats =
-        selectedMap || (match.games || []).length > 1
+        scopedSelectedMap || (match.games || []).length > 1
           ? allEvents.filter((event: any) => gamesForStats.some((game: any) => game.id === event.gameId))
           : allEvents;
 
       const performance = getPlayerPerformanceFromEvents(playerId, eventsForStats);
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, state.profile?.player?.id, selectedMap]);
+  }, [matchesByFilters, state.profile?.player?.id, selectedMap, activeTab]);
 
   const teammates = React.useMemo(() => {
     const selfId = state.profile?.player?.id;
