@@ -39,7 +39,7 @@ import crypto from 'node:crypto';
 import util from 'node:util';
 import log from 'electron-log';
 import { app } from 'electron';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { glob } from 'glob';
 import { Constants, Eagers, Util, is } from '@liga/shared';
 
@@ -467,6 +467,7 @@ export default class DatabaseClient {
     if (saveMeta.created && id !== 0) {
       await DatabaseClient.ensureInitialCareerStints(pool[id].client);
     }
+    await DatabaseClient.reconcileActiveCareerStints(pool[id].client);
 
     return pool[id].client;
   }
@@ -483,6 +484,7 @@ export default class DatabaseClient {
         select: {
           id: true,
           teamId: true,
+          starter: true,
           team: {
             select: {
               tier: true,
@@ -509,6 +511,7 @@ export default class DatabaseClient {
       playerId: number;
       teamId: number | null;
       tier: number | null;
+      starter: boolean;
       startedAt: Date;
       endedAt: Date | null;
     }> = players
@@ -517,6 +520,7 @@ export default class DatabaseClient {
         playerId: player.id,
         teamId: player.teamId,
         tier: player.team?.tier ?? null,
+        starter: player.starter,
         startedAt,
         endedAt: null as Date | null,
       }));
@@ -534,6 +538,160 @@ export default class DatabaseClient {
     );
 
     DatabaseClient.log.info('Initialized %d player career stints for save bootstrap.', missingStints.length);
+  }
+
+  private static async reconcileActiveCareerStints(prisma: PrismaClientExtended) {
+    const profile = await prisma.profile.findFirst();
+    const splitDate = profile?.date ?? new Date();
+
+    const [players, activeStints, recentStints] = await Promise.all([
+      prisma.player.findMany({
+        select: {
+          id: true,
+          teamId: true,
+          starter: true,
+          team: {
+            select: {
+              tier: true,
+            },
+          },
+        },
+      }),
+      prisma.careerStint.findMany({
+        where: { endedAt: null },
+        select: {
+          id: true,
+          playerId: true,
+          teamId: true,
+          tier: true,
+          starter: true,
+          startedAt: true,
+        },
+      }),
+      prisma.careerStint.findMany({
+        where: {
+          OR: [
+            { endedAt: null },
+            { endedAt: splitDate },
+          ],
+        },
+        select: {
+          id: true,
+          playerId: true,
+          teamId: true,
+          tier: true,
+          starter: true,
+          startedAt: true,
+          endedAt: true,
+        },
+        orderBy: { startedAt: 'asc' },
+      }),
+    ]);
+
+    type ActiveStintSnapshot = {
+      id: number;
+      playerId: number;
+      teamId: number | null;
+      tier: number | null;
+      starter: boolean;
+      startedAt: Date;
+    };
+    const activeByPlayer = new Map<number, ActiveStintSnapshot>(
+      activeStints.map((stint) => [stint.playerId, stint as ActiveStintSnapshot]),
+    );
+    const stintsByPlayer = new Map<number, typeof recentStints>();
+    for (const stint of recentStints) {
+      const list = stintsByPlayer.get(stint.playerId) ?? [];
+      list.push(stint);
+      stintsByPlayer.set(stint.playerId, list);
+    }
+    const tx: Prisma.PrismaPromise<unknown>[] = [];
+
+    // Legacy cleanup: collapse artificial split created at load time by older reconciliation.
+    // Pattern:
+    //   previous stint ended exactly at profile.date
+    //   active stint started exactly at profile.date
+    //   same team
+    // Keep one continuous stint and apply active snapshot (starter/tier) to it.
+    for (const [playerId, stints] of stintsByPlayer.entries()) {
+      const active = stints.find((stint) => stint.endedAt == null);
+      if (!active) continue;
+
+      const previous = stints
+        .filter((stint) => stint.id !== active.id && stint.endedAt != null)
+        .sort((a, b) => new Date(b.endedAt as Date).getTime() - new Date(a.endedAt as Date).getTime())[0];
+
+      if (!previous?.endedAt) continue;
+      if (previous.teamId !== active.teamId) continue;
+      if (new Date(previous.endedAt).getTime() !== splitDate.getTime()) continue;
+      if (new Date(active.startedAt).getTime() !== splitDate.getTime()) continue;
+
+      tx.push(prisma.careerStint.update({
+        where: { id: previous.id },
+        data: {
+          endedAt: null,
+          starter: active.starter,
+          tier: active.tier,
+          teamId: active.teamId,
+        },
+      }));
+      tx.push(prisma.careerStint.delete({
+        where: { id: active.id },
+      }));
+      activeByPlayer.set(playerId, {
+        ...active,
+        id: previous.id,
+        startedAt: previous.startedAt,
+      } as ActiveStintSnapshot);
+    }
+
+    for (const player of players) {
+      const active = activeByPlayer.get(player.id);
+      const targetTier = player.team?.tier ?? null;
+
+      if (!player.teamId) {
+        if (active) {
+          tx.push(prisma.careerStint.updateMany({
+            where: { playerId: player.id, endedAt: null },
+            data: { endedAt: splitDate },
+          }));
+        }
+        continue;
+      }
+
+      if (!active) {
+        tx.push(prisma.careerStint.create({
+          data: {
+            playerId: player.id,
+            teamId: player.teamId,
+            tier: targetTier,
+            starter: player.starter,
+            startedAt: splitDate,
+          },
+        }));
+        continue;
+      }
+
+      const sameSnapshot = active.teamId === player.teamId
+        && active.tier === targetTier
+        && active.starter === player.starter;
+
+      if (sameSnapshot) continue;
+
+      tx.push(prisma.careerStint.update({
+        where: { id: active.id },
+        data: {
+          teamId: player.teamId,
+          tier: targetTier,
+          starter: player.starter,
+        },
+      }));
+    }
+
+    if (tx.length > 0) {
+      await prisma.$transaction(tx);
+      DatabaseClient.log.info('Reconciled %d active career stint snapshot operation(s).', tx.length);
+    }
   }
 
   /**

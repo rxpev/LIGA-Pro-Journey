@@ -748,15 +748,17 @@ async function startCareerStint(prisma: typeof DatabaseClient.prisma, params: {
   playerId: number;
   teamId: number | null;
   tier: number | null;
+  starter: boolean;
   startedAt: Date;
 }) {
-  const { playerId, teamId, tier, startedAt } = params;
+  const { playerId, teamId, tier, starter, startedAt } = params;
 
   await prisma.careerStint.create({
     data: {
       playerId,
       teamId,
       tier,
+      starter,
       startedAt,
     },
   });
@@ -818,7 +820,8 @@ async function benchVictim(params: {
 
   const destTeam = await prisma.team.findFirst({
     where: { id: teamId },
-    include: {
+    select: {
+      tier: true,
       players: {
         select: {
           id: true,
@@ -879,6 +882,14 @@ async function benchVictim(params: {
       transferListed: true,
     },
   });
+  await closeOpenCareerStints(prisma, victim.id, now);
+  await startCareerStint(prisma, {
+    playerId: victim.id,
+    teamId,
+    tier: destTeam.tier ?? null,
+    starter: false,
+    startedAt: now,
+  });
 
   Engine.Runtime.Instance.log.info(
     "Bench victim: teamId=%d victimId=%d victimRole=%s (xp=%d) transferListed=true",
@@ -913,7 +924,8 @@ async function promoteReplacement(params: {
 
   const team = await prisma.team.findFirst({
     where: { id: teamId },
-    include: {
+    select: {
+      tier: true,
       players: {
         select: {
           id: true,
@@ -980,6 +992,14 @@ async function promoteReplacement(params: {
       transferListed: false,
       lastOfferAt: null,
     },
+  });
+  await closeOpenCareerStints(prisma, promoted.id, now);
+  await startCareerStint(prisma, {
+    playerId: promoted.id,
+    teamId,
+    tier: team.tier ?? null,
+    starter: true,
+    startedAt: now,
   });
 
   Engine.Runtime.Instance.log.info(
@@ -1302,6 +1322,7 @@ export async function acceptTransferOffer(transferId: number) {
     playerId: transfer.playerId,
     teamId: fromTeamId,
     tier: destTierIdx,
+    starter: true,
     startedAt: now,
   });
   await recalculateTeamCountryIdentity(fromTeamId);
@@ -1649,6 +1670,14 @@ export async function benchUserPlayer(params: {
       starter: false,
       transferListed: true,
     },
+  });
+  await closeOpenCareerStints(prisma, playerId, now);
+  await startCareerStint(prisma, {
+    playerId,
+    teamId,
+    tier: team.tier ?? null,
+    starter: false,
+    startedAt: now,
   });
 
   await promoteReplacement({
@@ -4472,6 +4501,23 @@ async function enforceSingleStarterSniper(params: {
 }) {
   const { teamId, keepStarterPlayerId, date } = params;
 
+  const team = await DatabaseClient.prisma.team.findFirst({
+    where: { id: teamId },
+    select: {
+      tier: true,
+      players: {
+        where: {
+          teamId,
+          starter: true,
+          id: { not: keepStarterPlayerId },
+          role: { in: ["SNIPER", "AWPER"] },
+        },
+        select: { id: true },
+      },
+    },
+  });
+  if (!team || !team.players.length) return;
+
   await DatabaseClient.prisma.player.updateMany({
     where: {
       teamId,
@@ -4485,13 +4531,32 @@ async function enforceSingleStarterSniper(params: {
       lastOfferAt: date,
     },
   });
+
+  await DatabaseClient.prisma.$transaction([
+    ...team.players.map((player) =>
+      DatabaseClient.prisma.careerStint.updateMany({
+        where: { playerId: player.id, endedAt: null },
+        data: { endedAt: date },
+      })),
+    ...team.players.map((player) =>
+      DatabaseClient.prisma.careerStint.create({
+        data: {
+          playerId: player.id,
+          teamId,
+          tier: team.tier ?? null,
+          starter: false,
+          startedAt: date,
+        },
+      })),
+  ]);
 }
 
 async function reinstateBenchedPlayerAfterSale(params: {
   teamId: number;
   soldRole: string;
+  date: Date;
 }) {
-  const { teamId, soldRole } = params;
+  const { teamId, soldRole, date } = params;
 
   const team = await DatabaseClient.prisma.team.findFirst({
     where: { id: teamId },
@@ -4528,6 +4593,14 @@ async function reinstateBenchedPlayerAfterSale(params: {
       transferListed: false,
       lastOfferAt: null,
     },
+  });
+  await closeOpenCareerStints(DatabaseClient.prisma, promoted.id, date);
+  await startCareerStint(DatabaseClient.prisma, {
+    playerId: promoted.id,
+    teamId,
+    tier: team.tier ?? null,
+    starter: true,
+    startedAt: date,
   });
 
   return Promise.resolve();
@@ -4599,6 +4672,14 @@ async function processNPCContractExtensions() {
         await prisma.player.update({
           where: { id: promote.id },
           data: { starter: true, transferListed: false, lastOfferAt: null },
+        });
+        await closeOpenCareerStints(prisma, promote.id, now);
+        await startCareerStint(prisma, {
+          playerId: promote.id,
+          teamId: team.id,
+          tier: team.tier ?? null,
+          starter: true,
+          startedAt: now,
         });
         promote.starter = true;
         continue;
@@ -4672,12 +4753,13 @@ async function processNPCContractExtensions() {
         });
 
         await closeOpenCareerStints(prisma, freeAgent.id, now);
-        await startCareerStint(prisma, {
-          playerId: freeAgent.id,
-          teamId: team.id,
-          tier: team.tier,
-          startedAt: now,
-        });
+  await startCareerStint(prisma, {
+    playerId: freeAgent.id,
+    teamId: team.id,
+    tier: team.tier,
+    starter: true,
+    startedAt: now,
+  });
 
         team.players.push({ ...freeAgent, teamId: team.id, starter: true } as any);
         continue;
@@ -4728,6 +4810,7 @@ async function processNPCContractExtensions() {
         playerId: donor.id,
         teamId: team.id,
         tier: team.tier,
+        starter: true,
         startedAt: now,
       });
 
@@ -4926,6 +5009,14 @@ async function trySignNPCFreeAgent(params: {
     where: { id: victim.id },
     data: { starter: false, transferListed: true, lastOfferAt: date },
   });
+  await closeOpenCareerStints(DatabaseClient.prisma, victim.id, date);
+  await startCareerStint(DatabaseClient.prisma, {
+    playerId: victim.id,
+    teamId: from.id,
+    tier: from.tier,
+    starter: false,
+    startedAt: date,
+  });
 
   const years = getTierContractYears(from.tier);
   const contractEnd = addYears(date, years);
@@ -4962,6 +5053,7 @@ async function trySignNPCFreeAgent(params: {
     playerId: target.id,
     teamId: from.id,
     tier: from.tier,
+    starter: true,
     startedAt: date,
   });
 
@@ -5341,6 +5433,14 @@ export async function onTransferParse(entry: Calendar) {
     where: { id: victim.id },
     data: { starter: false, transferListed: true, lastOfferAt: profile.date },
   });
+  await closeOpenCareerStints(DatabaseClient.prisma, victim.id, profile.date);
+  await startCareerStint(DatabaseClient.prisma, {
+    playerId: victim.id,
+    teamId: transfer.from.id,
+    tier: transfer.from.tier,
+    starter: false,
+    startedAt: profile.date,
+  });
 
   await DatabaseClient.prisma.transfer.update({
     where: { id: transfer.id },
@@ -5381,6 +5481,7 @@ export async function onTransferParse(entry: Calendar) {
   await reinstateBenchedPlayerAfterSale({
     teamId: transfer.to.id,
     soldRole: transfer.target.role || "",
+    date: profile.date,
   });
 
   await closeOpenCareerStints(DatabaseClient.prisma, transfer.target.id, profile.date);
@@ -5388,6 +5489,7 @@ export async function onTransferParse(entry: Calendar) {
     playerId: transfer.target.id,
     teamId: transfer.from.id,
     tier: transfer.from.tier,
+    starter: true,
     startedAt: profile.date,
   });
 

@@ -31,6 +31,7 @@ type Player = (NonNullable<Awaited<ReturnType<typeof api.players.find<typeof Eag
   careerStints?: Array<{
     id: number;
     teamId: number | null;
+    starter: boolean;
     startedAt: Date;
     endedAt: Date | null;
     team?: {
@@ -199,6 +200,7 @@ export default function TransferModal() {
           const wonTitle = stints.some(
             (stint) =>
               stint.teamId === winnerTeamId &&
+              stint.starter &&
               isWithinStint(championshipDate, stint.startedAt, stint.endedAt),
           );
 
@@ -403,7 +405,14 @@ export default function TransferModal() {
                     {stint.team ? (
                       <div className="flex items-center gap-2">
                         <img src={stint.team.blazon} className="inline-block size-6" />
-                        <span>{stint.team.name}</span>
+                        <span className="inline-flex items-baseline gap-1">
+                          {stint.team.name}
+                          {!stint.starter && (
+                            <span className="text-[8px] uppercase text-red-400">
+                              (BENCHED)
+                            </span>
+                          )}
+                        </span>
                       </div>
                     ) : (
                       <span className="opacity-70">Free Agent</span>

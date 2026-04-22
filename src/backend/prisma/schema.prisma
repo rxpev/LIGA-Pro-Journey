@@ -479,6 +479,7 @@ model CareerStint {
 
   // snapshot of team tier at the time (Open..Premier index)
   tier                Int?
+  starter             Boolean             @default(true)
 
   startedAt           DateTime
   endedAt             DateTime?
