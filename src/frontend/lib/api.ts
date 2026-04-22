@@ -92,6 +92,18 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.COMPETITIONS_FIND, query) as Promise<
         Prisma.CompetitionGetPayload<T>
       >,
+    participantLineup: (competitionId: number, teamId: number) =>
+      ipcRenderer.invoke(
+        Constants.IPCRoute.COMPETITIONS_PARTICIPANT_LINEUP,
+        competitionId,
+        teamId,
+      ) as Promise<Array<{
+        id: number;
+        name: string;
+        country: {
+          code: string;
+        };
+      }>>,
     winners: (id: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.COMPETITIONS_WINNERS, id) as Promise<
         Prisma.CompetitionGetPayload<typeof Eagers.competition>['competitors']

@@ -5,7 +5,6 @@
  */
 import React from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { Constants, Eagers } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 
 /**
@@ -34,7 +33,7 @@ export default function () {
   const [isLineupsVisible, setIsLineupsVisible] = React.useState(false);
 
   const [startersByTeamId, setStartersByTeamId] = React.useState<
-    Record<number, Awaited<ReturnType<typeof api.players.all<typeof Eagers.player>>>>
+    Record<number, Awaited<ReturnType<typeof api.competitions.participantLineup>>>
   >({});
   const [loadingByTeamId, setLoadingByTeamId] = React.useState<Record<number, boolean>>({});
 
@@ -44,6 +43,19 @@ export default function () {
   const [worldRankingLoadingByTeamId, setWorldRankingLoadingByTeamId] = React.useState<
     Record<number, boolean>
   >({});
+
+  /**
+   * Competition context can change (season/federation/tier filter switch) while this component
+   * instance remains mounted. Reset cached lineup/ranking maps so we don't show stale team data
+   * from the previously viewed competition.
+   */
+  React.useEffect(() => {
+    setStartersByTeamId({});
+    setLoadingByTeamId({});
+    setWorldRankingByTeamId({});
+    setWorldRankingLoadingByTeamId({});
+    setHoveredTeamId(null);
+  }, [competition.id]);
 
   const baseParticipants = React.useMemo(() => {
     const teamMap = new Map<number, (typeof competition.competitors)[number]['team']>();
@@ -63,22 +75,12 @@ export default function () {
 
       setLoadingByTeamId((prev) => ({ ...prev, [teamId]: true }));
 
-      api.players
-        .all<typeof Eagers.player>({
-          ...Eagers.player,
-          where: {
-            teamId,
-            starter: true,
-          },
-          take: Constants.GameSettings.SQUAD_STARTERS_NUM,
-          orderBy: {
-            name: 'asc',
-          },
-        })
+      api.competitions
+        .participantLineup(competition.id, teamId)
         .then((players) => setStartersByTeamId((prev) => ({ ...prev, [teamId]: players })))
         .finally(() => setLoadingByTeamId((prev) => ({ ...prev, [teamId]: false })));
     },
-    [startersByTeamId, loadingByTeamId],
+    [startersByTeamId, loadingByTeamId, competition.id],
   );
 
   const fetchWorldRanking = React.useCallback(
