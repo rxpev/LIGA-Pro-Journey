@@ -781,7 +781,12 @@ export default function LeagueStatsConcept(): JSX.Element {
             {activeTab === StatsTab.TEAMMATES && (
               <section className="mt-4 border border-base-content/10 p-2">
                 <p className="mb-2 text-xs uppercase text-base-content/70">Teammates</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div
+                  className={cx(
+                    'grid grid-cols-3 gap-2',
+                    teammates.length > 6 && 'max-h-36 overflow-y-auto pr-1',
+                  )}
+                >
                   {teammates.map((teammate) => (
                     <button
                       key={teammate.id}
