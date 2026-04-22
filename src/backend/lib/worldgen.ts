@@ -4551,6 +4551,95 @@ async function enforceSingleStarterSniper(params: {
   ]);
 }
 
+async function enforceStarterLimit(params: {
+  teamId: number;
+  date: Date;
+  maxStarters?: number;
+}) {
+  const { teamId, date, maxStarters = Constants.Application.SQUAD_MIN_LENGTH } = params;
+
+  const team = await DatabaseClient.prisma.team.findFirst({
+    where: { id: teamId },
+    select: {
+      tier: true,
+      players: {
+        where: { teamId, starter: true },
+        select: {
+          id: true,
+          xp: true,
+          role: true,
+          userControlled: true,
+          contractEnd: true,
+        },
+      },
+    },
+  });
+  if (!team) return;
+
+  const starters = [...(team.players || [])];
+  if (starters.length <= maxStarters) return;
+
+  const starterSnipers = starters.filter((p) => normalizeRole(p.role) === "SNIPER").length;
+  let removableSnipers = Math.max(0, starterSnipers - 1);
+
+  const benchCount = starters.length - maxStarters;
+  const benched: Array<(typeof starters)[number]> = [];
+
+  for (let i = 0; i < benchCount; i += 1) {
+    const candidates = starters.filter((player) => !benched.some((b) => b.id === player.id));
+    if (!candidates.length) break;
+
+    const keepOneStarterSniper = candidates.filter((player) => {
+      if (normalizeRole(player.role) !== "SNIPER") return true;
+      return removableSnipers > 0;
+    });
+
+    const victimPool = keepOneStarterSniper.length ? keepOneStarterSniper : candidates;
+    const victim = victimPool
+      .sort((a, b) => {
+        if (!!a.userControlled !== !!b.userControlled) {
+          return a.userControlled ? 1 : -1;
+        }
+
+        const xpDiff = (a.xp || 0) - (b.xp || 0);
+        if (xpDiff !== 0) return xpDiff;
+
+        const aEnd = a.contractEnd ? new Date(a.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
+        const bEnd = b.contractEnd ? new Date(b.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
+        return aEnd - bEnd;
+      })[0];
+
+    if (!victim) break;
+
+    if (normalizeRole(victim.role) === "SNIPER" && removableSnipers > 0) {
+      removableSnipers -= 1;
+    }
+
+    benched.push(victim);
+  }
+
+  if (!benched.length) return;
+
+  for (const victim of benched) {
+    await DatabaseClient.prisma.player.update({
+      where: { id: victim.id },
+      data: {
+        starter: false,
+        transferListed: true,
+        lastOfferAt: date,
+      },
+    });
+    await closeOpenCareerStints(DatabaseClient.prisma, victim.id, date);
+    await startCareerStint(DatabaseClient.prisma, {
+      playerId: victim.id,
+      teamId,
+      tier: team.tier ?? null,
+      starter: false,
+      startedAt: date,
+    });
+  }
+}
+
 async function reinstateBenchedPlayerAfterSale(params: {
   teamId: number;
   soldRole: string;
@@ -4640,6 +4729,25 @@ async function processNPCContractExtensions() {
   const now = profile.date;
   const prisma = DatabaseClient.prisma;
   const blockedRejoinByTeam = new Map<number, Set<number>>();
+
+  const teams = await prisma.team.findMany({
+    select: {
+      id: true,
+      players: {
+        where: { starter: true },
+        select: { id: true },
+      },
+    },
+  });
+
+  for (const team of teams) {
+    if ((team.players || []).length > Constants.Application.SQUAD_MIN_LENGTH) {
+      await enforceStarterLimit({
+        teamId: team.id,
+        date: now,
+      });
+    }
+  }
 
   async function ensureNPCStarterFloorAndAwper(teamId: number, preferredRole?: string | null) {
     const team = await prisma.team.findFirst({
