@@ -50,6 +50,22 @@ function TeamSelector(props: TeamSelectorProps) {
   const [teams, setTeams] = React.useState<
     Awaited<ReturnType<typeof api.play.exhibitionTeams<typeof Eagers.team>>>
   >([]);
+  const selectedFederation = React.useMemo(
+    () => federations.find((federation) => federation.id === selectedFederationId),
+    [federations, selectedFederationId],
+  );
+  const isFederationSlug = (slug: string): slug is Constants.FederationSlug =>
+    Object.values(Constants.FederationSlug).includes(slug as Constants.FederationSlug);
+
+  const isTierEnabled = React.useCallback(
+    (tier: Constants.TierSlug) => {
+      const slug = selectedFederation?.slug;
+      return slug && isFederationSlug(slug)
+        ? Util.isLeagueTierEnabledForFederation(tier, slug)
+        : true;
+    },
+    [selectedFederation?.slug],
+  );
 
   // build team query
   const teamQuery = React.useMemo(
@@ -69,6 +85,18 @@ function TeamSelector(props: TeamSelectorProps) {
   React.useEffect(() => {
     api.play.exhibitionTeams<typeof Eagers.team>(teamQuery).then(setTeams);
   }, [teamQuery]);
+
+  // reset tier selection if the federation does not support it
+  React.useEffect(() => {
+    if (!Number.isInteger(selectedTierId)) {
+      return;
+    }
+
+    const tierSlug = Constants.Prestige[selectedTierId];
+    if (tierSlug && !isTierEnabled(tierSlug)) {
+      setSelectedTierId(undefined);
+    }
+  }, [isTierEnabled, selectedTierId]);
 
   // preload random team
   React.useEffect(() => {
@@ -92,9 +120,12 @@ function TeamSelector(props: TeamSelectorProps) {
   // massage team data to team selector data structure
   const teamSelectorData = React.useMemo(
     () =>
-      Constants.Prestige.filter((_, prestigeIdx) =>
-        Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true,
-      ).map((prestige) => ({
+      Constants.Prestige.filter((prestige, prestigeIdx) => {
+        if (!isTierEnabled(prestige)) {
+          return false;
+        }
+        return Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true;
+      }).map((prestige) => ({
         label: Constants.IdiomaticTier[prestige],
         options: teams
           .filter((team) => team.tier === Constants.Prestige.findIndex((tier) => tier === prestige))
@@ -104,7 +135,7 @@ function TeamSelector(props: TeamSelectorProps) {
             label: team.name,
           })),
       })),
-    [teams, selectedTierId],
+    [isTierEnabled, teams, selectedTierId],
   );
 
   // isolate the selected team
@@ -163,13 +194,18 @@ function TeamSelector(props: TeamSelectorProps) {
                 onChange={(event) => setSelectedTierId(Number(event.target.value))}
                 value={selectedTierId}
               >
-                {Constants.Prestige.map((prestige, prestigeId) => (
-                  <option key={prestige} value={prestigeId}>
-                    {Constants.IdiomaticTier[prestige] === 'Group Stage'
-                      ? 'ESL Pro League'
-                      : Constants.IdiomaticTier[prestige]}
-                  </option>
-                ))}
+                {Constants.Prestige.filter((prestige) => isTierEnabled(prestige)).map(
+                  (prestige) => (
+                    <option
+                      key={prestige}
+                      value={Constants.Prestige.findIndex((tier) => tier === prestige)}
+                    >
+                      {Constants.IdiomaticTier[prestige] === 'Group Stage'
+                        ? 'ESL Pro League'
+                        : Constants.IdiomaticTier[prestige]}
+                    </option>
+                  ),
+                )}
               </select>
             </aside>
           </article>
