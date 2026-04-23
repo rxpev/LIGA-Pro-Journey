@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { groupBy } from 'lodash';
 import { format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -199,6 +200,32 @@ function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
   return { kills, deaths, plusMinus, rating };
 }
 
+
+function getSeriesAwarePerformance(
+  playerId: number,
+  eventsForStats: any[],
+  useSeriesAverageRating: boolean,
+) {
+  const performance = getPlayerPerformanceFromEvents(playerId, eventsForStats);
+
+  if (!useSeriesAverageRating) {
+    return performance;
+  }
+
+  const ratings = Object.values(groupBy(eventsForStats, 'gameId'))
+    .map((gameEvents: any) => getPlayerPerformanceFromEvents(playerId, gameEvents).rating)
+    .filter((rating: number) => Number.isFinite(rating));
+
+  if (!ratings.length) {
+    return performance;
+  }
+
+  return {
+    ...performance,
+    rating: ratings.reduce((sum: number, rating: number) => sum + rating, 0) / ratings.length,
+  };
+}
+
 function isPlayedGame(game: any) {
   const scores = (game?.teams || []).map((team: any) => Number(team.score || 0));
   if (!scores.length) return false;
@@ -387,7 +414,11 @@ export default function LeagueStatsConcept(): JSX.Element {
           ? allEvents.filter((event: any) => gamesForStats.some((game: any) => game.id === event.gameId))
           : allEvents;
 
-      const performance = getPlayerPerformanceFromEvents(playerId, eventsForStats);
+      const performance = getSeriesAwarePerformance(
+        playerId,
+        eventsForStats,
+        !scopedSelectedMap && (match.games || []).length > 1,
+      );
       return [{ match, ...performance }];
     });
   }, [matchesByFilters, state.profile?.player?.id, selectedMap, activeTab]);
@@ -522,7 +553,11 @@ export default function LeagueStatsConcept(): JSX.Element {
           ? allEvents.filter((event: any) => gamesForStats.some((game: any) => game.id === event.gameId))
           : allEvents;
 
-      const performance = getPlayerPerformanceFromEvents(teammateId, eventsForStats);
+      const performance = getSeriesAwarePerformance(
+        teammateId,
+        eventsForStats,
+        !selectedMap && (match.games || []).length > 1,
+      );
       return [{ match, ...performance }];
     });
   }, [matchesByFilters, selectedTeammateId, selectedMap, careerTeamIds, careerStints]);
