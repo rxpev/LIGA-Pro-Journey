@@ -359,11 +359,14 @@ export default function registerDatabaseHandlers() {
           },
           {
             status: Constants.TransferStatus.TEAM_ACCEPTED,
-            teamIdFrom: id,
             teamIdTo: id,
             offers: {
               some: { cost: 0 },
             },
+          },
+          {
+            status: Constants.TransferStatus.EXPIRED,
+            teamIdFrom: id,
           },
         ],
       },
