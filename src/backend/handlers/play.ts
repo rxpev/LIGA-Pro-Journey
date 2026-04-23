@@ -549,13 +549,27 @@ export default function () {
     }
 
     // apply elo deltas
-    const homeExpectedScore = Util.getEloWinProbability(home.team.elo, away.team.elo);
     const homeActualScore = Constants.EloScore[Simulator.getMatchResult(home.team.id, globalScore)];
-    const awayExpectedScore = 1 - homeExpectedScore;
     const awayActualScore = Constants.EloScore[Simulator.getMatchResult(away.team.id, globalScore)];
     const deltas = [
-      Util.getEloRatingDelta(homeActualScore, homeExpectedScore),
-      Util.getEloRatingDelta(awayActualScore, awayExpectedScore),
+      Util.getTeamRankingPointDelta(home.team.elo, away.team.elo, homeActualScore, {
+        tierSlug: match.competition?.tier?.slug,
+        leagueSlug: match.competition?.tier?.league?.slug,
+        competitionFederationId: match.competition?.federationId,
+        ownCompetitionFederationId: home.team.competitionFederationId,
+        opponentCompetitionFederationId: away.team.competitionFederationId,
+        ownTier: home.team.tier,
+        opponentTier: away.team.tier,
+      }),
+      Util.getTeamRankingPointDelta(away.team.elo, home.team.elo, awayActualScore, {
+        tierSlug: match.competition?.tier?.slug,
+        leagueSlug: match.competition?.tier?.league?.slug,
+        competitionFederationId: match.competition?.federationId,
+        ownCompetitionFederationId: away.team.competitionFederationId,
+        opponentCompetitionFederationId: home.team.competitionFederationId,
+        ownTier: away.team.tier,
+        opponentTier: home.team.tier,
+      }),
     ];
     await Promise.all(
       deltas.map((delta, teamIdx) =>

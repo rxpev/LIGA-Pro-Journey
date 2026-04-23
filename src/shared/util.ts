@@ -460,6 +460,235 @@ export function getEloRatingDelta(actualScore: number, expectedScore: number, k 
 }
 
 /**
+ * Context used to compute team ranking point adjustments.
+ */
+export type TeamRankingDeltaContext = {
+  tierSlug?: string | null;
+  leagueSlug?: string | null;
+  competitionFederationId?: number | null;
+  ownCompetitionFederationId?: number | null;
+  opponentCompetitionFederationId?: number | null;
+  ownTier?: number | null;
+  opponentTier?: number | null;
+};
+
+function getRankingTierWeight(tierSlug?: string | null, leagueSlug?: string | null) {
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) return 1.4;
+
+  switch (tierSlug) {
+    case Constants.TierSlug.LEAGUE_PRO:
+    case Constants.TierSlug.LEAGUE_PRO_PLAYOFFS:
+      return 1.35;
+    case Constants.TierSlug.LEAGUE_ADVANCED:
+    case Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS:
+      return 0.92;
+    case Constants.TierSlug.LEAGUE_MAIN:
+    case Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS:
+      return 0.75;
+    case Constants.TierSlug.LEAGUE_INTERMEDIATE:
+    case Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS:
+      return 0.52;
+    case Constants.TierSlug.LEAGUE_OPEN:
+    case Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS:
+      return 0.38;
+    case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
+      return 1.15;
+    case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
+      return 1.2;
+    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
+      return 1.3;
+    default:
+      return 0.95;
+  }
+}
+
+function getRankingFederationWeight(competitionFederationId?: number | null) {
+  switch (competitionFederationId) {
+    case 2: // Europe
+      return 1.12;
+    case 1: // Americas
+      return 1.0;
+    case 3: // Asia
+      return 0.9;
+    case 4: // OCE
+      return 0.82;
+    default:
+      return 1.0;
+  }
+}
+
+function getTournamentChampionBonus(tierSlug?: string | null, leagueSlug?: string | null) {
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    return 70;
+  }
+
+  switch (tierSlug) {
+    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
+      return 130;
+    case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
+    case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
+      return 55;
+    case Constants.TierSlug.LEAGUE_PRO_PLAYOFFS:
+      return 85;
+    case Constants.TierSlug.LEAGUE_PRO:
+      return 45;
+    default:
+      return 16;
+  }
+}
+
+function getTournamentDeltaCap(tierSlug?: string | null, leagueSlug?: string | null) {
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    return 150;
+  }
+
+  switch (tierSlug) {
+    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
+      return 220;
+    case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
+    case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
+      return 140;
+    case Constants.TierSlug.LEAGUE_PRO_PLAYOFFS:
+      return 150;
+    case Constants.TierSlug.LEAGUE_PRO:
+      return 120;
+    default:
+      return 60;
+  }
+}
+
+/**
+ * Calculates per-team ranking point delta for a match using an HLTV-like
+ * points model (upset boosts, favorite penalties, and top-team volatility).
+ */
+export function getTeamRankingPointDelta(
+  ownElo: number,
+  opponentElo: number,
+  actualScore: number,
+  context: TeamRankingDeltaContext = {},
+) {
+  const expectedScore = getEloWinProbability(ownElo, opponentElo, 325);
+  const tierWeight = getRankingTierWeight(context.tierSlug, context.leagueSlug);
+  const federationWeight = getRankingFederationWeight(context.competitionFederationId);
+  let matchWeight = tierWeight * federationWeight;
+
+  const sameRegionalCircuit =
+    context.ownCompetitionFederationId != null &&
+    context.opponentCompetitionFederationId != null &&
+    context.ownCompetitionFederationId === context.opponentCompetitionFederationId;
+
+  if (sameRegionalCircuit) {
+    switch (context.tierSlug) {
+      case Constants.TierSlug.LEAGUE_OPEN:
+      case Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS:
+        matchWeight *= 0.5;
+        break;
+      case Constants.TierSlug.LEAGUE_INTERMEDIATE:
+      case Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS:
+        matchWeight *= 0.58;
+        break;
+      case Constants.TierSlug.LEAGUE_MAIN:
+      case Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS:
+        matchWeight *= 0.72;
+        break;
+      default:
+        matchWeight *= 0.9;
+    }
+  }
+
+  const isWin = actualScore === 1;
+  const isLoss = actualScore === 0;
+  const rawDelta = 18 * (actualScore - expectedScore);
+  const eloGap = ownElo - opponentElo;
+
+  let volatility = 1;
+  if (isWin) {
+    const underdogBoost = expectedScore < 0.5 ? 1 + (0.5 - expectedScore) * 0.9 : 1;
+    const eliteWinBoost =
+      opponentElo > ownElo
+        ? 1 + Math.min(0.85, (opponentElo - ownElo) / 1000)
+        : 1;
+    const topGainDamp = ownElo > 1400 ? Math.max(0.64, 1 - (ownElo - 1400) / 1800) : 1;
+    volatility *= underdogBoost * eliteWinBoost * topGainDamp;
+  } else if (isLoss) {
+    const upsetPenalty = expectedScore > 0.5 ? 1 + (expectedScore - 0.5) * 1.25 : 1;
+    const topLossBoost = ownElo > 1700 ? 1 + (ownElo - 1700) / 2200 : 1;
+    const strongerOpponentRelief = eloGap < -250 ? Math.max(0.62, 1 - Math.abs(eloGap) / 2200) : 1;
+    volatility *= upsetPenalty * topLossBoost * strongerOpponentRelief;
+  } else {
+    volatility *= 0.9;
+  }
+
+  let delta = Math.round(rawDelta * matchWeight * volatility);
+
+  if (isWin && opponentElo >= 1500) {
+    const elitePointsBonus = Math.min(26, Math.round((opponentElo - 1450) / 28));
+    delta += Math.max(0, Math.round(elitePointsBonus * matchWeight));
+  }
+
+  if (isLoss && ownElo >= 1500 && opponentElo <= 1200) {
+    const badLossPenalty = Math.min(16, Math.round((ownElo - opponentElo) / 60));
+    delta -= Math.max(0, Math.round(badLossPenalty * matchWeight));
+  }
+
+  const cappedDelta = Math.max(-45, Math.min(45, delta));
+
+  if (cappedDelta === 0 && actualScore !== expectedScore) {
+    return actualScore > expectedScore ? 1 : -1;
+  }
+
+  return cappedDelta;
+}
+
+/**
+ * Calculates end-of-tournament ranking bonus/penalty for a team.
+ */
+export function getTournamentPlacementRankingDelta(params: {
+  currentElo: number;
+  placement: number;
+  totalTeams: number;
+  tierSlug?: string | null;
+  leagueSlug?: string | null;
+  competitionFederationId?: number | null;
+}) {
+  const {
+    currentElo,
+    placement,
+    totalTeams,
+    tierSlug,
+    leagueSlug,
+    competitionFederationId,
+  } = params;
+
+  if (!Number.isFinite(totalTeams) || totalTeams <= 1 || placement <= 0) {
+    return 0;
+  }
+
+  const tierWeight = getRankingTierWeight(tierSlug, leagueSlug);
+  const federationWeight = getRankingFederationWeight(competitionFederationId);
+  const tournamentWeight = tierWeight * federationWeight;
+
+  const normalizedStrength = clampElo(currentElo) / 2000;
+  const expectedPlacement = 1 + (totalTeams - 1) * (1 - normalizedStrength);
+  const placementPerformance = expectedPlacement - placement;
+  let delta = placementPerformance * 3.25 * tournamentWeight;
+
+  if (placement === 1) {
+    delta += getTournamentChampionBonus(tierSlug, leagueSlug) * tournamentWeight;
+  }
+
+  const topTeamCollapseThreshold = Math.ceil(totalTeams * 0.35);
+  if (currentElo >= 1500 && placement > topTeamCollapseThreshold) {
+    const collapseSpan = Math.max(1, totalTeams - topTeamCollapseThreshold);
+    const collapseSeverity = (placement - topTeamCollapseThreshold) / collapseSpan;
+    delta -= 18 * collapseSeverity * tournamentWeight;
+  }
+
+  const cap = getTournamentDeltaCap(tierSlug, leagueSlug);
+  return Math.max(-cap, Math.min(cap, Math.round(delta)));
+}
+
+/**
  * Clamps an Elo value to the configured team range.
  *
  * @param rating Elo value to clamp.

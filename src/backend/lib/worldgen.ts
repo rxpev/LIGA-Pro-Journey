@@ -336,7 +336,11 @@ async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants
     include: {
       competition: {
         include: {
-          tier: true,
+          tier: {
+            include: {
+              league: true,
+            },
+          },
         },
       },
     },
@@ -683,7 +687,7 @@ export async function createWelcomeEmail() {
  * @function
  */
 export async function distributePrizePool(
-  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: { include: { league: true } } } }>,
   preloadedTournament?: Tournament,
 ) {
   // bail if competition is not done yet
@@ -701,15 +705,13 @@ export async function distributePrizePool(
   }
 
   // loop through positions and assign their award
-  const winners: Array<[number, number]> = [];
+  const winners: Array<[number, number, number]> = [];
 
   for (const competitorId of tournament.competitors) {
     const competitor = tournament.$base.resultsFor(tournament.getSeedByCompetitorId(competitorId));
     const pos = (competitor.gpos || competitor.pos) - 1;
     const prizeMoney = prizePool.total * ((prizePool.distribution[pos] || 0) / 100);
-    if (prizeMoney > 0) {
-      winners.push([competitorId, prizeMoney]);
-    }
+    winners.push([competitorId, prizeMoney, competitor.gpos || competitor.pos]);
   }
 
   if (!winners.length) {
@@ -717,8 +719,30 @@ export async function distributePrizePool(
   }
 
   // assign prize winnings to team earnings
-  const transaction = winners.map(([id, prizeMoney]) =>
-    DatabaseClient.prisma.competitionToTeam.update({
+  const seededCompetitors = await DatabaseClient.prisma.competitionToTeam.findMany({
+    where: {
+      id: { in: winners.map(([id]) => id) },
+    },
+    include: {
+      team: true,
+    },
+  });
+
+  const seededById = new Map(seededCompetitors.map((item) => [item.id, item]));
+
+  const transaction = winners.map(([id, prizeMoney, placement]) => {
+    const seeded = seededById.get(id);
+    const currentElo = seeded?.team?.elo ?? 1000;
+    const tournamentDelta = Util.getTournamentPlacementRankingDelta({
+      currentElo,
+      placement,
+      totalTeams: tournament.competitors.length,
+      tierSlug: competition.tier.slug,
+      leagueSlug: competition.tier.league?.slug,
+      competitionFederationId: competition.federationId,
+    });
+
+    return DatabaseClient.prisma.competitionToTeam.update({
       where: {
         id,
       },
@@ -728,11 +752,12 @@ export async function distributePrizePool(
             earnings: {
               increment: prizeMoney,
             },
+            elo: Util.clampElo(currentElo + tournamentDelta),
           },
         },
       },
-    }),
-  );
+    });
+  });
 
   return DatabaseClient.prisma.$transaction(transaction);
 }
@@ -5994,7 +6019,11 @@ export async function onMatchdayNPC(entry: Calendar) {
       },
       competition: {
         include: {
-          tier: true,
+          tier: {
+            include: {
+              league: true,
+            },
+          },
         },
       },
       games: true,
@@ -6070,15 +6099,29 @@ export async function onMatchdayNPC(entry: Calendar) {
   }
 
   // apply elo deltas
-  const homeExpectedScore = Util.getEloWinProbability(home.team.elo, away.team.elo);
   const homeActualScore =
     Constants.EloScore[Simulator.getMatchResult(home.team.id, simulationResult)];
-  const awayExpectedScore = 1 - homeExpectedScore;
   const awayActualScore =
     Constants.EloScore[Simulator.getMatchResult(away.team.id, simulationResult)];
   const deltas = [
-    Util.getEloRatingDelta(homeActualScore, homeExpectedScore),
-    Util.getEloRatingDelta(awayActualScore, awayExpectedScore),
+    Util.getTeamRankingPointDelta(home.team.elo, away.team.elo, homeActualScore, {
+      tierSlug: match.competition?.tier?.slug,
+      leagueSlug: match.competition?.tier?.league?.slug,
+      competitionFederationId: match.competition?.federationId,
+      ownCompetitionFederationId: home.team.competitionFederationId,
+      opponentCompetitionFederationId: away.team.competitionFederationId,
+      ownTier: home.team.tier,
+      opponentTier: away.team.tier,
+    }),
+    Util.getTeamRankingPointDelta(away.team.elo, home.team.elo, awayActualScore, {
+      tierSlug: match.competition?.tier?.slug,
+      leagueSlug: match.competition?.tier?.league?.slug,
+      competitionFederationId: match.competition?.federationId,
+      ownCompetitionFederationId: away.team.competitionFederationId,
+      opponentCompetitionFederationId: home.team.competitionFederationId,
+      ownTier: away.team.tier,
+      opponentTier: home.team.tier,
+    }),
   ];
 
   await XpEconomy.applyMatchXpFromSim({
