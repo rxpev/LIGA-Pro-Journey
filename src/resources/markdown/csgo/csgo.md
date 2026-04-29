@@ -1,27 +1,32 @@
-# Enabling CS:GO Legacy Version
+# CS:GO Legacy Version Setup (Debug Fork)
 
-Counter-Strike 2 is missing many features that prevent you from playing your matches in-game. As a result, you'll need to Counter-Strike: Global Offensive again until CS2 supports these features.
+This guide applies to the debug fork of LIGA: Pro Journey. For official documentation, visit: https://github.com/playliga/prototype
 
-> 📝 Don't worry! You'll still be able to play CS2 even with CS:GO installed.
+## About
 
-Right click on Counter-Strike 2 in your Steam library and click `Properties`.
+Counter-Strike 2 is missing many features that prevent proper match functionality. This guide shows how to enable the CS:GO legacy version for testing purposes.
 
-![](resources://markdown/csgo/settings.png)
+> 📝 Note: You can use both CS2 and CS:GO. The launcher will prompt you to choose.
 
-When you're in properties, click on `Betas`.
+## Steps
 
-Then click on the `Beta Participation` dropdown and select `csgo_legacy - Legacy Version of CS:GO`.
+1. Right-click on Counter-Strike 2 in your Steam library
+2. Click `Properties`
+3. Click on the `Betas` tab
+4. In the `Beta Participation` dropdown, select `csgo_legacy - Legacy Version of CS:GO`
+5. Steam will download CS:GO automatically
 
-![](resources://markdown/csgo/betas.png)
+## Launching
 
-That's it! Steam will begin downloading CS:GO again.
+When you want to test with CS2, launch it normally from Steam Library.
+
+You'll see a dialog to choose between CS2 and CS:GO. You can enable `Always use this option` to skip this dialog.
 
 ---
 
-When you want to play CS2 you'll launch it as usual from your Steam library.
+## For Debugging
 
-![](resources://markdown/csgo/legacy.png)
-
-Note that you'll be presented with a dialog window to choose between CS2 and CS:GO which can be disabled by toggling on the `Always use this option` check box.
-
-![](resources://markdown/csgo/launch.png)
+When testing matches in this debug fork:
+- Check the console output for logs
+- Review the game logs directory for match data
+- Test with both CS2 and CS:GO to identify game-specific issues
