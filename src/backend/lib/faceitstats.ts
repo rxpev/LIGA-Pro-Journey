@@ -1,6 +1,16 @@
 import DatabaseClient from "./database-client";
 import { Constants } from "@liga/shared";
 
+export function isFaceitKillEvent(event: { payload?: string | null }) {
+  if (!event?.payload) return false;
+
+  try {
+    return JSON.parse(event.payload).type === "playerkilled";
+  } catch {
+    return false;
+  }
+}
+
 export async function computeLifetimeStats(
   profileId: number,
   playerId: number,
@@ -31,11 +41,13 @@ export async function computeLifetimeStats(
   let headshots = 0;
 
   for (const e of events) {
-    if (e.attackerId === playerId) {
+    const isKill = isFaceitKillEvent(e);
+
+    if (isKill && e.attackerId === playerId) {
       kills++;
       if (e.headshot) headshots++;
     }
-    if (e.victimId === playerId) deaths++;
+    if (isKill && e.victimId === playerId) deaths++;
     if (e.assistId === playerId) assists++;
   }
 

@@ -6,7 +6,11 @@ import { FaceitMatchmaker } from "@liga/backend/lib/matchmaker";
 import { Server as Game } from "@liga/backend/lib/game";
 import { Constants } from "@liga/shared";
 import { saveFaceitResult } from "@liga/backend/lib/save-result";
-import { computeLifetimeStats, getRecentMatches } from "@liga/backend/lib/faceitstats";
+import {
+  computeLifetimeStats,
+  getRecentMatches,
+  isFaceitKillEvent,
+} from "@liga/backend/lib/faceitstats";
 import { Eagers } from "@liga/shared";
 import { sample } from "lodash";
 import { Engine } from "@liga/backend/lib";
@@ -310,6 +314,8 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
     let matchHeadshots = 0;
 
     for (const event of match.events || []) {
+      if (!isFaceitKillEvent(event)) continue;
+
       if (event.attackerId === playerId) {
         matchKills++;
         if (event.headshot) matchHeadshots++;
