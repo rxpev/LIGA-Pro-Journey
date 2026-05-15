@@ -454,17 +454,28 @@ export default function () {
                       ))}
                     </aside>
                     <aside className="text-center">
-                      <button
-                        className="btn btn-block rounded-none border-x-0"
-                        onClick={() => {
-                          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                            target: '/brackets',
-                            payload: standings.competitionId,
-                          });
-                        }}
-                      >
-                        {t('main.dashboard.viewBracket')}
-                      </button>
+                      {Constants.TierSwissConfig[
+                        standings.competition.tier.slug as Constants.TierSlug
+                      ] ? (
+                        <Link
+                          className="btn btn-block rounded-none border-x-0"
+                          to={`/competitions/standings?federationId=${standings.competition.federationId}&season=${standings.competition.season}&tierId=${standings.competition.tier.id}`}
+                        >
+                          View Standings
+                        </Link>
+                      ) : (
+                        <button
+                          className="btn btn-block rounded-none border-x-0"
+                          onClick={() => {
+                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                              target: '/brackets',
+                              payload: standings.competitionId,
+                            });
+                          }}
+                        >
+                          {t('main.dashboard.viewBracket')}
+                        </button>
+                      )}
                     </aside>
                   </article>
                 );

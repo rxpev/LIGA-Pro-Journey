@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   addMonths,
   eachDayOfInterval,
@@ -154,6 +155,9 @@ export default function () {
             const opponent = spotlight.competitors.find(
               (competitor) => competitor.teamId !== state.profile.teamId,
             );
+            const isSwiss = Boolean(
+              Constants.TierSwissConfig[spotlight.competition.tier.slug as Constants.TierSlug],
+            );
 
             return (
               <article className="stack-y">
@@ -200,19 +204,27 @@ export default function () {
                     )}
                   </aside>
                   <aside className="join">
-                    {!spotlight.competition.tier.groupSize && (
-                      <button
-                        className="btn join-item flex-1 rounded-none"
-                        onClick={() => {
-                          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                            target: '/brackets',
-                            payload: spotlight.competitionId,
-                          });
-                        }}
-                      >
-                        {t('main.dashboard.viewBracket')}
-                      </button>
-                    )}
+                    {!spotlight.competition.tier.groupSize &&
+                      (isSwiss ? (
+                        <Link
+                          className="btn join-item flex-1 rounded-none"
+                          to={`/competitions/standings?federationId=${spotlight.competition.federationId}&season=${spotlight.competition.season}&tierId=${spotlight.competition.tier.id}`}
+                        >
+                          View Standings
+                        </Link>
+                      ) : (
+                        <button
+                          className="btn join-item flex-1 rounded-none"
+                          onClick={() => {
+                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                              target: '/brackets',
+                              payload: spotlight.competitionId,
+                            });
+                          }}
+                        >
+                          {t('main.dashboard.viewBracket')}
+                        </button>
+                      ))}
                     <button
                       className="btn join-item flex-1 rounded-none"
                       disabled={!spotlight._count.events}
