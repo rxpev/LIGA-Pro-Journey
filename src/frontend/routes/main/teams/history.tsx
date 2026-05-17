@@ -69,9 +69,7 @@ const buildChartConfig = (
  * @param season        The season.
  */
 function findSeasonDivision(
-  competitions: Awaited<
-    ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
-  >,
+  competitions: Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>,
   season: number,
 ): Constants.TierSlug | undefined {
   const competition = competitions.find(
@@ -197,7 +195,7 @@ export default function () {
     }
 
     if (competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD) {
-      return `${competition.tier.league.name}: ${tierLabel}`;
+      return tierLabel;
     }
 
     return `${competition.federation.name}: ${tierLabel}`;
@@ -333,11 +331,9 @@ export default function () {
             {seasons.map((_, idx) => (
               <option key={idx + 1 + '__season'} value={idx + 1}>
                 {t('shared.season')} {idx + 1} -&nbsp;
-                {
-                  getTeamsTierLabel(
-                    findSeasonDivision(competitions, idx + 1) || Constants.Prestige[team.tier],
-                  )
-                }
+                {getTeamsTierLabel(
+                  findSeasonDivision(competitions, idx + 1) || Constants.Prestige[team.tier],
+                )}
               </option>
             ))}
           </select>

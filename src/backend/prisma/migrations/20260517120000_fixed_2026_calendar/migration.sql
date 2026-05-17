@@ -1,0 +1,2 @@
+-- Intentionally empty.
+-- The 2026 tournament schedule is seeded into the root new-save template only.

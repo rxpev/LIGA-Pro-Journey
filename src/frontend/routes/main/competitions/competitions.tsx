@@ -65,16 +65,16 @@ export default function () {
       ...Eagers.tier,
       ...(selectedFederationId > 0
         ? {
-          where: {
-            league: {
-              federations: {
-                some: {
-                  id: selectedFederationId,
+            where: {
+              league: {
+                federations: {
+                  some: {
+                    id: selectedFederationId,
+                  },
                 },
               },
             },
-          },
-        }
+          }
         : {}),
     }),
     [selectedFederationId],
@@ -154,13 +154,7 @@ export default function () {
     setSelectedSeasonId(querySeasonId);
     setSelectedTierId(queryTierId);
     setInitializedFromQuery(true);
-  }, [
-    hasQueryParams,
-    initializedFromQuery,
-    queryFederationId,
-    querySeasonId,
-    queryTierId,
-  ]);
+  }, [hasQueryParams, initializedFromQuery, queryFederationId, querySeasonId, queryTierId]);
 
   React.useEffect(() => {
     if (!hasQueryParams || initializedQueryCompetition) return;
@@ -254,6 +248,33 @@ export default function () {
 
     return tiers.filter((tier) => {
       if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_LEAGUE) {
+        if (tier.league.slug === Constants.LeagueSlug.ESPORTS_CCT) {
+          const regionalSeriesTiers = [
+            Constants.TierSlug.CCT_SERIES,
+            Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+          ];
+          const oceaniaSeriesTiers = [
+            Constants.TierSlug.CCT_OCE_SERIES,
+            Constants.TierSlug.CCT_OCE_PLAYOFFS,
+          ];
+
+          if (selectedFederation.slug === Constants.FederationSlug.ESPORTS_OCE) {
+            return oceaniaSeriesTiers.includes(tier.slug as Constants.TierSlug);
+          }
+
+          if (
+            [
+              Constants.FederationSlug.ESPORTS_AMERICAS,
+              Constants.FederationSlug.ESPORTS_ASIA,
+              Constants.FederationSlug.ESPORTS_EUROPA,
+            ].includes(selectedFederation.slug as Constants.FederationSlug)
+          ) {
+            return regionalSeriesTiers.includes(tier.slug as Constants.TierSlug);
+          }
+
+          return false;
+        }
+
         if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_MAJOR) {
           return true;
         }
@@ -392,10 +413,7 @@ export default function () {
   ]);
 
   // Build seasons dropdown data
-  const seasons = React.useMemo(
-    () => [...Array(state?.profile?.season || 0)],
-    [state.profile],
-  );
+  const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
 
   return (
     <div className="dashboard">
@@ -469,7 +487,7 @@ export default function () {
                   </option>
                   {visibleTiers.map((tier) => (
                     <option key={tier.id} value={tier.id}>
-                      {tier.league.name} {Constants.IdiomaticTier[tier.slug]}
+                      {Util.getCompetitionDisplayName(tier.league.name, tier.slug)}
                     </option>
                   ))}
                 </select>
@@ -504,11 +522,9 @@ export default function () {
                 className="btn btn-primary btn-block col-span-2!"
                 disabled={selectedFederationId < 0 || selectedTierId < 0 || selectedSeasonId < 0}
                 onClick={() =>
-                  loadCompetition(
-                    selectedFederationId,
-                    selectedSeasonId,
-                    selectedTierId,
-                  ).then(setCompetition)
+                  loadCompetition(selectedFederationId, selectedSeasonId, selectedTierId).then(
+                    setCompetition,
+                  )
                 }
               >
                 {t('shared.apply')}

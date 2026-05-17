@@ -28,6 +28,8 @@ export enum Application {
   TRAINING_FREQUENCY = 7,
 }
 
+export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
+
 /** @enum */
 export enum AwardAction {
   CONFETTI,
@@ -76,9 +78,9 @@ export enum PlayerRole {
   SNIPER = 'SNIPER',
 }
 export enum UserRole {
-  RIFLER = "RIFLER",
-  IGL = "IGL",
-  AWPER = "AWPER",
+  RIFLER = 'RIFLER',
+  IGL = 'IGL',
+  AWPER = 'AWPER',
 }
 export enum PersonalityTemplate {
   LURK = 'LurkPersonality',
@@ -219,6 +221,15 @@ export enum LeagueSlug {
   ESPORTS_LEAGUE = 'esl',
   ESPORTS_PRO_LEAGUE = 'espl',
   ESPORTS_MAJOR = 'major',
+  ESPORTS_BLAST = 'blast',
+  ESPORTS_CCT = 'cct',
+  ESPORTS_CCT_GLOBAL = 'cct-global',
+  ESPORTS_IEM_COLOGNE_QUALIFIER = 'iem-cologne-qualifier',
+  ESPORTS_IEM_COLOGNE = 'iem-cologne',
+  ESPORTS_ESL_CHALLENGER = 'esl-challenger',
+  ESPORTS_ESEA_CASH_CUP = 'esea-cash-cup',
+  ESPORTS_IEM_KRAKOW_QUALIFIER = 'iem-krakow-qualifier',
+  ESPORTS_IEM_KRAKOW = 'iem-krakow',
 }
 
 /**
@@ -439,7 +450,24 @@ export enum SimulationMode {
  * @enum
  */
 export enum TierSlug {
+  BLAST_FINALS = 'blast:finals',
+  CCT_GLOBAL_FINALS = 'cct:global-finals',
+  CCT_OCE_PLAYOFFS = 'cct:oceania:playoffs',
+  CCT_OCE_SERIES = 'cct:oceania:series',
+  CCT_SERIES = 'cct:series',
+  CCT_SERIES_PLAYOFFS = 'cct:series:playoffs',
+  ESEA_CASH_CUP = 'esea:cash-cup',
+  ESL_CHALLENGER = 'esl-challenger:group-stage',
+  ESL_CHALLENGER_PLAYOFFS = 'esl-challenger:playoffs',
   EXHIBITION_FRIENDLY = 'exhibition:friendly',
+  IEM_COLOGNE_GROUP_A = 'iem:cologne:group-a',
+  IEM_COLOGNE_GROUP_B = 'iem:cologne:group-b',
+  IEM_COLOGNE_OPEN_QUALIFIER = 'iem:cologne:open-qualifier',
+  IEM_COLOGNE_PLAYOFFS = 'iem:cologne:playoffs',
+  IEM_KRAKOW_GROUP_A = 'iem:krakow:group-a',
+  IEM_KRAKOW_GROUP_B = 'iem:krakow:group-b',
+  IEM_KRAKOW_OPEN_QUALIFIER = 'iem:krakow:open-qualifier',
+  IEM_KRAKOW_PLAYOFFS = 'iem:krakow:playoffs',
   LEAGUE_ADVANCED = 'league:advanced',
   LEAGUE_ADVANCED_PLAYOFFS = 'league:advanced:playoffs',
   LEAGUE_INTERMEDIATE = 'league:intermediate',
@@ -566,6 +594,62 @@ export enum Zones {
  * @constant
  */
 export const Awards = [
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.BLAST_FINALS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.CCT_SERIES_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.CCT_OCE_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.CCT_GLOBAL_FINALS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.ESL_CHALLENGER_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.IEM_COLOGNE_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.ESEA_CASH_CUP,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
+  {
+    on: CalendarEntry.COMPETITION_END,
+    target: TierSlug.IEM_KRAKOW_PLAYOFFS,
+    type: AwardType.CHAMPION,
+    action: [AwardAction.CONFETTI, AwardAction.EMAIL],
+    start: Zones.LEAGUE_PROMOTION_AUTO_START,
+  },
   {
     on: CalendarEntry.COMPETITION_END,
     target: TierSlug.LEAGUE_OPEN_PLAYOFFS,
@@ -696,7 +780,24 @@ export const GameSettings = {
  * @constant
  */
 export const IdiomaticTier: Record<TierSlug | string, string> = {
+  [TierSlug.BLAST_FINALS]: 'Finals',
+  [TierSlug.CCT_GLOBAL_FINALS]: 'Global Finals',
+  [TierSlug.CCT_OCE_PLAYOFFS]: 'Playoffs',
+  [TierSlug.CCT_OCE_SERIES]: 'Series',
+  [TierSlug.CCT_SERIES]: 'Series',
+  [TierSlug.CCT_SERIES_PLAYOFFS]: 'Playoffs',
+  [TierSlug.ESEA_CASH_CUP]: 'Cash Cup',
+  [TierSlug.ESL_CHALLENGER]: 'Group Stage',
+  [TierSlug.ESL_CHALLENGER_PLAYOFFS]: 'Playoffs',
   [TierSlug.EXHIBITION_FRIENDLY]: 'Friendly',
+  [TierSlug.IEM_COLOGNE_GROUP_A]: 'Group A',
+  [TierSlug.IEM_COLOGNE_GROUP_B]: 'Group B',
+  [TierSlug.IEM_COLOGNE_OPEN_QUALIFIER]: 'Qualifier',
+  [TierSlug.IEM_COLOGNE_PLAYOFFS]: 'Playoffs',
+  [TierSlug.IEM_KRAKOW_GROUP_A]: 'Group A',
+  [TierSlug.IEM_KRAKOW_GROUP_B]: 'Group B',
+  [TierSlug.IEM_KRAKOW_OPEN_QUALIFIER]: 'Qualifier',
+  [TierSlug.IEM_KRAKOW_PLAYOFFS]: 'Playoffs',
   [TierSlug.LEAGUE_OPEN]: 'Open Division',
   [TierSlug.LEAGUE_OPEN_PLAYOFFS]: 'Open Division Playoffs',
   [TierSlug.LEAGUE_INTERMEDIATE]: 'Intermediate Division',
@@ -859,37 +960,54 @@ export const Prestige = [
  * @constant
  */
 export const PrizePool: Record<TierSlug | string, { total: number; distribution: Array<number> }> =
-{
-  [TierSlug.LEAGUE_OPEN]: { total: 5_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_INTERMEDIATE]: { total: 15_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_MAIN]: { total: 30_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_ADVANCED]: { total: 70_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.LEAGUE_PRO]: { total: 1_000_000, distribution: [50, 35, 15] },
-  [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_ASIA_RMR]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_AMERICAS_RMR]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_RMR_A]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_EUROPE_RMR_B]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_CHALLENGERS_STAGE]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_LEGENDS_STAGE]: { total: 0, distribution: [] },
-  [TierSlug.MAJOR_CHAMPIONS_STAGE]: { total: 2_500_000, distribution: [50, 35, 15] },
-};
+  {
+    [TierSlug.BLAST_FINALS]: { total: 0, distribution: [] },
+    [TierSlug.CCT_GLOBAL_FINALS]: { total: 0, distribution: [] },
+    [TierSlug.CCT_OCE_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.CCT_OCE_SERIES]: { total: 0, distribution: [] },
+    [TierSlug.CCT_SERIES]: { total: 0, distribution: [] },
+    [TierSlug.CCT_SERIES_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.ESEA_CASH_CUP]: { total: 0, distribution: [] },
+    [TierSlug.ESL_CHALLENGER]: { total: 0, distribution: [] },
+    [TierSlug.ESL_CHALLENGER_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.IEM_COLOGNE_GROUP_A]: { total: 0, distribution: [] },
+    [TierSlug.IEM_COLOGNE_GROUP_B]: { total: 0, distribution: [] },
+    [TierSlug.IEM_COLOGNE_OPEN_QUALIFIER]: { total: 0, distribution: [] },
+    [TierSlug.IEM_COLOGNE_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.IEM_KRAKOW_GROUP_A]: { total: 0, distribution: [] },
+    [TierSlug.IEM_KRAKOW_GROUP_B]: { total: 0, distribution: [] },
+    [TierSlug.IEM_KRAKOW_OPEN_QUALIFIER]: { total: 0, distribution: [] },
+    [TierSlug.IEM_KRAKOW_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.LEAGUE_OPEN]: { total: 5_000, distribution: [50, 35, 15] },
+    [TierSlug.LEAGUE_OPEN_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.LEAGUE_INTERMEDIATE]: { total: 15_000, distribution: [50, 35, 15] },
+    [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.LEAGUE_MAIN]: { total: 30_000, distribution: [50, 35, 15] },
+    [TierSlug.LEAGUE_MAIN_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.LEAGUE_ADVANCED]: { total: 70_000, distribution: [50, 35, 15] },
+    [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.LEAGUE_PRO]: { total: 1_000_000, distribution: [50, 35, 15] },
+    [TierSlug.LEAGUE_PRO_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_ASIA_RMR]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_AMERICAS_RMR]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_RMR_A]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_EUROPE_RMR_B]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_CHALLENGERS_STAGE]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_LEGENDS_STAGE]: { total: 0, distribution: [] },
+    [TierSlug.MAJOR_CHAMPIONS_STAGE]: { total: 2_500_000, distribution: [50, 35, 15] },
+  };
 
 /**
  * Settings for the application and their defaults.
@@ -943,6 +1061,22 @@ export const Settings = {
  * @constant
  */
 export const TierMatchConfig: Record<string, Array<number>> = {
+  [TierSlug.BLAST_FINALS]: [3],
+  [TierSlug.CCT_GLOBAL_FINALS]: [3],
+  [TierSlug.CCT_OCE_PLAYOFFS]: [3],
+  [TierSlug.CCT_OCE_SERIES]: [3],
+  [TierSlug.CCT_SERIES_PLAYOFFS]: [3],
+  [TierSlug.ESEA_CASH_CUP]: [1],
+  [TierSlug.ESL_CHALLENGER]: [3],
+  [TierSlug.ESL_CHALLENGER_PLAYOFFS]: [3],
+  [TierSlug.IEM_COLOGNE_GROUP_A]: [3],
+  [TierSlug.IEM_COLOGNE_GROUP_B]: [3],
+  [TierSlug.IEM_COLOGNE_OPEN_QUALIFIER]: [3, 3, 3, 3, 1, 1, 1, 1, 1],
+  [TierSlug.IEM_COLOGNE_PLAYOFFS]: [3],
+  [TierSlug.IEM_KRAKOW_GROUP_A]: [3],
+  [TierSlug.IEM_KRAKOW_GROUP_B]: [3],
+  [TierSlug.IEM_KRAKOW_OPEN_QUALIFIER]: [3, 3, 3, 3, 1, 1, 1, 1, 1],
+  [TierSlug.IEM_KRAKOW_PLAYOFFS]: [3],
   [TierSlug.LEAGUE_PRO]: [3],
   [TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: [3, 3],
   [TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: [3, 3],
@@ -986,6 +1120,12 @@ export const TierSwissConfig: Partial<
     }
   >
 > = {
+  [TierSlug.CCT_SERIES]: {
+    maxLosses: 3,
+    maxRounds: 5,
+    maxTeams: 16,
+    maxWins: 3,
+  },
   [TierSlug.MAJOR_AMERICAS_RMR]: {
     maxLosses: 2,
     maxRounds: 4,
@@ -1347,7 +1487,13 @@ export const UserOfferSettings = {
     [FederationSlug.ESPORTS_AMERICAS]: { minMatches: 5, maxMatches: 12 },
     [FederationSlug.ESPORTS_ASIA]: { minMatches: 5, maxMatches: 15 },
     [FederationSlug.ESPORTS_OCE]: { minMatches: 5, maxMatches: 10 },
-  } as Record<FederationSlug.ESPORTS_EUROPA | FederationSlug.ESPORTS_AMERICAS | FederationSlug.ESPORTS_ASIA | FederationSlug.ESPORTS_OCE, { minMatches: number; maxMatches: number }>,
+  } as Record<
+    | FederationSlug.ESPORTS_EUROPA
+    | FederationSlug.ESPORTS_AMERICAS
+    | FederationSlug.ESPORTS_ASIA
+    | FederationSlug.ESPORTS_OCE,
+    { minMatches: number; maxMatches: number }
+  >,
 
   FACEIT_ELO_THRESHOLDS: {
     OPEN_MAX: 2000,
@@ -1406,15 +1552,15 @@ export const UserOfferSettings = {
     },
     [UserRole.IGL]: {
       pbxMultLeague: 0.85,
-      pbxMultFaceit: 0.90,
-      cooldownMultTeam: 1.30,
-      cooldownMultTeamless: 1.30,
+      pbxMultFaceit: 0.9,
+      cooldownMultTeam: 1.3,
+      cooldownMultTeamless: 1.3,
     },
     [UserRole.AWPER]: {
       pbxMultLeague: 0.55,
-      pbxMultFaceit: 0.70,
-      cooldownMultTeam: 1.60,
-      cooldownMultTeamless: 1.60,
+      pbxMultFaceit: 0.7,
+      cooldownMultTeam: 1.6,
+      cooldownMultTeamless: 1.6,
     },
   },
 };
@@ -1423,11 +1569,11 @@ export const PlayerContractSettings = {
   // Bench evaluation
   BENCH_MIN_LEAGUE_MATCHES: 7,
   BENCH_KD_MIN_BY_TIER: {
-    [TierSlug.LEAGUE_OPEN]: 0.90,
+    [TierSlug.LEAGUE_OPEN]: 0.9,
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.95,
-    [TierSlug.LEAGUE_MAIN]: 1.00,
+    [TierSlug.LEAGUE_MAIN]: 1.0,
     [TierSlug.LEAGUE_ADVANCED]: 1.05,
-    [TierSlug.LEAGUE_PRO]: 1.10,
+    [TierSlug.LEAGUE_PRO]: 1.1,
   },
   BENCH_PBX_BY_TIER: {
     [TierSlug.LEAGUE_OPEN]: 30,
@@ -1441,10 +1587,10 @@ export const PlayerContractSettings = {
   KICK_MIN_LEAGUE_MATCHES: 6,
   KICK_WINDOW_DAYS: 90,
   KICK_KD_MAX_BY_TIER: {
-    [TierSlug.LEAGUE_OPEN]: 0.70,
+    [TierSlug.LEAGUE_OPEN]: 0.7,
     [TierSlug.LEAGUE_INTERMEDIATE]: 0.75,
-    [TierSlug.LEAGUE_MAIN]: 0.80,
-    [TierSlug.LEAGUE_ADVANCED]: 0.90,
+    [TierSlug.LEAGUE_MAIN]: 0.8,
+    [TierSlug.LEAGUE_ADVANCED]: 0.9,
     [TierSlug.LEAGUE_PRO]: 0.95,
   },
   KICK_PBX_BY_TIER: {
@@ -1459,10 +1605,10 @@ export const PlayerContractSettings = {
   EXTENSION_EVAL_DAYS_BEFORE_END: 30,
   EXTENSION_MIN_MATCHES: 7,
   EXTENSION_PLAYER_OK_KD_BY_TIER: {
-    [TierSlug.LEAGUE_OPEN]: 1.00,
-    [TierSlug.LEAGUE_INTERMEDIATE]: 1.00,
+    [TierSlug.LEAGUE_OPEN]: 1.0,
+    [TierSlug.LEAGUE_INTERMEDIATE]: 1.0,
     [TierSlug.LEAGUE_MAIN]: 1.05,
-    [TierSlug.LEAGUE_ADVANCED]: 1.10,
+    [TierSlug.LEAGUE_ADVANCED]: 1.1,
     [TierSlug.LEAGUE_PRO]: 1.15,
   },
   EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER: 85,
@@ -1480,7 +1626,31 @@ export const PlayerContractSettings = {
  */
 export const WeaponTemplates = {
   [Game.CSGO]: {
-    [WeaponTemplate.RIFLE]: ['ak47', 'aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas', 'mp9', 'mac10', 'ump45', 'mp7'],
-    [WeaponTemplate.SNIPER]: ['awp', 'ak47', 'aug', 'm4a1_silencer', 'm4a1', 'galiar', 'famas', 'ssg08', 'mp9', 'mac10', 'ump45', 'mp7'],
+    [WeaponTemplate.RIFLE]: [
+      'ak47',
+      'aug',
+      'm4a1_silencer',
+      'm4a1',
+      'galiar',
+      'famas',
+      'mp9',
+      'mac10',
+      'ump45',
+      'mp7',
+    ],
+    [WeaponTemplate.SNIPER]: [
+      'awp',
+      'ak47',
+      'aug',
+      'm4a1_silencer',
+      'm4a1',
+      'galiar',
+      'famas',
+      'ssg08',
+      'mp9',
+      'mac10',
+      'ump45',
+      'mp7',
+    ],
   },
 };

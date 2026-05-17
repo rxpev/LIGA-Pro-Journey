@@ -73,7 +73,6 @@ export default function () {
     [],
   );
 
-
   // initial data load
   React.useEffect(() => {
     if (!location.state) {
@@ -119,24 +118,21 @@ export default function () {
       ),
     [vetoHistory],
   );
-  const vetoSequence = React.useMemo(
-    () => {
-      if (!match) {
-        return [];
-      }
+  const vetoSequence = React.useMemo(() => {
+    if (!match) {
+      return [];
+    }
 
-      // best-of-one veto runs as alternating bans until one map is left.
-      if (match.games.length === 1) {
-        return Array.from({ length: Math.max(0, mapPool.length - 1) }, (_, idx) => ({
-          team: idx % 2,
-          type: Constants.MapVetoAction.BAN,
-        }));
-      }
+    // best-of-one veto runs as alternating bans until one map is left.
+    if (match.games.length === 1) {
+      return Array.from({ length: Math.max(0, mapPool.length - 1) }, (_, idx) => ({
+        team: idx % 2,
+        type: Constants.MapVetoAction.BAN,
+      }));
+    }
 
-      return Constants.MapVetoConfig[match.games.length] || [];
-    },
-    [mapPool.length, match],
-  );
+    return Constants.MapVetoConfig[match.games.length] || [];
+  }, [mapPool.length, match]);
   const vetoSequenceComplete = React.useMemo(
     () => match && vetoMapList.length >= match.games.length,
     [match, vetoHistory, vetoSequence],
@@ -145,7 +141,6 @@ export default function () {
     () => vetoSequence[vetoHistory.length],
     [vetoHistory, vetoSequence],
   );
-
 
   // handle map veto selections
   const onVetoSelection = (map: string) => {
@@ -261,8 +256,10 @@ export default function () {
         <ul>
           <li>
             <span>
-              {match.competition.tier.league.name}:&nbsp;
-              {Constants.IdiomaticTier[match.competition.tier.slug]}
+              {Util.getCompetitionDisplayName(
+                match.competition.tier.league.name,
+                match.competition.tier.slug,
+              )}
             </span>
           </li>
           <li>
@@ -358,12 +355,7 @@ export default function () {
               const competitor =
                 picked && match.competitors.find((entry) => entry.teamId === picked.teamId);
               const isUsersTurn = !!vetoSequenceStep && vetoSequenceStep.team === userCompetitorIdx;
-              const canPick =
-                !picked &&
-                !vetoSequenceComplete &&
-                !working &&
-                isUsersTurn &&
-                isIgl;
+              const canPick = !picked && !vetoSequenceComplete && !working && isUsersTurn && isIgl;
 
               return (
                 <figure key={map.gameMap.name} className="relative h-full w-full">
@@ -413,7 +405,11 @@ export default function () {
                 const entry = userSquad.find((u) => u.id === player.id);
 
                 // transferListed players can never be starters
-                const starter = player.transferListed ? false : entry ? entry.starter : player.starter;
+                const starter = player.transferListed
+                  ? false
+                  : entry
+                    ? entry.starter
+                    : player.starter;
 
                 return {
                   ...player,

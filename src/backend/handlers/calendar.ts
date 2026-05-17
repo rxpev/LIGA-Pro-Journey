@@ -2,11 +2,11 @@
  * Calendar IPC handlers.
  */
 
-import { dialog, ipcMain } from "electron";
-import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay } from "date-fns";
-import { Prisma, Calendar } from "@prisma/client";
-import { DatabaseClient, Engine, WindowManager, Worldgen } from "@liga/backend/lib";
-import { Bot, Eagers, Constants, Util } from "@liga/shared";
+import { dialog, ipcMain } from 'electron';
+import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay } from 'date-fns';
+import { Prisma, Calendar } from '@prisma/client';
+import { DatabaseClient, Engine, WindowManager, Worldgen } from '@liga/backend/lib';
+import { Bot, Eagers, Constants, Util } from '@liga/shared';
 
 /**
  * Prevents the main window from closing immediately while the calendar advances.
@@ -15,10 +15,10 @@ async function disableClose(event: Electron.Event) {
   event.preventDefault();
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
   const data = await dialog.showMessageBox(mainWindow, {
-    type: "warning",
-    message: "The calendar is still advancing. Exiting now may cause database corruption.",
-    detail: "Are you sure you want to continue and risk potential data loss?",
-    buttons: ["Continue", "Cancel"],
+    type: 'warning',
+    message: 'The calendar is still advancing. Exiting now may cause database corruption.',
+    detail: 'Are you sure you want to continue and risk potential data loss?',
+    buttons: ['Continue', 'Cancel'],
   });
   if (data.response === 0) mainWindow.destroy();
 }
@@ -29,7 +29,9 @@ async function disableClose(event: Electron.Event) {
  * This is a safety net for cases where a competition remains SCHEDULED
  * past its due start date but has no pending COMPETITION_START entry.
  */
-async function reconcileDueCompetitionStarts(profile: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>>) {
+async function reconcileDueCompetitionStarts(
+  profile: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>>,
+) {
   const seasonStart = await DatabaseClient.prisma.calendar.findFirst({
     where: {
       type: Constants.CalendarEntry.SEASON_START,
@@ -90,19 +92,70 @@ async function reconcileDueCompetitionStarts(profile: NonNullable<Awaited<Return
 }
 
 /**
+ * Requeue stale matchdays that were created for a previous calendar day but
+ * never processed. This can happen when a competition creates matchdays during
+ * the same tick as its start event.
+ */
+async function reconcileOverdueMatchdays(
+  profile: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>>,
+) {
+  const today = startOfDay(profile.date);
+  const overdueEntries = await DatabaseClient.prisma.calendar.findMany({
+    where: {
+      completed: false,
+      date: { lt: today.toISOString() },
+      type: {
+        in: [Constants.CalendarEntry.MATCHDAY_NPC, Constants.CalendarEntry.MATCHDAY_USER],
+      },
+    },
+  });
+
+  for (const entry of overdueEntries) {
+    const matchId = Number(entry.payload);
+    if (!Number.isFinite(matchId)) {
+      continue;
+    }
+
+    const match = await DatabaseClient.prisma.match.findFirst({
+      where: {
+        id: matchId,
+        matchType: { not: 'FACEIT_PUG' },
+        status: { not: Constants.MatchStatus.COMPLETED },
+      },
+      select: { id: true },
+    });
+
+    if (!match) {
+      continue;
+    }
+
+    await DatabaseClient.prisma.$transaction([
+      DatabaseClient.prisma.calendar.update({
+        where: { id: entry.id },
+        data: { date: profile.date.toISOString() },
+      }),
+      DatabaseClient.prisma.match.update({
+        where: { id: match.id },
+        data: { date: profile.date.toISOString() },
+      }),
+    ]);
+  }
+}
+
+/**
  * Engine middleware: start of each tick.
  */
 async function onTickStart() {
-
   Engine.Runtime.Instance.log.info(
-    "Running %s middleware...",
-    Engine.MiddlewareType.TICK_START.toUpperCase()
+    'Running %s middleware...',
+    Engine.MiddlewareType.TICK_START.toUpperCase(),
   );
 
   const profile = await DatabaseClient.prisma.profile.findFirst();
   if (!profile) return Promise.resolve();
 
   await reconcileDueCompetitionStarts(profile);
+  await reconcileOverdueMatchdays(profile);
 
   // Fetch global calendar events for today (calendar-day window, not exact timestamp).
   // This avoids missing entries due to timezone/DST/millisecond drift.
@@ -121,9 +174,9 @@ async function onTickStart() {
 
   Engine.Runtime.Instance.log.info(
     "Today's date is: %s",
-    format(profile.date, Constants.Settings.calendar.calendarDateFormat)
+    format(profile.date, Constants.Settings.calendar.calendarDateFormat),
   );
-  Engine.Runtime.Instance.log.info("%d items to run.", Engine.Runtime.Instance.input.length);
+  Engine.Runtime.Instance.log.info('%d items to run.', Engine.Runtime.Instance.input.length);
 
   return Promise.resolve();
 }
@@ -138,8 +191,8 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
       DatabaseClient.prisma.calendar.update({
         where: { id: calendar.id },
         data: { completed: true },
-      })
-    )
+      }),
+    ),
   );
 
   await Worldgen.recordMatchResults();
@@ -153,7 +206,7 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
 
   // If stopped, do not advance day
   if (status === Engine.LoopStatus.TERMINATED) {
-    Engine.Runtime.Instance.log.info("Stopping...");
+    Engine.Runtime.Instance.log.info('Stopping...');
     return Promise.resolve();
   }
 
@@ -219,7 +272,10 @@ function randomWeeklyFaceitDeltaForXp(xp = 0) {
   return gainRoll ? magnitude : -magnitude;
 }
 
-async function simulateWeeklyNpcFaceitElo(prisma: typeof DatabaseClient.prisma, userPlayerId?: number | null) {
+async function simulateWeeklyNpcFaceitElo(
+  prisma: typeof DatabaseClient.prisma,
+  userPlayerId?: number | null,
+) {
   const players = await prisma.player.findMany({
     where: userPlayerId ? { id: { not: userPlayerId } } : {},
     select: {
@@ -243,7 +299,7 @@ async function simulateWeeklyNpcFaceitElo(prisma: typeof DatabaseClient.prisma, 
             elo: { increment: delta },
           },
         });
-      })
+      }),
     );
 
     await prisma.player.updateMany({
@@ -275,8 +331,8 @@ async function simulateWeeklyNpcFaceitElo(prisma: typeof DatabaseClient.prisma, 
   }
 
   Engine.Runtime.Instance.log.info(
-    "Weekly FACEIT Elo simulation applied to %d players (excluding user).",
-    players.length
+    'Weekly FACEIT Elo simulation applied to %d players (excluding user).',
+    players.length,
   );
 }
 
@@ -287,8 +343,8 @@ async function simulateWeeklyNpcFaceitElo(prisma: typeof DatabaseClient.prisma, 
  */
 async function onLoopFinish() {
   Engine.Runtime.Instance.log.info(
-    "Running %s middleware...",
-    Engine.MiddlewareType.LOOP_FINISH.toUpperCase()
+    'Running %s middleware...',
+    Engine.MiddlewareType.LOOP_FINISH.toUpperCase(),
   );
 
   return Promise.resolve();
@@ -306,68 +362,68 @@ export default function () {
   // Worldgen handlers (global world events).
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.COMPETITION_START,
-    Worldgen.onCompetitionStart
+    Worldgen.onCompetitionStart,
   );
   Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
   Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, Worldgen.onMatchdayNPC);
 
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_USER, async (entry: Calendar) => {
-    const profile = await DatabaseClient.prisma.profile.findFirst();
-
-    // Fail-safe: if teamless but we encounter a MATCHDAY_USER,
-    // demote it and simulate as NPC so matches never get stuck
-    if (!profile?.teamId) {
-      await DatabaseClient.prisma.calendar.update({
-        where: { id: entry.id },
-        data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
-      });
-
-      return Worldgen.onMatchdayNPC({
-        ...(entry as Calendar),
-        type: Constants.CalendarEntry.MATCHDAY_NPC,
-      });
-    }
-
-    return Worldgen.onMatchdayUser(entry as Calendar);
-  });
-
   Engine.Runtime.Instance.register(
-    Constants.CalendarEntry.SEASON_START,
-    Worldgen.onSeasonStart
+    Constants.CalendarEntry.MATCHDAY_USER,
+    async (entry: Calendar) => {
+      const profile = await DatabaseClient.prisma.profile.findFirst();
+
+      // Fail-safe: if teamless but we encounter a MATCHDAY_USER,
+      // demote it and simulate as NPC so matches never get stuck
+      if (!profile?.teamId) {
+        await DatabaseClient.prisma.calendar.update({
+          where: { id: entry.id },
+          data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+        });
+
+        return Worldgen.onMatchdayNPC({
+          ...(entry as Calendar),
+          type: Constants.CalendarEntry.MATCHDAY_NPC,
+        });
+      }
+
+      return Worldgen.onMatchdayUser(entry as Calendar);
+    },
   );
+
+  Engine.Runtime.Instance.register(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
-    Worldgen.onPlayerContractExpire
+    Worldgen.onPlayerContractExpire,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
-    Worldgen.onPlayerScoutingCheck
+    Worldgen.onPlayerScoutingCheck,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
-    Worldgen.onPlayerContractReview
+    Worldgen.onPlayerContractReview,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
-    Worldgen.onPlayerContractExtensionEval
+    Worldgen.onPlayerContractExtensionEval,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
-    Worldgen.onTransferOfferExpiryCheck
+    Worldgen.onTransferOfferExpiryCheck,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.TRANSFER_PARSE,
-    Worldgen.onTransferParse
+    Worldgen.onTransferParse,
   );
 
   // IPC: create calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_CREATE, (_, data: Prisma.CalendarCreateInput) =>
-    DatabaseClient.prisma.calendar.create({ data })
+    DatabaseClient.prisma.calendar.create({ data }),
   );
 
   // IPC: find calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_FIND, (_, query: Prisma.CalendarFindFirstArgs) =>
-    DatabaseClient.prisma.calendar.findFirst(query)
+    DatabaseClient.prisma.calendar.findFirst(query),
   );
 
   // IPC: start calendar simulation.
@@ -377,13 +433,13 @@ export default function () {
 
     // First-run logic for competitions remains unchanged.
     if (!(await DatabaseClient.prisma.competition.count())) {
-      Engine.Runtime.Instance.log.debug("First run detected. Advancing 1 day...");
+      Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');
 
       return Engine.Runtime.Instance.start(1, true);
     }
 
     // Disable window actions during calendar advance.
-    WindowManager.get(Constants.WindowIdentifier.Main).on("close", disableClose);
+    WindowManager.get(Constants.WindowIdentifier.Main).on('close', disableClose);
     WindowManager.disableMenu(Constants.WindowIdentifier.Main);
 
     let days = max;
@@ -395,7 +451,7 @@ export default function () {
 
     await Engine.Runtime.Instance.start(days);
 
-    WindowManager.get(Constants.WindowIdentifier.Main).off("close", disableClose);
+    WindowManager.get(Constants.WindowIdentifier.Main).off('close', disableClose);
     WindowManager.enableMenu(Constants.WindowIdentifier.Main);
     return Promise.resolve();
   });
@@ -422,9 +478,9 @@ export default function () {
     if (!entry) return null;
 
     Engine.Runtime.Instance.log.debug(
-      "Received request to sim for match(payload=%s) on %s",
+      'Received request to sim for match(payload=%s) on %s',
       entry.payload,
-      format(entry.date, Constants.Settings.calendar.calendarDateFormat)
+      format(entry.date, Constants.Settings.calendar.calendarDateFormat),
     );
 
     // Simulate NPC behavior for user match.
@@ -444,12 +500,11 @@ export default function () {
           DatabaseClient.prisma.player.update({
             where: { id: player.id },
             data: { xp: player.xp },
-          })
-        )
+          }),
+        ),
       );
     }
 
     return match;
   });
-
 }

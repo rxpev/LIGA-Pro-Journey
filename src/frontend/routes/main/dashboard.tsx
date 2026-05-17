@@ -312,7 +312,10 @@ export default function () {
                       </td>
                       <td
                         className="w-2/6 truncate"
-                        title={`${match.competition.tier.league.name}: ${Constants.IdiomaticTier[match.competition.tier.slug]}`}
+                        title={Util.getCompetitionDisplayName(
+                          match.competition.tier.league.name,
+                          match.competition.tier.slug,
+                        )}
                       >
                         {Constants.IdiomaticTier[match.competition.tier.slug]}
                       </td>
@@ -324,12 +327,12 @@ export default function () {
                     <td className="w-1/6">
                       {state.profile
                         ? format(
-                          addDays(
-                            !upcoming.length ? state.profile.date : upcoming.slice(-1)[0].date,
-                            idx + 1,
-                          ),
-                          'MM/dd',
-                        )
+                            addDays(
+                              !upcoming.length ? state.profile.date : upcoming.slice(-1)[0].date,
+                              idx + 1,
+                            ),
+                            'MM/dd',
+                          )
                         : '-'}
                     </td>
                     <td className="w-3/6 truncate">{t('main.dashboard.noMatchScheduled')}</td>
@@ -378,13 +381,12 @@ export default function () {
                         competitors={userGroupCompetitors}
                         title={
                           standings.competition.tier.league.slug ===
-                            Constants.LeagueSlug.ESPORTS_LEAGUE
+                          Constants.LeagueSlug.ESPORTS_LEAGUE
                             ? Constants.IdiomaticTier[standings.competition.tier.slug]
                             : `${t('shared.group')} ${Util.toAlpha(userTeam.group)}`
                         }
                         zones={
-                          standings.competition.status ===
-                          Constants.CompetitionStatus.STARTED &&
+                          standings.competition.status === Constants.CompetitionStatus.STARTED &&
                           Util.getTierZonesByGroup(
                             standings.competition.tier.slug as Constants.TierSlug,
                             standings.competition.federation.slug as Constants.FederationSlug,
@@ -426,7 +428,9 @@ export default function () {
                         <h5>
                           {spotlight.competition.tier.groupSize
                             ? `${t('shared.matchday')} ${spotlight.round}`
-                            : Constants.TierSwissConfig[spotlight.competition.tier.slug as Constants.TierSlug]
+                            : Constants.TierSwissConfig[
+                                  spotlight.competition.tier.slug as Constants.TierSlug
+                                ]
                               ? Util.parseSwissRound(spotlight.round)
                               : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
                         </h5>
@@ -507,8 +511,8 @@ export default function () {
                           "You have not found a team to compete with yet!\n\nPlay FACEIT to get a team's attention.",
                         buttons: ['OK'],
                       });
-            setDismissedNoTeamAdvanceWarning(true);
-            return;
+                      setDismissedNoTeamAdvanceWarning(true);
+                      return;
                     }
                   }
 
@@ -602,306 +606,314 @@ export default function () {
               })}
           </section>
           <section className="divide-base-content/10 flex divide-x">
-            <aside className="w-2/3">{(() => {
-            // placeholder while things are loading
-            // or if there are no matches
-            if (!spotlight) {
-              return (
-                <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none! before:opacity-50!">
-                  <figure>
-                    <Image
-                      className="h-full w-full"
-                      src={Util.convertMapPool('de_dust2', Constants.Game.CSGO, true)}
-                    />
-                  </figure>
-                  <article className="card-body items-center justify-center">
-                    {t('main.dashboard.noMatch')}
-                  </article>
-                </section>
-              );
-            }
-
-            // the suffix is either the current position
-            // or their league tier if it's a cup
-            const disabled = state.working || !isMatchday || isBenched;
-            const spotlightCompetitors = spotlight.competitors.filter((competitor) => !!competitor?.team);
-            const [home, away] = spotlightCompetitors;
-
-            if (!home || !away) {
-              return (
-                <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none! before:opacity-50!">
-                  <figure>
-                    <Image
-                      className="h-full w-full"
-                      src={Util.convertMapPool('de_dust2', Constants.Game.CSGO, true)}
-                    />
-                  </figure>
-                  <article className="card-body items-center justify-center text-center">
-                    {t('main.dashboard.noMatchScheduled')}
-                  </article>
-                </section>
-              );
-            }
-
-            const spotlightGames = spotlight.games || [];
-            const [homeHistorial, awayHistorial] = matchHistorial;
-            const [homeWorldRanking, awayWorldRanking] = worldRankings;
-            const [homeSuffix, awaySuffix] = [home, away].map((competitor) => {
-              if (!spotlight.competition.tier.groupSize || !userGroupCompetitors) {
-                return toDashboardTeamTierLabel(Constants.Prestige[competitor.team.tier]);
-              }
-
-              const idx = userGroupCompetitors.findIndex(
-                (a) => a.teamId === competitor.teamId,
-              );
-              if (idx === -1) {
-                return toDashboardTeamTierLabel(Constants.Prestige[competitor.team.tier]);
-              }
-
-              return Util.toOrdinalSuffix(idx + 1);
-            });
-
-            return (
-              <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none!">
-                {spotlight.status === Constants.MatchStatus.PLAYING && (
-                  <figure className="center absolute top-2 left-1/2 z-10 -translate-x-1/2 gap-1 uppercase">
-                    <article className="inline-grid *:[grid-area:1/1]">
-                      <span className="status status-error animate-ping" />
-                      <span className="status status-error" />
-                    </article>
-                    <span>
-                      <strong>Live&nbsp;</strong>
-                      <em>
-                        ({spotlight.competitors.map((competitor) => competitor.score).join(' - ')}
-                        )
-                      </em>
-                    </span>
-                  </figure>
-                )}
-                <figure>
-                  <Image
-                    className="h-full w-full"
-                    src={
-                      isIgl && isMatchday
-                        ? 'resources://maps/allmaps.png'
-                        : Util.convertMapPool(
-                            spotlightGames[0]?.map || 'de_dust2',
-                            settings.general.game,
-                            true,
-                          )
-                    }
-                  />
-                </figure>
-                <article className="card-body">
-                  <header className="grid h-full grid-cols-3 place-items-center">
-                    <aside className="stack-y items-center">
-                      <img src={home.team.blazon} className="h-24 w-auto" />
-                      <Historial matches={homeHistorial} teamId={home.teamId} />
-                      <div className="text-center">
-                        <p>
-                          {home.team.name}&nbsp;
-                          <small title={t('shared.worldRanking')}>
-                            (#{homeWorldRanking || 0})
-                          </small>
-                        </p>
-                        <p>
-                          <small>{homeSuffix}</small>
-                        </p>
-                      </div>
-                    </aside>
-                    <aside className="center h-full gap-4">
-                      <Image
-                        title={`${spotlight.competition.tier.league.name}: ${Constants.IdiomaticTier[spotlight.competition.tier.slug]}`}
-                        className="size-24"
-                        src={Util.getCompetitionLogo(
-                          spotlight.competition.tier.slug,
-                          spotlight.competition.federation.slug,
-                        )}
-                      />
-                      <p>
-                        <em>{format(spotlight.date, 'PPPP')}</em>
-                      </p>
-                      <ul>
-                        <li className="stack-x items-center">
-                          <FaMapSigns />
-                          <span>
-                            {Util.convertMapPool(
-                              spotlightGames[0]?.map || 'de_dust2',
-                              settings.general.game,
-                            )}
-                          </span>
-                        </li>
-                        <li className="stack-x items-center">
-                          <FaCalendarDay />
-                          <span>
-                            {spotlight.competition.tier.groupSize
-                              ? `${t('shared.matchday')} ${spotlight.round}`
-                              : Constants.TierSwissConfig[spotlight.competition.tier.slug as Constants.TierSlug]
-                              ? Util.parseSwissRound(spotlight.round)
-                              : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
-                          </span>
-                        </li>
-                        <li className="stack-x items-center">
-                          <FaStream />
-                          <span>
-                            {t('shared.bestOf')}&nbsp;
-                            {spotlightGames.length || 1}
-                          </span>
-                        </li>
-                      </ul>
-                    </aside>
-                    <aside className="stack-y items-center">
-                      <img src={away.team.blazon} className="h-24 w-auto" />
-                      <Historial matches={awayHistorial} teamId={away.teamId} />
-                      <div className="text-center">
-                        <p>
-                          {away.team.name}&nbsp;
-                          <small title="World Ranking">
-                            (#{awayWorldRanking || 0})
-                          </small>
-                        </p>
-                        <p>
-                          <small>{awaySuffix}</small>
-                        </p>
-                      </div>
-                    </aside>
-                  </header>
-                  <footer className="join justify-center">
-                    <button
-                      title={t('main.dashboard.matchSetup')}
-                      className="btn join-item"
-                      disabled={disabled}
-                      onClick={() =>
-                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                          target: '/pregame',
-                          payload: spotlight.id,
-                        })
-                      }
-                    >
-                      <FaCog />
-                    </button>
-                    <button
-                      className="btn btn-primary join-item btn-wide"
-                      disabled={disabled}
-                      onClick={() => {
-                        const hasMapInProgress = spotlightGames.some(
-                          (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
-                        );
-                        const shouldOpenVeto =
-                          spotlight.status !== Constants.MatchStatus.PLAYING &&
-                          spotlight.status !== Constants.MatchStatus.COMPLETED &&
-                          (spotlightGames.length > 1 || isIgl);
-
-                        // only jump directly into game when a map is already live,
-                        // or when no veto flow is required.
-                        if (!shouldOpenVeto || hasMapInProgress) {
-                          return dispatch(play(spotlight.id));
-                        }
-
-                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                          target:
-                            spotlight.status === Constants.MatchStatus.PLAYING
-                              ? '/postgame'
-                              : '/play',
-                          payload: spotlight.id,
-                        });
-                      }}
-                    >
-                      {t('main.dashboard.play')}
-                    </button>
-                  </footer>
-                </article>
-              </section>
-            );
-          })()}</aside>
-          <aside className="w-1/3">
-            <header className="heading prose max-w-none border-t-0!">
-              <h2>Recent Transfers</h2>
-            </header>
-            <table className="table table-fixed">
-              <tbody>
-                {transfers.slice(0, NUM_PREVIOUS).map((transfer) => {
-                  const latestOffer = transfer.offers[0];
-                  const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
-                  const isFreeAgentTransfer =
-                    transfer.status === Constants.TransferStatus.TEAM_ACCEPTED &&
-                    (latestOffer?.cost || 0) === 0;
-                  const destinationTeam = isContractExpiry ? transfer.from : transfer.to;
-                  const isNoTeam =
-                    isFreeAgentTransfer ||
-                    !destinationTeam ||
-                    destinationTeam.id == null ||
-                    destinationTeam.name?.toLowerCase() === 'no team' ||
-                    destinationTeam.blazon?.includes('noteam.svg');
-
+            <aside className="w-2/3">
+              {(() => {
+                // placeholder while things are loading
+                // or if there are no matches
+                if (!spotlight) {
                   return (
-                    <tr key={`${transfer.id}__transfer_recent`}>
-                      <td className="p-0 text-center">
-                        <button
-                          type="button"
-                          className="mr-2 inline-block"
-                          title={`View ${transfer.target.name}`}
-                          onClick={() => openPlayerTransferModal(transfer.target.id)}
-                        >
-                          <img
-                            title={transfer.target.name}
-                            className="inline-block size-12"
-                            src={transfer.target.avatar || 'resources://avatars/empty.png'}
-                          />
-                        </button>
-                        {isNoTeam ? (
-                          <img
-                            title="No Team"
-                            className="inline-block size-12"
-                            src="resources://blazonry/noteam.svg"
-                          />
-                        ) : (
-                          <Link to={`/teams?teamId=${destinationTeam.id}`}>
-                            <img
-                              title={destinationTeam.name}
-                              className="inline-block size-12"
-                              src={destinationTeam.blazon}
-                            />
-                          </Link>
-                        )}
-                      </td>
-                      <td className="text-center">&rarr;</td>
-                      <td className="p-0 text-center">
-                        {isContractExpiry ? (
-                          <img
-                            title="No Team"
-                            className="inline-block size-12"
-                            src="resources://blazonry/noteam.svg"
-                          />
-                        ) : (
-                          <Link to={`/teams?teamId=${transfer.from.id}`}>
-                            <img
-                              title={transfer.from.name}
-                              className="inline-block size-12"
-                              src={transfer.from.blazon}
-                            />
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
+                    <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none! before:opacity-50!">
+                      <figure>
+                        <Image
+                          className="h-full w-full"
+                          src={Util.convertMapPool('de_dust2', Constants.Game.CSGO, true)}
+                        />
+                      </figure>
+                      <article className="card-body items-center justify-center">
+                        {t('main.dashboard.noMatch')}
+                      </article>
+                    </section>
                   );
-                })}
-                {[...Array(Math.max(0, NUM_PREVIOUS - transfers.length))].map((_, idx) => (
-                  <tr key={`${idx}__filler_transfer_recent`} className="text-muted">
-                    <td className="text-center">-</td>
-                    <td className="text-center">&rarr;</td>
-                    <td className="text-center">-</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </aside>
+                }
+
+                // the suffix is either the current position
+                // or their league tier if it's a cup
+                const disabled = state.working || !isMatchday || isBenched;
+                const spotlightCompetitors = spotlight.competitors.filter(
+                  (competitor) => !!competitor?.team,
+                );
+                const [home, away] = spotlightCompetitors;
+
+                if (!home || !away) {
+                  return (
+                    <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none! before:opacity-50!">
+                      <figure>
+                        <Image
+                          className="h-full w-full"
+                          src={Util.convertMapPool('de_dust2', Constants.Game.CSGO, true)}
+                        />
+                      </figure>
+                      <article className="card-body items-center justify-center text-center">
+                        {t('main.dashboard.noMatchScheduled')}
+                      </article>
+                    </section>
+                  );
+                }
+
+                const spotlightGames = spotlight.games || [];
+                const [homeHistorial, awayHistorial] = matchHistorial;
+                const [homeWorldRanking, awayWorldRanking] = worldRankings;
+                const [homeSuffix, awaySuffix] = [home, away].map((competitor) => {
+                  if (!spotlight.competition.tier.groupSize || !userGroupCompetitors) {
+                    return toDashboardTeamTierLabel(Constants.Prestige[competitor.team.tier]);
+                  }
+
+                  const idx = userGroupCompetitors.findIndex((a) => a.teamId === competitor.teamId);
+                  if (idx === -1) {
+                    return toDashboardTeamTierLabel(Constants.Prestige[competitor.team.tier]);
+                  }
+
+                  return Util.toOrdinalSuffix(idx + 1);
+                });
+
+                return (
+                  <section className="card image-full card-sm h-80 flex-grow rounded-none before:rounded-none!">
+                    {spotlight.status === Constants.MatchStatus.PLAYING && (
+                      <figure className="center absolute top-2 left-1/2 z-10 -translate-x-1/2 gap-1 uppercase">
+                        <article className="inline-grid *:[grid-area:1/1]">
+                          <span className="status status-error animate-ping" />
+                          <span className="status status-error" />
+                        </article>
+                        <span>
+                          <strong>Live&nbsp;</strong>
+                          <em>
+                            (
+                            {spotlight.competitors
+                              .map((competitor) => competitor.score)
+                              .join(' - ')}
+                            )
+                          </em>
+                        </span>
+                      </figure>
+                    )}
+                    <figure>
+                      <Image
+                        className="h-full w-full"
+                        src={
+                          isIgl && isMatchday
+                            ? 'resources://maps/allmaps.png'
+                            : Util.convertMapPool(
+                                spotlightGames[0]?.map || 'de_dust2',
+                                settings.general.game,
+                                true,
+                              )
+                        }
+                      />
+                    </figure>
+                    <article className="card-body">
+                      <header className="grid h-full grid-cols-3 place-items-center">
+                        <aside className="stack-y items-center">
+                          <img src={home.team.blazon} className="h-24 w-auto" />
+                          <Historial matches={homeHistorial} teamId={home.teamId} />
+                          <div className="text-center">
+                            <p>
+                              {home.team.name}&nbsp;
+                              <small title={t('shared.worldRanking')}>
+                                (#{homeWorldRanking || 0})
+                              </small>
+                            </p>
+                            <p>
+                              <small>{homeSuffix}</small>
+                            </p>
+                          </div>
+                        </aside>
+                        <aside className="center h-full gap-4">
+                          <Image
+                            title={Util.getCompetitionDisplayName(
+                              spotlight.competition.tier.league.name,
+                              spotlight.competition.tier.slug,
+                            )}
+                            className="size-24"
+                            src={Util.getCompetitionLogo(
+                              spotlight.competition.tier.slug,
+                              spotlight.competition.federation.slug,
+                            )}
+                          />
+                          <p>
+                            <em>{format(spotlight.date, 'PPPP')}</em>
+                          </p>
+                          <ul>
+                            <li className="stack-x items-center">
+                              <FaMapSigns />
+                              <span>
+                                {Util.convertMapPool(
+                                  spotlightGames[0]?.map || 'de_dust2',
+                                  settings.general.game,
+                                )}
+                              </span>
+                            </li>
+                            <li className="stack-x items-center">
+                              <FaCalendarDay />
+                              <span>
+                                {spotlight.competition.tier.groupSize
+                                  ? `${t('shared.matchday')} ${spotlight.round}`
+                                  : Constants.TierSwissConfig[
+                                        spotlight.competition.tier.slug as Constants.TierSlug
+                                      ]
+                                    ? Util.parseSwissRound(spotlight.round)
+                                    : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
+                              </span>
+                            </li>
+                            <li className="stack-x items-center">
+                              <FaStream />
+                              <span>
+                                {t('shared.bestOf')}&nbsp;
+                                {spotlightGames.length || 1}
+                              </span>
+                            </li>
+                          </ul>
+                        </aside>
+                        <aside className="stack-y items-center">
+                          <img src={away.team.blazon} className="h-24 w-auto" />
+                          <Historial matches={awayHistorial} teamId={away.teamId} />
+                          <div className="text-center">
+                            <p>
+                              {away.team.name}&nbsp;
+                              <small title="World Ranking">(#{awayWorldRanking || 0})</small>
+                            </p>
+                            <p>
+                              <small>{awaySuffix}</small>
+                            </p>
+                          </div>
+                        </aside>
+                      </header>
+                      <footer className="join justify-center">
+                        <button
+                          title={t('main.dashboard.matchSetup')}
+                          className="btn join-item"
+                          disabled={disabled}
+                          onClick={() =>
+                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                              target: '/pregame',
+                              payload: spotlight.id,
+                            })
+                          }
+                        >
+                          <FaCog />
+                        </button>
+                        <button
+                          className="btn btn-primary join-item btn-wide"
+                          disabled={disabled}
+                          onClick={() => {
+                            const hasMapInProgress = spotlightGames.some(
+                              (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
+                            );
+                            const shouldOpenVeto =
+                              spotlight.status !== Constants.MatchStatus.PLAYING &&
+                              spotlight.status !== Constants.MatchStatus.COMPLETED &&
+                              (spotlightGames.length > 1 || isIgl);
+
+                            // only jump directly into game when a map is already live,
+                            // or when no veto flow is required.
+                            if (!shouldOpenVeto || hasMapInProgress) {
+                              return dispatch(play(spotlight.id));
+                            }
+
+                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                              target:
+                                spotlight.status === Constants.MatchStatus.PLAYING
+                                  ? '/postgame'
+                                  : '/play',
+                              payload: spotlight.id,
+                            });
+                          }}
+                        >
+                          {t('main.dashboard.play')}
+                        </button>
+                      </footer>
+                    </article>
+                  </section>
+                );
+              })()}
+            </aside>
+            <aside className="w-1/3">
+              <header className="heading prose max-w-none border-t-0!">
+                <h2>Recent Transfers</h2>
+              </header>
+              <table className="table table-fixed">
+                <tbody>
+                  {transfers.slice(0, NUM_PREVIOUS).map((transfer) => {
+                    const latestOffer = transfer.offers[0];
+                    const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
+                    const isFreeAgentTransfer =
+                      transfer.status === Constants.TransferStatus.TEAM_ACCEPTED &&
+                      (latestOffer?.cost || 0) === 0;
+                    const destinationTeam = isContractExpiry ? transfer.from : transfer.to;
+                    const isNoTeam =
+                      isFreeAgentTransfer ||
+                      !destinationTeam ||
+                      destinationTeam.id == null ||
+                      destinationTeam.name?.toLowerCase() === 'no team' ||
+                      destinationTeam.blazon?.includes('noteam.svg');
+
+                    return (
+                      <tr key={`${transfer.id}__transfer_recent`}>
+                        <td className="p-0 text-center">
+                          <button
+                            type="button"
+                            className="mr-2 inline-block"
+                            title={`View ${transfer.target.name}`}
+                            onClick={() => openPlayerTransferModal(transfer.target.id)}
+                          >
+                            <img
+                              title={transfer.target.name}
+                              className="inline-block size-12"
+                              src={transfer.target.avatar || 'resources://avatars/empty.png'}
+                            />
+                          </button>
+                          {isNoTeam ? (
+                            <img
+                              title="No Team"
+                              className="inline-block size-12"
+                              src="resources://blazonry/noteam.svg"
+                            />
+                          ) : (
+                            <Link to={`/teams?teamId=${destinationTeam.id}`}>
+                              <img
+                                title={destinationTeam.name}
+                                className="inline-block size-12"
+                                src={destinationTeam.blazon}
+                              />
+                            </Link>
+                          )}
+                        </td>
+                        <td className="text-center">&rarr;</td>
+                        <td className="p-0 text-center">
+                          {isContractExpiry ? (
+                            <img
+                              title="No Team"
+                              className="inline-block size-12"
+                              src="resources://blazonry/noteam.svg"
+                            />
+                          ) : (
+                            <Link to={`/teams?teamId=${transfer.from.id}`}>
+                              <img
+                                title={transfer.from.name}
+                                className="inline-block size-12"
+                                src={transfer.from.blazon}
+                              />
+                            </Link>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {[...Array(Math.max(0, NUM_PREVIOUS - transfers.length))].map((_, idx) => (
+                    <tr key={`${idx}__filler_transfer_recent`} className="text-muted">
+                      <td className="text-center">-</td>
+                      <td className="text-center">&rarr;</td>
+                      <td className="text-center">-</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </aside>
           </section>
           <section className="divide-base-content/10 grid grid-cols-2 divide-x">
             {((!!spotlight && spotlight.competitors) || [...Array(2)]).map(
               (competitor, competitorIdx) => {
                 const teamId = competitor?.teamId;
-                const matches = competitor ? (matchHistorial[competitorIdx] || []) : [];
+                const matches = competitor ? matchHistorial[competitorIdx] || [] : [];
                 const previousFiller = [...Array(Math.max(0, NUM_PREVIOUS - matches.length))];
                 return (
                   <article
@@ -927,13 +939,13 @@ export default function () {
                             const onClick =
                               match._count.events > 0
                                 ? () =>
-                                  api.window.send<ModalRequest>(
-                                    Constants.WindowIdentifier.Modal,
-                                    {
-                                      target: '/postgame',
-                                      payload: match.id,
-                                    },
-                                  )
+                                    api.window.send<ModalRequest>(
+                                      Constants.WindowIdentifier.Modal,
+                                      {
+                                        target: '/postgame',
+                                        payload: match.id,
+                                      },
+                                    )
                                 : null;
 
                             return (
@@ -978,7 +990,10 @@ export default function () {
                                 </td>
                                 <td
                                   className="w-3/12 truncate"
-                                  title={`${match.competition.tier.league.name}: ${Constants.IdiomaticTier[match.competition.tier.slug]}`}
+                                  title={Util.getCompetitionDisplayName(
+                                    match.competition.tier.league.name,
+                                    match.competition.tier.slug,
+                                  )}
                                 >
                                   {Constants.IdiomaticTier[match.competition.tier.slug]}
                                 </td>
@@ -990,14 +1005,14 @@ export default function () {
                             <td className="w-1/12">
                               {state.profile
                                 ? format(
-                                  addDays(
-                                    !matches.length
-                                      ? state.profile.date
-                                      : matches.slice(-1)[0].date,
-                                    idx - 1,
-                                  ),
-                                  'MM/dd',
-                                )
+                                    addDays(
+                                      !matches.length
+                                        ? state.profile.date
+                                        : matches.slice(-1)[0].date,
+                                      idx - 1,
+                                    ),
+                                    'MM/dd',
+                                  )
                                 : '-'}
                             </td>
                             <td className="w-4/12 text-center">-</td>

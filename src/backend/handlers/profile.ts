@@ -4,22 +4,19 @@
  * All manager-mode logic removed.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import log from "electron-log";
-import { ipcMain } from "electron";
-import { glob } from "glob";
-import { Prisma } from "@prisma/client";
-import { Constants, Util } from "@liga/shared";
-import { DatabaseClient, Game, WindowManager } from "@liga/backend/lib";
+import fs from 'node:fs';
+import path from 'node:path';
+import log from 'electron-log';
+import { ipcMain } from 'electron';
+import { glob } from 'glob';
+import { Prisma } from '@prisma/client';
+import { Constants, Util } from '@liga/shared';
+import { DatabaseClient, Game, WindowManager } from '@liga/backend/lib';
 
 export default function registerProfileHandlers() {
   ipcMain.handle(
-    "profiles:createPlayerCareer",
-    async (
-      _,
-      data: { playerName: string; countryId: number; role: string }
-    ) => {
+    'profiles:createPlayerCareer',
+    async (_, data: { playerName: string; countryId: number; role: string }) => {
       const { playerName, countryId, role } = data;
 
       // Always use the single root profile
@@ -30,7 +27,7 @@ export default function registerProfileHandlers() {
         where: { id: existing.id },
         data: {
           name: playerName,
-          date: new Date().toISOString(),
+          date: Constants.NewSaveSeasonStartDate,
           season: 0,
           faceitElo: 1200,
 
@@ -57,7 +54,7 @@ export default function registerProfileHandlers() {
       });
 
       return profile;
-    }
+    },
   );
 
   ipcMain.handle(Constants.IPCRoute.PROFILES_CURRENT, async () => {
@@ -66,65 +63,52 @@ export default function registerProfileHandlers() {
     });
   });
 
-  ipcMain.handle(
-    Constants.IPCRoute.PROFILES_UPDATE,
-    async (_, query: Prisma.ProfileUpdateArgs) => {
-      const profile = await DatabaseClient.prisma.profile.findFirst({
-        include: { player: true },
-      });
+  ipcMain.handle(Constants.IPCRoute.PROFILES_UPDATE, async (_, query: Prisma.ProfileUpdateArgs) => {
+    const profile = await DatabaseClient.prisma.profile.findFirst({
+      include: { player: true },
+    });
 
-      const settings = Util.loadSettings(profile.settings);
-      const newSettings = JSON.parse(
-        query.data.settings as string
-      ) as typeof Constants.Settings;
+    const settings = Util.loadSettings(profile.settings);
+    const newSettings = JSON.parse(query.data.settings as string) as typeof Constants.Settings;
 
-      // Reload logging level
-      if (newSettings.general.logLevel !== settings.general.logLevel) {
-        log.transports.console.level =
-          newSettings.general.logLevel as log.LogLevel;
-        log.transports.file.level =
-          newSettings.general.logLevel as log.LogLevel;
-      }
-
-      // Rediscover game path if game mode changed
-      if (
-        newSettings.general.game !== settings.general.game &&
-        settings.general.steamPath
-      ) {
-        try {
-          newSettings.general.gamePath = await Game.discoverGamePath(
-            newSettings.general.game,
-            settings.general.steamPath
-          );
-        } catch {
-          newSettings.general.gamePath = null;
-        }
-      }
-
-      const updated = await DatabaseClient.prisma.profile.update({
-        ...query,
-        data: {
-          ...query.data,
-          settings: JSON.stringify(newSettings),
-        },
-      });
-
-      WindowManager.sendAll(Constants.IPCRoute.PROFILES_CURRENT, updated);
-      return updated;
+    // Reload logging level
+    if (newSettings.general.logLevel !== settings.general.logLevel) {
+      log.transports.console.level = newSettings.general.logLevel as log.LogLevel;
+      log.transports.file.level = newSettings.general.logLevel as log.LogLevel;
     }
-  );
+
+    // Rediscover game path if game mode changed
+    if (newSettings.general.game !== settings.general.game && settings.general.steamPath) {
+      try {
+        newSettings.general.gamePath = await Game.discoverGamePath(
+          newSettings.general.game,
+          settings.general.steamPath,
+        );
+      } catch {
+        newSettings.general.gamePath = null;
+      }
+    }
+
+    const updated = await DatabaseClient.prisma.profile.update({
+      ...query,
+      data: {
+        ...query.data,
+        settings: JSON.stringify(newSettings),
+      },
+    });
+
+    WindowManager.sendAll(Constants.IPCRoute.PROFILES_CURRENT, updated);
+    return updated;
+  });
 
   ipcMain.handle(Constants.IPCRoute.SAVES_ALL, async () => {
     const saves = [];
-    const files = await glob("save_*.db", {
+    const files = await glob('save_*.db', {
       cwd: path.normalize(DatabaseClient.basePath),
     });
 
     for (const file of files) {
-      const [databaseIdStr] = Array.from(
-        file.matchAll(/save_(\d+)\.db/g),
-        (groups) => groups[1]
-      );
+      const [databaseIdStr] = Array.from(file.matchAll(/save_(\d+)\.db/g), (groups) => groups[1]);
       if (!databaseIdStr) continue;
 
       const databaseId = Number(databaseIdStr);

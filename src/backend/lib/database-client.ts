@@ -505,7 +505,7 @@ export default class DatabaseClient {
     }
 
     const existing = new Set(existingStints.map((stint) => stint.playerId));
-    const startedAt = new Date();
+    const startedAt = new Date(Constants.NewSaveSeasonStartDate);
 
     const missingStints: Array<{
       playerId: number;
@@ -544,7 +544,7 @@ export default class DatabaseClient {
     const profile = await prisma.profile.findFirst();
     const splitDate = profile?.date ?? new Date();
 
-    const [players, activeStints, recentStints] = await Promise.all([
+    const [players, activeStints, recentStints, futureFreeAgentStints] = await Promise.all([
       prisma.player.findMany({
         select: {
           id: true,
@@ -586,6 +586,19 @@ export default class DatabaseClient {
         },
         orderBy: { startedAt: 'asc' },
       }),
+      prisma.careerStint.findMany({
+        where: {
+          teamId: null,
+          startedAt: {
+            gt: splitDate,
+          },
+        },
+        select: {
+          id: true,
+          startedAt: true,
+          endedAt: true,
+        },
+      }),
     ]);
 
     type ActiveStintSnapshot = {
@@ -606,6 +619,19 @@ export default class DatabaseClient {
       stintsByPlayer.set(stint.playerId, list);
     }
     const tx: Prisma.PrismaPromise<unknown>[] = [];
+    const intendedInitialStart = new Date(Constants.NewSaveSeasonStartDate);
+
+    futureFreeAgentStints.forEach((stint) => {
+      tx.push(prisma.careerStint.update({
+        where: { id: stint.id },
+        data: {
+          startedAt: intendedInitialStart,
+          ...(stint.endedAt != null && stint.endedAt < intendedInitialStart
+            ? { endedAt: intendedInitialStart }
+            : {}),
+        },
+      }));
+    });
 
     // Legacy cleanup: collapse artificial split created at load time by older reconciliation.
     // Pattern:
@@ -616,6 +642,22 @@ export default class DatabaseClient {
     for (const [playerId, stints] of stintsByPlayer.entries()) {
       const active = stints.find((stint) => stint.endedAt == null);
       if (!active) continue;
+
+      const hasPreviousStint = stints.some((stint) => stint.id !== active.id);
+      if (
+        !hasPreviousStint &&
+        active.teamId != null &&
+        new Date(active.startedAt).getTime() > intendedInitialStart.getTime()
+      ) {
+        tx.push(prisma.careerStint.update({
+          where: { id: active.id },
+          data: { startedAt: intendedInitialStart },
+        }));
+        activeByPlayer.set(playerId, {
+          ...(active as ActiveStintSnapshot),
+          startedAt: intendedInitialStart,
+        });
+      }
 
       const previous = stints
         .filter((stint) => stint.id !== active.id && stint.endedAt != null)
@@ -650,7 +692,7 @@ export default class DatabaseClient {
       const targetTier = player.team?.tier ?? null;
 
       if (!player.teamId) {
-        if (active) {
+        if (active && active.teamId != null) {
           tx.push(prisma.careerStint.updateMany({
             where: { playerId: player.id, endedAt: null },
             data: { endedAt: splitDate },
@@ -678,12 +720,30 @@ export default class DatabaseClient {
 
       if (sameSnapshot) continue;
 
+      if (active.startedAt >= splitDate && active.teamId === player.teamId) {
+        tx.push(prisma.careerStint.update({
+          where: { id: active.id },
+          data: {
+            teamId: player.teamId,
+            tier: targetTier,
+            starter: player.starter,
+            startedAt: splitDate,
+          },
+        }));
+        continue;
+      }
+
       tx.push(prisma.careerStint.update({
         where: { id: active.id },
+        data: { endedAt: splitDate },
+      }));
+      tx.push(prisma.careerStint.create({
         data: {
+          playerId: player.id,
           teamId: player.teamId,
           tier: targetTier,
           starter: player.starter,
+          startedAt: splitDate,
         },
       }));
     }

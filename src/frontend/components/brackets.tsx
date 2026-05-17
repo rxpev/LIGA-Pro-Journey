@@ -165,6 +165,136 @@ function toDoubleElimData(
   );
 }
 
+function IemGroupBracket(props: {
+  matches: Props['matches'];
+  onPartyClick?: Props['onPartyClick'];
+}) {
+  const fmtDate = useFormatAppDate();
+  const sections = React.useMemo(() => {
+    const grouped = props.matches.reduce(
+      (acc, match) => {
+        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const key = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
+        if (!acc[key][matchId.r]) {
+          acc[key][matchId.r] = [];
+        }
+        acc[key][matchId.r].push(match);
+        return acc;
+      },
+      { lower: {}, upper: {} } as Record<'lower' | 'upper', Record<number, Props['matches']>>,
+    );
+
+    Object.values(grouped).forEach((rounds) => {
+      Object.values(rounds).forEach((round) => {
+        round.sort((a, b) => {
+          const aId = JSON.parse(a.payload) as BracketMatchId;
+          const bId = JSON.parse(b.payload) as BracketMatchId;
+          return aId.m - bId.m;
+        });
+      });
+    });
+
+    return grouped;
+  }, [props.matches]);
+
+  const renderMatch = (match: Props['matches'][number]) => {
+    const competitors = [...match.competitors].sort((a, b) => a.seed - b.seed);
+
+    return (
+      <article
+        key={match.id}
+        className="border-base-content/10 bg-base-200/70 min-h-14 w-56 border text-xs shadow-sm"
+      >
+        <header className="text-base-content/60 px-2 py-1">{fmtDate(match.date)}</header>
+        {competitors.map((competitor) => {
+          const won = competitor.result === Constants.MatchResult.WIN;
+          const lost = competitor.result === Constants.MatchResult.LOSS;
+
+          return (
+            <button
+              key={competitor.id}
+              type="button"
+              className={[
+                'flex h-7 w-full items-center justify-between gap-2 border-t border-base-content/10 px-2 text-left',
+                won ? 'bg-base-300 text-base-content' : '',
+                lost ? 'text-base-content/50' : '',
+              ].join(' ')}
+              onClick={() =>
+                props.onPartyClick?.(
+                  {
+                    id: competitor.team.id,
+                    name: competitor.team.name,
+                    resultText: competitor.score != null ? String(competitor.score) : null,
+                  } as ParticipantType,
+                  won,
+                )
+              }
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                {competitor.team.blazon && (
+                  <img
+                    alt=""
+                    className="size-4 shrink-0 object-contain"
+                    src={competitor.team.blazon}
+                  />
+                )}
+                <span className="truncate">{competitor.team.name}</span>
+              </span>
+              <span
+                className={[
+                  'shrink-0 tabular-nums',
+                  won ? 'text-success' : lost ? 'text-error' : 'text-base-content',
+                ].join(' ')}
+              >
+                {competitor.score ?? '-'}
+              </span>
+            </button>
+          );
+        })}
+      </article>
+    );
+  };
+
+  const renderRounds = (
+    title: string,
+    rounds: Record<number, Props['matches']>,
+    labels: Record<number, string>,
+  ) => (
+    <section className="space-y-3">
+      <h3 className="text-base-content/70 text-sm font-semibold">{title}</h3>
+      <div className="grid min-w-max grid-cols-3 gap-10">
+        {[1, 2, 3].map((round) => (
+          <div key={`${title}-${round}`} className="space-y-6">
+            <header className="bg-base-200 text-info h-8 w-56 text-center text-sm leading-8">
+              {labels[round]}
+            </header>
+            <div className="flex min-h-40 flex-col justify-around gap-4">
+              {(rounds[round] ?? []).map(renderMatch)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="h-full w-full overflow-auto bg-base-100 p-4">
+      <div className="flex min-w-max flex-col gap-8">
+        {renderRounds('Upper Bracket', sections.upper, {
+          1: 'Opening round',
+          2: 'Upper semi-finals',
+          3: 'Upper final',
+        })}
+        {renderRounds('Lower Bracket', sections.lower, {
+          1: 'Lower round 1',
+          2: 'Lower semi-finals',
+          3: 'Lower final',
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Exports this module.
  *
@@ -191,6 +321,10 @@ export default function (props: Props) {
 
   if (!tourney.brackets) {
     return null;
+  }
+
+  if (tourney.iemGroup) {
+    return <IemGroupBracket matches={props.matches} onPartyClick={props.onPartyClick} />;
   }
 
   const isDoubleElim = hasLast(tourney.options) && tourney.options.last === Constants.BracketIdentifier.LOWER;

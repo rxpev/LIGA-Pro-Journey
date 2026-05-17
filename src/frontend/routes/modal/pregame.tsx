@@ -73,8 +73,10 @@ export default function () {
         <ul>
           <li>
             <span>
-              {match.competition.tier.league.name}:&nbsp;
-              {Constants.IdiomaticTier[match.competition.tier.slug]}
+              {Util.getCompetitionDisplayName(
+                match.competition.tier.league.name,
+                match.competition.tier.slug,
+              )}
             </span>
           </li>
           <li>

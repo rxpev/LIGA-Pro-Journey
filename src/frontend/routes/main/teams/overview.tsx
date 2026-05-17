@@ -254,7 +254,7 @@ export default function () {
                   const competitionLabel =
                     match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE
                       ? tierLabel
-                      : `${match.competition.tier.league.name}: ${tierLabel}`;
+                      : tierLabel;
 
                   return (
                     <tr
@@ -371,7 +371,10 @@ export default function () {
                       )}
                     </td>
                     <td className="text-center">&rarr;</td>
-                    <td title={isContractExpiry ? 'No Team' : transfer.from.name} className="p-0 text-center">
+                    <td
+                      title={isContractExpiry ? 'No Team' : transfer.from.name}
+                      className="p-0 text-center"
+                    >
                       {isContractExpiry ? (
                         <img
                           title="No Team"
@@ -380,7 +383,11 @@ export default function () {
                         />
                       ) : (
                         <Link to={`/teams?teamId=${transfer.from.id}`}>
-                          <img title={transfer.from.name} className="inline-block size-12" src={transfer.from.blazon} />
+                          <img
+                            title={transfer.from.name}
+                            className="inline-block size-12"
+                            src={transfer.from.blazon}
+                          />
                         </Link>
                       )}
                     </td>

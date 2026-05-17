@@ -192,8 +192,8 @@ function Scoreboard(props: ScoreboardProps) {
             let rating = report.rating;
 
             if (!props.matchGame) {
-              const ratings = Object.values(groupBy(killOrAssistEvents, 'gameId')).map((data) =>
-                getPlayerPerformance(player, data).rating,
+              const ratings = Object.values(groupBy(killOrAssistEvents, 'gameId')).map(
+                (data) => getPlayerPerformance(player, data).rating,
               );
               rating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
             }
@@ -325,8 +325,10 @@ export default function () {
         <ul>
           <li>
             <span>
-              {match.competition.tier.league.name}:&nbsp;
-              {Constants.IdiomaticTier[match.competition.tier.slug]}
+              {Util.getCompetitionDisplayName(
+                match.competition.tier.league.name,
+                match.competition.tier.slug,
+              )}
             </span>
           </li>
           <li>

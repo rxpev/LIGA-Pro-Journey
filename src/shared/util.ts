@@ -356,9 +356,7 @@ export function getSquad(
 ) {
   const isUserTeam = team.id === profile.teamId;
 
-  const user = isUserTeam
-    ? team.players.find((p) => p.id === profile.playerId)
-    : undefined;
+  const user = isUserTeam ? team.players.find((p) => p.id === profile.playerId) : undefined;
 
   const willIncludeUser = !!(includeUser && isUserTeam && user && !user.transferListed);
   const size = forceSize || Constants.GameSettings.SQUAD_STARTERS_NUM - +willIncludeUser;
@@ -436,6 +434,43 @@ export function getCompetitionLogo(
 }
 
 /**
+ * Builds a user-facing competition name without repeating words already in the league name.
+ *
+ * @param leagueName The competition league name.
+ * @param tierSlug   The tier slug.
+ * @function
+ */
+export function getCompetitionDisplayName(
+  leagueName: string | null | undefined,
+  tierSlug: Constants.TierSlug | string | null | undefined,
+) {
+  const tierName = tierSlug ? Constants.IdiomaticTier[tierSlug] : '';
+  const cleanLeagueName = (leagueName ?? '').trim();
+  const cleanTierName = (tierName ?? '').trim();
+
+  if (!cleanLeagueName) {
+    return cleanTierName || tierSlug || '';
+  }
+
+  if (!cleanTierName) {
+    return cleanLeagueName;
+  }
+
+  if (cleanLeagueName.toLocaleLowerCase().endsWith(cleanTierName.toLocaleLowerCase())) {
+    return cleanLeagueName;
+  }
+
+  if (
+    cleanLeagueName === 'CCT Series' &&
+    cleanTierName.toLocaleLowerCase().startsWith('oceania ')
+  ) {
+    return `CCT ${cleanTierName}`;
+  }
+
+  return `${cleanLeagueName} ${cleanTierName}`;
+}
+
+/**
  * Gets the expected score value using the Elo formula.
  *
  * @param ratingA Expected score for Team A.
@@ -473,9 +508,33 @@ export type TeamRankingDeltaContext = {
 };
 
 function getRankingTierWeight(tierSlug?: string | null, leagueSlug?: string | null) {
-  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) return 1.4;
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) return 1.38;
 
   switch (tierSlug) {
+    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
+      return 1.8;
+    case Constants.TierSlug.IEM_COLOGNE_PLAYOFFS:
+    case Constants.TierSlug.IEM_KRAKOW_PLAYOFFS:
+      return 1.58;
+    case Constants.TierSlug.IEM_COLOGNE_GROUP_A:
+    case Constants.TierSlug.IEM_COLOGNE_GROUP_B:
+    case Constants.TierSlug.IEM_KRAKOW_GROUP_A:
+    case Constants.TierSlug.IEM_KRAKOW_GROUP_B:
+      return 1.36;
+    case Constants.TierSlug.BLAST_FINALS:
+      return 1.42;
+    case Constants.TierSlug.CCT_GLOBAL_FINALS:
+      return 1.0;
+    case Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS:
+      return 0.98;
+    case Constants.TierSlug.ESL_CHALLENGER:
+      return 0.9;
+    case Constants.TierSlug.CCT_SERIES_PLAYOFFS:
+    case Constants.TierSlug.CCT_OCE_PLAYOFFS:
+      return 0.82;
+    case Constants.TierSlug.CCT_SERIES:
+    case Constants.TierSlug.CCT_OCE_SERIES:
+      return 0.72;
     case Constants.TierSlug.LEAGUE_PRO:
     case Constants.TierSlug.LEAGUE_PRO_PLAYOFFS:
       return 1.35;
@@ -495,8 +554,6 @@ function getRankingTierWeight(tierSlug?: string | null, leagueSlug?: string | nu
       return 1.15;
     case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
       return 1.2;
-    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
-      return 1.3;
     default:
       return 0.95;
   }
@@ -524,7 +581,19 @@ function getTournamentChampionBonus(tierSlug?: string | null, leagueSlug?: strin
 
   switch (tierSlug) {
     case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
-      return 130;
+      return 160;
+    case Constants.TierSlug.IEM_COLOGNE_PLAYOFFS:
+    case Constants.TierSlug.IEM_KRAKOW_PLAYOFFS:
+      return 115;
+    case Constants.TierSlug.BLAST_FINALS:
+      return 90;
+    case Constants.TierSlug.CCT_GLOBAL_FINALS:
+      return 42;
+    case Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS:
+      return 36;
+    case Constants.TierSlug.CCT_SERIES_PLAYOFFS:
+    case Constants.TierSlug.CCT_OCE_PLAYOFFS:
+      return 24;
     case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
     case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
       return 55;
@@ -544,7 +613,19 @@ function getTournamentDeltaCap(tierSlug?: string | null, leagueSlug?: string | n
 
   switch (tierSlug) {
     case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
-      return 220;
+      return 260;
+    case Constants.TierSlug.IEM_COLOGNE_PLAYOFFS:
+    case Constants.TierSlug.IEM_KRAKOW_PLAYOFFS:
+      return 210;
+    case Constants.TierSlug.BLAST_FINALS:
+      return 170;
+    case Constants.TierSlug.CCT_GLOBAL_FINALS:
+      return 95;
+    case Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS:
+      return 85;
+    case Constants.TierSlug.CCT_SERIES_PLAYOFFS:
+    case Constants.TierSlug.CCT_OCE_PLAYOFFS:
+      return 70;
     case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
     case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
       return 140;
@@ -605,9 +686,7 @@ export function getTeamRankingPointDelta(
   if (isWin) {
     const underdogBoost = expectedScore < 0.5 ? 1 + (0.5 - expectedScore) * 0.9 : 1;
     const eliteWinBoost =
-      opponentElo > ownElo
-        ? 1 + Math.min(0.85, (opponentElo - ownElo) / 1000)
-        : 1;
+      opponentElo > ownElo ? 1 + Math.min(0.85, (opponentElo - ownElo) / 1000) : 1;
     const topGainDamp = ownElo > 1400 ? Math.max(0.64, 1 - (ownElo - 1400) / 1800) : 1;
     volatility *= underdogBoost * eliteWinBoost * topGainDamp;
   } else if (isLoss) {
@@ -651,14 +730,8 @@ export function getTournamentPlacementRankingDelta(params: {
   leagueSlug?: string | null;
   competitionFederationId?: number | null;
 }) {
-  const {
-    currentElo,
-    placement,
-    totalTeams,
-    tierSlug,
-    leagueSlug,
-    competitionFederationId,
-  } = params;
+  const { currentElo, placement, totalTeams, tierSlug, leagueSlug, competitionFederationId } =
+    params;
 
   if (!Number.isFinite(totalTeams) || totalTeams <= 1 || placement <= 0) {
     return 0;

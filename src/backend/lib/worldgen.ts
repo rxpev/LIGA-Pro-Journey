@@ -11,13 +11,32 @@ import * as Engine from './engine';
 import Tournament from '@liga/shared/tournament';
 import DatabaseClient from './database-client';
 import getLocale from './locale';
-import { addDays, addWeeks, addYears, differenceInDays, format, setDay, subDays } from 'date-fns';
+import {
+  addDays,
+  addWeeks,
+  addYears,
+  differenceInDays,
+  endOfDay,
+  format,
+  setDay,
+  startOfDay,
+  subDays,
+} from 'date-fns';
 import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
 import { Calendar, Prisma } from '@prisma/client';
-import { Constants, Chance, Bot, Eagers, Util, UserOfferSettings, TierSlug, UserRole } from '@liga/shared';
-import { computeLifetimeStats } from "./faceitstats";
-import * as LeagueStats from "./leaguestats";
-import * as XpEconomy from "@liga/backend/lib/xp-economy";
+import {
+  Constants,
+  Chance,
+  Bot,
+  Eagers,
+  Util,
+  UserOfferSettings,
+  TierSlug,
+  UserRole,
+} from '@liga/shared';
+import { computeLifetimeStats } from './faceitstats';
+import * as LeagueStats from './leaguestats';
+import * as XpEconomy from '@liga/backend/lib/xp-economy';
 
 /**
  * Bumps the current season number by one.
@@ -120,8 +139,7 @@ export async function createCompetitions() {
   const today = profile?.date || new Date();
 
   // loop through autofill entries and create competitions
-  const autofill = Autofill.Items
-    .filter((item) => item.on === Constants.CalendarEntry.SEASON_START)
+  const autofill = Autofill.Items.filter((item) => item.on === Constants.CalendarEntry.SEASON_START)
     .map((item, idx) => ({ item, idx }))
     .sort((a, b) => {
       const priority = {
@@ -181,7 +199,8 @@ export async function createCompetitions() {
         if (
           [Constants.TierSlug.MAJOR_EUROPE_RMR_A, Constants.TierSlug.MAJOR_EUROPE_RMR_B].includes(
             tier.slug as Constants.TierSlug,
-          ) && federation.slug !== Constants.FederationSlug.ESPORTS_EUROPA
+          ) &&
+          federation.slug !== Constants.FederationSlug.ESPORTS_EUROPA
         ) {
           return Promise.resolve();
         }
@@ -203,6 +222,24 @@ export async function createCompetitions() {
         if (
           majorStageTiers.includes(tier.slug as Constants.TierSlug) &&
           federation.slug !== Constants.FederationSlug.ESPORTS_WORLD
+        ) {
+          return Promise.resolve();
+        }
+
+        if (
+          [Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_SERIES_PLAYOFFS].includes(
+            tier.slug as Constants.TierSlug,
+          ) &&
+          federation.slug === Constants.FederationSlug.ESPORTS_OCE
+        ) {
+          return Promise.resolve();
+        }
+
+        if (
+          [Constants.TierSlug.CCT_OCE_SERIES, Constants.TierSlug.CCT_OCE_PLAYOFFS].includes(
+            tier.slug as Constants.TierSlug,
+          ) &&
+          federation.slug !== Constants.FederationSlug.ESPORTS_OCE
         ) {
           return Promise.resolve();
         }
@@ -261,7 +298,6 @@ export async function createCompetitions() {
   return competitions;
 }
 
-
 function getSwissMatchSeriesLength(match: Clux.Match, tournament: Tournament) {
   if (!tournament.swiss || match.p[1] < 0) {
     return 1;
@@ -289,6 +325,22 @@ function getSwissMatchSeriesLength(match: Clux.Match, tournament: Tournament) {
 }
 
 const SUCCESSIVE_ROUND_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+  Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  Constants.TierSlug.CCT_OCE_SERIES,
+  Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  Constants.TierSlug.ESEA_CASH_CUP,
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
   Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
   Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
   Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
@@ -296,6 +348,41 @@ const SUCCESSIVE_ROUND_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_PRO,
   Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+]);
+
+const THREE_MATCHES_PER_WEEK_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
+]);
+
+const DOUBLE_ELIMINATION_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.BLAST_FINALS,
+]);
+
+const IEM_GROUP_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+]);
+
+const SEEDED_TOURNAMENT_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+  Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
 ]);
 
 const MAJOR_RMR_TIERS = new Set<Constants.TierSlug>([
@@ -434,7 +521,8 @@ async function createMatchdays(
       sample(fallbackMapPool)?.gameMap.name || fallbackMapPool[0]?.gameMap.name || 'de_dust2';
 
     resolvedMapName = resolvedMapName || fallbackMapName;
-    resolvedVetoMapName = resolvedVetoMapName || fallbackMapPool[0]?.gameMap.name || fallbackMapName;
+    resolvedVetoMapName =
+      resolvedVetoMapName || fallbackMapPool[0]?.gameMap.name || fallbackMapName;
   }
 
   const today = profile?.date || new Date();
@@ -446,8 +534,7 @@ async function createMatchdays(
       : undefined;
   const userSeed = tournament.getSeedByCompetitorId(userCompetitorId?.id);
   const userIsIgl =
-    !!profile?.teamId &&
-    resolveUserRole(profile, profile?.player) === Constants.UserRole.IGL;
+    !!profile?.teamId && resolveUserRole(profile, profile?.player) === Constants.UserRole.IGL;
 
   // create the matchdays
   const totalRounds = tournament.$base.rounds().length;
@@ -499,26 +586,31 @@ async function createMatchdays(
       });
 
       if (existingMatch) {
+        const nextCalendarType =
+          userSeed != null && match.p.includes(userSeed)
+            ? Constants.CalendarEntry.MATCHDAY_USER
+            : Constants.CalendarEntry.MATCHDAY_NPC;
         const existingEntry = await DatabaseClient.prisma.calendar.findFirst({
-          where: { payload: String(existingMatch.id) },
+          where: {
+            payload: String(existingMatch.id),
+            type: {
+              in: [Constants.CalendarEntry.MATCHDAY_NPC, Constants.CalendarEntry.MATCHDAY_USER],
+            },
+          },
         });
+
         if (userSeed != null && match.p.includes(userSeed)) {
           Engine.Runtime.Instance.log.debug(
             'User has new match(id=%d) on %s',
-            existingEntry.id,
-            format(existingEntry.date, Constants.Settings.calendar.calendarDateFormat),
+            existingEntry?.id ?? existingMatch.id,
+            format(
+              existingEntry?.date ?? existingMatch.date,
+              Constants.Settings.calendar.calendarDateFormat,
+            ),
           );
         }
-        return DatabaseClient.prisma.$transaction([
-          DatabaseClient.prisma.calendar.update({
-            where: { id: existingEntry.id },
-            data: {
-              type:
-                userSeed != null && match.p.includes(userSeed)
-                  ? Constants.CalendarEntry.MATCHDAY_USER
-                  : Constants.CalendarEntry.MATCHDAY_NPC,
-            },
-          }),
+
+        const tx: Prisma.PrismaPromise<unknown>[] = [
           DatabaseClient.prisma.match.update({
             where: { id: existingMatch.id },
             data: {
@@ -538,7 +630,30 @@ async function createMatchdays(
               },
             },
           }),
-        ]);
+        ];
+
+        if (existingEntry) {
+          tx.unshift(
+            DatabaseClient.prisma.calendar.update({
+              where: { id: existingEntry.id },
+              data: {
+                type: nextCalendarType,
+              },
+            }),
+          );
+        } else {
+          tx.unshift(
+            DatabaseClient.prisma.calendar.create({
+              data: {
+                type: nextCalendarType,
+                date: existingMatch.date.toISOString(),
+                payload: String(existingMatch.id),
+              },
+            }),
+          );
+        }
+
+        return DatabaseClient.prisma.$transaction(tx);
       }
 
       const roundOffset =
@@ -553,13 +668,30 @@ async function createMatchdays(
       const hasSuccessivePlayoffSchedule = SUCCESSIVE_ROUND_TIERS.has(
         competition.tier.slug as Constants.TierSlug,
       );
-      let matchday = isMajorQualifier || hasSuccessivePlayoffSchedule
-        ? addDays(today, roundOffset)
-        : setDay(
+      const hasThreeMatchWeeks =
+        competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE &&
+        THREE_MATCHES_PER_WEEK_TIERS.has(competition.tier.slug as Constants.TierSlug);
+      let matchday: Date;
+
+      if (tournament.iemGroup) {
+        matchday = addDays(today, 1);
+      } else if (tournament.swiss) {
+        matchday = addDays(today, 1);
+      } else if (hasThreeMatchWeeks) {
+        const zeroBasedRoundOffset = Math.max(0, roundOffset - 1);
+        matchday = addDays(
+          today,
+          1 + Math.floor(zeroBasedRoundOffset / 3) * 7 + (zeroBasedRoundOffset % 3) * 2,
+        );
+      } else if (isMajorQualifier || hasSuccessivePlayoffSchedule) {
+        matchday = addDays(today, roundOffset);
+      } else {
+        matchday = setDay(
           addWeeks(today, roundOffset),
           Number(Chance.roll(Constants.MatchDayWeights[competition.tier.league.slug])),
           { weekStartsOn: 1 },
         );
+      }
 
       if (userSeed != null && match.p.includes(userSeed)) {
         matchday = await resolveUserMatchdayConflict(
@@ -569,7 +701,9 @@ async function createMatchdays(
       }
 
       const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
-      const roundMapName = isUserIglMatch ? resolvedVetoMapName || resolvedMapName : resolvedMapName;
+      const roundMapName = isUserIglMatch
+        ? resolvedVetoMapName || resolvedMapName
+        : resolvedMapName;
 
       // assign map to match
       if (!match.data) {
@@ -687,7 +821,9 @@ export async function createWelcomeEmail() {
  * @function
  */
 export async function distributePrizePool(
-  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: { include: { league: true } } } }>,
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: { include: { league: true } } };
+  }>,
   preloadedTournament?: Tournament,
 ) {
   // bail if competition is not done yet
@@ -762,20 +898,41 @@ export async function distributePrizePool(
   return DatabaseClient.prisma.$transaction(transaction);
 }
 
-async function closeOpenCareerStints(prisma: typeof DatabaseClient.prisma, playerId: number, endedAt: Date) {
-  await prisma.careerStint.updateMany({
+async function closeOpenCareerStints(
+  prisma: typeof DatabaseClient.prisma,
+  playerId: number,
+  endedAt: Date,
+) {
+  const seasonStart = new Date(Constants.NewSaveSeasonStartDate);
+  const openStints = await prisma.careerStint.findMany({
     where: { playerId, endedAt: null },
-    data: { endedAt },
   });
+
+  await prisma.$transaction(
+    openStints.map((stint) =>
+      prisma.careerStint.update({
+        where: { id: stint.id },
+        data: {
+          endedAt,
+          ...(stint.teamId == null && stint.startedAt > endedAt
+            ? { startedAt: seasonStart }
+            : {}),
+        },
+      }),
+    ),
+  );
 }
 
-async function startCareerStint(prisma: typeof DatabaseClient.prisma, params: {
-  playerId: number;
-  teamId: number | null;
-  tier: number | null;
-  starter: boolean;
-  startedAt: Date;
-}) {
+async function startCareerStint(
+  prisma: typeof DatabaseClient.prisma,
+  params: {
+    playerId: number;
+    teamId: number | null;
+    tier: number | null;
+    starter: boolean;
+    startedAt: Date;
+  },
+) {
   const { playerId, teamId, tier, starter, startedAt } = params;
 
   await prisma.careerStint.create({
@@ -789,25 +946,22 @@ async function startCareerStint(prisma: typeof DatabaseClient.prisma, params: {
   });
 }
 function getTeamTierSlug(teamTierIdx: number | null | undefined): TierSlug | null {
-  if (typeof teamTierIdx !== "number") return null;
+  if (typeof teamTierIdx !== 'number') return null;
   if (teamTierIdx < 0 || teamTierIdx >= Constants.Prestige.length) return null;
   return Constants.Prestige[teamTierIdx] as TierSlug;
 }
 
 function getTeamTierName(teamTierIdx: number | null | undefined): string {
   const slug = getTeamTierSlug(teamTierIdx);
-  if (!slug) return "Unknown";
+  if (!slug) return 'Unknown';
   return (Constants as any).IdiomaticTier?.[slug] ?? slug;
 }
 function normalizeRole(r: unknown): string {
-  return String(r ?? "").toUpperCase();
+  return String(r ?? '').toUpperCase();
 }
 
 function resolveUserRole(profile: any, player: any): UserRole {
-  const role =
-    player?.role ??
-    profile?.player?.role ??
-    profile?.role;
+  const role = player?.role ?? profile?.player?.role ?? profile?.role;
 
   if (role === UserRole.IGL) return UserRole.IGL;
   if (role === UserRole.AWPER) return UserRole.AWPER;
@@ -863,9 +1017,9 @@ async function benchVictim(params: {
   if (!destTeam) return;
 
   const uRole = normalizeRole(userRole);
-  const wantsSniperSlot = uRole === "AWPER";
+  const wantsSniperSlot = uRole === 'AWPER';
 
-  const desiredVictimRole = wantsSniperSlot ? "SNIPER" : "RIFLER";
+  const desiredVictimRole = wantsSniperSlot ? 'SNIPER' : 'RIFLER';
 
   // Candidates: starters with the desired role (excluding the incoming player defensively)
   let candidates = destTeam.players.filter(
@@ -917,7 +1071,7 @@ async function benchVictim(params: {
   });
 
   Engine.Runtime.Instance.log.info(
-    "Bench victim: teamId=%d victimId=%d victimRole=%s (xp=%d) transferListed=true",
+    'Bench victim: teamId=%d victimId=%d victimRole=%s (xp=%d) transferListed=true',
     teamId,
     victim.id,
     normalizeRole(victim.role),
@@ -967,9 +1121,9 @@ async function promoteReplacement(params: {
   if (!team) return;
 
   const uRole = normalizeRole(outgoingUserRole);
-  const outgoingWasAwper = uRole === "AWPER";
+  const outgoingWasAwper = uRole === 'AWPER';
 
-  const desiredRole = outgoingWasAwper ? "SNIPER" : "RIFLER";
+  const desiredRole = outgoingWasAwper ? 'SNIPER' : 'RIFLER';
 
   let candidates = team.players.filter(
     (p) =>
@@ -981,10 +1135,7 @@ async function promoteReplacement(params: {
 
   if (!candidates.length) {
     candidates = team.players.filter(
-      (p) =>
-        p.id !== outgoingPlayerId &&
-        !p.starter &&
-        normalizeRole(p.role) === desiredRole,
+      (p) => p.id !== outgoingPlayerId && !p.starter && normalizeRole(p.role) === desiredRole,
     );
   }
   if (!candidates.length) {
@@ -1028,7 +1179,7 @@ async function promoteReplacement(params: {
   });
 
   Engine.Runtime.Instance.log.info(
-    "Promoted replacement: teamId=%d promotedId=%d promotedRole=%s (xp=%d) starter=true transferListed=false",
+    'Promoted replacement: teamId=%d promotedId=%d promotedRole=%s (xp=%d) starter=true transferListed=false',
     teamId,
     promoted.id,
     normalizeRole(promoted.role),
@@ -1053,20 +1204,17 @@ export async function acceptTransferOffer(transferId: number) {
     where: { id: transferId },
     include: {
       ...Eagers.transfer.include,
-      offers: { orderBy: { id: "desc" } },
+      offers: { orderBy: { id: 'desc' } },
     },
   });
 
   if (!transfer) return Promise.resolve();
 
   const latestPending = transfer.offers.find(
-    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING,
   );
 
-  if (
-    latestPending?.expiresAt &&
-    latestPending.expiresAt <= profile.date
-  ) {
+  if (latestPending?.expiresAt && latestPending.expiresAt <= profile.date) {
     await onTransferOfferExpiryCheck({
       ...({} as any),
       payload: String(transfer.id),
@@ -1077,8 +1225,8 @@ export async function acceptTransferOffer(transferId: number) {
   const fromTeamId = transfer.from?.id;
   if (!fromTeamId) {
     Engine.Runtime.Instance.log.warn(
-      "acceptUserPlayerTransfer: transfer %d has no from team loaded. Skipping.",
-      transferId
+      'acceptUserPlayerTransfer: transfer %d has no from team loaded. Skipping.',
+      transferId,
     );
     return Promise.resolve();
   }
@@ -1086,8 +1234,8 @@ export async function acceptTransferOffer(transferId: number) {
   // Only handle invites that target our user player.
   if (transfer.playerId !== profile.playerId) {
     Engine.Runtime.Instance.log.warn(
-      "acceptUserPlayerTransfer: transfer %d does not target user player. Skipping.",
-      transferId
+      'acceptUserPlayerTransfer: transfer %d does not target user player. Skipping.',
+      transferId,
     );
     return Promise.resolve();
   }
@@ -1096,9 +1244,7 @@ export async function acceptTransferOffer(transferId: number) {
 
   // Extension detection:
   // If the offer comes from the user's CURRENT team, we treat it as a contract extension.
-  const isExtension =
-    profile.teamId != null &&
-    fromTeamId === profile.teamId;
+  const isExtension = profile.teamId != null && fromTeamId === profile.teamId;
 
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
 
@@ -1142,7 +1288,7 @@ export async function acceptTransferOffer(transferId: number) {
 
     if (currentPlayer.teamId !== profile.teamId) {
       Engine.Runtime.Instance.log.warn(
-        "acceptTransferOffer: extension offer mismatch (player.teamId=%s profile.teamId=%s). Skipping.",
+        'acceptTransferOffer: extension offer mismatch (player.teamId=%s profile.teamId=%s). Skipping.',
         String(currentPlayer.teamId),
         String(profile.teamId),
       );
@@ -1225,10 +1371,7 @@ export async function acceptTransferOffer(transferId: number) {
         id: { not: transfer.id },
         playerId: transfer.playerId,
         status: {
-          in: [
-            Constants.TransferStatus.TEAM_PENDING,
-            Constants.TransferStatus.PLAYER_PENDING,
-          ],
+          in: [Constants.TransferStatus.TEAM_PENDING, Constants.TransferStatus.PLAYER_PENDING],
         },
       },
     });
@@ -1255,8 +1398,7 @@ export async function acceptTransferOffer(transferId: number) {
     const persona =
       transfer.from?.personas?.find(
         (p) =>
-          p.role === Constants.PersonaRole.MANAGER ||
-          p.role === Constants.PersonaRole.ASSISTANT,
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
       ) ?? transfer.from?.personas?.[0];
     if (!persona) return Promise.resolve();
 
@@ -1278,7 +1420,7 @@ export async function acceptTransferOffer(transferId: number) {
       }),
       persona,
       profile.date,
-      true
+      true,
     );
 
     const refreshedProfile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
@@ -1286,12 +1428,11 @@ export async function acceptTransferOffer(transferId: number) {
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
-
     Engine.Runtime.Instance.log.info(
-      "%s accepted a contract extension at %s (years=%d).",
+      '%s accepted a contract extension at %s (years=%d).',
       profile.name,
       transfer.from.name,
-      years
+      years,
     );
 
     return Promise.resolve();
@@ -1340,7 +1481,7 @@ export async function acceptTransferOffer(transferId: number) {
     where: { id: fromTeamId },
     select: { tier: true },
   });
-  const destTierIdx = typeof destTeam?.tier === "number" ? destTeam.tier : null;
+  const destTierIdx = typeof destTeam?.tier === 'number' ? destTeam.tier : null;
 
   await closeOpenCareerStints(DatabaseClient.prisma, transfer.playerId, now);
   await startCareerStint(DatabaseClient.prisma, {
@@ -1469,10 +1610,7 @@ export async function acceptTransferOffer(transferId: number) {
         payload: { in: matchIds },
         date: { gte: today.toISOString() },
         type: {
-          in: [
-            Constants.CalendarEntry.MATCHDAY_NPC,
-            Constants.CalendarEntry.MATCHDAY_USER,
-          ],
+          in: [Constants.CalendarEntry.MATCHDAY_NPC, Constants.CalendarEntry.MATCHDAY_USER],
         },
       },
       data: { type: Constants.CalendarEntry.MATCHDAY_USER },
@@ -1485,10 +1623,7 @@ export async function acceptTransferOffer(transferId: number) {
       id: { not: transfer.id },
       playerId: transfer.playerId,
       status: {
-        in: [
-          Constants.TransferStatus.TEAM_PENDING,
-          Constants.TransferStatus.PLAYER_PENDING,
-        ],
+        in: [Constants.TransferStatus.TEAM_PENDING, Constants.TransferStatus.PLAYER_PENDING],
       },
     },
   });
@@ -1513,29 +1648,34 @@ export async function acceptTransferOffer(transferId: number) {
   const locale = getLocale(profile);
   const persona =
     transfer.from?.personas?.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT,
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? transfer.from?.personas?.[0];
   if (!persona) return Promise.resolve();
 
   await sendEmail(
-    Sqrl.render(locale.templates.OfferAcceptedUser.SUBJECT, { transfer, profile, player: updatedPlayer }),
-    Sqrl.render(locale.templates.OfferAcceptedUser.CONTENT, { transfer, profile, player: updatedPlayer }),
+    Sqrl.render(locale.templates.OfferAcceptedUser.SUBJECT, {
+      transfer,
+      profile,
+      player: updatedPlayer,
+    }),
+    Sqrl.render(locale.templates.OfferAcceptedUser.CONTENT, {
+      transfer,
+      profile,
+      player: updatedPlayer,
+    }),
     persona,
     profile.date,
-    true
+    true,
   );
 
   Engine.Runtime.Instance.log.info(
-    "%s joined %s via player-career invite.",
+    '%s joined %s via player-career invite.',
     profile.name,
-    transfer.from.name
+    transfer.from.name,
   );
 
   return Promise.resolve();
 }
-
 
 /**
  * Reject a transfer offer that targets the user player.
@@ -1548,20 +1688,17 @@ export async function rejectTransferOffer(transferId: number) {
     where: { id: transferId },
     include: {
       ...Eagers.transfer.include,
-      offers: { orderBy: { id: "desc" } },
+      offers: { orderBy: { id: 'desc' } },
     },
   });
 
   if (!transfer) return Promise.resolve();
 
   const latestPending = transfer.offers.find(
-    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING,
   );
 
-  if (
-    latestPending?.expiresAt &&
-    latestPending.expiresAt <= profile.date
-  ) {
+  if (latestPending?.expiresAt && latestPending.expiresAt <= profile.date) {
     await onTransferOfferExpiryCheck({
       ...({} as any),
       payload: String(transfer.id),
@@ -1571,8 +1708,8 @@ export async function rejectTransferOffer(transferId: number) {
 
   if (transfer.playerId !== profile.playerId) {
     Engine.Runtime.Instance.log.warn(
-      "rejectUserPlayerTransfer: transfer %d does not target user player. Skipping.",
-      transferId
+      'rejectUserPlayerTransfer: transfer %d does not target user player. Skipping.',
+      transferId,
     );
     return Promise.resolve();
   }
@@ -1580,10 +1717,7 @@ export async function rejectTransferOffer(transferId: number) {
   // Extension detection:
   // If the offer comes from the user's CURRENT team, we treat it as a contract extension.
   const fromTeamId = transfer.from?.id;
-  const isExtension =
-    profile.teamId != null &&
-    fromTeamId != null &&
-    fromTeamId === profile.teamId;
+  const isExtension = profile.teamId != null && fromTeamId != null && fromTeamId === profile.teamId;
 
   const [offer] = transfer.offers;
 
@@ -1604,9 +1738,7 @@ export async function rejectTransferOffer(transferId: number) {
 
   const persona =
     transfer.from.personas.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? transfer.from.personas[0];
 
   // Different email content for extensions vs new-team offers.
@@ -1626,14 +1758,14 @@ export async function rejectTransferOffer(transferId: number) {
         }),
         persona,
         profile.date,
-        false
+        false,
       );
     }
 
     Engine.Runtime.Instance.log.info(
-      "User rejected contract extension from %s (transfer %d).",
+      'User rejected contract extension from %s (transfer %d).',
       transfer.from.name,
-      transfer.id
+      transfer.id,
     );
 
     return Promise.resolve();
@@ -1643,13 +1775,13 @@ export async function rejectTransferOffer(transferId: number) {
     `You have declined the offer from ${transfer.from.name}.`,
     persona,
     profile.date,
-    false
+    false,
   );
 
   Engine.Runtime.Instance.log.info(
-    "User rejected invite from %s (transfer %d).",
+    'User rejected invite from %s (transfer %d).',
     transfer.from.name,
-    transfer.id
+    transfer.id,
   );
   return Promise.resolve();
 }
@@ -1754,12 +1886,10 @@ export async function benchUserPlayer(params: {
   const locale = getLocale(profile);
   const persona =
     team.personas.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT,
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? team.personas[0];
 
-  const kdFmt = Number.isFinite(kd) ? Number(kd).toFixed(2) : "1.00";
+  const kdFmt = Number.isFinite(kd) ? Number(kd).toFixed(2) : '1.00';
 
   if (persona && (locale.templates as any).PlayerBenched) {
     await sendEmail(
@@ -1786,14 +1916,14 @@ export async function benchUserPlayer(params: {
   }
 
   Engine.Runtime.Instance.log.info(
-    "benchUserPlayer: playerId=%d teamId=%d tier=%s kd=%s standing=%s form=%s reason=%s",
+    'benchUserPlayer: playerId=%d teamId=%d tier=%s kd=%s standing=%s form=%s reason=%s',
     playerId,
     teamId,
     tierName,
     Number(kd).toFixed(2),
     Number(standingScore).toFixed(2),
     Number(formScore).toFixed(2),
-    reason ?? "",
+    reason ?? '',
   );
 
   return Promise.resolve();
@@ -1829,7 +1959,7 @@ export async function kickUserPlayer(params: {
     include: { personas: true },
   });
 
-  const tierName = team ? getTeamTierName(team.tier) : "Unknown";
+  const tierName = team ? getTeamTierName(team.tier) : 'Unknown';
 
   const outgoing = await prisma.player.findFirst({
     where: { id: playerId },
@@ -1921,26 +2051,24 @@ export async function kickUserPlayer(params: {
     const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(teamId, playerId, 30);
     kd = leagueRecent.kdRatio ?? 1;
     matchesPlayed = leagueRecent.matchesPlayed ?? 0;
-  } catch (_) { }
+  } catch (_) {}
 
   try {
     standingScore = await computeTeamStandingScore({ ...profile, teamId });
     formScore = await computeTeamFormScore({ ...profile, teamId }, 5);
-  } catch (_) { }
+  } catch (_) {}
 
   if (team?.personas?.length) {
     const persona =
       team.personas.find(
         (p) =>
-          p.role === Constants.PersonaRole.MANAGER ||
-          p.role === Constants.PersonaRole.ASSISTANT,
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
       ) ?? team.personas[0];
 
     const locale = getLocale(profile);
 
     const tpl =
-      (locale.templates as any).PlayerKicked ??
-      (locale.templates as any).ContractTerminatedEarly;
+      (locale.templates as any).PlayerKicked ?? (locale.templates as any).ContractTerminatedEarly;
 
     if (persona && tpl) {
       await sendEmail(
@@ -1958,7 +2086,7 @@ export async function kickUserPlayer(params: {
   }
 
   Engine.Runtime.Instance.log.info(
-    "kickUserPlayer: playerId=%d oldTeamId=%d tier=%s kd=%s standing=%s form=%s reason=%s",
+    'kickUserPlayer: playerId=%d oldTeamId=%d tier=%s kd=%s standing=%s form=%s reason=%s',
     playerId,
     teamId,
     tierName,
@@ -2002,7 +2130,7 @@ async function computeTeamStandingScore(profile: any) {
       competitors: true,
       tier: true,
     },
-    orderBy: { id: "desc" },
+    orderBy: { id: 'desc' },
   });
 
   if (!competition || !competition.competitors?.length) {
@@ -2032,7 +2160,7 @@ async function computeTeamFormScore(profile: any, take = 5) {
       competitors: { some: { teamId: profile.teamId } },
     },
     include: { competitors: true },
-    orderBy: { date: "desc" },
+    orderBy: { date: 'desc' },
     take,
   });
 
@@ -2110,7 +2238,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       tier: { not: null },
       OR: [{ endedAt: null }, { endedAt: { gte: cutoff } }],
     },
-    orderBy: [{ endedAt: "desc" }, { startedAt: "desc" }],
+    orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }],
     select: { teamId: true, tier: true },
   });
 
@@ -2125,9 +2253,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
   // Current tier from team; if teamless fall back to last stint tier; otherwise Open.
   const currentTierIdx =
-    typeof (profile as any)?.team?.tier === "number"
+    typeof (profile as any)?.team?.tier === 'number'
       ? (profile as any).team.tier
-      : typeof lastStintWithTeam?.tier === "number"
+      : typeof lastStintWithTeam?.tier === 'number'
         ? lastStintWithTeam.tier
         : idxOpen;
 
@@ -2139,12 +2267,12 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       tier: { not: null },
     },
     select: { tier: true, startedAt: true, endedAt: true },
-    orderBy: { startedAt: "desc" },
+    orderBy: { startedAt: 'desc' },
   });
 
   let recentPeakTierIdx = currentTierIdx;
   for (const s of stints) {
-    if (typeof s.tier === "number") {
+    if (typeof s.tier === 'number') {
       recentPeakTierIdx = Math.max(recentPeakTierIdx, s.tier);
     }
   }
@@ -2208,18 +2336,18 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   }
 
   Engine.Runtime.Instance.log.debug(
-    "PlayerScoutingCheck: kd=%s standing=%s form=%s leagueSignal=%s majorWinner=%s",
+    'PlayerScoutingCheck: kd=%s standing=%s form=%s leagueSignal=%s majorWinner=%s',
     kd.toFixed(2),
     standingScore.toFixed(2),
     formScore.toFixed(2),
     leagueSignal.toFixed(2),
-    hasWonMajorAnyTeam ? "true" : "false",
+    hasWonMajorAnyTeam ? 'true' : 'false',
   );
 
   // Helper: add tier idx safely
   const eligible = new Set<number>();
   const addTier = (idx: number) => {
-    if (typeof idx !== "number") return;
+    if (typeof idx !== 'number') return;
     if (idx < 0) return;
     if (idx >= Constants.Prestige.length) return;
     eligible.add(idx);
@@ -2243,9 +2371,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
   // User federation (prefer the profile include; fallback to country lookup)
   let userFedId: number | null =
-    (profile as any)?.team?.competitionFederationId
-    ?? (profile as any)?.player?.country?.continent?.federationId
-    ?? null;
+    (profile as any)?.team?.competitionFederationId ??
+    (profile as any)?.player?.country?.continent?.federationId ??
+    null;
 
   const userFederation = await prisma.federation.findFirst({
     where: { id: userFedId },
@@ -2253,16 +2381,15 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   });
   const userFedSlug = userFederation?.slug as Constants.FederationSlug | undefined;
   const disabledTiers = userFedSlug
-    ? Constants.LeagueTierDisabledByFederation[userFedSlug] ?? []
+    ? (Constants.LeagueTierDisabledByFederation[userFedSlug] ?? [])
     : [];
   const midTiersDisabled =
     disabledTiers.includes(TierSlug.LEAGUE_INTERMEDIATE) &&
     disabledTiers.includes(TierSlug.LEAGUE_MAIN);
 
-
   const isLowTier = currentTierIdx <= idxInter;
   if (isLowTier) {
-    const exceptional = leagueSignal >= 0.90;
+    const exceptional = leagueSignal >= 0.9;
     if (exceptional) {
       if (midTiersDisabled) {
         const rareJump = leagueSignal >= 0.93 && Chance.rollD2(15);
@@ -2285,18 +2412,18 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
   // Downward offers if performance isn't good
   if (leagueSignal <= 0.45) addTier(baselineTierIdx - 1);
-  if (leagueSignal <= 0.30) addTier(baselineTierIdx - 2);
+  if (leagueSignal <= 0.3) addTier(baselineTierIdx - 2);
 
   const eligibleTierIdxs = Array.from(eligible).sort((a, b) => a - b);
   const eligibleTierSlugs = eligibleTierIdxs.map((i) => Constants.Prestige[i]);
 
   Engine.Runtime.Instance.log.debug(
-    "PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s proLowRankOnly=%s",
+    'PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s proLowRankOnly=%s',
     Constants.Prestige[currentTierIdx],
     Constants.Prestige[recentPeakTierIdx],
     Constants.Prestige[baselineTierIdx],
-    eligibleTierSlugs.join(","),
-    proLowRankOnly ? "true" : "false",
+    eligibleTierSlugs.join(','),
+    proLowRankOnly ? 'true' : 'false',
   );
 
   try {
@@ -2310,16 +2437,15 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     const cooldownDays = Math.max(
       1,
       Math.round(
-        baseCooldownDays *
-        (isTeamless ? tuning.cooldownMultTeamless : tuning.cooldownMultTeam)
-      )
+        baseCooldownDays * (isTeamless ? tuning.cooldownMultTeamless : tuning.cooldownMultTeam),
+      ),
     );
 
     if (player.lastOfferAt) {
       const daysSinceLast = differenceInDays(profile.date, player.lastOfferAt);
       if (daysSinceLast < cooldownDays) {
         Engine.Runtime.Instance.log.debug(
-          "PlayerScoutingCheck: cooldown active (daysSinceLast=%d < cooldown=%d) role=%s",
+          'PlayerScoutingCheck: cooldown active (daysSinceLast=%d < cooldown=%d) role=%s',
           daysSinceLast,
           cooldownDays,
           role,
@@ -2338,17 +2464,15 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     if (pendingCount >= UserOfferSettings.TEAMLESS_MAX_PENDING_OFFERS) {
       Engine.Runtime.Instance.log.debug(
-        "PlayerScoutingCheck: pending offer cap hit (%d).",
+        'PlayerScoutingCheck: pending offer cap hit (%d).',
         pendingCount,
       );
       return Promise.resolve();
     }
 
     // Contract gating
-    const CONTRACT_SOFT_GATE_DAYS =
-      (UserOfferSettings as any).CONTRACT_SOFT_GATE_DAYS ?? 180;
-    const CONTRACT_HOT_WINDOW_DAYS =
-      (UserOfferSettings as any).CONTRACT_HOT_WINDOW_DAYS ?? 120;
+    const CONTRACT_SOFT_GATE_DAYS = (UserOfferSettings as any).CONTRACT_SOFT_GATE_DAYS ?? 180;
+    const CONTRACT_HOT_WINDOW_DAYS = (UserOfferSettings as any).CONTRACT_HOT_WINDOW_DAYS ?? 120;
 
     let contractMult = 1.0;
     if (player.contractEnd) {
@@ -2359,7 +2483,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     // Starter / transferListed modifiers
     const starterMult = player.starter ? 1.0 : 0.85;
-    const listedMult = player.transferListed ? 0.90 : 1.0;
+    const listedMult = player.transferListed ? 0.9 : 1.0;
 
     // Pick a target tier (weighted among eligible tiers)
     const tierWeights: Record<string, number> = {};
@@ -2375,14 +2499,14 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
       // Performance shaping
       if (delta > 0) w = Math.round(w * Math.max(0.15, leagueSignal));
-      if (delta < 0) w = Math.round(w * Math.max(0.15, 1 - leagueSignal + 0.10));
+      if (delta < 0) w = Math.round(w * Math.max(0.15, 1 - leagueSignal + 0.1));
 
       // Non-starter: rarely move up; more likely "rescue" down
       if (!player.starter && delta > 0) w = Math.round(w * 0.35);
       if (!player.starter && delta < 0) w = Math.round(w * 1.25);
 
       // Transfer-listed: reduce upward, slightly increase downward
-      if (player.transferListed && delta > 0) w = Math.round(w * 0.60);
+      if (player.transferListed && delta > 0) w = Math.round(w * 0.6);
       if (player.transferListed && delta < 0) w = Math.round(w * 1.15);
 
       if (w < 1) w = 1;
@@ -2410,7 +2534,10 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     // Teamless Advanced/Pro League scouting should be a bit rarer than contracted scouting
     if (isTeamless) pbx *= 0.85;
-    if (hasWonMajorAnyTeam && (pickedTierSlug === TierSlug.LEAGUE_ADVANCED || pickedTierSlug === TierSlug.LEAGUE_PRO)) {
+    if (
+      hasWonMajorAnyTeam &&
+      (pickedTierSlug === TierSlug.LEAGUE_ADVANCED || pickedTierSlug === TierSlug.LEAGUE_PRO)
+    ) {
       pbx *= 1.5;
     }
 
@@ -2418,32 +2545,32 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     pbx = clampPbx(pbx);
 
     Engine.Runtime.Instance.log.debug(
-      "PlayerScoutingCheck: role=%s pbxAfterRole=%d (roleMult=%s)",
+      'PlayerScoutingCheck: role=%s pbxAfterRole=%d (roleMult=%s)',
       role,
       pbx,
       tuning.pbxMultLeague.toFixed(2),
     );
 
     Engine.Runtime.Instance.log.debug(
-      "PlayerScoutingCheck: pickedTier=%s base=%d pbx=%d contractMult=%s starter=%s listed=%s",
+      'PlayerScoutingCheck: pickedTier=%s base=%d pbx=%d contractMult=%s starter=%s listed=%s',
       pickedTierSlug,
       base,
       pbx,
       contractMult.toFixed(2),
-      player.starter ? "true" : "false",
-      player.transferListed ? "true" : "false",
+      player.starter ? 'true' : 'false',
+      player.transferListed ? 'true' : 'false',
     );
 
     if (!Chance.rollD2(pbx)) {
-      Engine.Runtime.Instance.log.debug("PlayerScoutingCheck: roll failed (pbx=%d).", pbx);
+      Engine.Runtime.Instance.log.debug('PlayerScoutingCheck: roll failed (pbx=%d).', pbx);
       return Promise.resolve();
     }
 
     const playerCountryContext = player.countryId
       ? await prisma.country.findFirst({
-        where: { id: player.countryId },
-        include: { continent: true },
-      })
+          where: { id: player.countryId },
+          include: { continent: true },
+        })
       : null;
 
     if (!userFedId && player.countryId) {
@@ -2452,7 +2579,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     // If we cannot determine federation, safest is to skip (prevents invalid cross-region offers)
     if (!userFedId) {
-      Engine.Runtime.Instance.log.debug("PlayerScoutingCheck: userFedId missing; skipping offer.");
+      Engine.Runtime.Instance.log.debug('PlayerScoutingCheck: userFedId missing; skipping offer.');
       return Promise.resolve();
     }
 
@@ -2460,10 +2587,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     // - Open/Intermediate/Main: never
     // - Advanced: 15%
     // - Pro: 25%
-    const crossFedPbx =
-      pickedTierIdx >= idxPro ? 25 :
-        pickedTierIdx >= idxAdv ? 15 :
-          0;
+    const crossFedPbx = pickedTierIdx >= idxPro ? 25 : pickedTierIdx >= idxAdv ? 15 : 0;
 
     const wantCrossFederation = crossFedPbx > 0 && Chance.rollD2(crossFedPbx);
 
@@ -2497,9 +2621,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     if (!teams.length) {
       Engine.Runtime.Instance.log.debug(
-        "PlayerScoutingCheck: no teams found for tier=%s (crossFed=%s)",
+        'PlayerScoutingCheck: no teams found for tier=%s (crossFed=%s)',
         pickedTierSlug,
-        wantCrossFederation ? "true" : "false",
+        wantCrossFederation ? 'true' : 'false',
       );
       return Promise.resolve();
     }
@@ -2515,11 +2639,11 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     if (proLowRankOnly && pickedTierIdx === idxPro) {
       const sortedAsc = [...pool].sort((a, b) => (a.elo ?? 0) - (b.elo ?? 0));
-      const bottomCount = Math.max(3, Math.floor(sortedAsc.length * 0.30));
+      const bottomCount = Math.max(3, Math.floor(sortedAsc.length * 0.3));
       pool = sortedAsc.slice(0, bottomCount);
     } else if (hasWonMajorAnyTeam && (pickedTierIdx === idxAdv || pickedTierIdx === idxPro)) {
       const sortedDesc = [...pool].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
-      const topCount = Math.max(3, Math.floor(sortedDesc.length * 0.20));
+      const topCount = Math.max(3, Math.floor(sortedDesc.length * 0.2));
       pool = sortedDesc.slice(0, topCount);
     } else if (leagueSignal >= 0.75) {
       // Strong performance: bias toward top teams in that tier
@@ -2540,8 +2664,8 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     const baseWages = player.wages ?? 0;
     const baseCost = player.cost ?? 0;
 
-    let wageMult = 0.90 + leagueSignal * 0.25; // 0.90..1.15
-    if (!player.starter) wageMult *= 0.90;
+    let wageMult = 0.9 + leagueSignal * 0.25; // 0.90..1.15
+    if (!player.starter) wageMult *= 0.9;
     if (player.transferListed) wageMult *= 0.85;
 
     const wages = Math.max(0, Math.round(baseWages * wageMult));
@@ -2584,8 +2708,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     const persona =
       from.personas.find(
         (p) =>
-          p.role === Constants.PersonaRole.MANAGER ||
-          p.role === Constants.PersonaRole.ASSISTANT,
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
       ) ?? from.personas[0];
     const fromTierName = getTeamTierName(transfer.from?.tier);
 
@@ -2603,9 +2726,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     Engine.Runtime.Instance.stop();
 
     Engine.Runtime.Instance.log.info(
-      "League-based offer: %s -> %s (tier=%s years=%d wages=%d cost=%d pbx=%d)",
+      'League-based offer: %s -> %s (tier=%s years=%d wages=%d cost=%d pbx=%d)',
       from.name,
-      (profile as any)?.player?.name ?? "USER",
+      (profile as any)?.player?.name ?? 'USER',
       pickedTierSlug,
       contractYears,
       wages,
@@ -2672,7 +2795,7 @@ export async function onPlayerContractReview(entry: Calendar) {
   const tierSlug = getTeamTierSlug(profile.team.tier);
   if (!tierSlug) {
     Engine.Runtime.Instance.log.warn(
-      "onPlayerContractReview: could not resolve tierSlug (team.tier=%s). Skipping.",
+      'onPlayerContractReview: could not resolve tierSlug (team.tier=%s). Skipping.',
       String(profile.team.tier),
     );
     // still reschedule
@@ -2690,7 +2813,7 @@ export async function onPlayerContractReview(entry: Calendar) {
   // Load active stint (contract start proxy)
   const activeStint = await prisma.careerStint.findFirst({
     where: { playerId, endedAt: null },
-    orderBy: { startedAt: "desc" },
+    orderBy: { startedAt: 'desc' },
     select: { startedAt: true, teamId: true, tier: true },
   });
 
@@ -2712,7 +2835,7 @@ export async function onPlayerContractReview(entry: Calendar) {
     matchesPlayed = leagueRecent.matchesPlayed ?? 0;
   } catch (e) {
     Engine.Runtime.Instance.log.warn(
-      "onPlayerContractReview: failed to compute league stats (teamId=%d playerId=%d).",
+      'onPlayerContractReview: failed to compute league stats (teamId=%d playerId=%d).',
       teamId,
       playerId,
     );
@@ -2728,22 +2851,18 @@ export async function onPlayerContractReview(entry: Calendar) {
   const benchMinMatches = S.BENCH_MIN_LEAGUE_MATCHES;
   const kickWindowDays = S.KICK_WINDOW_DAYS;
   const kickMinMatches = S.KICK_MIN_LEAGUE_MATCHES;
-  const benchKdMin =
-    (S.BENCH_KD_MIN_BY_TIER as Record<string, number>)[tierSlug];
-  const benchBasePbx =
-    (S.BENCH_PBX_BY_TIER as Record<string, number>)[tierSlug];
+  const benchKdMin = (S.BENCH_KD_MIN_BY_TIER as Record<string, number>)[tierSlug];
+  const benchBasePbx = (S.BENCH_PBX_BY_TIER as Record<string, number>)[tierSlug];
 
-  const kickKdMax =
-    (S.KICK_KD_MAX_BY_TIER as Record<string, number>)[tierSlug];
-  const kickBasePbx =
-    (S.KICK_PBX_BY_TIER as Record<string, number>)[tierSlug];
+  const kickKdMax = (S.KICK_KD_MAX_BY_TIER as Record<string, number>)[tierSlug];
+  const kickBasePbx = (S.KICK_PBX_BY_TIER as Record<string, number>)[tierSlug];
 
   // Probability shaping based on form: (1 + (0.5 - formScore)) => [~0.5..~1.5] if formScore in [0..1]
   const formMult = 1 + (0.5 - formScore);
 
   Engine.Runtime.Instance.log.debug(
     `onPlayerContractReview: teamId=${teamId} tier=${tierSlug} daysInContract=${daysInContract} ` +
-    `kd=${kd.toFixed(2)} matches=${matchesPlayed} standing=${standingScore.toFixed(2)} form=${formScore.toFixed(2)}`
+      `kd=${kd.toFixed(2)} matches=${matchesPlayed} standing=${standingScore.toFixed(2)} form=${formScore.toFixed(2)}`,
   );
 
   // Off-season / inactivity block: require at least 3 matches in the last 30 days
@@ -2763,11 +2882,7 @@ export async function onPlayerContractReview(entry: Calendar) {
         competitors: { some: { teamId } },
         events: {
           some: {
-            OR: [
-              { attackerId: playerId },
-              { victimId: playerId },
-              { assistId: playerId },
-            ],
+            OR: [{ attackerId: playerId }, { victimId: playerId }, { assistId: playerId }],
           },
         },
       },
@@ -2779,7 +2894,7 @@ export async function onPlayerContractReview(entry: Calendar) {
 
   if (!hasRecentActivity) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractReview: skipping kick/bench; only %d user-played matches in last 30 days (min=%d).",
+      'onPlayerContractReview: skipping kick/bench; only %d user-played matches in last 30 days (min=%d).',
       matchesPlayed30d,
       reviewMinRecentMatches,
     );
@@ -2787,10 +2902,7 @@ export async function onPlayerContractReview(entry: Calendar) {
     // Kick logic
     const inKickWindow = daysInContract <= kickWindowDays;
     const eligibleForKick =
-      !isBenched &&
-      inKickWindow &&
-      matchesPlayed >= kickMinMatches &&
-      kd <= kickKdMax;
+      !isBenched && inKickWindow && matchesPlayed >= kickMinMatches && kd <= kickKdMax;
 
     if (eligibleForKick) {
       let pbx = kickBasePbx * formMult;
@@ -2819,15 +2931,14 @@ export async function onPlayerContractReview(entry: Calendar) {
     }
 
     // Bench logic
-    const eligibleForBench =
-      !isBenched && matchesPlayed >= benchMinMatches && kd < benchKdMin;
+    const eligibleForBench = !isBenched && matchesPlayed >= benchMinMatches && kd < benchKdMin;
 
     if (eligibleForBench) {
       let pbx = benchBasePbx * formMult;
       pbx = Math.max(1, Math.min(95, Math.round(pbx)));
 
       Engine.Runtime.Instance.log.debug(
-        "onPlayerContractReview: bench check eligible (kd<%.2f, matches>=%d). pbx=%d",
+        'onPlayerContractReview: bench check eligible (kd<%.2f, matches>=%d). pbx=%d',
         benchKdMin,
         benchMinMatches,
         pbx,
@@ -2890,24 +3001,25 @@ async function getUserMajorWinFlags(params: {
 
   const hasWonMajorAnyTeam = Boolean(majorWinWithPlayer?.teamId);
 
-  const hasWonMajorWithCurrentTeam = currentTeamId != null
-    ? await prisma.competitionToTeam.count({
-      where: {
-        position: 1,
-        teamId: currentTeamId,
-        competition: {
-          tier: { slug: TierSlug.MAJOR_CHAMPIONS_STAGE },
-          matches: {
-            some: {
-              players: {
-                some: { id: playerId },
+  const hasWonMajorWithCurrentTeam =
+    currentTeamId != null
+      ? (await prisma.competitionToTeam.count({
+          where: {
+            position: 1,
+            teamId: currentTeamId,
+            competition: {
+              tier: { slug: TierSlug.MAJOR_CHAMPIONS_STAGE },
+              matches: {
+                some: {
+                  players: {
+                    some: { id: playerId },
+                  },
+                },
               },
             },
           },
-        },
-      },
-    }) > 0
-    : false;
+        })) > 0
+      : false;
 
   return {
     hasWonMajorAnyTeam,
@@ -2925,7 +3037,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   const playerId = Number(entry.payload);
   const logExit = (reason: string) => {
     Engine.Runtime.Instance.log.info(
-      "onPlayerContractExtensionEval exit: playerId=%d entryId=%d reason=%s",
+      'onPlayerContractExtensionEval exit: playerId=%d entryId=%d reason=%s',
       playerId,
       entry.id,
       reason,
@@ -2937,11 +3049,11 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   }
 
   const profile = await prisma.profile.findFirst(Eagers.profile);
-  if (!profile) return logExit("profile-missing");
-  if (profile.playerId !== playerId) return logExit("not-user-player");
+  if (!profile) return logExit('profile-missing');
+  if (profile.playerId !== playerId) return logExit('not-user-player');
 
   // Must be on a team
-  if (!profile.teamId || !profile.team) return logExit("profile-team-missing");
+  if (!profile.teamId || !profile.team) return logExit('profile-team-missing');
 
   const now = profile.date;
   const teamId = profile.teamId;
@@ -2964,26 +3076,31 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
       cost: true,
     },
   });
-  if (!player) return logExit("player-missing");
-  if (player.teamId !== teamId) return logExit("player-team-mismatch");
-  if (!player.contractEnd) return logExit("contract-end-missing");
+  if (!player) return logExit('player-missing');
+  if (player.teamId !== teamId) return logExit('player-team-mismatch');
+  if (!player.contractEnd) return logExit('contract-end-missing');
   if (player.transferListed) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractExtensionEval: playerId=%d is transferListed; skipping extension offer.",
+      'onPlayerContractExtensionEval: playerId=%d is transferListed; skipping extension offer.',
       playerId,
     );
-    return logExit("transfer-listed");
+    return logExit('transfer-listed');
   }
 
   // Window check: 0 < daysLeft <= 30
   const daysLeft = differenceInDays(player.contractEnd, now);
-  if (!(daysLeft > 0 && daysLeft <= (Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END ?? 30))) {
+  if (
+    !(
+      daysLeft > 0 &&
+      daysLeft <= (Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END ?? 30)
+    )
+  ) {
     return logExit(`outside-window-days-left=${daysLeft}`);
   }
 
   // Determine tier slug
   const tierSlug = getTeamTierSlug(profile.team.tier);
-  if (!tierSlug) return logExit("tier-slug-missing");
+  if (!tierSlug) return logExit('tier-slug-missing');
 
   // Prevent duplicate extension offers (pending)
   const existingPendingExtension = await prisma.transfer.findFirst({
@@ -3002,7 +3119,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
 
   if (existingPendingExtension) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractExtensionEval: pending extension offer already exists (transferId=%d).",
+      'onPlayerContractExtensionEval: pending extension offer already exists (transferId=%d).',
       existingPendingExtension.id,
     );
     return logExit(`pending-extension-transfer-id=${existingPendingExtension.id}`);
@@ -3017,7 +3134,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     matchesPlayed = leagueRecent.matchesPlayed ?? 0;
   } catch (_) {
     // If stats fail, do not offer an extension.
-    return logExit("league-stats-failed");
+    return logExit('league-stats-failed');
   }
 
   // Team context
@@ -3029,8 +3146,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   const extMinMatches = S.EXTENSION_MIN_MATCHES ?? 7;
 
   // Tier-indexed extension thresholds
-  const extOkKd =
-    ((S.EXTENSION_PLAYER_OK_KD_BY_TIER as Record<string, number>)[tierSlug]) ?? 1.00;
+  const extOkKd = (S.EXTENSION_PLAYER_OK_KD_BY_TIER as Record<string, number>)[tierSlug] ?? 1.0;
 
   // "Good team" and "good/ok player"
   const goodTeam = formScore >= 0.5; // optionally also check standingScore >= 0.5
@@ -3057,7 +3173,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   if (hasWonMajorWithCurrentTeam) {
     pbx = Math.max(pbx, 85);
     Engine.Runtime.Instance.log.info(
-      "onPlayerContractExtensionEval: major winner with current team, forcing min extension pbx=85.",
+      'onPlayerContractExtensionEval: major winner with current team, forcing min extension pbx=85.',
     );
   }
 
@@ -3065,19 +3181,19 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   const declinePbx = S.EXTENSION_DECLINE_PBX_EVEN_IF_GOOD ?? 10;
   if (pbx > 0 && declinePbx > 0 && Chance.rollD2(declinePbx)) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractExtensionEval: declined to offer despite eligibility (declinePbx=%d).",
+      'onPlayerContractExtensionEval: declined to offer despite eligibility (declinePbx=%d).',
       declinePbx,
     );
     return logExit(`declined-by-roll-pbx=${declinePbx}`);
   }
 
-  if (pbx <= 0) return logExit("pbx-zero");
+  if (pbx <= 0) return logExit('pbx-zero');
 
   // Roll whether we offer
   pbx = Math.max(1, Math.min(95, Math.round(pbx)));
   if (!Chance.rollD2(pbx)) {
     Engine.Runtime.Instance.log.debug(
-      "onPlayerContractExtensionEval: offer roll failed (pbx=%d).",
+      'onPlayerContractExtensionEval: offer roll failed (pbx=%d).',
       pbx,
     );
     return logExit(`offer-roll-failed-pbx=${pbx}`);
@@ -3086,7 +3202,9 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   const contractYears = rollContractYears(tierSlug);
   const rawExpiry = addDays(now, 30);
   const offerExpiresAt = player.contractEnd
-    ? (player.contractEnd < rawExpiry ? player.contractEnd : rawExpiry)
+    ? player.contractEnd < rawExpiry
+      ? player.contractEnd
+      : rawExpiry
     : rawExpiry;
 
   // Create transfer-like "extension offer"
@@ -3122,9 +3240,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   const locale = getLocale(profile);
   const persona =
     profile.team.personas.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT,
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? profile.team.personas[0];
 
   const tierName = getTeamTierName(profile.team.tier);
@@ -3154,7 +3270,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    "Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d pbx=%d kd=%.2f matches=%d form=%.2f standing=%.2f daysLeft=%d",
+    'Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d pbx=%d kd=%.2f matches=%d form=%.2f standing=%.2f daysLeft=%d',
     teamId,
     playerId,
     tierSlug,
@@ -3167,7 +3283,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     daysLeft,
   );
   Engine.Runtime.Instance.log.info(
-    "onPlayerContractExtensionEval exit: playerId=%d entryId=%d reason=offer-created transferId=%d",
+    'onPlayerContractExtensionEval exit: playerId=%d entryId=%d reason=offer-created transferId=%d',
     playerId,
     entry.id,
     transfer.id,
@@ -3195,7 +3311,6 @@ function isExtensionOffer(params: {
   return true;
 }
 
-
 /**
  * Records the match results for the day by updating
  * their respective tournament object entries.
@@ -3210,10 +3325,15 @@ export async function recordMatchResults() {
   // get today's match results
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const today = profile?.date || new Date();
+  const from = startOfDay(today);
+  const to = endOfDay(today);
   const allMatches = await DatabaseClient.prisma.match.findMany({
     where: {
-      date: today.toISOString(),
-      matchType: { not: "FACEIT_PUG" },
+      date: {
+        gte: from.toISOString(),
+        lte: to.toISOString(),
+      },
+      matchType: { not: 'FACEIT_PUG' },
       status: Constants.MatchStatus.COMPLETED,
     },
     include: {
@@ -3271,14 +3391,23 @@ export async function recordMatchResults() {
       const lowerRoundReady =
         Array.isArray(lowerMatches) && lowerMatches.every((match) => !match.m);
 
-      if (tournament.brackets && upperRoundReady) {
+      if (tournament.brackets && !tournament.iemGroup && upperRoundReady) {
         Engine.Runtime.Instance.log.info('Generating next round of upper bracket matches...');
         await createMatchdays(upperMatches, tournament, competition);
       }
 
-      if (tournament.brackets && lowerRoundReady) {
+      if (tournament.brackets && !tournament.iemGroup && lowerRoundReady) {
         Engine.Runtime.Instance.log.info('Generating next round of lower bracket matches...');
         await createMatchdays(lowerMatches, tournament, competition);
+      }
+
+      if (tournament.iemGroup) {
+        const groupMatches = tournament.iemGroup.generateNextRound();
+
+        if (groupMatches.length > 0) {
+          Engine.Runtime.Instance.log.info('Generating next IEM group bracket matches...');
+          await createMatchdays(groupMatches, tournament, competition);
+        }
       }
 
       if (tournament.swiss && upperRoundReady) {
@@ -3307,16 +3436,16 @@ export async function recordMatchResults() {
             ...(majorStageTiers.includes(competition.tier.triggerTierSlug as Constants.TierSlug)
               ? {}
               : {
-                federation: {
-                  OR: [
-                    { slug: competition.federation.slug },
-                    { slug: Constants.FederationSlug.ESPORTS_WORLD },
-                    ...(competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_ASIA_RMR
-                      ? [{ slug: Constants.FederationSlug.ESPORTS_ASIA }]
-                      : []),
-                  ],
-                },
-              }),
+                  federation: {
+                    OR: [
+                      { slug: competition.federation.slug },
+                      { slug: Constants.FederationSlug.ESPORTS_WORLD },
+                      ...(competition.tier.triggerTierSlug === Constants.TierSlug.MAJOR_ASIA_RMR
+                        ? [{ slug: Constants.FederationSlug.ESPORTS_ASIA }]
+                        : []),
+                    ],
+                  },
+                }),
           },
           include: {
             federation: true,
@@ -3603,7 +3732,7 @@ export async function sendUserAward(
 async function getLastOfferTeamId(playerId: number) {
   const latestTransfer = await DatabaseClient.prisma.transfer.findFirst({
     where: { playerId },
-    orderBy: { id: "desc" },
+    orderBy: { id: 'desc' },
     select: { teamIdFrom: true },
   });
 
@@ -3619,7 +3748,6 @@ function filterRepeatedOfferTeam<T extends { id: number }>(
   const filteredTeams = teams.filter((team) => team.id !== lastOfferTeamId);
   return filteredTeams.length ? filteredTeams : teams;
 }
-
 
 const MIXED_REGION_COUNTRY_CODES = new Set(['EU', 'NA', 'XSA', 'AS']);
 const MIXED_REGION_STORAGE_CODES: Record<string, string> = {
@@ -3685,23 +3813,36 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 ) {
   if (!candidates.length) return candidates;
 
-  const sameCountryCandidates = candidates.filter((candidate) => matchesTeamCountryPreference(team, candidate));
-  if (sameCountryCandidates.length && Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_COUNTRY)) {
+  const sameCountryCandidates = candidates.filter((candidate) =>
+    matchesTeamCountryPreference(team, candidate),
+  );
+  if (
+    sameCountryCandidates.length &&
+    Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_COUNTRY)
+  ) {
     return sameCountryCandidates;
   }
 
   const teamFederationId = team.competitionFederationId ?? null;
-  const sameFederationCandidates = teamFederationId == null
-    ? []
-    : candidates.filter((candidate) => {
-      if (sameCountryCandidates.some((sameCountryCandidate) => sameCountryCandidate.id === candidate.id)) {
-        return false;
-      }
+  const sameFederationCandidates =
+    teamFederationId == null
+      ? []
+      : candidates.filter((candidate) => {
+          if (
+            sameCountryCandidates.some(
+              (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
+            )
+          ) {
+            return false;
+          }
 
-      return candidate.country?.continent?.federationId === teamFederationId;
-    });
+          return candidate.country?.continent?.federationId === teamFederationId;
+        });
 
-  if (sameFederationCandidates.length && Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_FED)) {
+  if (
+    sameFederationCandidates.length &&
+    Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_FED)
+  ) {
     return sameFederationCandidates;
   }
 
@@ -3735,26 +3876,36 @@ function selectNPCTargetCandidatesByCountryPreference<
 
   const teamRegionCode = getTeamRegionCode(team);
   const teamFederationId = team.competitionFederationId ?? null;
-  const isInternationalTeam = Boolean(teamRegionCode && MIXED_REGION_COUNTRY_CODES.has(teamRegionCode));
+  const isInternationalTeam = Boolean(
+    teamRegionCode && MIXED_REGION_COUNTRY_CODES.has(teamRegionCode),
+  );
 
-  const sameCountryCandidates = candidates.filter((candidate) => candidate.countryId === team.countryId);
+  const sameCountryCandidates = candidates.filter(
+    (candidate) => candidate.countryId === team.countryId,
+  );
   const federationInternationalCandidates = isInternationalTeam
     ? candidates.filter((candidate) => {
-      if (sameCountryCandidates.some((sameCountryCandidate) => sameCountryCandidate.id === candidate.id)) {
-        return false;
-      }
+        if (
+          sameCountryCandidates.some(
+            (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
+          )
+        ) {
+          return false;
+        }
 
-      if (teamFederationId == null) {
-        return false;
-      }
+        if (teamFederationId == null) {
+          return false;
+        }
 
-      return candidate.country?.continent?.federationId === teamFederationId;
-    })
+        return candidate.country?.continent?.federationId === teamFederationId;
+      })
     : [];
   const otherCountryCandidates = candidates.filter(
     (candidate) =>
-      !sameCountryCandidates.some((sameCountryCandidate) => sameCountryCandidate.id === candidate.id)
-      && !federationInternationalCandidates.some(
+      !sameCountryCandidates.some(
+        (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
+      ) &&
+      !federationInternationalCandidates.some(
         (internationalCandidate) => internationalCandidate.id === candidate.id,
       ),
   );
@@ -3766,11 +3917,8 @@ function selectNPCTargetCandidatesByCountryPreference<
   } as const;
 
   const roll = random(1, 100);
-  const pickedBucket = roll <= 65
-    ? 'sameCountry'
-    : roll <= 99
-      ? 'federationInternational'
-      : 'otherCountry';
+  const pickedBucket =
+    roll <= 65 ? 'sameCountry' : roll <= 99 ? 'federationInternational' : 'otherCountry';
 
   if (weightedBuckets[pickedBucket].length) {
     return weightedBuckets[pickedBucket];
@@ -3829,8 +3977,9 @@ async function recalculateTeamCountryIdentity(teamId: number) {
     }
   }
 
-  const dominantCountry = [...countryCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  const dominantCountry = [...countryCounts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0] - b[0],
+  )[0];
 
   let nextCountryId = dominantCountry?.[1] >= 3 ? dominantCountry[0] : null;
 
@@ -3955,7 +4104,9 @@ function selectCountryAwareOfferPool<
     },
   } as const;
 
-  const availableBuckets = Object.entries(weightedBuckets).filter(([, bucket]) => bucket.teams.length);
+  const availableBuckets = Object.entries(weightedBuckets).filter(
+    ([, bucket]) => bucket.teams.length,
+  );
   if (!availableBuckets.length) {
     return fallbackTeams.length ? fallbackTeams : repeatSafeTeams;
   }
@@ -4005,9 +4156,9 @@ export async function sendPlayerInviteForUser() {
 
   const playerCountryContext = profile.player.countryId
     ? await prisma.country.findFirst({
-      where: { id: profile.player.countryId },
-      include: { continent: true },
-    })
+        where: { id: profile.player.countryId },
+        include: { continent: true },
+      })
     : null;
 
   const lastOfferTeamId = await getLastOfferTeamId(profile.playerId!);
@@ -4048,9 +4199,7 @@ export async function sendPlayerInviteForUser() {
 
   const persona =
     from.personas.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT,
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? from.personas[0];
 
   await sendEmail(
@@ -4065,11 +4214,7 @@ export async function sendPlayerInviteForUser() {
 
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
-  Engine.Runtime.Instance.log.info(
-    "%s sent a player-career invite to %s",
-    from.name,
-    target.name,
-  );
+  Engine.Runtime.Instance.log.info('%s sent a player-career invite to %s', from.name, target.name);
 
   return Promise.resolve(transfer);
 }
@@ -4080,12 +4225,12 @@ function blendFaceitMetric(recent: number, lifetime: number) {
 }
 
 type ContractYearWeight = { years: number; weight: number };
-const ContractYearsWeights =
-  UserOfferSettings.CONTRACT_YEARS_WEIGHTS as Partial<Record<TierSlug, ContractYearWeight[]>>;
+const ContractYearsWeights = UserOfferSettings.CONTRACT_YEARS_WEIGHTS as Partial<
+  Record<TierSlug, ContractYearWeight[]>
+>;
 
 function rollContractYears(tier: TierSlug): number {
-  const options: ContractYearWeight[] =
-    ContractYearsWeights[tier] ?? [{ years: 1, weight: 100 }];
+  const options: ContractYearWeight[] = ContractYearsWeights[tier] ?? [{ years: 1, weight: 100 }];
 
   const pbx: Record<string, number> = {};
   options.forEach((o: ContractYearWeight, idx: number) => {
@@ -4095,7 +4240,11 @@ function rollContractYears(tier: TierSlug): number {
   return options[pickedIdx]?.years ?? 1;
 }
 
-function getFaceitOfferChanceByMatchCount(matchCount: number, minMatches: number, maxMatches: number) {
+function getFaceitOfferChanceByMatchCount(
+  matchCount: number,
+  minMatches: number,
+  maxMatches: number,
+) {
   if (matchCount < minMatches) {
     return 0;
   }
@@ -4179,7 +4328,7 @@ export async function sendUserFaceitOffer() {
   const last = profile.player.lastOfferAt;
   const cooldownDays = Math.max(
     1,
-    Math.round(UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS * tuning.cooldownMultTeamless)
+    Math.round(UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS * tuning.cooldownMultTeamless),
   );
 
   if (last) {
@@ -4224,10 +4373,7 @@ export async function sendUserFaceitOffer() {
   const winratePct = blendFaceitMetric(recentWinratePct, lifetimeWinratePct);
   const winrate = winratePct / 100;
 
-  const perfMult = Math.max(
-    0.85,
-    Math.min(1.30, 1 + (kd - 1) * 0.15 + (winrate - 0.5) * 0.2),
-  );
+  const perfMult = Math.max(0.85, Math.min(1.3, 1 + (kd - 1) * 0.15 + (winrate - 0.5) * 0.2));
 
   // post window pbx
   let pbx = Math.round(pbxBase * perfMult);
@@ -4240,10 +4386,7 @@ export async function sendUserFaceitOffer() {
   const targetTier = tierFromEloByFederation(elo, userFederationSlug);
 
   const isHotProspect =
-    matchCount >= 20 &&
-    kd >= 1.8 &&
-    elo >= 1800 &&
-    targetTier === TierSlug.LEAGUE_INTERMEDIATE;
+    matchCount >= 20 && kd >= 1.8 && elo >= 1800 && targetTier === TierSlug.LEAGUE_INTERMEDIATE;
 
   if (isHotProspect) {
     pbx = Math.max(pbx, clampPbx(90 * tuning.pbxMultFaceit));
@@ -4254,8 +4397,7 @@ export async function sendUserFaceitOffer() {
   }
 
   // Federation restriction (own federation)
-  const userFedId = profile.player.country?.continent?.federationId
-    ?? null;
+  const userFedId = profile.player.country?.continent?.federationId ?? null;
 
   const prestigeIdx = Constants.Prestige.findIndex((p) => p === targetTier);
 
@@ -4265,8 +4407,8 @@ export async function sendUserFaceitOffer() {
       profile: null,
       ...(userFedId
         ? {
-          competitionFederationId: userFedId,
-        }
+            competitionFederationId: userFedId,
+          }
         : {}),
     },
     include: {
@@ -4344,9 +4486,7 @@ export async function sendUserFaceitOffer() {
 
   const persona =
     from.personas.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT,
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? from.personas[0];
   const fromTierName = getTeamTierName(transfer.from?.tier);
 
@@ -4364,7 +4504,7 @@ export async function sendUserFaceitOffer() {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    "%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d)",
+    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d)',
     from.name,
     target.name,
     targetTier,
@@ -4375,7 +4515,6 @@ export async function sendUserFaceitOffer() {
   return Promise.resolve(transfer);
 }
 
-
 function getTierContractYears(tierIdx: number | null | undefined) {
   const tierSlug = getTeamTierSlug(tierIdx);
   if (!tierSlug) return 1;
@@ -4383,10 +4522,10 @@ function getTierContractYears(tierIdx: number | null | undefined) {
 }
 
 function countStarterSnipers(players: Array<{ starter?: boolean; role?: string | null }>) {
-  return players.filter((p) => p.starter && normalizeRole(p.role) === "SNIPER").length;
+  return players.filter((p) => p.starter && normalizeRole(p.role) === 'SNIPER').length;
 }
 function countSnipers(players: Array<{ role?: string | null }>) {
-  return players.filter((p) => normalizeRole(p.role) === "SNIPER").length;
+  return players.filter((p) => normalizeRole(p.role) === 'SNIPER').length;
 }
 
 function ensureTeamFloorAndSniper(params: {
@@ -4409,7 +4548,12 @@ async function isUserBenchWorthyForReplacement(params: {
   const teamTier =
     profile?.teamId === teamId
       ? profile?.team?.tier
-      : (await DatabaseClient.prisma.team.findFirst({ where: { id: teamId }, select: { tier: true } }))?.tier;
+      : (
+          await DatabaseClient.prisma.team.findFirst({
+            where: { id: teamId },
+            select: { tier: true },
+          })
+        )?.tier;
 
   const tierSlug = getTeamTierSlug(teamTier);
   if (!tierSlug) return false;
@@ -4420,7 +4564,7 @@ async function isUserBenchWorthyForReplacement(params: {
 
   const activeStint = await DatabaseClient.prisma.careerStint.findFirst({
     where: { playerId, endedAt: null, teamId },
-    orderBy: { startedAt: "desc" },
+    orderBy: { startedAt: 'desc' },
     select: { startedAt: true },
   });
   const contractStart = activeStint?.startedAt ?? subDays(now, 365);
@@ -4455,22 +4599,18 @@ async function selectBenchVictim(params: {
   const userId = profile?.playerId;
   const userTeamId = profile?.teamId;
   const userPlayer =
-    userId && userTeamId === teamId
-      ? teamPlayers.find((p) => p.id === userId)
-      : null;
+    userId && userTeamId === teamId ? teamPlayers.find((p) => p.id === userId) : null;
   const isUserStarter = !!userPlayer?.starter;
   const userRole = normalizeRole(userPlayer?.role);
 
   // Hard rule for snipers: bench a starter sniper so teams don't field two starter snipers.
-  if (incomingRole === "SNIPER") {
-    if (isUserStarter && userRole === "SNIPER") {
+  if (incomingRole === 'SNIPER') {
+    if (isUserStarter && userRole === 'SNIPER') {
       return userPlayer;
     }
 
     const starterSnipers = teamPlayers
-      .filter(
-        (p) => p.starter && p.id !== incomingPlayerId && normalizeRole(p.role) === "SNIPER",
-      )
+      .filter((p) => p.starter && p.id !== incomingPlayerId && normalizeRole(p.role) === 'SNIPER')
       .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0));
 
     return starterSnipers[0] ?? null;
@@ -4504,7 +4644,7 @@ async function selectBenchVictim(params: {
   }
 
   // Hard rule for riflers: rifler must replace rifler.
-  if (!candidates.length && incomingRole === "RIFLER") {
+  if (!candidates.length && incomingRole === 'RIFLER') {
     return null;
   }
 
@@ -4535,7 +4675,7 @@ async function enforceSingleStarterSniper(params: {
           teamId,
           starter: true,
           id: { not: keepStarterPlayerId },
-          role: { in: ["SNIPER", "AWPER"] },
+          role: { in: ['SNIPER', 'AWPER'] },
         },
         select: { id: true },
       },
@@ -4548,7 +4688,7 @@ async function enforceSingleStarterSniper(params: {
       teamId,
       starter: true,
       id: { not: keepStarterPlayerId },
-      role: { in: ["SNIPER", "AWPER"] },
+      role: { in: ['SNIPER', 'AWPER'] },
     },
     data: {
       starter: false,
@@ -4562,7 +4702,8 @@ async function enforceSingleStarterSniper(params: {
       DatabaseClient.prisma.careerStint.updateMany({
         where: { playerId: player.id, endedAt: null },
         data: { endedAt: date },
-      })),
+      }),
+    ),
     ...team.players.map((player) =>
       DatabaseClient.prisma.careerStint.create({
         data: {
@@ -4572,15 +4713,12 @@ async function enforceSingleStarterSniper(params: {
           starter: false,
           startedAt: date,
         },
-      })),
+      }),
+    ),
   ]);
 }
 
-async function enforceStarterLimit(params: {
-  teamId: number;
-  date: Date;
-  maxStarters?: number;
-}) {
+async function enforceStarterLimit(params: { teamId: number; date: Date; maxStarters?: number }) {
   const { teamId, date, maxStarters = Constants.Application.SQUAD_MIN_LENGTH } = params;
 
   const team = await DatabaseClient.prisma.team.findFirst({
@@ -4604,7 +4742,7 @@ async function enforceStarterLimit(params: {
   const starters = [...(team.players || [])];
   if (starters.length <= maxStarters) return;
 
-  const starterSnipers = starters.filter((p) => normalizeRole(p.role) === "SNIPER").length;
+  const starterSnipers = starters.filter((p) => normalizeRole(p.role) === 'SNIPER').length;
   let removableSnipers = Math.max(0, starterSnipers - 1);
 
   const benchCount = starters.length - maxStarters;
@@ -4615,28 +4753,27 @@ async function enforceStarterLimit(params: {
     if (!candidates.length) break;
 
     const keepOneStarterSniper = candidates.filter((player) => {
-      if (normalizeRole(player.role) !== "SNIPER") return true;
+      if (normalizeRole(player.role) !== 'SNIPER') return true;
       return removableSnipers > 0;
     });
 
     const victimPool = keepOneStarterSniper.length ? keepOneStarterSniper : candidates;
-    const victim = victimPool
-      .sort((a, b) => {
-        if (!!a.userControlled !== !!b.userControlled) {
-          return a.userControlled ? 1 : -1;
-        }
+    const victim = victimPool.sort((a, b) => {
+      if (!!a.userControlled !== !!b.userControlled) {
+        return a.userControlled ? 1 : -1;
+      }
 
-        const xpDiff = (a.xp || 0) - (b.xp || 0);
-        if (xpDiff !== 0) return xpDiff;
+      const xpDiff = (a.xp || 0) - (b.xp || 0);
+      if (xpDiff !== 0) return xpDiff;
 
-        const aEnd = a.contractEnd ? new Date(a.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
-        const bEnd = b.contractEnd ? new Date(b.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
-        return aEnd - bEnd;
-      })[0];
+      const aEnd = a.contractEnd ? new Date(a.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
+      const bEnd = b.contractEnd ? new Date(b.contractEnd).getTime() : Number.MAX_SAFE_INTEGER;
+      return aEnd - bEnd;
+    })[0];
 
     if (!victim) break;
 
-    if (normalizeRole(victim.role) === "SNIPER" && removableSnipers > 0) {
+    if (normalizeRole(victim.role) === 'SNIPER' && removableSnipers > 0) {
       removableSnipers -= 1;
     }
 
@@ -4720,7 +4857,6 @@ async function reinstateBenchedPlayerAfterSale(params: {
   return Promise.resolve();
 }
 
-
 async function getCareerPeakTier(playerId: number) {
   const peak = await DatabaseClient.prisma.careerStint.findFirst({
     where: { playerId, tier: { not: null } },
@@ -4789,17 +4925,19 @@ async function processNPCContractExtensions() {
     });
     if (!team) return;
 
-    const needsStarter = () => team.players.filter((p) => p.starter).length < Constants.Application.SQUAD_MIN_LENGTH;
+    const needsStarter = () =>
+      team.players.filter((p) => p.starter).length < Constants.Application.SQUAD_MIN_LENGTH;
     const needsAwper = () => countStarterSnipers(team.players as any) < 1;
 
     while (needsStarter() || needsAwper()) {
-      const desiredRole = needsAwper() ? "SNIPER" : normalizeRole(preferredRole || "");
+      const desiredRole = needsAwper() ? 'SNIPER' : normalizeRole(preferredRole || '');
 
-      const promote = team.players
-        .filter((p) => !p.starter)
-        .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole)
-        .sort((a, b) => (b.xp || 0) - (a.xp || 0))[0]
-        || team.players.filter((p) => !p.starter).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
+      const promote =
+        team.players
+          .filter((p) => !p.starter)
+          .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole)
+          .sort((a, b) => (b.xp || 0) - (a.xp || 0))[0] ||
+        team.players.filter((p) => !p.starter).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
 
       if (promote) {
         await prisma.player.update({
@@ -4830,8 +4968,10 @@ async function processNPCContractExtensions() {
         .filter((p) => !blockedRejoin.has(p.id))
         .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole);
 
-      const freeAgent = selectNPCFreeAgentCandidatesByCountryPreference(team, freeAgentCandidates)
-        .sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
+      const freeAgent = selectNPCFreeAgentCandidatesByCountryPreference(
+        team,
+        freeAgentCandidates,
+      ).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
 
       if (freeAgent) {
         const years = getTierContractYears(team.tier);
@@ -4848,7 +4988,7 @@ async function processNPCContractExtensions() {
           },
         });
 
-        if (incomingRole === "SNIPER") {
+        if (incomingRole === 'SNIPER') {
           await enforceSingleStarterSniper({
             teamId: team.id,
             keepStarterPlayerId: freeAgent.id,
@@ -4860,7 +5000,7 @@ async function processNPCContractExtensions() {
               return { ...p, starter: true, transferListed: false, lastOfferAt: null };
             }
 
-            if (p.starter && normalizeRole(p.role) === "SNIPER") {
+            if (p.starter && normalizeRole(p.role) === 'SNIPER') {
               return { ...p, starter: false, transferListed: true, lastOfferAt: now };
             }
 
@@ -4875,24 +5015,26 @@ async function processNPCContractExtensions() {
             to: { connect: { id: team.id } },
             target: { connect: { id: freeAgent.id } },
             offers: {
-              create: [{
-                status: Constants.TransferStatus.TEAM_ACCEPTED,
-                cost: 0,
-                wages: freeAgent.wages || 0,
-                contractYears: years,
-              }],
+              create: [
+                {
+                  status: Constants.TransferStatus.TEAM_ACCEPTED,
+                  cost: 0,
+                  wages: freeAgent.wages || 0,
+                  contractYears: years,
+                },
+              ],
             },
           },
         });
 
         await closeOpenCareerStints(prisma, freeAgent.id, now);
-  await startCareerStint(prisma, {
-    playerId: freeAgent.id,
-    teamId: team.id,
-    tier: team.tier,
-    starter: true,
-    startedAt: now,
-  });
+        await startCareerStint(prisma, {
+          playerId: freeAgent.id,
+          teamId: team.id,
+          tier: team.tier,
+          starter: true,
+          startedAt: now,
+        });
 
         team.players.push({ ...freeAgent, teamId: team.id, starter: true } as any);
         continue;
@@ -4919,7 +5061,9 @@ async function processNPCContractExtensions() {
         .filter(
           (p) =>
             matchesTeamCountryPreference(team, p) ||
-            (teamRegionCode == null && sameFed != null && p.country?.continent?.federationId === sameFed),
+            (teamRegionCode == null &&
+              sameFed != null &&
+              p.country?.continent?.federationId === sameFed),
         )
         .sort((a, b) => (a.xp || 0) - (b.xp || 0))[0];
 
@@ -4989,12 +5133,14 @@ async function processNPCContractExtensions() {
         from: { connect: { id: player.teamId } },
         target: { connect: { id: player.id } },
         offers: {
-          create: [{
-            status: Constants.TransferStatus.EXPIRED,
-            cost: 0,
-            wages: player.wages || 0,
-            contractYears: 0,
-          }],
+          create: [
+            {
+              status: Constants.TransferStatus.EXPIRED,
+              cost: 0,
+              wages: player.wages || 0,
+              contractYears: 0,
+            },
+          ],
         },
       },
     });
@@ -5006,7 +5152,10 @@ async function processNPCContractExtensions() {
     await recalculateTeamCountryIdentity(player.teamId);
   }
 
-  const horizon = addDays(now, Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END ?? 30);
+  const horizon = addDays(
+    now,
+    Constants.PlayerContractSettings.EXTENSION_EVAL_DAYS_BEFORE_END ?? 30,
+  );
 
   const expiring = await DatabaseClient.prisma.player.findMany({
     where: {
@@ -5032,7 +5181,7 @@ async function processNPCContractExtensions() {
     });
     const avgElo = tierTeams.length
       ? tierTeams.reduce((sum, t) => sum + (t.elo || 0), 0) / tierTeams.length
-      : (player.team.elo || 0);
+      : player.team.elo || 0;
 
     let teamOfferPbx = (player.team.elo || 0) >= avgElo ? 82 : 30;
     const daysLeft = differenceInDays(player.contractEnd!, now);
@@ -5103,7 +5252,7 @@ async function trySignNPCFreeAgent(params: {
     const role = normalizeRole(player.role);
     const sameRole = (from.players || []).filter((p) => normalizeRole(p.role) === role);
 
-    if (role === "RIFLER" && !sameRole.length) {
+    if (role === 'RIFLER' && !sameRole.length) {
       return false;
     }
 
@@ -5171,12 +5320,14 @@ async function trySignNPCFreeAgent(params: {
       to: { connect: { id: from.id } },
       target: { connect: { id: target.id } },
       offers: {
-        create: [{
-          status: Constants.TransferStatus.TEAM_ACCEPTED,
-          cost: 0,
-          wages: target.wages || 0,
-          contractYears: years,
-        }],
+        create: [
+          {
+            status: Constants.TransferStatus.TEAM_ACCEPTED,
+            cost: 0,
+            wages: target.wages || 0,
+            contractYears: years,
+          },
+        ],
       },
     },
   });
@@ -5218,10 +5369,7 @@ export async function sendNPCTransferOffer() {
   const buyers = await DatabaseClient.prisma.team.findMany({
     where: {
       tier: tierIdx,
-      OR: [
-        { profile: null },
-        ...(profile?.teamId ? [{ id: profile.teamId }] : []),
-      ],
+      OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
     },
     include: Eagers.team.include,
   });
@@ -5239,10 +5387,7 @@ export async function sendNPCTransferOffer() {
     where: {
       id: { not: from.id },
       tier: { lte: from.tier },
-      OR: [
-        { profile: null },
-        ...(profile?.teamId ? [{ id: profile.teamId }] : []),
-      ],
+      OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
     },
     include: Eagers.team.include,
   });
@@ -5310,7 +5455,7 @@ export async function sendTransferOffer(
       const role = normalizeRole(player.role);
 
       // selling team must keep at least one sniper after sale
-      if (role === "SNIPER") {
+      if (role === 'SNIPER') {
         return countSnipers(to.players as any) > 1;
       }
 
@@ -5321,11 +5466,14 @@ export async function sendTransferOffer(
       const sameRoleFrom = (from.players || []).filter((p) => normalizeRole(p.role) === role);
 
       // rifler always replaces rifler
-      if (role === "RIFLER" && !sameRoleFrom.length) {
+      if (role === 'RIFLER' && !sameRoleFrom.length) {
         return false;
       }
 
-      const weakestRoleXp = Math.min(...sameRoleFrom.map((p) => p.xp || 0), Number.MAX_SAFE_INTEGER);
+      const weakestRoleXp = Math.min(
+        ...sameRoleFrom.map((p) => p.xp || 0),
+        Number.MAX_SAFE_INTEGER,
+      );
       return (player.xp || 0) > weakestRoleXp || sameRoleFrom.length === 0;
     });
 
@@ -5399,7 +5547,9 @@ export async function sendTransferOffer(
   );
   if (!preferredCandidates.length) return Promise.resolve();
 
-  const target = scored.find((entry) => preferredCandidates.some((player) => player.id === entry.player.id))?.player;
+  const target = scored.find((entry) =>
+    preferredCandidates.some((player) => player.id === entry.player.id),
+  )?.player;
   if (!target) return Promise.resolve();
 
   const fromFed = from.competitionFederationId ?? null;
@@ -5407,14 +5557,19 @@ export async function sendTransferOffer(
   const sameFed = fromFed && toFed ? fromFed === toFed : true;
 
   const peakTier = await getCareerPeakTier(target.id);
-  const topProfile = typeof peakTier === 'number' && peakTier >= Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
-  if (!sameFed && !(topProfile && Chance.rollD2(Constants.TransferSettings.PBX_NPC_CROSS_FED_TOP))) {
+  const topProfile =
+    typeof peakTier === 'number' &&
+    peakTier >= Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
+  if (
+    !sameFed &&
+    !(topProfile && Chance.rollD2(Constants.TransferSettings.PBX_NPC_CROSS_FED_TOP))
+  ) {
     return Promise.resolve();
   }
 
   const offerPercent = random(95, 115) / 100;
   const cost = Math.max(0, Math.round((target.cost || 0) * offerPercent));
-  const wages = Math.max(0, Math.round((target.wages || 0) * random(95, 120) / 100));
+  const wages = Math.max(0, Math.round(((target.wages || 0) * random(95, 120)) / 100));
   const contractYears = getTierContractYears(from.tier);
 
   const transfer = await DatabaseClient.prisma.transfer.create({
@@ -5424,12 +5579,14 @@ export async function sendTransferOffer(
       to: { connect: { id: to.id } },
       target: { connect: { id: target.id } },
       offers: {
-        create: [{
-          status: Constants.TransferStatus.TEAM_PENDING,
-          cost,
-          wages,
-          contractYears,
-        }],
+        create: [
+          {
+            status: Constants.TransferStatus.TEAM_PENDING,
+            cost,
+            wages,
+            contractYears,
+          },
+        ],
       },
     },
     include: Eagers.transfer.include,
@@ -5440,7 +5597,10 @@ export async function sendTransferOffer(
       type: Constants.CalendarEntry.TRANSFER_PARSE,
       date: addDays(
         profile.date,
-        random(Constants.TransferSettings.RESPONSE_MIN_DAYS, Constants.TransferSettings.RESPONSE_MAX_DAYS),
+        random(
+          Constants.TransferSettings.RESPONSE_MIN_DAYS,
+          Constants.TransferSettings.RESPONSE_MAX_DAYS,
+        ),
       ).toISOString(),
       payload: String(transfer.id),
     },
@@ -5507,7 +5667,8 @@ export async function onTransferParse(entry: Calendar) {
 
   let playerAcceptPbx = 60;
   playerAcceptPbx += getExpiryBoost(transfer.target.contractEnd as any, profile.date);
-  if (matchesTeamCountryPreference(transfer.from as any, transfer.target as any)) playerAcceptPbx += 10;
+  if (matchesTeamCountryPreference(transfer.from as any, transfer.target as any))
+    playerAcceptPbx += 10;
 
   const listedDays = getListedDays(transfer.target as any, profile.date);
   const lowerTierOffer = transfer.from.tier < transfer.to.tier;
@@ -5531,8 +5692,14 @@ export async function onTransferParse(entry: Calendar) {
     return Promise.resolve();
   }
 
-  const fromTeam = await DatabaseClient.prisma.team.findFirst({ where: { id: transfer.from.id }, include: { players: true } });
-  const toTeam = await DatabaseClient.prisma.team.findFirst({ where: { id: transfer.to.id }, include: { players: true } });
+  const fromTeam = await DatabaseClient.prisma.team.findFirst({
+    where: { id: transfer.from.id },
+    include: { players: true },
+  });
+  const toTeam = await DatabaseClient.prisma.team.findFirst({
+    where: { id: transfer.to.id },
+    include: { players: true },
+  });
   if (!fromTeam || !toTeam) return Promise.resolve();
 
   // keep both teams valid after trade (>=5 players and at least one sniper each)
@@ -5603,7 +5770,7 @@ export async function onTransferParse(entry: Calendar) {
     },
   });
 
-  if (role === "SNIPER") {
+  if (role === 'SNIPER') {
     await enforceSingleStarterSniper({
       teamId: transfer.from.id,
       keepStarterPlayerId: transfer.target.id,
@@ -5613,7 +5780,7 @@ export async function onTransferParse(entry: Calendar) {
 
   await reinstateBenchedPlayerAfterSale({
     teamId: transfer.to.id,
-    soldRole: transfer.target.role || "",
+    soldRole: transfer.target.role || '',
     date: profile.date,
   });
 
@@ -5647,7 +5814,6 @@ export async function onTransferParse(entry: Calendar) {
 
   return Promise.resolve();
 }
-
 
 /**
  * Sync teams to their current tier.
@@ -5763,7 +5929,7 @@ async function incrementAgesSeasonal() {
     data: { age: { increment: 1 } },
   });
 
-  Engine.Runtime.Instance.log.info("Season start: incremented age for %d players.", res.count);
+  Engine.Runtime.Instance.log.info('Season start: incremented age for %d players.', res.count);
 }
 
 /**
@@ -5869,11 +6035,21 @@ export async function onCompetitionStart(entry: Calendar) {
       data: { status: Constants.CompetitionStatus.COMPLETED },
     });
   }
-  const tournamentOptions: Clux.GroupStageOptions | Clux.DuelOptions | { swiss: {
-    maxLosses: number;
-    maxRounds: number;
-    maxWins: number;
-  } } = swissConfig
+  const tournamentOptions:
+    | Clux.GroupStageOptions
+    | Clux.DuelOptions
+    | {
+        iemGroup: true;
+        last: Constants.BracketIdentifier.LOWER;
+        short: true;
+      }
+    | {
+        swiss: {
+          maxLosses: number;
+          maxRounds: number;
+          maxWins: number;
+        };
+      } = swissConfig
     ? {
         swiss: {
           maxLosses: swissConfig.maxLosses,
@@ -5886,20 +6062,33 @@ export async function onCompetitionStart(entry: Calendar) {
           groupSize: Math.min(competition.tier.groupSize, tournamentSize),
           meetTwice: false,
         }
-      : {
-          short: true,
-          ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
-          competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
-          competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
-            ? { last: Constants.BracketIdentifier.LOWER }
-            : {}),
-        };
+      : IEM_GROUP_TIERS.has(competition.tier.slug as Constants.TierSlug)
+        ? {
+            iemGroup: true,
+            last: Constants.BracketIdentifier.LOWER,
+            short: true,
+          }
+        : DOUBLE_ELIMINATION_TIERS.has(competition.tier.slug as Constants.TierSlug)
+        ? {
+            last: Constants.BracketIdentifier.LOWER,
+            short: true,
+          }
+        : {
+            short: true,
+            ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+              competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
+            competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+              ? { last: Constants.BracketIdentifier.LOWER }
+              : {}),
+          };
   const tournament = new Tournament(tournamentSize, tournamentOptions);
-  tournament.addCompetitors(
-    shuffle(competition.competitors)
-      .slice(0, tournamentSize)
-      .map((competitor) => competitor.id),
-  );
+  const tournamentCompetitors = SEEDED_TOURNAMENT_TIERS.has(
+    competition.tier.slug as Constants.TierSlug,
+  )
+    ? competition.competitors.slice(0, tournamentSize)
+    : shuffle(competition.competitors).slice(0, tournamentSize);
+
+  tournament.addCompetitors(tournamentCompetitors.map((competitor) => competitor.id));
   tournament.start();
 
   // collect map pool
@@ -5914,7 +6103,7 @@ export async function onCompetitionStart(entry: Calendar) {
       },
     },
     orderBy: {
-      position: "asc",
+      position: 'asc',
     },
     include: Eagers.mapPool.include,
   });
@@ -6130,9 +6319,10 @@ export async function onMatchdayNPC(entry: Calendar) {
     awayTeam: away.team,
     simulationResult,
     allowDraw: simulator.allowDraw,
-    profile: entry.type === Constants.CalendarEntry.MATCHDAY_USER
-      ? { teamId: simulator.userTeamId, playerId: simulator.userPlayerId }
-      : undefined,
+    profile:
+      entry.type === Constants.CalendarEntry.MATCHDAY_USER
+        ? { teamId: simulator.userTeamId, playerId: simulator.userPlayerId }
+        : undefined,
   });
 
   return Promise.all([
@@ -6302,7 +6492,7 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
     where: { id: transferId },
     include: {
       ...Eagers.transfer.include,
-      offers: { orderBy: { id: "desc" } },
+      offers: { orderBy: { id: 'desc' } },
       from: { include: { personas: true } },
     },
   });
@@ -6313,7 +6503,7 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
   if (transfer.status !== Constants.TransferStatus.PLAYER_PENDING) return Promise.resolve();
 
   const pendingOffer = transfer.offers.find(
-    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING
+    (o) => o.status === Constants.TransferStatus.PLAYER_PENDING,
   );
   if (!pendingOffer?.expiresAt) return Promise.resolve();
 
@@ -6351,9 +6541,7 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
 
   const persona =
     transfer.from?.personas?.find(
-      (p) =>
-        p.role === Constants.PersonaRole.MANAGER ||
-        p.role === Constants.PersonaRole.ASSISTANT
+      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? transfer.from?.personas?.[0];
 
   if (persona) {
@@ -6362,7 +6550,10 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
       : Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { profile, transfer });
 
     const content = isExtension
-      ? Sqrl.render((locale.templates as any).ContractExtensionExpired.CONTENT, { profile, transfer })
+      ? Sqrl.render((locale.templates as any).ContractExtensionExpired.CONTENT, {
+          profile,
+          transfer,
+        })
       : Sqrl.render((locale.templates as any).OfferExpiredUser.CONTENT, { profile, transfer });
 
     await sendEmail(subject, content, persona, now, true);
