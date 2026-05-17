@@ -154,26 +154,6 @@ export default function () {
           <fieldset>
             <section>
               <header>
-                <p>{t('settings.simTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate('general.simulationMode', event.target.value)
-                  }
-                  value={settings.general.simulationMode}
-                >
-                  {Object.values(Constants.SimulationMode).map((mode) => (
-                    <option key={mode} value={mode}>
-                      {mode}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
                 <p>{t('settings.logLevelTitle')}</p>
               </header>
               <article>
