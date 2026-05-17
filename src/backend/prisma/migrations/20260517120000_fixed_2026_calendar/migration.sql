@@ -1,2 +1,4 @@
 -- Intentionally empty.
--- The 2026 tournament schedule is seeded into the root new-save template only.
+-- The 2026 tournament schedule is seeded into the root new-save template and
+-- synced into existing saves from the season-start runtime handler so active
+-- seasons keep their original schedule until the next season begins.

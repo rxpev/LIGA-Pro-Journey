@@ -463,6 +463,7 @@ export default class DatabaseClient {
     await DatabaseClient.repairCountryMetadata(pool[id].client);
     await DatabaseClient.syncTeamCompetitionFederations(pool[id].client, id);
     await DatabaseClient.recalculateAllTeamCountryIdentities(pool[id].client);
+    await DatabaseClient.normalizeCareerStintStarterValues(pool[id].client);
 
     if (saveMeta.created && id !== 0) {
       await DatabaseClient.ensureInitialCareerStints(pool[id].client);
@@ -538,6 +539,14 @@ export default class DatabaseClient {
     );
 
     DatabaseClient.log.info('Initialized %d player career stints for save bootstrap.', missingStints.length);
+  }
+
+  private static async normalizeCareerStintStarterValues(prisma: PrismaClientExtended) {
+    await prisma.$executeRaw`
+      UPDATE "CareerStint"
+      SET "starter" = 1
+      WHERE "starter" IS NULL
+    `;
   }
 
   private static async reconcileActiveCareerStints(prisma: PrismaClientExtended) {
@@ -644,21 +653,6 @@ export default class DatabaseClient {
       if (!active) continue;
 
       const hasPreviousStint = stints.some((stint) => stint.id !== active.id);
-      if (
-        !hasPreviousStint &&
-        active.teamId != null &&
-        new Date(active.startedAt).getTime() > intendedInitialStart.getTime()
-      ) {
-        tx.push(prisma.careerStint.update({
-          where: { id: active.id },
-          data: { startedAt: intendedInitialStart },
-        }));
-        activeByPlayer.set(playerId, {
-          ...(active as ActiveStintSnapshot),
-          startedAt: intendedInitialStart,
-        });
-      }
-
       const previous = stints
         .filter((stint) => stint.id !== active.id && stint.endedAt != null)
         .sort((a, b) => new Date(b.endedAt as Date).getTime() - new Date(a.endedAt as Date).getTime())[0];

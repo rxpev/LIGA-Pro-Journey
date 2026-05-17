@@ -8,6 +8,7 @@ import * as Autofill from './autofill';
 import * as Simulator from './simulator';
 import * as WindowManager from './window-manager';
 import * as Engine from './engine';
+import { syncLeagueSchedule } from '@liga/backend/prisma/seeds/030-leagues';
 import Tournament from '@liga/shared/tournament';
 import DatabaseClient from './database-client';
 import getLocale from './locale';
@@ -23,7 +24,7 @@ import {
   subDays,
 } from 'date-fns';
 import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
-import { Calendar, Prisma } from '@prisma/client';
+import { Calendar, Prisma, PrismaClient } from '@prisma/client';
 import {
   Constants,
   Chance,
@@ -402,6 +403,21 @@ const ESEA_DIVISION_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
   Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
 ]);
+
+const LEAGUE_PLAYOFF_TIER_TO_DIVISION: Partial<Record<Constants.TierSlug, Constants.TierSlug>> = {
+  [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: Constants.TierSlug.LEAGUE_OPEN,
+  [Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  [Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS]: Constants.TierSlug.LEAGUE_MAIN,
+  [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: Constants.TierSlug.LEAGUE_ADVANCED,
+  [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: Constants.TierSlug.LEAGUE_PRO,
+};
+
+function getPrestigeIndexForTierSlug(tierSlug?: string | null) {
+  const normalizedTierSlug =
+    LEAGUE_PLAYOFF_TIER_TO_DIVISION[tierSlug as Constants.TierSlug] ?? tierSlug;
+
+  return Constants.Prestige.findIndex((prestige) => prestige === normalizedTierSlug);
+}
 
 async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants.TierSlug) {
   const existingMatchday = await DatabaseClient.prisma.calendar.findFirst({
@@ -2252,10 +2268,11 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const idxPro = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PRO);
 
   // Current tier from team; if teamless fall back to last stint tier; otherwise Open.
+  const profileTeamTier = (profile as any)?.team?.tier;
   const currentTierIdx =
-    typeof (profile as any)?.team?.tier === 'number'
-      ? (profile as any).team.tier
-      : typeof lastStintWithTeam?.tier === 'number'
+    typeof profileTeamTier === 'number' && profileTeamTier >= 0
+      ? profileTeamTier
+      : typeof lastStintWithTeam?.tier === 'number' && lastStintWithTeam.tier >= 0
         ? lastStintWithTeam.tier
         : idxOpen;
 
@@ -2513,6 +2530,11 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       tierWeights[String(tIdx)] = w;
     }
 
+    if (Object.keys(tierWeights).length === 0) {
+      Engine.Runtime.Instance.log.debug('PlayerScoutingCheck: no eligible tiers; skipping offer.');
+      return Promise.resolve();
+    }
+
     const pickedTierIdx = Number(Chance.roll(tierWeights));
     const pickedTierSlug = Constants.Prestige[pickedTierIdx] as TierSlug;
 
@@ -2740,14 +2762,31 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   } finally {
     // Schedule next weekly check (recurring)
     const nextDate = addDays(profile.date, 7);
-    await prisma.calendar.create({
-      data: {
-        type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
-        date: nextDate.toISOString(),
-        payload: String(playerId),
-      },
-    });
+    await schedulePlayerScoutingCheck(prisma, nextDate, playerId);
   }
+}
+
+async function schedulePlayerScoutingCheck(
+  prisma: typeof DatabaseClient.prisma,
+  date: Date,
+  playerId: number,
+) {
+  const payload = String(playerId);
+  return prisma.calendar.upsert({
+    where: {
+      date_type_payload: {
+        date,
+        type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+        payload,
+      },
+    },
+    update: {},
+    create: {
+      type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+      date,
+      payload,
+    },
+  });
 }
 
 /**
@@ -2755,6 +2794,29 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
  *
  * Payload: playerId (stringified)
  */
+async function schedulePlayerContractReview(
+  prisma: typeof DatabaseClient.prisma,
+  date: Date,
+  playerId: number,
+) {
+  const payload = String(playerId);
+  return prisma.calendar.upsert({
+    where: {
+      date_type_payload: {
+        date,
+        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        payload,
+      },
+    },
+    update: {},
+    create: {
+      type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+      date,
+      payload,
+    },
+  });
+}
+
 export async function onPlayerContractReview(entry: Calendar) {
   const prisma = DatabaseClient.prisma;
   const playerId = Number(entry.payload);
@@ -2800,13 +2862,7 @@ export async function onPlayerContractReview(entry: Calendar) {
     );
     // still reschedule
     const nextDate = addDays(now, 7);
-    await prisma.calendar.create({
-      data: {
-        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
-        date: nextDate.toISOString(),
-        payload: String(playerId),
-      },
-    });
+    await schedulePlayerContractReview(prisma, nextDate, playerId);
     return Promise.resolve();
   }
 
@@ -2962,13 +3018,7 @@ export async function onPlayerContractReview(entry: Calendar) {
   const freshProfile = await prisma.profile.findFirst(Eagers.profile);
   if (freshProfile?.playerId === playerId && freshProfile.teamId) {
     const nextDate = addDays(now, 7);
-    await prisma.calendar.create({
-      data: {
-        type: Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
-        date: nextDate.toISOString(),
-        payload: String(playerId),
-      },
-    });
+    await schedulePlayerContractReview(prisma, nextDate, playerId);
   }
 
   return Promise.resolve();
@@ -3564,9 +3614,21 @@ export async function recordMatchResults() {
  */
 export async function scheduleNextSeasonStart() {
   const profile = await DatabaseClient.prisma.profile.findFirst();
+  const date = addYears(profile.date, 1);
+  const existingEntry = await DatabaseClient.prisma.calendar.findFirst({
+    where: {
+      date: date.toISOString(),
+      type: Constants.CalendarEntry.SEASON_START,
+    },
+  });
+
+  if (existingEntry) {
+    return existingEntry;
+  }
+
   return DatabaseClient.prisma.calendar.create({
     data: {
-      date: addYears(profile.date, 1).toISOString(),
+      date: date.toISOString(),
       type: Constants.CalendarEntry.SEASON_START,
     },
   });
@@ -5843,17 +5905,25 @@ export async function syncTiers() {
   });
 
   // build a transaction for all the updates
-  const transaction = competitions.map((competition) =>
-    DatabaseClient.prisma.team.updateMany({
+  const transaction: Prisma.PrismaPromise<Prisma.BatchPayload>[] = competitions.reduce(
+    (queries: Prisma.PrismaPromise<Prisma.BatchPayload>[], competition) => {
+    const prestigeIdx = getPrestigeIndexForTierSlug(competition.tier.slug);
+    if (prestigeIdx < 0) {
+      return queries;
+    }
+
+    queries.push(DatabaseClient.prisma.team.updateMany({
       where: {
         id: { in: competition.competitors.map((competitor) => competitor.teamId) },
       },
       data: {
-        tier: Constants.Prestige.findIndex((prestige) => prestige === competition.tier.slug),
-        prestige: Constants.Prestige.findIndex((prestige) => prestige === competition.tier.slug),
+        tier: prestigeIdx,
+        prestige: prestigeIdx,
       },
-    }),
-  );
+    }));
+
+    return queries;
+  }, []);
 
   // run the transaction
   return DatabaseClient.prisma.$transaction(transaction);
@@ -6181,6 +6251,7 @@ export async function onSeasonStart() {
     .then(scheduleNextSeasonStart)
     .then(bumpSeasonNumber)
     .then(rotateMapPoolForNewSeason)
+    .then(() => syncLeagueSchedule(DatabaseClient.prisma as unknown as PrismaClient))
     .then(createCompetitions)
     .then(incrementAgesSeasonal)
     .then(syncTiers)

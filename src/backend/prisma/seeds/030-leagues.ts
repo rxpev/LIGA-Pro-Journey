@@ -18,7 +18,7 @@ type LeagueSeedData = Prisma.LeagueCreateInput & {
  *
  * @constant
  */
-const data: Array<LeagueSeedData> = [
+export const data: Array<LeagueSeedData> = [
   {
     name: 'ESEA',
     slug: Constants.LeagueSlug.ESPORTS_LEAGUE,
@@ -450,33 +450,25 @@ const data: Array<LeagueSeedData> = [
  * @param prisma The prisma client.
  * @function
  */
-export default async function (prisma: PrismaClient) {
+export async function syncLeagueSchedule(prisma: PrismaClient) {
   // grab all federations
   const federations = await prisma.federation.findMany();
 
-  // build the transaction
-  const transaction = data.map((league) =>
-    prisma.league.upsert({
+  for (const league of data) {
+    const leagueFederations = federations
+      .filter((federation) =>
+        league.federations.includes(federation.slug as Constants.FederationSlug),
+      )
+      .map((federation) => ({ id: federation.id }));
+
+    const persistedLeague = await prisma.league.upsert({
       where: { slug: league.slug },
       update: {
         name: league.name,
         slug: league.slug,
         startOffsetDays: league.startOffsetDays,
         federations: {
-          connect: federations
-            .filter((federation) =>
-              league.federations.includes(federation.slug as Constants.FederationSlug),
-            )
-            .map((federation) => ({ id: federation.id })),
-        },
-        tiers: {
-          upsert: league.tiers.map((tier) => ({
-            where: {
-              slug: tier.slug,
-            },
-            update: tier,
-            create: tier,
-          })),
+          connect: leagueFederations,
         },
       },
       create: {
@@ -484,19 +476,31 @@ export default async function (prisma: PrismaClient) {
         slug: league.slug,
         startOffsetDays: league.startOffsetDays,
         federations: {
-          connect: federations
-            .filter((federation) =>
-              league.federations.includes(federation.slug as Constants.FederationSlug),
-            )
-            .map((federation) => ({ id: federation.id })),
-        },
-        tiers: {
-          create: league.tiers,
+          connect: leagueFederations,
         },
       },
-    }),
-  );
+    });
 
-  // run the transaction
-  return prisma.$transaction(transaction);
+    for (const tier of league.tiers) {
+      await prisma.tier.upsert({
+        where: { slug: tier.slug },
+        update: {
+          ...tier,
+          league: {
+            connect: { id: persistedLeague.id },
+          },
+        },
+        create: {
+          ...tier,
+          league: {
+            connect: { id: persistedLeague.id },
+          },
+        },
+      });
+    }
+  }
+
+  return Promise.resolve();
 }
+
+export default syncLeagueSchedule;
