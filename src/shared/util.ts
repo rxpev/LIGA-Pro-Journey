@@ -419,7 +419,10 @@ export function getCompetitionLogo(
   federationSlug?: Constants.FederationSlug | string,
 ) {
   const protocol = 'resources://competitions/';
-  const slug = tierSlug.replace(/:/gi, '-');
+  const slug =
+    tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+      ? 'cct-oceania-series-playoffs'
+      : tierSlug.replace(/:/gi, '-');
 
   // circuits are not tied to a federation
   if (slug.includes('circuit')) {
