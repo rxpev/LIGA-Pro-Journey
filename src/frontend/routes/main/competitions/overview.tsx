@@ -52,7 +52,6 @@ export default function () {
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
-  const [selectedGroup, setSelectedGroup] = React.useState<number>();
   const [winners, setWinners] = React.useState<
     Awaited<ReturnType<typeof api.competitions.winners>>
   >([]);
@@ -128,23 +127,31 @@ export default function () {
 
   // reset group selection when competition changes
   React.useEffect(() => {
-    setSelectedGroup(null);
     setShowAllPrizePool(false);
   }, [competition]);
 
-  // grab user's team info
-  const userTeam = React.useMemo(
-    () => competition.competitors.find((competitor) => competitor.teamId === state.profile.teamId),
-    [competition, state.profile],
+  // group standings tables
+  const groups = React.useMemo(
+    () => groupBy(competition.competitors, 'group'),
+    [competition.competitors],
   );
-
-  // grab group to highlight
-  const group = React.useMemo(
+  const groupKeys = React.useMemo(() => Object.keys(groups), [groups]);
+  const groupZones = React.useMemo(
     () =>
-      competition.competitors.filter(
-        (competitor) => competitor.group === (selectedGroup || userTeam?.group || 1),
+      competition.status === Constants.CompetitionStatus.STARTED &&
+      competition.tier.groupSize &&
+      Util.getTierZonesByGroup(
+        tierSlug,
+        competition.federation.slug as Constants.FederationSlug,
+        groupKeys.length,
       ),
-    [competition, userTeam, selectedGroup],
+    [
+      competition.status,
+      competition.tier.groupSize,
+      competition.federation.slug,
+      groupKeys.length,
+      tierSlug,
+    ],
   );
 
   // filler for previous matches
@@ -446,47 +453,29 @@ export default function () {
         <header className="heading prose max-w-none border-t-0!">
           <h2>{t('shared.standings')}</h2>
         </header>
-        {!isBracketStandings && (
-          <select
-            className={cx(
-              'select border-base-content/10 bg-base-200 w-full rounded-none border-0 border-b',
-              'disabled:bg-base-200 disabled:text-opacity-100 focus:border-0 focus:border-b',
-            )}
-            onChange={(event) => setSelectedGroup(Number(event.target.value))}
-            value={selectedGroup || userTeam?.group || -1}
-            disabled={!competition.competitors.some((competitor) => competitor.group > 1)}
-          >
-            {!group.length && (
-              <option disabled value={-1}>
-                {t('shared.competitionNotStarted')}
-              </option>
-            )}
-            {competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE ? (
-              <option>{Constants.IdiomaticTier[competition.tier.slug]}</option>
-            ) : (
-              Object.keys(groupBy(competition.competitors, 'group')).map((groupKey) => (
-                <option key={groupKey + '__select'} value={groupKey}>
-                  {t('shared.group')} {Util.toAlpha(groupKey)}
-                </option>
-              ))
-            )}
-          </select>
+        {!!competition.tier.groupSize &&
+          groupKeys.map((groupKey) => (
+            <Standings
+              key={groupKey + '__overview_standings'}
+              highlight={state.profile.teamId}
+              competitors={groups[groupKey]}
+              teamLink={(team) => `/teams?teamId=${team.id}`}
+              title={
+                competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+                  ? Constants.IdiomaticTier[tierSlug]
+                  : `${t('shared.group')} ${Util.toAlpha(groupKey)}`
+              }
+              zones={groupZones}
+            />
+          ))}
+        {!competition.tier.groupSize && (
+          <Standings
+            highlight={state.profile.teamId}
+            competitors={competition.competitors}
+            mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
+            teamLink={(team) => `/teams?teamId=${team.id}`}
+          />
         )}
-        <Standings
-          highlight={state.profile.teamId}
-          competitors={isBracketStandings ? competition.competitors : group}
-          mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
-          teamLink={(team) => `/teams?teamId=${team.id}`}
-          zones={
-            competition.status === Constants.CompetitionStatus.STARTED &&
-            competition.tier.groupSize &&
-            Util.getTierZonesByGroup(
-              competition.tier.slug as Constants.TierSlug,
-              competition.federation.slug as Constants.FederationSlug,
-              Object.keys(groupBy(competition.competitors, 'group')).length,
-            )
-          }
-        />
       </article>
     </section>
   );
