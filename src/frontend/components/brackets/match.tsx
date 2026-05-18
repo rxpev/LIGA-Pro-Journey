@@ -24,16 +24,18 @@ const Wrapper = styled.div`
 
 const TopText = styled.p`
   color: ${({ theme }) => theme.textColor.dark};
-  margin-bottom: 0.2rem;
+  margin: 0 0 0.35rem;
   min-height: 1.25rem;
+  font-size: 0.8rem;
 `;
 
 const BottomText = styled.p`
   color: ${({ theme }) => theme.textColor.dark};
   flex: 0 0 none;
   text-align: center;
-  margin-top: 0.2rem;
+  margin: 0.25rem 0 0;
   min-height: 1.25rem;
+  font-size: 0.75rem;
 `;
 
 const StyledMatch = styled.div`
@@ -41,6 +43,9 @@ const StyledMatch = styled.div`
   flex-direction: column;
   flex: 1 1 auto;
   justify-content: space-between;
+  overflow: hidden;
+  border: 1px solid ${({ theme }) => theme.border.color};
+  background: var(--color-base-200);
 `;
 
 const Team = styled.div`
@@ -58,14 +63,18 @@ const Logo = styled.img`
 const Score = styled.div<{ won?: boolean }>`
   display: flex;
   height: 100%;
-  padding: 0 1rem;
+  padding: 0 0.9rem;
   align-items: center;
-  width: 20%;
+  min-width: 3.5rem;
   justify-content: center;
   background: ${({ theme, won }) =>
     won ? theme.score.background.wonColor : theme.score.background.lostColor};
   color: ${({ won }) =>
-    won === undefined ? 'var(--color-base-content)' : won ? 'var(--color-success)' : 'var(--color-error)'};
+    won === undefined
+      ? 'var(--color-base-content)'
+      : won
+        ? 'var(--color-success)'
+        : 'var(--color-error)'};
 `;
 
 const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
@@ -73,23 +82,23 @@ const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
   height: 100%;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 0 1rem;
+  padding: 0 0 0 0.85rem;
   background: ${({ theme, won }) =>
     won ? theme.matchBackground.wonColor : theme.matchBackground.lostColor};
 
-  border-right: 4px solid ${({ theme }) => theme.border.color};
-  border-left: 4px solid ${({ theme }) => theme.border.color};
-  border-top: 1px solid ${({ theme }) => theme.border.color};
-  border-bottom: 1px solid ${({ theme }) => theme.border.color};
+  border: 0;
 
   transition: border-color 0.5s ${({ theme }) => theme.transitionTimingFunction};
   ${Team} {
-    color: ${({ theme, won }) =>
-    won ? theme.textColor.highlighted : theme.textColor.dark};
+    color: ${({ theme, won }) => (won ? theme.textColor.highlighted : theme.textColor.dark)};
   }
   ${Score} {
     color: ${({ won }) =>
-    won === undefined ? 'var(--color-base-content)' : won ? 'var(--color-success)' : 'var(--color-error)'};
+      won === undefined
+        ? 'var(--color-base-content)'
+        : won
+          ? 'var(--color-success)'
+          : 'var(--color-error)'};
   }
   ${({ hovered, theme, won }) =>
     hovered &&
@@ -100,11 +109,12 @@ const Side = styled.button<{ won?: boolean; hovered?: boolean }>`
       }
       ${Score} {
         color: ${won === undefined
-        ? 'var(--color-base-content)'
-        : won
-          ? 'var(--color-success)'
-          : 'var(--color-error)'};
+          ? 'var(--color-base-content)'
+          : won
+            ? 'var(--color-success)'
+            : 'var(--color-error)'};
       }
+      background: var(--color-base-300);
     `}
 `;
 
@@ -204,9 +214,7 @@ export function TeamLogoMatch({
           onClick={() => onPartyClick?.(topParty, topWon)}
         >
           {renderTeamName(topParty, teamNameFallback)}
-          <Score won={topWon}>
-            {topParty?.resultText ?? resultFallback(topParty)}
-          </Score>
+          <Score won={topWon}>{topParty?.resultText ?? resultFallback(topParty)}</Score>
         </Side>
         <Line highlighted={topHovered || bottomHovered} />
         <Side
@@ -218,9 +226,7 @@ export function TeamLogoMatch({
           onClick={() => onPartyClick?.(bottomParty, bottomWon)}
         >
           {renderTeamName(bottomParty, teamNameFallback)}
-          <Score won={bottomWon}>
-            {bottomParty?.resultText ?? resultFallback(bottomParty)}
-          </Score>
+          <Score won={bottomWon}>{bottomParty?.resultText ?? resultFallback(bottomParty)}</Score>
         </Side>
       </StyledMatch>
       <BottomText>{bottomText ?? ' '}</BottomText>

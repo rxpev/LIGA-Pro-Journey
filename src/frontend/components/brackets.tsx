@@ -6,17 +6,9 @@
 import React from 'react';
 import Tournament from '@liga/shared/tournament';
 import { Constants, Eagers, Util } from '@liga/shared';
+import { cx } from '@liga/frontend/lib';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
-import {
-  SingleEliminationBracket,
-  DoubleEliminationBracket,
-  SVGViewer,
-  MATCH_STATES,
-  MatchType,
-  ParticipantType,
-  createTheme,
-} from '@g-loot/react-tournament-brackets/dist/esm';
-import { TeamLogoMatch } from './brackets/match';
+import { ParticipantType } from '@g-loot/react-tournament-brackets/dist/esm';
 
 /** @interface */
 interface Props {
@@ -24,39 +16,12 @@ interface Props {
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
 }
 
-/**
- * Brackets theme definition.
- *
- * @constant
- */
-const theme = createTheme({
-  border: {
-    color: 'color-mix(in oklch, transparent 90%, var(--color-base-content))',
-    highlightedColor: 'var(--color-base-content)',
-  },
-  matchBackground: {
-    wonColor: 'var(--color-base-200)',
-    lostColor: 'color-mix(in oklch, transparent 90%, var(--color-base-200))',
-  },
-  roundHeaders: {
-    background: 'var(--color-base-200)',
-  },
-  score: {
-    background: {
-      wonColor: 'var(--color-base-300)',
-      lostColor: 'var(--color-base-300)',
-    },
-    text: {
-      highlightedWonColor: 'var(--color-info)',
-      highlightedLostColor: 'var(--color-warning)',
-    },
-  },
-  textColor: {
-    main: 'var(--color-base-content)',
-    dark: 'color-mix(in oklch, transparent 50%, var(--color-base-content))',
-    highlighted: 'var(--color-base-content)',
-  },
-});
+const MATCH_WIDTH = 300;
+const MATCH_HEIGHT = 92;
+const ROUND_GAP = 72;
+const MATCH_GAP = 38;
+const HEADER_HEIGHT = 36;
+const SECTION_GAP = 52;
 
 /**
  * Converts Prisma Matches object to data
@@ -67,229 +32,428 @@ const theme = createTheme({
  * @function
  */
 type BracketMatchId = { s: number; r: number; m: number };
+type BracketSection = {
+  height: number;
+  nodes: Array<{ hidden: boolean; match: Props['matches'][number]; x: number; y: number }>;
+  positions: Map<
+    string,
+    { hidden: boolean; match: Props['matches'][number]; x: number; y: number }
+  >;
+  roundNumbers: number[];
+  title: string;
+  top: number;
+  width: number;
+};
 
-function getMatchState(match: Props['matches'][number]) {
-  switch (match.status) {
-    case Constants.MatchStatus.COMPLETED:
-      return MATCH_STATES.SCORE_DONE;
-    case Constants.MatchStatus.LOCKED:
-      return MATCH_STATES.NO_PARTY;
-    default:
-      return null;
+function makeMatchKey(matchId: BracketMatchId) {
+  return JSON.stringify(matchId);
+}
+
+function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
+  if (!isIemGroup) {
+    return null;
   }
-}
 
-function getParticipantState(match: Props['matches'][number], score: number | null) {
-  switch (match.status) {
-    case Constants.MatchStatus.COMPLETED:
-      return score !== null ? MATCH_STATES.SCORE_DONE : MATCH_STATES.WALK_OVER;
-    case Constants.MatchStatus.LOCKED:
-      return MATCH_STATES.NO_PARTY;
-    default:
-      return null;
+  if (matchId.s === Constants.BracketIdentifier.UPPER) {
+    if (matchId.r === 1) {
+      return {
+        s: Constants.BracketIdentifier.UPPER,
+        r: 2,
+        m: matchId.m <= 2 ? 1 : 2,
+      };
+    }
+
+    if (matchId.r === 2) {
+      return {
+        s: Constants.BracketIdentifier.UPPER,
+        r: 3,
+        m: 1,
+      };
+    }
   }
+
+  if (matchId.s === Constants.BracketIdentifier.LOWER) {
+    if (matchId.r === 1) {
+      return {
+        s: Constants.BracketIdentifier.LOWER,
+        r: 2,
+        m: matchId.m,
+      };
+    }
+
+    if (matchId.r === 2) {
+      return {
+        s: Constants.BracketIdentifier.LOWER,
+        r: 3,
+        m: 1,
+      };
+    }
+  }
+
+  return null;
 }
 
-function toMatchType(
-  tourney: Tournament,
-  match: Props['matches'][number],
-  matchId: BracketMatchId,
-  fmtDate: (value: Date | number | string) => string,
-) {
-  const [nextMatchId] = tourney.brackets.right(matchId) || [];
-  const downMatch = tourney.brackets as {
-    down?: (id: BracketMatchId) => [BracketMatchId, number] | null;
-  };
-  const [nextLooserMatchId] =
-    matchId.s === Constants.BracketIdentifier.UPPER ? downMatch.down?.(matchId) || [] : [];
-  const bracketLabel =
-    matchId.s === Constants.BracketIdentifier.UPPER
-      ? 'UB'
-      : matchId.s === Constants.BracketIdentifier.LOWER
-        ? 'LB'
-        : 'R';
+function BracketCard(props: {
+  match: Props['matches'][number];
+  fmtDate: (value: Date | number | string) => string;
+  onPartyClick?: Props['onPartyClick'];
+}) {
+  const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
 
-  return {
-    id: match.payload,
-    nextMatchId: nextMatchId ? JSON.stringify(nextMatchId) : null,
-    nextLooserMatchId: nextLooserMatchId ? JSON.stringify(nextLooserMatchId) : null,
-    startTime: fmtDate(match.date),
-    tournamentRoundText: `${bracketLabel} ${matchId.r}`,
-    state: getMatchState(match),
-    participants: match.competitors.map((competitor) => ({
-      id: competitor.team.id,
-      name: competitor.team.name,
-      logo: competitor.team.blazon,
-      isWinner: competitor.result === Constants.MatchResult.WIN,
-      resultText: competitor.score !== null ? String(competitor.score) : null,
-      status: getParticipantState(match, competitor.score),
-    })),
-  } satisfies MatchType;
-}
+  return (
+    <article className="border-base-content/15 bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm">
+      <header className="text-info/70 bg-base-100 border-base-content/10 border-b px-3 py-1 font-semibold">
+        {props.fmtDate(props.match.date)}
+      </header>
+      {competitors.map((competitor) => {
+        const won = competitor.result === Constants.MatchResult.WIN;
+        const lost = competitor.result === Constants.MatchResult.LOSS;
 
-function toSingleElimData(
-  tourney: Tournament,
-  matches: Props['matches'],
-  fmtDate: (value: Date | number | string) => string,
-): MatchType[] {
-  return matches.map((match) => {
-    const matchId = JSON.parse(match.payload) as BracketMatchId;
-    return {
-      ...toMatchType(tourney, match, matchId, fmtDate),
-      tournamentRoundText: String(match.round),
-      nextLooserMatchId: null as MatchType['nextLooserMatchId'],
-    };
-  });
-}
-
-function toDoubleElimData(
-  tourney: Tournament,
-  matches: Props['matches'],
-  fmtDate: (value: Date | number | string) => string,
-): { upper: MatchType[]; lower: MatchType[] } {
-  return matches.reduce(
-    (acc, match) => {
-      const matchId = JSON.parse(match.payload) as BracketMatchId;
-      const bracketMatch = toMatchType(tourney, match, matchId, fmtDate);
-      if (matchId.s === Constants.BracketIdentifier.LOWER) {
-        acc.lower.push({
-          ...bracketMatch,
-          nextLooserMatchId: null,
-        });
-      } else {
-        acc.upper.push(bracketMatch);
-      }
-      return acc;
-    },
-    { upper: [], lower: [] } as { upper: MatchType[]; lower: MatchType[] },
+        return (
+          <button
+            key={competitor.id}
+            type="button"
+            className={cx(
+              'hover:bg-base-300 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left',
+              won ? 'bg-base-200 text-base-content' : 'bg-base-100/65',
+              lost && 'text-base-content/50',
+            )}
+            onClick={() =>
+              props.onPartyClick?.(
+                {
+                  id: competitor.team.id,
+                  name: competitor.team.name,
+                  resultText: competitor.score != null ? String(competitor.score) : null,
+                } as ParticipantType,
+                won,
+              )
+            }
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              {competitor.team.blazon && (
+                <img
+                  alt=""
+                  className="size-4 shrink-0 object-contain"
+                  src={competitor.team.blazon}
+                />
+              )}
+              <span className="truncate">{competitor.team.name}</span>
+            </span>
+            <span
+              className={cx(
+                'bg-base-300 flex h-full w-12 shrink-0 items-center justify-center tabular-nums',
+                won ? 'text-success' : lost ? 'text-error' : 'text-base-content',
+              )}
+            >
+              {competitor.score ?? '-'}
+            </span>
+          </button>
+        );
+      })}
+    </article>
   );
 }
 
-function IemGroupBracket(props: {
+function ManualBracket(props: {
   matches: Props['matches'];
+  tourney: Tournament;
   onPartyClick?: Props['onPartyClick'];
 }) {
   const fmtDate = useFormatAppDate();
-  const sections = React.useMemo(() => {
-    const grouped = props.matches.reduce(
+  const [zoom, setZoom] = React.useState(1);
+  const [pan, setPan] = React.useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = React.useState<{
+    mouseX: number;
+    mouseY: number;
+    x: number;
+    y: number;
+  }>();
+  const handleWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setZoom((value) => {
+      const next = value + direction * 0.08;
+      return Math.min(1.35, Math.max(0.45, Number(next.toFixed(2))));
+    });
+  }, []);
+  const handleMouseDown = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setDragStart({
+        mouseX: event.clientX,
+        mouseY: event.clientY,
+        x: pan.x,
+        y: pan.y,
+      });
+    },
+    [pan.x, pan.y],
+  );
+  const handleMouseMove = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!dragStart) {
+        return;
+      }
+
+      setPan({
+        x: dragStart.x + event.clientX - dragStart.mouseX,
+        y: dragStart.y + event.clientY - dragStart.mouseY,
+      });
+    },
+    [dragStart],
+  );
+  const stopDragging = React.useCallback(() => setDragStart(undefined), []);
+  const layout = React.useMemo(() => {
+    const sections = props.matches.reduce(
       (acc, match) => {
         const matchId = JSON.parse(match.payload) as BracketMatchId;
-        const key = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
-        if (!acc[key][matchId.r]) {
-          acc[key][matchId.r] = [];
-        }
-        acc[key][matchId.r].push(match);
+        const section = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
+        acc[section][matchId.r] ||= [];
+        acc[section][matchId.r].push(match);
         return acc;
       },
       { lower: {}, upper: {} } as Record<'lower' | 'upper', Record<number, Props['matches']>>,
     );
 
-    Object.values(grouped).forEach((rounds) => {
-      Object.values(rounds).forEach((round) => {
+    Object.values(sections).forEach((rounds) => {
+      Object.values(rounds).forEach((round) =>
         round.sort((a, b) => {
           const aId = JSON.parse(a.payload) as BracketMatchId;
           const bId = JSON.parse(b.payload) as BracketMatchId;
           return aId.m - bId.m;
-        });
+        }),
+      );
+    });
+
+    return sections;
+  }, [props.matches]);
+
+  const buildSection = (
+    sectionKey: 'upper' | 'lower',
+    title: string,
+    top: number,
+  ): BracketSection => {
+    const rounds = layout[sectionKey];
+    const roundNumbers = Object.keys(rounds)
+      .map(Number)
+      .sort((a, b) => a - b);
+    const firstRound = roundNumbers[0];
+    const firstRoundMatches = firstRound ? rounds[firstRound] || [] : [];
+    const maxMatches = Math.max(
+      1,
+      firstRoundMatches.length,
+      ...roundNumbers.map((round) => rounds[round]?.length || 0),
+    );
+    const sectionHeight =
+      HEADER_HEIGHT + 58 + maxMatches * MATCH_HEIGHT + (maxMatches - 1) * MATCH_GAP;
+    const positions = new Map<
+      string,
+      { hidden: boolean; match: Props['matches'][number]; x: number; y: number }
+    >();
+    const incoming = new Map<string, string[]>();
+
+    Object.values(rounds).forEach((matches) => {
+      matches.forEach((match) => {
+        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const nextMatchId =
+          getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
+          props.tourney.brackets.right(matchId)?.[0];
+        if (!nextMatchId) {
+          return;
+        }
+
+        const nextKey = makeMatchKey(nextMatchId as BracketMatchId);
+        incoming.set(nextKey, [...(incoming.get(nextKey) || []), match.payload]);
       });
     });
 
-    return grouped;
-  }, [props.matches]);
+    roundNumbers.forEach((round, roundIndex) => {
+      const matches = rounds[round] ?? [];
+      matches.forEach((match, matchIndex) => {
+        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const x = roundIndex * (MATCH_WIDTH + ROUND_GAP);
+        const childCenters = (incoming.get(match.payload) || [])
+          .map((key) => positions.get(key))
+          .filter(Boolean)
+          .map((position) => position!.y + MATCH_HEIGHT / 2);
+        const fallbackY = top + HEADER_HEIGHT + 58 + matchIndex * (MATCH_HEIGHT + MATCH_GAP);
+        const isFirstRound = matchId.r === firstRound;
+        const isHiddenBye =
+          sectionKey === 'upper' &&
+          isFirstRound &&
+          match.competitors.length < 2 &&
+          roundNumbers.length > 1;
+        const y = childCenters.length
+          ? childCenters.reduce((sum, center) => sum + center, 0) / childCenters.length -
+            MATCH_HEIGHT / 2
+          : fallbackY;
+        positions.set(match.payload, { hidden: isHiddenBye, x, y, match });
+      });
+    });
 
-  const renderMatch = (match: Props['matches'][number]) => {
-    const competitors = [...match.competitors].sort((a, b) => a.seed - b.seed);
-
-    return (
-      <article
-        key={match.id}
-        className="border-base-content/10 bg-base-200/70 min-h-14 w-56 border text-xs shadow-sm"
-      >
-        <header className="text-base-content/60 px-2 py-1">{fmtDate(match.date)}</header>
-        {competitors.map((competitor) => {
-          const won = competitor.result === Constants.MatchResult.WIN;
-          const lost = competitor.result === Constants.MatchResult.LOSS;
-
-          return (
-            <button
-              key={competitor.id}
-              type="button"
-              className={[
-                'flex h-7 w-full items-center justify-between gap-2 border-t border-base-content/10 px-2 text-left',
-                won ? 'bg-base-300 text-base-content' : '',
-                lost ? 'text-base-content/50' : '',
-              ].join(' ')}
-              onClick={() =>
-                props.onPartyClick?.(
-                  {
-                    id: competitor.team.id,
-                    name: competitor.team.name,
-                    resultText: competitor.score != null ? String(competitor.score) : null,
-                  } as ParticipantType,
-                  won,
-                )
-              }
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                {competitor.team.blazon && (
-                  <img
-                    alt=""
-                    className="size-4 shrink-0 object-contain"
-                    src={competitor.team.blazon}
-                  />
-                )}
-                <span className="truncate">{competitor.team.name}</span>
-              </span>
-              <span
-                className={[
-                  'shrink-0 tabular-nums',
-                  won ? 'text-success' : lost ? 'text-error' : 'text-base-content',
-                ].join(' ')}
-              >
-                {competitor.score ?? '-'}
-              </span>
-            </button>
-          );
-        })}
-      </article>
-    );
+    return {
+      height: sectionHeight,
+      nodes: [...positions.values()],
+      title,
+      top,
+      roundNumbers,
+      positions,
+      width: roundNumbers.length * MATCH_WIDTH + Math.max(0, roundNumbers.length - 1) * ROUND_GAP,
+    };
   };
 
-  const renderRounds = (
-    title: string,
-    rounds: Record<number, Props['matches']>,
-    labels: Record<number, string>,
-  ) => (
-    <section className="space-y-3">
-      <h3 className="text-base-content/70 text-sm font-semibold">{title}</h3>
-      <div className="grid min-w-max grid-cols-3 gap-10">
-        {[1, 2, 3].map((round) => (
-          <div key={`${title}-${round}`} className="space-y-6">
-            <header className="bg-base-200 text-info h-8 w-56 text-center text-sm leading-8">
-              {labels[round]}
-            </header>
-            <div className="flex min-h-40 flex-col justify-around gap-4">
-              {(rounds[round] ?? []).map(renderMatch)}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+  const upper = buildSection('upper', 'Upper Bracket', 0);
+  const lowerTop = upper.height + SECTION_GAP;
+  const lower = buildSection('lower', 'Lower Bracket', lowerTop);
+  const sections = lower.nodes.length ? [upper, lower] : [upper];
+  const width = Math.max(...sections.map((section) => section.width));
+  const height = sections.reduce((max, section) => Math.max(max, section.top + section.height), 0);
+
+  const connectors = sections.flatMap((section) =>
+    section.nodes.flatMap(({ match }) => {
+      const matchId = JSON.parse(match.payload) as BracketMatchId;
+      const nextMatchId =
+        getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
+        props.tourney.brackets.right(matchId)?.[0];
+      if (!nextMatchId) {
+        return [];
+      }
+
+      const from = section.positions.get(match.payload);
+      const to = section.positions.get(makeMatchKey(nextMatchId as BracketMatchId));
+      if (!from || !to || from.hidden || to.hidden) {
+        return [];
+      }
+
+      const startX = from.x + MATCH_WIDTH;
+      const startY = from.y + MATCH_HEIGHT / 2;
+      const endX = to.x;
+      const endY = to.y + MATCH_HEIGHT / 2;
+      const midX = startX + (endX - startX) / 2;
+
+      return [`M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`];
+    }),
   );
 
+  const roundTitle = (section: BracketSection, round: number) => {
+    const roundIndex = section.roundNumbers.indexOf(round);
+    const total = section.roundNumbers.length;
+
+    if (section.title === 'Lower Bracket') {
+      if (props.tourney.iemGroup && total === 3) {
+        return (
+          ['Lower round 1', 'Lower semi-finals', 'Lower final'][roundIndex] || `Round ${round}`
+        );
+      }
+
+      if (total === 4) {
+        return (
+          ['Lower round 1', 'Lower semi-finals', 'Lower final', 'Consolidation final'][
+            roundIndex
+          ] || `Round ${round}`
+        );
+      }
+
+      if (total === 5) {
+        return (
+          ['Lower round 1', 'Lower round 2', 'Lower semi-finals', 'Lower final', 'Grand final'][
+            roundIndex
+          ] || `Round ${round}`
+        );
+      }
+
+      return Util.parseCupRounds(roundIndex + 1, total);
+    }
+
+    if (props.tourney.iemGroup && total === 3) {
+      return ['Opening round', 'Upper semi-finals', 'Upper final'][roundIndex] || `Round ${round}`;
+    }
+
+    if (total === 3 && sections.some((section) => section.title === 'Lower Bracket')) {
+      return (
+        ['Opening round', 'Upper semi-finals', 'Upper final (qualification)'][roundIndex] ||
+        `Round ${round}`
+      );
+    }
+
+    return Util.parseCupRounds(roundIndex + 1, total);
+  };
+
   return (
-    <div className="h-full w-full overflow-auto bg-base-100 p-4">
-      <div className="flex min-w-max flex-col gap-8">
-        {renderRounds('Upper Bracket', sections.upper, {
-          1: 'Opening round',
-          2: 'Upper semi-finals',
-          3: 'Upper final',
-        })}
-        {renderRounds('Lower Bracket', sections.lower, {
-          1: 'Lower round 1',
-          2: 'Lower semi-finals',
-          3: 'Lower final',
-        })}
+    <div
+      className={cx(
+        'bg-base-100 relative h-full w-full overflow-hidden p-5 select-none',
+        dragStart ? 'cursor-grabbing' : 'cursor-grab',
+      )}
+      onMouseDown={handleMouseDown}
+      onMouseLeave={stopDragging}
+      onMouseMove={handleMouseMove}
+      onMouseUp={stopDragging}
+      onWheel={handleWheel}
+    >
+      <div className="h-full w-full">
+        <div
+          className="relative"
+          style={{
+            width,
+            height,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'top left',
+            transition: dragStart ? undefined : 'transform 120ms ease-out',
+          }}
+        >
+          <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
+            {connectors.map((path, index) => (
+              <path
+                key={`${path}-${index}`}
+                d={path}
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.24)"
+                strokeWidth={1}
+                shapeRendering="crispEdges"
+              />
+            ))}
+          </svg>
+          {sections.map((section) => (
+            <React.Fragment key={section.title}>
+              {section.title === 'Lower Bracket' && (
+                <h3
+                  className="text-base-content/70 absolute text-lg font-black uppercase"
+                  style={{ top: section.top - 30, left: 0 }}
+                >
+                  {section.title}
+                </h3>
+              )}
+              {section.roundNumbers.map((round, roundIndex) => (
+                <header
+                  key={`${section.title}-${round}`}
+                  className="text-info bg-base-200 border-base-content/10 absolute h-9 border text-center text-sm leading-9 font-bold"
+                  style={{
+                    top: section.top,
+                    left: roundIndex * (MATCH_WIDTH + ROUND_GAP),
+                    width: MATCH_WIDTH,
+                  }}
+                >
+                  {roundTitle(section, round)}
+                </header>
+              ))}
+              {section.nodes.map(({ hidden, match, x, y }) =>
+                hidden ? null : (
+                  <div key={match.id} className="absolute" style={{ left: x, top: y }}>
+                    <BracketCard
+                      match={match}
+                      fmtDate={fmtDate}
+                      onPartyClick={props.onPartyClick}
+                    />
+                  </div>
+                ),
+              )}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -307,118 +471,12 @@ export default function (props: Props) {
     () => Tournament.restore(JSON.parse(props.matches[0].competition.tournament)),
     [props.matches],
   );
-  const fmtDate = useFormatAppDate();
-  type HasLast = { last: number };
-
-  function hasLast(options: unknown): options is HasLast {
-    return (
-      typeof options === 'object' &&
-      options !== null &&
-      'last' in options &&
-      typeof (options as any).last === 'number'
-    );
-  }
 
   if (!tourney.brackets) {
     return null;
   }
 
-  if (tourney.iemGroup) {
-    return <IemGroupBracket matches={props.matches} onPartyClick={props.onPartyClick} />;
-  }
-
-  const isDoubleElim = hasLast(tourney.options) && tourney.options.last === Constants.BracketIdentifier.LOWER;
-
-  // grab the width and height of the parent component
-  // dynamically to pass on to the canvas below
-  const refWrapper = React.useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = React.useState({
-    width: 0,
-    height: 0,
-  });
-
-  React.useEffect(() => {
-    if (!refWrapper.current) {
-      return;
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (!refWrapper.current) {
-        return;
-      }
-      setDimensions({
-        width: refWrapper.current.offsetWidth,
-        height: refWrapper.current.offsetHeight,
-      });
-    });
-
-    resizeObserver.observe(refWrapper.current);
-
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  const singleMatches = React.useMemo(
-    () => toSingleElimData(tourney, props.matches, fmtDate),
-    [fmtDate, props.matches, tourney],
-  );
-  const doubleMatches = React.useMemo(
-    () => toDoubleElimData(tourney, props.matches, fmtDate),
-    [fmtDate, props.matches, tourney],
-  );
-
-  const bracketOptions = React.useMemo(
-    () => ({
-      style: {
-        connectorColor: 'color-mix(in oklch, transparent 90%, var(--color-base-content))',
-        connectorColorHighlight: 'var(--color-base-content)',
-        wonBywalkOverText: 'BYE',
-        roundHeader: {
-          fontColor: 'var(--color-base-content)',
-          roundTextGenerator: Util.parseCupRounds,
-        },
-      },
-    }),
-    [],
-  );
-
-  const svgWrapper = React.useCallback(
-    ({ children, ...props }: { children: React.ReactNode } & Record<string, unknown>) => (
-      <SVGViewer
-        width={dimensions.width}
-        height={dimensions.height}
-        bracketWidth={dimensions.width}
-        bracketHeight={dimensions.height}
-        miniatureProps={{ position: 'none' }}
-        SVGBackground="var(--color-base-100)"
-        {...props}
-      >
-        {children}
-      </SVGViewer>
-    ),
-    [dimensions.height, dimensions.width],
-  );
-
   return (
-    <div ref={refWrapper} className="h-full w-full cursor-grab">
-      {isDoubleElim ? (
-        <DoubleEliminationBracket
-          matches={doubleMatches}
-          matchComponent={TeamLogoMatch}
-          onPartyClick={props.onPartyClick}
-          theme={theme}
-          options={bracketOptions}
-          svgWrapper={svgWrapper}
-        />
-      ) : (
-        <SingleEliminationBracket
-          matches={singleMatches}
-          matchComponent={TeamLogoMatch}
-          onPartyClick={props.onPartyClick}
-          theme={theme}
-          options={bracketOptions}
-          svgWrapper={svgWrapper}
-        />
-      )}
-    </div>
+    <ManualBracket matches={props.matches} tourney={tourney} onPartyClick={props.onPartyClick} />
   );
 }

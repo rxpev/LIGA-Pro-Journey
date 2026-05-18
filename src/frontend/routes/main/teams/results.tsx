@@ -13,7 +13,7 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Pagination } from '@liga/frontend/components';
 import { FaChartBar, FaSortAmountDown, FaSortAmountDownAlt } from 'react-icons/fa';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
-import { getTeamsTierLabel } from './labels';
+import { getTeamsRoundLabel, getTeamsTierLabel } from './labels';
 
 /** @constant */
 const NUM_COLUMNS = 7;
@@ -36,18 +36,12 @@ function getCompetitionLabel(
     return federationName ?? 'Unknown competition';
   }
 
-  const tierLabel = getTeamsTierLabel(
-    tier.slug,
-    league?.name,
-  );
-  const suffix =
-    tier.groupSize === null
-      ? ` ${Constants.TierSwissConfig[tier.slug as Constants.TierSlug]
-        ? Util.parseSwissRound(match.round)
-        : Util.parseCupRounds(match.round, match.totalRounds)
-      }`
-      : '';
+  const tierLabel = getTeamsTierLabel(tier.slug, league?.name);
+  const suffix = tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
   if (league?.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    return `${tierLabel}${suffix}`;
+  }
+  if (match.competition?.federation?.slug === Constants.FederationSlug.ESPORTS_WORLD) {
     return `${tierLabel}${suffix}`;
   }
   return `${federationName ?? ''} ${tierLabel}${suffix}`.trim();

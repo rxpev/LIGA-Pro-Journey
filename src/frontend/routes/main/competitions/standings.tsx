@@ -51,12 +51,12 @@ export default function () {
     [competition.competitors],
   );
 
-  const isSwiss = Boolean(
-    Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug],
-  );
+  const isSwiss = Boolean(Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug]);
 
   // fetch matches when viewing bracket
   React.useEffect(() => {
+    setBracket(undefined);
+
     if (competition.tier.groupSize || isSwiss) {
       return;
     }
@@ -123,8 +123,9 @@ export default function () {
   }
 
   return (
-    <section className="h-full w-full">
+    <section className="h-full w-full overflow-hidden">
       <PureBrackets
+        key={`${competition.id}:${competition.tier.slug}`}
         matches={bracket}
         onPartyClick={(party) => {
           const route = teamLinkById.get(Number(party.id));

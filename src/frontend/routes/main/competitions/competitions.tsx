@@ -18,6 +18,289 @@ enum TabIdentifier {
   PARTICIPANTS = '/competitions/participants',
 }
 
+type CompetitionTier = Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>[number];
+type TournamentFamily = 'all' | 'esea' | 'major' | 'cct' | 'qualifiers';
+
+type TournamentCard = {
+  key: string;
+  name: string;
+  eyebrow: string;
+  family: TournamentFamily | 'event';
+  accent: string;
+  tiers: CompetitionTier[];
+};
+
+const FAMILY_FILTERS: Array<{ id: TournamentFamily; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'esea', label: 'ESEA' },
+  { id: 'major', label: 'Major' },
+  { id: 'cct', label: 'CCT' },
+  { id: 'qualifiers', label: 'Qualifiers' },
+];
+
+const FEDERATION_LABELS: Partial<Record<Constants.FederationSlug, string>> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 'Europe',
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 'Americas',
+  [Constants.FederationSlug.ESPORTS_ASIA]: 'Asia',
+  [Constants.FederationSlug.ESPORTS_OCE]: 'Oceania',
+  [Constants.FederationSlug.ESPORTS_WORLD]: 'International',
+};
+
+const FEDERATION_ORDER: Constants.FederationSlug[] = [
+  Constants.FederationSlug.ESPORTS_EUROPA,
+  Constants.FederationSlug.ESPORTS_AMERICAS,
+  Constants.FederationSlug.ESPORTS_ASIA,
+  Constants.FederationSlug.ESPORTS_OCE,
+  Constants.FederationSlug.ESPORTS_WORLD,
+];
+
+const INTERNATIONAL_ORDER: Partial<Record<Constants.LeagueSlug | string, number>> = {
+  'major:international': 10,
+  [Constants.LeagueSlug.ESPORTS_BLAST]: 20,
+  [Constants.LeagueSlug.ESPORTS_IEM_COLOGNE]: 30,
+  [Constants.LeagueSlug.ESPORTS_IEM_KRAKOW]: 40,
+  [Constants.LeagueSlug.ESPORTS_PRO_LEAGUE]: 50,
+  [Constants.LeagueSlug.ESPORTS_ESL_CHALLENGER]: 60,
+  [Constants.LeagueSlug.ESPORTS_CCT_GLOBAL]: 70,
+};
+
+function getStageOrder(tier: CompetitionTier) {
+  const slug = tier.slug as Constants.TierSlug;
+  const stageOrder: Partial<Record<Constants.TierSlug, number>> = {
+    [Constants.TierSlug.LEAGUE_OPEN]: 10,
+    [Constants.TierSlug.LEAGUE_INTERMEDIATE]: 10,
+    [Constants.TierSlug.LEAGUE_MAIN]: 10,
+    [Constants.TierSlug.LEAGUE_ADVANCED]: 10,
+    [Constants.TierSlug.LEAGUE_PRO]: 10,
+    [Constants.TierSlug.ESL_CHALLENGER]: 10,
+    [Constants.TierSlug.CCT_SERIES]: 10,
+    [Constants.TierSlug.CCT_OCE_SERIES]: 10,
+    [Constants.TierSlug.IEM_COLOGNE_GROUP_A]: 10,
+    [Constants.TierSlug.IEM_KRAKOW_GROUP_A]: 10,
+    [Constants.TierSlug.IEM_COLOGNE_GROUP_B]: 20,
+    [Constants.TierSlug.IEM_KRAKOW_GROUP_B]: 20,
+    [Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: 10,
+    [Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: 10,
+    [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1]: 10,
+    [Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: 10,
+    [Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: 10,
+    [Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: 20,
+    [Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: 20,
+    [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: 20,
+    [Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: 20,
+    [Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: 20,
+    [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: 30,
+    [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: 40,
+    [Constants.TierSlug.MAJOR_ASIA_RMR]: 50,
+    [Constants.TierSlug.MAJOR_AMERICAS_RMR]: 50,
+    [Constants.TierSlug.MAJOR_EUROPE_RMR_A]: 50,
+    [Constants.TierSlug.MAJOR_EUROPE_RMR_B]: 60,
+    [Constants.TierSlug.MAJOR_CHALLENGERS_STAGE]: 70,
+    [Constants.TierSlug.MAJOR_LEGENDS_STAGE]: 80,
+    [Constants.TierSlug.MAJOR_CHAMPIONS_STAGE]: 90,
+    [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: 100,
+    [Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS]: 100,
+    [Constants.TierSlug.CCT_SERIES_PLAYOFFS]: 100,
+    [Constants.TierSlug.CCT_OCE_PLAYOFFS]: 100,
+    [Constants.TierSlug.IEM_COLOGNE_PLAYOFFS]: 100,
+    [Constants.TierSlug.IEM_KRAKOW_PLAYOFFS]: 100,
+  };
+
+  return stageOrder[slug] ?? 50;
+}
+
+function getTournamentMeta(
+  tier: CompetitionTier,
+  federationSlug?: Constants.FederationSlug | string,
+): Omit<TournamentCard, 'tiers'> {
+  const slug = tier.slug as Constants.TierSlug;
+  const leagueSlug = tier.league.slug as Constants.LeagueSlug;
+  const displayName = Util.getCompetitionDisplayName(tier.league.name, tier.slug);
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
+    const division = Constants.IdiomaticTier[tier.slug].replace(' Playoffs', '');
+
+    return {
+      key: `${leagueSlug}:${division}`,
+      name: `ESEA ${division}`,
+      eyebrow: 'League season',
+      family: 'esea',
+      accent: 'from-sky-500/25',
+    };
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_CCT) {
+    return {
+      key:
+        slug === Constants.TierSlug.CCT_OCE_SERIES || slug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+          ? 'cct:oceania'
+          : 'cct:regional',
+      name:
+        slug === Constants.TierSlug.CCT_OCE_SERIES || slug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+          ? 'CCT Oceania Series'
+          : 'CCT Series',
+      eyebrow: 'Circuit event',
+      family: 'cct',
+      accent: 'from-emerald-500/25',
+    };
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_CCT_GLOBAL) {
+    return {
+      key: 'cct:global-finals',
+      name: 'CCT Global Finals',
+      eyebrow: 'Circuit final',
+      family: 'cct',
+      accent: 'from-emerald-500/25',
+    };
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_MAJOR) {
+    const isQualifier = slug.includes('open-qualifier');
+    const isRmr = slug.includes(':rmr');
+
+    if (isQualifier) {
+      return {
+        key: `major:qualifiers:${slug.includes(':china:') ? 'china' : 'regional'}`,
+        name: slug.includes(':china:') ? 'China RMR Qualifiers' : 'Major RMR Qualifiers',
+        eyebrow: 'Open qualifiers',
+        family: 'qualifiers',
+        accent: 'from-amber-500/25',
+      };
+    }
+
+    if (isRmr) {
+      const federationLabel = federationSlug
+        ? FEDERATION_LABELS[federationSlug as Constants.FederationSlug]
+        : null;
+
+      return {
+        key: 'major:rmr',
+        name: federationLabel ? `${federationLabel} RMR` : 'RMR',
+        eyebrow: 'Regional major ranking',
+        family: 'major',
+        accent: 'from-red-500/25',
+      };
+    }
+
+    return {
+      key: 'major:international',
+      name: 'Major',
+      eyebrow: 'International stage',
+      family: 'major',
+      accent: 'from-red-500/25',
+    };
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_BLAST) {
+    return {
+      key: leagueSlug,
+      name: tier.league.name,
+      eyebrow: 'BLAST finals',
+      family: 'event',
+      accent: 'from-purple-500/30',
+    };
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_ESEA_CASH_CUP) {
+    return {
+      key: leagueSlug,
+      name: tier.league.name,
+      eyebrow: 'Cash cup',
+      family: 'esea',
+      accent: 'from-sky-500/25',
+    };
+  }
+
+  if (
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_COLOGNE ||
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_KRAKOW ||
+    leagueSlug === Constants.LeagueSlug.ESPORTS_ESL_CHALLENGER ||
+    leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE
+  ) {
+    return {
+      key: leagueSlug,
+      name: tier.league.name,
+      eyebrow: 'Group play + playoffs',
+      family: 'event',
+      accent: 'from-cyan-500/25',
+    };
+  }
+
+  if (
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_COLOGNE_QUALIFIER ||
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_KRAKOW_QUALIFIER
+  ) {
+    return {
+      key: leagueSlug,
+      name: tier.league.name,
+      eyebrow: 'Open qualifier',
+      family: 'qualifiers',
+      accent: 'from-amber-500/25',
+    };
+  }
+
+  return {
+    key: `${leagueSlug}:${tier.slug}`,
+    name: displayName,
+    eyebrow: tier.league.name || 'Tournament',
+    family: 'event',
+    accent: 'from-base-content/10',
+  };
+}
+
+function sortTournamentCards(
+  cards: TournamentCard[],
+  federationSlug?: Constants.FederationSlug | string,
+) {
+  if (federationSlug === Constants.FederationSlug.ESPORTS_WORLD) {
+    return [...cards].sort((a, b) => {
+      const aOrder = INTERNATIONAL_ORDER[a.key] ?? 999;
+      const bOrder = INTERNATIONAL_ORDER[b.key] ?? 999;
+
+      return aOrder === bOrder ? a.name.localeCompare(b.name) : aOrder - bOrder;
+    });
+  }
+
+  return [...cards].sort((a, b) => {
+    const regionalOrder = (card: TournamentCard) => {
+      if (card.key === Constants.LeagueSlug.ESPORTS_ESEA_CASH_CUP) {
+        return 90;
+      }
+
+      if (card.family === 'esea') {
+        return 10;
+      }
+
+      if (card.family === 'major') {
+        return 20;
+      }
+
+      if (card.family === 'cct') {
+        return 30;
+      }
+
+      if (card.family === 'qualifiers') {
+        return 40;
+      }
+
+      return 50;
+    };
+
+    const familyDiff = regionalOrder(a) - regionalOrder(b);
+
+    if (familyDiff !== 0) {
+      return familyDiff;
+    }
+
+    return a.name.localeCompare(b.name);
+  });
+}
+
 /**
  * Exports this module.
  *
@@ -41,6 +324,7 @@ export default function () {
   const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
   const [selectedTierId, setSelectedTierId] = React.useState<number>(-1);
+  const [selectedFamily, setSelectedFamily] = React.useState<TournamentFamily>('all');
 
   const [initializedFromQuery, setInitializedFromQuery] = React.useState(false);
   // Used to ensure we only auto-initialize filters once from the profile.
@@ -333,6 +617,77 @@ export default function () {
     });
   }, [tiers, selectedFederation]);
 
+  const federationTabs = React.useMemo(
+    () =>
+      [...federations].sort((a, b) => {
+        const aIndex = FEDERATION_ORDER.indexOf(a.slug as Constants.FederationSlug);
+        const bIndex = FEDERATION_ORDER.indexOf(b.slug as Constants.FederationSlug);
+
+        return (aIndex < 0 ? 99 : aIndex) - (bIndex < 0 ? 99 : bIndex);
+      }),
+    [federations],
+  );
+
+  const allTournamentCards = React.useMemo(() => {
+    const cards = visibleTiers.reduce<Record<string, TournamentCard>>((acc, tier) => {
+      const meta = getTournamentMeta(tier, selectedFederation?.slug as Constants.FederationSlug);
+
+      acc[meta.key] ||= {
+        ...meta,
+        tiers: [],
+      };
+      acc[meta.key].tiers.push(tier);
+
+      return acc;
+    }, {});
+
+    return sortTournamentCards(
+      Object.values(cards).map((card) => ({
+        ...card,
+        tiers: [...card.tiers].sort((a, b) => getStageOrder(a) - getStageOrder(b)),
+      })),
+      selectedFederation?.slug as Constants.FederationSlug,
+    );
+  }, [selectedFederation, visibleTiers]);
+
+  const tournamentCards = React.useMemo(
+    () =>
+      allTournamentCards.filter(
+        (card) => selectedFamily === 'all' || card.family === selectedFamily,
+      ),
+    [allTournamentCards, selectedFamily],
+  );
+
+  const selectedTournamentKey = React.useMemo(() => {
+    const selectedTier = tiers.find((tier) => tier.id === selectedTierId);
+
+    return selectedTier
+      ? getTournamentMeta(selectedTier, selectedFederation?.slug as Constants.FederationSlug).key
+      : null;
+  }, [selectedFederation, selectedTierId, tiers]);
+
+  const selectedTournamentName = React.useMemo(() => {
+    if (!selectedTournamentKey) {
+      return null;
+    }
+
+    return allTournamentCards.find((card) => card.key === selectedTournamentKey)?.name ?? null;
+  }, [allTournamentCards, selectedTournamentKey]);
+
+  const loadTier = React.useCallback(
+    async (tierId: number) => {
+      setSelectedTierId(tierId);
+
+      if (selectedFederationId < 0 || selectedSeasonId < 0) {
+        return;
+      }
+
+      const nextCompetition = await loadCompetition(selectedFederationId, selectedSeasonId, tierId);
+      setCompetition(nextCompetition);
+    },
+    [loadCompetition, selectedFederationId, selectedSeasonId],
+  );
+
   React.useEffect(() => {
     if (selectedTierId <= 0 || !visibleTiers.length) {
       return;
@@ -444,53 +799,34 @@ export default function () {
         </button>
       </header>
       <main>
-        <form className="form-ios form-ios-col-2">
+        <form className="form-ios">
           <fieldset>
             <legend className="border-t-0!">{t('shared.filters')}</legend>
-            <section>
-              <header>
-                <p>{t('shared.federation')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => {
-                    setSelectedFederationId(Number(event.target.value));
-                    setSelectedTierId(-1);
-                  }}
-                  value={selectedFederationId || -1}
-                >
-                  <option disabled value={-1}>
-                    {t('main.competitions.select')}
-                  </option>
-                  {federations.map((federation) => (
-                    <option key={federation.id} value={federation.id}>
-                      {federation.name}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('shared.competition')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => setSelectedTierId(Number(event.target.value))}
-                  value={selectedTierId || -1}
-                  disabled={selectedFederationId < 0}
-                >
-                  <option disabled value={-1}>
-                    {t('main.competitions.select')}
-                  </option>
-                  {visibleTiers.map((tier) => (
-                    <option key={tier.id} value={tier.id}>
-                      {Util.getCompetitionDisplayName(tier.league.name, tier.slug)}
-                    </option>
-                  ))}
-                </select>
+            <section className="block!">
+              <article className="grid! grid-cols-2 gap-2!">
+                {federationTabs.map((federation) => (
+                  <button
+                    key={federation.id}
+                    type="button"
+                    className={cx(
+                      'btn btn-sm border-base-content/10 h-10 rounded border font-semibold shadow-none',
+                      federation.slug === Constants.FederationSlug.ESPORTS_WORLD &&
+                        'col-span-2 mx-auto w-[calc(50%_-_0.25rem)]',
+                      selectedFederationId === federation.id
+                        ? 'btn-primary'
+                        : 'btn-ghost bg-base-200 hover:bg-base-300',
+                    )}
+                    onClick={() => {
+                      setSelectedFederationId(federation.id);
+                      setSelectedTierId(-1);
+                      setCompetition(undefined);
+                      setSelectedFamily('all');
+                    }}
+                  >
+                    {FEDERATION_LABELS[federation.slug as Constants.FederationSlug] ||
+                      federation.name}
+                  </button>
+                ))}
               </article>
             </section>
             <section>
@@ -516,28 +852,121 @@ export default function () {
             </section>
           </fieldset>
           <fieldset>
-            <section>
-              <button
-                type="button"
-                className="btn btn-primary btn-block col-span-2!"
-                disabled={selectedFederationId < 0 || selectedTierId < 0 || selectedSeasonId < 0}
-                onClick={() =>
-                  loadCompetition(selectedFederationId, selectedSeasonId, selectedTierId).then(
-                    setCompetition,
-                  )
-                }
-              >
-                {t('shared.apply')}
-              </button>
+            <legend>{t('shared.competition')}</legend>
+            <section className="block!">
+              <header className="mb-2 flex! items-center justify-between">
+                <p className="text-base-content/70 text-xs font-bold uppercase">Series</p>
+                <p className="text-base-content/50 text-xs">{tournamentCards.length} visible</p>
+              </header>
+              <article className="grid! grid-cols-1 gap-2!">
+                {tournamentCards.map((card) => {
+                  const primaryTier = card.tiers[0];
+                  const isActive = selectedTournamentKey === card.key;
+
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      className={cx(
+                        'group border-base-content/10 bg-base-200 h-auto rounded border p-0 text-left shadow-none',
+                        'hover:border-primary/60 hover:bg-base-300',
+                        isActive && 'border-primary bg-base-300',
+                      )}
+                      disabled={selectedFederationId < 0 || selectedSeasonId < 0}
+                      onClick={() => loadTier(primaryTier.id)}
+                    >
+                      <span
+                        className={cx(
+                          'block rounded-t bg-gradient-to-r to-transparent px-3 py-2',
+                          card.accent,
+                        )}
+                      >
+                        <span className="text-base-content/60 block text-[0.65rem] font-bold tracking-wide uppercase">
+                          {card.eyebrow}
+                        </span>
+                        <span className="block truncate text-sm font-bold">{card.name}</span>
+                      </span>
+                      <span className="flex flex-wrap gap-1 px-3 py-2">
+                        {card.tiers.map((tier) => (
+                          <span
+                            key={tier.id}
+                            className={cx(
+                              'border-base-content/10 rounded border px-2 py-1 text-[0.68rem] font-semibold',
+                              selectedTierId === tier.id
+                                ? 'bg-primary text-primary-content border-primary'
+                                : 'bg-base-100 text-base-content/80',
+                            )}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              loadTier(tier.id);
+                            }}
+                          >
+                            {Constants.IdiomaticTier[tier.slug] || tier.name}
+                          </span>
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+                {!tournamentCards.length && (
+                  <p className="text-base-content/60 bg-base-200 border-base-content/10 rounded border p-3 text-sm">
+                    No tournaments in this filter.
+                  </p>
+                )}
+              </article>
             </section>
           </fieldset>
         </form>
-        {!competition && (
+        {!competition && initializedFromProfile && selectedFederationId > 0 && (
+          <section className="center text-base-content/60 h-full px-6 text-center">
+            <span>Select a tournament to view its overview, standings, results, and teams.</span>
+          </section>
+        )}
+        {!competition && (!initializedFromProfile || selectedFederationId < 0) && (
           <section className="center h-full">
             <span className="loading loading-bars" />
           </section>
         )}
-        {!!competition && <Outlet context={{ competition } satisfies RouteContextCompetitions} />}
+        {!!competition && (
+          <section className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
+            <nav className="border-base-content/10 bg-base-200 flex items-center justify-between border-b px-3 py-2">
+              <article className="min-w-0">
+                <p className="text-base-content/50 text-xs font-bold uppercase">
+                  {selectedFederation
+                    ? FEDERATION_LABELS[selectedFederation.slug as Constants.FederationSlug] ||
+                      selectedFederation.name
+                    : t('shared.competition')}
+                </p>
+                <h2 className="truncate text-lg font-black">
+                  {selectedTournamentName
+                    ? selectedTournamentName
+                    : Util.getCompetitionDisplayName(
+                        competition.tier.league.name,
+                        competition.tier.slug,
+                      )}
+                </h2>
+              </article>
+              <article className="join shrink-0">
+                {FAMILY_FILTERS.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    className={cx(
+                      'btn join-item btn-sm rounded-none',
+                      selectedFamily === filter.id ? 'btn-primary' : 'btn-ghost',
+                    )}
+                    onClick={() => setSelectedFamily(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </article>
+            </nav>
+            <section className="overflow-y-scroll">
+              <Outlet context={{ competition } satisfies RouteContextCompetitions} />
+            </section>
+          </section>
+        )}
       </main>
     </div>
   );

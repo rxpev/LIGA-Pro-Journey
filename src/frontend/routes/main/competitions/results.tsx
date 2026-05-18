@@ -13,6 +13,7 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Pagination } from '@liga/frontend/components';
 import { FaChartBar, FaSortAmountDown, FaSortAmountDownAlt } from 'react-icons/fa';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
+import { getTeamsRoundLabel } from '../teams/labels';
 
 /** @constant */
 const NUM_COLUMNS = 7;
@@ -28,14 +29,7 @@ function getCompetitionLabel(
   match: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number],
 ) {
   const tier = Constants.IdiomaticTier[match.competition.tier.slug];
-  const suffix =
-    match.competition.tier.groupSize === null
-      ? ` ${
-          Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
-            ? Util.parseSwissRound(match.round)
-            : Util.parseCupRounds(match.round, match.totalRounds)
-        }`
-      : '';
+  const suffix = match.competition.tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
   if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
     return `${match.competition.tier.league.name} ${tier}${suffix}`;
   }
