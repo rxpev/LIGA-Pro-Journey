@@ -369,6 +369,11 @@ const IEM_GROUP_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_KRAKOW_GROUP_B,
 ]);
 
+const GROUP_SWISS_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.LEAGUE_PRO,
+]);
+
 const SEEDED_TOURNAMENT_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.BLAST_FINALS,
   Constants.TierSlug.CCT_GLOBAL_FINALS,
@@ -691,7 +696,7 @@ async function createMatchdays(
 
       if (tournament.iemGroup) {
         matchday = addDays(today, 1);
-      } else if (tournament.swiss) {
+      } else if (tournament.swiss || tournament.groupSwiss) {
         matchday = addDays(today, 1);
       } else if (hasThreeMatchWeeks) {
         const zeroBasedRoundOffset = Math.max(0, roundOffset - 1);
@@ -3460,6 +3465,15 @@ export async function recordMatchResults() {
         }
       }
 
+      if (tournament.groupSwiss && upperRoundReady) {
+        const groupSwissMatches = tournament.groupSwiss.generateNextRound();
+
+        if (groupSwissMatches.length > 0) {
+          Engine.Runtime.Instance.log.info('Generating next group swiss round matches...');
+          await createMatchdays(groupSwissMatches, tournament, competition);
+        }
+      }
+
       if (tournament.swiss && upperRoundReady) {
         const swissMatches = tournament.swiss.generateNextRound();
 
@@ -6114,6 +6128,13 @@ export async function onCompetitionStart(entry: Calendar) {
         short: true;
       }
     | {
+        groupSize: number;
+        groupSwiss: true;
+        maxLosses: number;
+        maxRounds: number;
+        maxWins: number;
+      }
+    | {
         swiss: {
           maxLosses: number;
           maxRounds: number;
@@ -6127,30 +6148,39 @@ export async function onCompetitionStart(entry: Calendar) {
           maxWins: swissConfig.maxWins,
         },
       }
-    : competition.tier.groupSize
+    : competition.tier.groupSize &&
+        GROUP_SWISS_TIERS.has(competition.tier.slug as Constants.TierSlug)
       ? {
           groupSize: Math.min(competition.tier.groupSize, tournamentSize),
-          meetTwice: false,
+          groupSwiss: true,
+          maxLosses: 2,
+          maxRounds: 3,
+          maxWins: 2,
         }
-      : IEM_GROUP_TIERS.has(competition.tier.slug as Constants.TierSlug)
+      : competition.tier.groupSize
         ? {
-            iemGroup: true,
-            last: Constants.BracketIdentifier.LOWER,
-            short: true,
+            groupSize: Math.min(competition.tier.groupSize, tournamentSize),
+            meetTwice: false,
           }
-        : DOUBLE_ELIMINATION_TIERS.has(competition.tier.slug as Constants.TierSlug)
-        ? {
-            last: Constants.BracketIdentifier.LOWER,
-            short: true,
-          }
-        : {
-            short: true,
-            ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
-              competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
-            competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
-              ? { last: Constants.BracketIdentifier.LOWER }
-              : {}),
-          };
+        : IEM_GROUP_TIERS.has(competition.tier.slug as Constants.TierSlug)
+          ? {
+              iemGroup: true,
+              last: Constants.BracketIdentifier.LOWER,
+              short: true,
+            }
+          : DOUBLE_ELIMINATION_TIERS.has(competition.tier.slug as Constants.TierSlug)
+            ? {
+                last: Constants.BracketIdentifier.LOWER,
+                short: true,
+              }
+            : {
+                short: true,
+                ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+                  competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
+                competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+                  ? { last: Constants.BracketIdentifier.LOWER }
+                  : {}),
+              };
   const tournament = new Tournament(tournamentSize, tournamentOptions);
   const tournamentCompetitors = SEEDED_TOURNAMENT_TIERS.has(
     competition.tier.slug as Constants.TierSlug,

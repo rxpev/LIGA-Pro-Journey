@@ -52,6 +52,9 @@ export default function () {
   );
 
   const isSwiss = Boolean(Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug]);
+  const hideSmallGroupPoints = Boolean(
+    competition.tier.groupSize && competition.tier.groupSize <= 4,
+  );
 
   // fetch matches when viewing bracket
   React.useEffect(() => {
@@ -78,6 +81,7 @@ export default function () {
           <Standings
             key={group + '__standings'}
             highlight={state.profile.teamId}
+            hidePoints={hideSmallGroupPoints}
             competitors={groups[group]}
             teamLink={(team) => `/teams?teamId=${team.id}`}
             title={

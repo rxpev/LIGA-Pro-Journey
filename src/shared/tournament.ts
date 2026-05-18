@@ -35,6 +35,25 @@ interface IemGroupTournamentState {
   size: number;
 }
 
+interface GroupSwissOptions {
+  groupSize: number;
+  groupSwiss: true;
+  maxLosses: number;
+  maxRounds: number;
+  maxWins: number;
+}
+
+interface GroupSwissMatch extends Clux.Match {
+  m: [number, number] | null;
+}
+
+interface GroupSwissTournamentState {
+  matches: GroupSwissMatch[];
+  options: GroupSwissOptions;
+  records: Record<number, { group: number; losses: number; opponents: number[]; wins: number }>;
+  size: number;
+}
+
 interface SwissTournamentState {
   matches: SwissMatch[];
   options: SwissOptions;
@@ -47,7 +66,10 @@ class SwissTournament {
   private matches: SwissMatch[];
   private readonly records: Record<number, { losses: number; opponents: number[]; wins: number }>;
 
-  constructor(private readonly size: number, options: SwissOptions) {
+  constructor(
+    private readonly size: number,
+    options: SwissOptions,
+  ) {
     this.options = options;
     this.matches = [];
     this.records = {};
@@ -72,13 +94,14 @@ class SwissTournament {
 
   public findMatch(matchId: Clux.MatchId) {
     return this.matches.find(
-      (match) =>
-        match.id.s === matchId.s && match.id.r === matchId.r && match.id.m === matchId.m,
+      (match) => match.id.s === matchId.s && match.id.r === matchId.r && match.id.m === matchId.m,
     );
   }
 
   public isDone() {
-    const completedRounds = this.rounds().filter((round) => round.every((match) => !!match.m)).length;
+    const completedRounds = this.rounds().filter((round) =>
+      round.every((match) => !!match.m),
+    ).length;
     const allSettled = Object.values(this.records).every(
       ({ losses, wins }) => losses >= this.options.maxLosses || wins >= this.options.maxWins,
     );
@@ -205,7 +228,8 @@ class SwissTournament {
 
     const activeSeeds = Object.entries(this.records)
       .filter(
-        ([, record]) => record.wins < this.options.maxWins && record.losses < this.options.maxLosses,
+        ([, record]) =>
+          record.wins < this.options.maxWins && record.losses < this.options.maxLosses,
       )
       .map(([seed]) => Number(seed));
 
@@ -233,13 +257,16 @@ class SwissTournament {
       }
 
       const floatCandidates =
-        seeds.length % 2 === 1 ? [...seeds.keys()].reverse().map((idx) => seeds[idx] as number) : [null];
+        seeds.length % 2 === 1
+          ? [...seeds.keys()].reverse().map((idx) => seeds[idx] as number)
+          : [null];
 
       let groupPairings: Array<[number, number]> | null = null;
       let nextFloatSeed: number | null = null;
 
       for (const candidate of floatCandidates) {
-        const pairingSeeds = candidate == null ? [...seeds] : seeds.filter((seed) => seed !== candidate);
+        const pairingSeeds =
+          candidate == null ? [...seeds] : seeds.filter((seed) => seed !== candidate);
         const candidatePairings = this.buildPairings(pairingSeeds);
 
         if (candidatePairings) {
@@ -283,6 +310,258 @@ class SwissTournament {
   }
 }
 
+class GroupSwissTournament {
+  public readonly options: GroupSwissOptions;
+  private matches: GroupSwissMatch[];
+  private readonly records: Record<
+    number,
+    { group: number; losses: number; opponents: number[]; wins: number }
+  >;
+
+  constructor(
+    private readonly size: number,
+    options: GroupSwissOptions,
+  ) {
+    this.options = options;
+    this.matches = [];
+    this.records = {};
+
+    for (let seed = 1; seed <= size; seed += 1) {
+      this.records[seed] = {
+        group: Math.ceil(seed / options.groupSize),
+        losses: 0,
+        opponents: [],
+        wins: 0,
+      };
+    }
+  }
+
+  public static restore(data: GroupSwissTournamentState) {
+    const instance = new GroupSwissTournament(data.size, data.options);
+    instance.matches = data.matches;
+    Object.keys(data.records).forEach((seed) => {
+      instance.records[Number(seed)] = data.records[Number(seed)];
+    });
+    return instance;
+  }
+
+  public currentRound() {
+    return this.rounds().find((round) => round.some((match) => !match.m)) || [];
+  }
+
+  public findMatch(matchId: Clux.MatchId) {
+    return this.matches.find(
+      (match) => match.id.s === matchId.s && match.id.r === matchId.r && match.id.m === matchId.m,
+    );
+  }
+
+  public groupFor(seed: number) {
+    return this.records[seed]?.group || BracketIdentifier.UPPER;
+  }
+
+  public isDone() {
+    const completedRounds = this.rounds().filter((round) =>
+      round.every((match) => !!match.m),
+    ).length;
+    const allSettled = Object.values(this.records).every(
+      ({ losses, wins }) => losses >= this.options.maxLosses || wins >= this.options.maxWins,
+    );
+
+    return completedRounds >= this.options.maxRounds || allSettled;
+  }
+
+  public metadata() {
+    return {
+      options: this.options,
+      records: this.records,
+    };
+  }
+
+  public results() {
+    return Object.entries(
+      groupBy(Object.keys(this.records).map(Number), (seed) => this.records[seed].group),
+    ).flatMap(([group, seeds]) =>
+      sortBy(
+        seeds.map((seed) => {
+          const record = this.records[seed];
+          return {
+            draws: 0,
+            grp: Number(group),
+            losses: record.losses,
+            pts: record.wins * 3,
+            seed,
+            wins: record.wins,
+          };
+        }),
+        [(entry) => -entry.wins, (entry) => entry.losses, (entry) => entry.seed],
+      ).map((entry, index) => ({ ...entry, gpos: index + 1, pos: index + 1 })),
+    );
+  }
+
+  public resultsFor(seed: number) {
+    return this.results().find((entry) => entry.seed === seed);
+  }
+
+  public rounds() {
+    const grouped = groupBy(this.matches, 'id.r');
+    return Object.keys(grouped)
+      .map((round) => Number(round))
+      .sort((a, b) => a - b)
+      .map((round) => grouped[round]);
+  }
+
+  public save(): GroupSwissTournamentState {
+    return {
+      matches: this.matches,
+      options: this.options,
+      records: this.records,
+      size: this.size,
+    };
+  }
+
+  public score(matchId: Clux.MatchId, mapScore: number[]) {
+    const match = this.findMatch(matchId);
+
+    if (!match || !Array.isArray(mapScore) || mapScore.length < 2 || mapScore[0] === mapScore[1]) {
+      return false;
+    }
+
+    if (match.m) {
+      return false;
+    }
+
+    const [homeSeed, awaySeed] = match.p;
+    if (homeSeed < 1 || awaySeed < 1) {
+      return false;
+    }
+
+    match.m = [mapScore[0], mapScore[1]];
+    this.records[homeSeed].opponents.push(awaySeed);
+    this.records[awaySeed].opponents.push(homeSeed);
+
+    if (mapScore[0] > mapScore[1]) {
+      this.records[homeSeed].wins += 1;
+      this.records[awaySeed].losses += 1;
+      return true;
+    }
+
+    this.records[awaySeed].wins += 1;
+    this.records[homeSeed].losses += 1;
+    return true;
+  }
+
+  public start() {
+    this.generateNextRound();
+  }
+
+  private buildPairings(seeds: number[], allowRematches = false): Array<[number, number]> | null {
+    if (seeds.length === 0) {
+      return [];
+    }
+
+    const [home, ...rest] = seeds;
+
+    for (let idx = 0; idx < rest.length; idx += 1) {
+      const away = rest[idx];
+
+      if (!allowRematches && this.records[home].opponents.includes(away)) {
+        continue;
+      }
+
+      const remainingSeeds = [...rest.slice(0, idx), ...rest.slice(idx + 1)];
+      const remainingPairings = this.buildPairings(remainingSeeds, allowRematches);
+
+      if (remainingPairings) {
+        return [[home, away], ...remainingPairings];
+      }
+    }
+
+    return null;
+  }
+
+  public generateNextRound() {
+    const currentRound = this.currentRound();
+
+    if (currentRound.length > 0 || this.isDone()) {
+      return [];
+    }
+
+    const nextRound = this.rounds().length + 1;
+    if (nextRound > this.options.maxRounds) {
+      return [];
+    }
+
+    const pairings = Object.entries(
+      groupBy(Object.keys(this.records).map(Number), (seed) => this.records[seed].group),
+    ).flatMap(([group, seeds]) => {
+      const activeSeeds = sortBy(
+        seeds.filter((seed) => {
+          const record = this.records[seed];
+          return record.wins < this.options.maxWins && record.losses < this.options.maxLosses;
+        }),
+        (seed) => seed,
+      );
+
+      if (activeSeeds.length < 2) {
+        return [];
+      }
+
+      const groupPairings =
+        nextRound === 1 ? this.pairOpeningRound(activeSeeds) : this.pairByRecord(activeSeeds);
+
+      return groupPairings.map(([home, away], idx) => ({
+        group: Number(group),
+        match: idx + 1,
+        seeds: [home, away] as [number, number],
+      }));
+    });
+
+    const newMatches: GroupSwissMatch[] = pairings.map(({ group, match, seeds }) => ({
+      data: {},
+      id: {
+        m: match,
+        r: nextRound,
+        s: group,
+      },
+      m: null as [number, number] | null,
+      p: seeds,
+    }));
+
+    this.matches = [...this.matches, ...newMatches];
+    return newMatches;
+  }
+
+  private pairByRecord(seeds: number[]) {
+    return Object.keys(
+      groupBy(seeds, (seed) => `${this.records[seed].wins}-${this.records[seed].losses}`),
+    )
+      .sort((a, b) => {
+        const [aWins, aLosses] = a.split('-').map(Number);
+        const [bWins, bLosses] = b.split('-').map(Number);
+        if (aWins !== bWins) return bWins - aWins;
+        return aLosses - bLosses;
+      })
+      .flatMap((key) => {
+        const bucket = sortBy(
+          seeds.filter((seed) => `${this.records[seed].wins}-${this.records[seed].losses}` === key),
+          (seed) => seed,
+        );
+        return this.buildPairings(bucket) || this.buildPairings(bucket, true) || [];
+      });
+  }
+
+  private pairOpeningRound(seeds: number[]) {
+    const orderedSeeds = sortBy(seeds, (seed) => seed);
+    const pairings: Array<[number, number]> = [];
+
+    while (orderedSeeds.length > 1) {
+      pairings.push([orderedSeeds.shift(), orderedSeeds.pop()] as [number, number]);
+    }
+
+    return pairings;
+  }
+}
+
 class IemGroupTournament {
   public readonly options: IemGroupOptions = {
     iemGroup: true,
@@ -313,7 +592,9 @@ class IemGroupTournament {
 
   public currentRound(section?: BracketIdentifier) {
     const readyRounds = this.rounds()
-      .map((round) => round.filter((match) => (!section || match.id.s === section) && this.isReady(match)))
+      .map((round) =>
+        round.filter((match) => (!section || match.id.s === section) && this.isReady(match)),
+      )
       .filter((round) => round.length > 0);
 
     return readyRounds[0] || [];
@@ -330,8 +611,7 @@ class IemGroupTournament {
 
   public findMatch(matchId: Clux.MatchId) {
     return this.matches.find(
-      (match) =>
-        match.id.s === matchId.s && match.id.r === matchId.r && match.id.m === matchId.m,
+      (match) => match.id.s === matchId.s && match.id.r === matchId.r && match.id.m === matchId.m,
     );
   }
 
@@ -342,7 +622,10 @@ class IemGroupTournament {
 
     const additions: IemGroupMatch[] = [];
 
-    if (this.allScored(BracketIdentifier.UPPER, 1) && !this.findByRound(BracketIdentifier.UPPER, 2).length) {
+    if (
+      this.allScored(BracketIdentifier.UPPER, 1) &&
+      !this.findByRound(BracketIdentifier.UPPER, 2).length
+    ) {
       additions.push(
         this.createMatch(BracketIdentifier.UPPER, 2, 1, [
           this.winner({ s: BracketIdentifier.UPPER, r: 1, m: 1 }),
@@ -448,7 +731,12 @@ class IemGroupTournament {
           pos,
         };
       }),
-      [(entry) => entry.pos, (entry) => -entry.wins, (entry) => entry.losses, (entry) => entry.seed],
+      [
+        (entry) => entry.pos,
+        (entry) => -entry.wins,
+        (entry) => entry.losses,
+        (entry) => entry.seed,
+      ],
     );
   }
 
@@ -522,7 +810,12 @@ class IemGroupTournament {
     return matches.length > 0 && matches.every((match) => !!match.m);
   }
 
-  private createMatch(section: BracketIdentifier, round: number, match: number, seeds: [number, number]): IemGroupMatch {
+  private createMatch(
+    section: BracketIdentifier,
+    round: number,
+    match: number,
+    seeds: [number, number],
+  ): IemGroupMatch {
     return {
       data: {},
       id: {
@@ -627,6 +920,7 @@ class IemGroupTournament {
 type TournamentOptions =
   | Clux.GroupStageOptions
   | Clux.DuelOptions
+  | GroupSwissOptions
   | IemGroupOptions
   | { swiss: SwissOptions };
 
@@ -640,6 +934,7 @@ export default class Tournament {
   public brackets: Duel;
   public competitors: Array<number>;
   public groups: GroupStage;
+  public groupSwiss: GroupSwissTournament;
   public iemGroup: IemGroupTournament;
   public options: TournamentOptions;
   public size: number;
@@ -657,6 +952,9 @@ export default class Tournament {
     if ('swiss' in data) {
       instance = new Tournament(data.swiss.size, { swiss: data.swiss.options });
       instance.swiss = SwissTournament.restore(data.swiss);
+    } else if ('groupSwiss' in data) {
+      instance = new Tournament(data.groupSwiss.size, data.groupSwiss.options);
+      instance.groupSwiss = GroupSwissTournament.restore(data.groupSwiss);
     } else if ('iemGroup' in data) {
       instance = new Tournament(data.iemGroup.size, {
         iemGroup: true,
@@ -688,10 +986,15 @@ export default class Tournament {
   }
 
   public get $base() {
-    return this.swiss || this.iemGroup || this.groups || this.brackets;
+    return this.swiss || this.groupSwiss || this.iemGroup || this.groups || this.brackets;
   }
 
   public get standings() {
+    if (this.groupSwiss) {
+      const standings = groupBy(this.groupSwiss.results(), 'grp');
+      return Object.keys(standings).map((groupId) => sortBy(standings[groupId], 'gpos'));
+    }
+
     if (this.groups) {
       const standings = groupBy(this.groups.results(), 'grp');
       return Object.keys(standings).map((groupId) => sortBy(standings[groupId], 'gpos'));
@@ -719,7 +1022,11 @@ export default class Tournament {
 
   public getGroupByCompetitorId(id: number) {
     const seed = this.getSeedByCompetitorId(id);
-    return this.groups?.groupFor(seed as number) || BracketIdentifier.UPPER;
+    return (
+      this.groupSwiss?.groupFor(seed as number) ||
+      this.groups?.groupFor(seed as number) ||
+      BracketIdentifier.UPPER
+    );
   }
 
   public save() {
@@ -727,6 +1034,13 @@ export default class Tournament {
       return {
         competitors: this.competitors,
         swiss: this.swiss.save(),
+      };
+    }
+
+    if (this.groupSwiss) {
+      return {
+        competitors: this.competitors,
+        groupSwiss: this.groupSwiss.save(),
       };
     }
 
@@ -764,6 +1078,12 @@ export default class Tournament {
     if (this.options && 'swiss' in this.options) {
       this.swiss = new SwissTournament(this.size, this.options.swiss);
       this.swiss.start();
+      return;
+    }
+
+    if (this.options && 'groupSwiss' in this.options) {
+      this.groupSwiss = new GroupSwissTournament(this.size, this.options);
+      this.groupSwiss.start();
       return;
     }
 

@@ -29,6 +29,7 @@ interface Props {
   >[number]['competitors'];
   compact?: boolean;
   highlight?: number;
+  hidePoints?: boolean;
   limit?: number;
   mode?: 'default' | 'swiss' | 'ranking';
   offset?: number;
@@ -80,15 +81,13 @@ function getZoneColorValue(value: number, zones?: Props['zones']) {
 export default function (props: Props) {
   const isSwiss = props.mode === 'swiss';
   const isRanking = props.mode === 'ranking';
+  const showPlacementOrPoints = !isSwiss && (isRanking || !props.hidePoints);
   const positionCounts = React.useMemo(
     () =>
-      props.competitors.reduce(
-        (acc, competitor) => {
-          acc.set(competitor.position, (acc.get(competitor.position) || 0) + 1);
-          return acc;
-        },
-        new Map<number, number>(),
-      ),
+      props.competitors.reduce((acc, competitor) => {
+        acc.set(competitor.position, (acc.get(competitor.position) || 0) + 1);
+        return acc;
+      }, new Map<number, number>()),
     [props.competitors],
   );
 
@@ -100,20 +99,42 @@ export default function (props: Props) {
           <th className="w-1/12">
             <p title="Ranking">#</p>
           </th>
-          <th className={cx(isRanking ? 'w-8/12' : isSwiss ? 'w-9/12' : 'w-8/12')}>Name</th>
+          <th
+            className={cx(
+              isRanking ? 'w-8/12' : props.hidePoints ? 'w-8/12' : isSwiss ? 'w-9/12' : 'w-8/12',
+            )}
+          >
+            Name
+          </th>
           {!isRanking && !!props.compact && (
-            <th className={cx(isSwiss ? 'w-2/12 text-right pr-6' : 'w-2/12 text-right pr-1')}>
+            <th
+              className={cx(
+                isSwiss
+                  ? 'w-2/12 pr-6 text-right'
+                  : props.hidePoints
+                    ? 'w-2/12 pr-6 text-right'
+                    : 'w-2/12 pr-1 text-right',
+              )}
+            >
               <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
             </th>
           )}
           {!isRanking && !props.compact && (
             <>
-              <th className={cx(isSwiss ? 'w-2/12 text-right pr-6' : 'w-2/12 text-right pr-1')}>
+              <th
+                className={cx(
+                  isSwiss
+                    ? 'w-2/12 pr-6 text-right'
+                    : props.hidePoints
+                      ? 'w-2/12 pr-6 text-right'
+                      : 'w-2/12 pr-1 text-right',
+                )}
+              >
                 <p title={isSwiss ? 'Record' : 'Win/Loss'}>{isSwiss ? 'Record' : 'W/L'}</p>
               </th>
             </>
           )}
-          {!isSwiss && (
+          {showPlacementOrPoints && (
             <th className={cx(isRanking ? 'w-3/12 text-right' : 'w-1/12 text-right')}>
               <p title={isRanking ? 'Finishing Position' : 'Total Points'}>
                 {isRanking ? 'Place' : 'Pts.'}
@@ -162,16 +183,32 @@ export default function (props: Props) {
                 )}
               </td>
               {!isRanking && !!props.compact && (
-                <td className={cx(isSwiss ? 'text-right pr-6' : 'text-right pr-1')}>
+                <td
+                  className={cx(
+                    isSwiss
+                      ? 'pr-6 text-right'
+                      : props.hidePoints
+                        ? 'pr-6 text-right'
+                        : 'pr-1 text-right',
+                  )}
+                >
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
               {!isRanking && !props.compact && (
-                <td className={cx(isSwiss ? 'text-right pr-6' : 'text-right pr-1')}>
+                <td
+                  className={cx(
+                    isSwiss
+                      ? 'pr-6 text-right'
+                      : props.hidePoints
+                        ? 'pr-6 text-right'
+                        : 'pr-1 text-right',
+                  )}
+                >
                   {`${competitor.win}-${competitor.loss}`}
                 </td>
               )}
-              {!isSwiss && (
+              {showPlacementOrPoints && (
                 <td className={cx('text-right')}>
                   {isRanking
                     ? getPlacementLabel(

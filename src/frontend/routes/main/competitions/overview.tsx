@@ -190,6 +190,9 @@ export default function () {
 
   const isSwiss = Boolean(Constants.TierSwissConfig[tierSlug]);
   const isBracketStandings = !competition.tier.groupSize && !isSwiss;
+  const hideSmallGroupPoints = Boolean(
+    competition.tier.groupSize && competition.tier.groupSize <= 4,
+  );
 
   return (
     <section className="divide-base-content/10 grid grid-cols-2 divide-x">
@@ -458,6 +461,7 @@ export default function () {
             <Standings
               key={groupKey + '__overview_standings'}
               highlight={state.profile.teamId}
+              hidePoints={hideSmallGroupPoints}
               competitors={groups[groupKey]}
               teamLink={(team) => `/teams?teamId=${team.id}`}
               title={
