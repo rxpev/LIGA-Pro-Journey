@@ -13,7 +13,7 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Pagination } from '@liga/frontend/components';
 import { FaChartBar, FaSortAmountDown, FaSortAmountDownAlt } from 'react-icons/fa';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
-import { getTeamsRoundLabel } from '../teams/labels';
+import { getTeamsRoundLabel, getTeamsTierLabel } from '../teams/labels';
 
 /** @constant */
 const NUM_COLUMNS = 7;
@@ -28,13 +28,19 @@ const PAGE_SIZE = 50;
 function getCompetitionLabel(
   match: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number],
 ) {
-  const tier = Constants.IdiomaticTier[match.competition.tier.slug];
-  const suffix = match.competition.tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
-  if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
-    return `${match.competition.tier.league.name} ${tier}${suffix}`;
+  const tier = match.competition.tier;
+  const tierLabel = getTeamsTierLabel(tier.slug, tier.league.name);
+  const suffix = tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
+
+  if (tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    return `${tierLabel}${suffix}`;
   }
 
-  return `${match.competition.federation.name} ${tier}${suffix}`;
+  if (match.competition.federation.slug === Constants.FederationSlug.ESPORTS_WORLD) {
+    return `${tierLabel}${suffix}`;
+  }
+
+  return `${match.competition.federation.name} ${tierLabel}${suffix}`.trim();
 }
 
 /**
