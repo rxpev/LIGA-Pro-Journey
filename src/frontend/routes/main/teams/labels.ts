@@ -41,6 +41,24 @@ export const getTeamsTierLabel = (tierSlug: string, leagueName?: string) => {
   return Constants.IdiomaticTier[tierSlug] ?? tierSlug;
 };
 
+export const getTeamsDivisionLabel = (tierSlug: string, leagueName?: string) => {
+  if (
+    [
+      Constants.TierSlug.LEAGUE_OPEN,
+      Constants.TierSlug.LEAGUE_INTERMEDIATE,
+      Constants.TierSlug.LEAGUE_MAIN,
+      Constants.TierSlug.LEAGUE_ADVANCED,
+    ].includes(tierSlug as Constants.TierSlug)
+  ) {
+    return `${leagueName ?? 'ESEA'} ${(Constants.IdiomaticTier[tierSlug] ?? tierSlug).replace(
+      /\s+Division$/i,
+      '',
+    )}`;
+  }
+
+  return getTeamsTierLabel(tierSlug, leagueName);
+};
+
 type MatchRoundContext = {
   payload?: string | null;
   round?: number | null;

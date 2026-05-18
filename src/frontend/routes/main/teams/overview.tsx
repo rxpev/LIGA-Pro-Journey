@@ -11,8 +11,8 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Historial, PlayerCard, Standings } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
-import { addDays, format } from 'date-fns';
-import { getTeamsTierLabel } from './labels';
+import { addDays, format, subMonths } from 'date-fns';
+import { getTeamsDivisionLabel, getTeamsTierLabel } from './labels';
 
 /** @constant */
 const NUM_PREVIOUS = 5;
@@ -31,6 +31,10 @@ export default function () {
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.upcoming<typeof Eagers.match>>>
   >([]);
+  const [recentMapWinRate, setRecentMapWinRate] = React.useState<{
+    maps: number;
+    percentage: number;
+  } | null>(null);
   const [settings, setSettings] = React.useState(Constants.Settings);
   const [squad, setSquad] = React.useState<
     Awaited<ReturnType<typeof api.players.all<typeof Eagers.player>>>
@@ -80,6 +84,112 @@ export default function () {
     api.team.transfers(team.id).then(setTransfers);
   }, [team]);
 
+  React.useEffect(() => {
+    if (!state.profile) {
+      return;
+    }
+
+    api.matches
+      .all({
+        ...Eagers.match,
+        where: {
+          status: Constants.MatchStatus.COMPLETED,
+          competitionId: { not: null as null },
+          matchType: { not: 'FACEIT_PUG' },
+          date: {
+            gte: subMonths(state.profile.date, 3),
+            lte: state.profile.date,
+          },
+          competitors: {
+            some: {
+              teamId: team.id,
+            },
+          },
+        },
+      })
+      .then((recentMatches) => {
+        const playedMaps = recentMatches.flatMap((match) => {
+          const hasOpponent = match.competitors.some(
+            (competitor) => competitor.teamId != null && competitor.teamId !== team.id,
+          );
+
+          if (!hasOpponent) {
+            return [];
+          }
+
+          const gameResults = match.games.flatMap((game) => {
+            const ownGameTeam = game.teams.find((gameTeam) => gameTeam.teamId === team.id);
+            const opponentGameTeam = game.teams.find(
+              (gameTeam) => gameTeam.teamId != null && gameTeam.teamId !== team.id,
+            );
+
+            if (!ownGameTeam || !opponentGameTeam) {
+              return [];
+            }
+
+            if (ownGameTeam.result != null) {
+              return [ownGameTeam.result];
+            }
+
+            if (ownGameTeam.score != null && opponentGameTeam.score != null) {
+              if (ownGameTeam.score > opponentGameTeam.score) {
+                return [Constants.MatchResult.WIN];
+              }
+
+              if (ownGameTeam.score < opponentGameTeam.score) {
+                return [Constants.MatchResult.LOSS];
+              }
+
+              return [Constants.MatchResult.DRAW];
+            }
+
+            return [];
+          });
+
+          if (gameResults.length) {
+            return gameResults;
+          }
+
+          const ownMatchTeam = match.competitors.find(
+            (competitor) => competitor.teamId === team.id,
+          );
+          const opponentMatchTeam = match.competitors.find(
+            (competitor) => competitor.teamId != null && competitor.teamId !== team.id,
+          );
+          const ownScore = ownMatchTeam?.score ?? null;
+          const opponentScore = opponentMatchTeam?.score ?? null;
+          const looksLikeSeriesScore =
+            ownScore != null &&
+            opponentScore != null &&
+            ownScore + opponentScore > 1 &&
+            ownScore + opponentScore <= 5 &&
+            ownScore <= 3 &&
+            opponentScore <= 3;
+
+          if (looksLikeSeriesScore) {
+            return [
+              ...Array(ownScore).fill(Constants.MatchResult.WIN),
+              ...Array(opponentScore).fill(Constants.MatchResult.LOSS),
+            ];
+          }
+
+          return ownMatchTeam?.result != null ? [ownMatchTeam.result] : [];
+        });
+
+        if (!playedMaps.length) {
+          setRecentMapWinRate(null);
+          return;
+        }
+
+        const wins = playedMaps.filter((result) => result === Constants.MatchResult.WIN).length;
+
+        setRecentMapWinRate({
+          maps: playedMaps.length,
+          percentage: Math.round((wins / playedMaps.length) * 100),
+        });
+      });
+  }, [state.profile, team]);
+
   // load settings
   React.useEffect(() => {
     if (!state.profile) {
@@ -112,6 +222,10 @@ export default function () {
   const isProLeagueStage =
     competition?.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
     competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
+  const divisionLabel = getTeamsDivisionLabel(
+    competition?.tier.slug,
+    competition?.tier.league.name,
+  );
 
   const sortedSquad = React.useMemo(
     () => [...squad].sort((a, b) => Number(b.starter) - Number(a.starter)),
@@ -132,64 +246,58 @@ export default function () {
         <header className="heading prose max-w-none border-t-0!">
           <h2>{t('shared.overview')}</h2>
         </header>
-        <aside className="divide-base-content/10 flex divide-x">
-          <figure className="center w-1/2 gap-4">
-            <img alt={team.name} src={team.blazon} />
-            <Historial matches={matches} teamId={team.id} />
-          </figure>
-          <table className="table table-fixed">
-            <thead>
-              <tr>
-                <th>{t('shared.name')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>{team.name}</td>
-              </tr>
-            </tbody>
-            <thead>
-              <tr>
-                <th>{t('shared.country')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <span className={cx('fp', team.country.code.toLowerCase())} />
-                  &nbsp;{team.country.name}
-                </td>
-              </tr>
-            </tbody>
-            <thead>
-              <tr>
-                <th>{t('main.teams.division')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  {!!group.length && !isProLeagueStage && (
-                    <span>{Util.toOrdinalSuffix(userTeam?.position)} in&nbsp;</span>
-                  )}
-                  {getTeamsTierLabel(competition.tier.slug, competition.tier.league.name)}
-                </td>
-              </tr>
-            </tbody>
-            <thead>
-              <tr>
-                <th>{t('shared.worldRanking')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <span>#{worldRanking}</span>&nbsp;
-                  <span className="text-muted">({team.elo} Elo Rating)</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <aside>
+          <section className="border-base-content/10 flex items-center gap-3 border-b p-4">
+            <img alt={team.name} src={team.blazon} className="size-14 shrink-0 object-contain" />
+            <article className="min-w-0">
+              <h3 className="truncate text-xl leading-tight font-bold" title={team.name}>
+                {team.name}
+              </h3>
+              <p className="mt-1 truncate text-sm" title={team.country.name}>
+                <span className={cx('fp', team.country.code.toLowerCase())} />
+                &nbsp;{team.country.name}
+              </p>
+            </article>
+          </section>
+          <section className="divide-base-content/10 grid grid-cols-4 divide-x">
+            <article className="min-w-0 p-4">
+              <p className="text-muted mb-2 text-xs font-bold uppercase">Form</p>
+              <Historial matches={matches} teamId={team.id} />
+            </article>
+            <article className="min-w-0 p-4">
+              <p className="text-muted mb-2 text-xs font-bold uppercase">
+                {t('main.teams.division')}
+              </p>
+              <p className="truncate" title={divisionLabel}>
+                {!!group.length && !isProLeagueStage && (
+                  <span>{Util.toOrdinalSuffix(userTeam?.position)} in&nbsp;</span>
+                )}
+                {divisionLabel}
+              </p>
+            </article>
+            <article className="min-w-0 p-4">
+              <p className="text-muted mb-2 text-xs font-bold uppercase">
+                {t('shared.worldRanking')}
+              </p>
+              <p className="truncate">
+                <span>#{worldRanking}</span>&nbsp;
+                <span className="text-muted">({team.elo} Elo)</span>
+              </p>
+            </article>
+            <article className="min-w-0 p-4">
+              <p className="text-muted mb-2 text-xs font-bold uppercase">Win % Last 3 Months</p>
+              <p
+                className={cx(
+                  recentMapWinRate && recentMapWinRate.percentage > 50 && 'text-success',
+                  recentMapWinRate && recentMapWinRate.percentage < 50 && 'text-error',
+                )}
+              >
+                {recentMapWinRate == null
+                  ? '-'
+                  : `${recentMapWinRate.percentage}% (${recentMapWinRate.maps} maps)`}
+              </p>
+            </article>
+          </section>
         </aside>
         <aside>
           <header className="heading prose max-w-none border-t-0!">

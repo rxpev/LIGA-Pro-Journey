@@ -5,13 +5,11 @@
  */
 import React from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Constants, Eagers, Util } from '@liga/shared';
+import { Constants, Eagers } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
-import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
-import { getTeamsTierLabel } from './labels';
 
 /** @enum */
 enum TabIdentifier {
@@ -34,45 +32,38 @@ export default function () {
   const [federations, setFederations] = React.useState<
     Awaited<ReturnType<typeof api.federations.all>>
   >([]);
-  const [selectedFederationId, setSelectedFederationId] = React.useState<number>();
-  const [selectedTeam, setSelectedTeam] =
-    React.useState<ReturnType<typeof findTeamOptionByValue>>();
-  const [selectedTierId, setSelectedTierId] = React.useState<number>();
   const [teams, setTeams] = React.useState<
     Awaited<ReturnType<typeof api.teams.all<typeof Eagers.team>>>
   >([]);
   const [team, setTeam] = React.useState<(typeof teams)[number]>();
   const [rankings, setRankings] = React.useState<typeof teams>([]);
-  const selectedFederation = React.useMemo(
-    () => federations.find((federation) => federation.id === selectedFederationId),
-    [federations, selectedFederationId],
-  );
-  const isFederationSlug = (slug: string): slug is Constants.FederationSlug =>
-    Object.values(Constants.FederationSlug).includes(slug as Constants.FederationSlug);
+  const [selectedRankingFederationId, setSelectedRankingFederationId] = React.useState<number>();
+  const [teamSearch, setTeamSearch] = React.useState('');
 
-  const isTierEnabled = React.useCallback(
-    (tier: Constants.TierSlug) => {
-      const slug = selectedFederation?.slug;
-      return slug && isFederationSlug(slug)
-        ? Util.isLeagueTierEnabledForFederation(tier, slug)
-        : true;
-    },
-    [selectedFederation?.slug],
+  const rankingFederations = React.useMemo(
+    () => [...federations].sort((a, b) => a.id - b.id),
+    [federations],
   );
 
-  // build team query
-  const teamQuery = React.useMemo(
-    () => ({
-      ...Eagers.team,
-      ...Util.buildTeamQuery(selectedFederationId, null, selectedTierId),
-    }),
-    [selectedFederationId, selectedTierId],
-  );
+  const searchedTeams = React.useMemo(() => {
+    const search = teamSearch.trim().toLowerCase();
+    if (!search) {
+      return [];
+    }
+
+    return teams
+      .filter((team) => team.name.toLowerCase().includes(search))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 12);
+  }, [teamSearch, teams]);
 
   // initial data fetch
   React.useEffect(() => {
     api.federations.all().then(setFederations);
     api.teams.all<typeof Eagers.team>(Eagers.team).then(setTeams);
+  }, []);
+
+  React.useEffect(() => {
     api.teams
       .all<typeof Eagers.team>({
         ...Eagers.team,
@@ -83,10 +74,13 @@ export default function () {
           tier: {
             not: null,
           },
+          ...(Number.isInteger(selectedRankingFederationId)
+            ? { competitionFederationId: selectedRankingFederationId }
+            : {}),
         },
       })
       .then(setRankings);
-  }, []);
+  }, [selectedRankingFederationId]);
 
   // preload the user's team
   React.useEffect(() => {
@@ -126,56 +120,6 @@ export default function () {
     }
   }, [state.profile, teams, team]);
 
-  // apply team filters
-  React.useEffect(() => {
-    api.teams.all<typeof Eagers.team>(teamQuery).then(setTeams);
-  }, [teamQuery]);
-
-  // reset tier selection if the federation does not support it
-  React.useEffect(() => {
-    if (!Number.isInteger(selectedTierId)) {
-      return;
-    }
-
-    const tierSlug = Constants.Prestige[selectedTierId];
-    if (tierSlug && !isTierEnabled(tierSlug)) {
-      setSelectedTierId(undefined);
-    }
-  }, [isTierEnabled, selectedTierId]);
-
-  // massage team data to team selector data structure
-  const teamSelectorData = React.useMemo(
-    () =>
-      Constants.Prestige.filter((prestige, prestigeIdx) => {
-        if (!isTierEnabled(prestige)) {
-          return false;
-        }
-        return Number.isInteger(selectedTierId) ? prestigeIdx === selectedTierId : true;
-      }).map((prestige) => ({
-        label: getTeamsTierLabel(prestige),
-        options: teams
-          .filter((team) => team.tier === Constants.Prestige.findIndex((tier) => tier === prestige))
-          .map((team) => ({
-            ...team,
-            value: team.id,
-            label: team.name,
-          })),
-      })),
-    [isTierEnabled, teams, selectedTierId],
-  );
-
-  React.useEffect(() => {
-    const teamId = Number(searchParams.get('teamId'));
-    if (!Number.isInteger(teamId) || !teamSelectorData.length) {
-      return;
-    }
-
-    const selected = findTeamOptionByValue(teamSelectorData, teamId);
-    if (selected) {
-      setSelectedTeam(selected);
-    }
-  }, [searchParams, teamSelectorData]);
-
   return (
     <div className="dashboard">
       <header>
@@ -200,89 +144,85 @@ export default function () {
       </header>
       <main>
         <section>
-          <form className="form-ios form-ios-col-2">
-            <fieldset>
-              <legend className="border-t-0!">{t('shared.filters')}</legend>
-              <section>
-                <header>
-                  <p>{t('shared.federation')}</p>
-                </header>
-                <article>
-                  <select
-                    className="select"
-                    onChange={(event) => setSelectedFederationId(Number(event.target.value))}
-                    value={selectedFederationId}
-                  >
-                    <option value="">{t('shared.any')}</option>
-                    {federations
-                      .filter(
-                        (federation) => federation.slug !== Constants.FederationSlug.ESPORTS_WORLD,
-                      )
-                      .map((federation) => (
-                        <option key={federation.id} value={federation.id}>
-                          {federation.name}
-                        </option>
-                      ))}
-                  </select>
-                </article>
-              </section>
-              <section>
-                <header>
-                  <p>{t('shared.tierPrestige')}</p>
-                </header>
-                <article>
-                  <select
-                    className="select"
-                    onChange={(event) => setSelectedTierId(Number(event.target.value))}
-                    value={selectedTierId}
-                  >
-                    <option value="">{t('shared.any')}</option>
-                    {Constants.Prestige.flatMap((prestige, prestigeId) =>
-                      isTierEnabled(prestige)
-                        ? [
-                            <option key={prestige} value={prestigeId}>
-                              {getTeamsTierLabel(prestige)}
-                            </option>,
-                          ]
-                        : [],
-                    )}
-                  </select>
-                </article>
-              </section>
-              <section>
-                <header>
-                  <p>{t('shared.team')}</p>
-                </header>
-                <article>
-                  <TeamSelect
-                    className="w-full"
-                    backgroundColor="var(--color-base-200)"
-                    options={teamSelectorData}
-                    value={selectedTeam}
-                    onChange={(option) =>
-                      setSelectedTeam(findTeamOptionByValue(teamSelectorData, option.value))
-                    }
-                  />
-                </article>
-              </section>
-            </fieldset>
-            <fieldset>
-              <section>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-block col-span-2!"
-                  disabled={selectedFederationId < 0 || selectedTierId < 0 || !selectedTeam}
-                  onClick={() => setTeam(teams.find((tteam) => tteam.id === selectedTeam.id))}
-                >
-                  {t('shared.apply')}
-                </button>
-              </section>
-            </fieldset>
-          </form>
+          <article className="stack-y">
+            <header className="prose">
+              <h2>{t('shared.team')}</h2>
+            </header>
+            <input
+              className="input input-bordered w-full"
+              placeholder={`Search ${t('shared.team').toLowerCase()}`}
+              value={teamSearch}
+              onChange={(event) => setTeamSearch(event.target.value)}
+            />
+            <footer className="max-h-64 overflow-y-auto">
+              <table className="table-xs table table-fixed">
+                <tbody>
+                  {searchedTeams.map((teamSearchResult) => (
+                    <tr
+                      key={teamSearchResult.id + '__search'}
+                      className={cx(
+                        'cursor-pointer',
+                        teamSearchResult.id === team?.id && 'bg-base-content/10',
+                      )}
+                      onClick={() => setTeam(teamSearchResult)}
+                    >
+                      <td className="w-10 px-0">
+                        <Image
+                          src={teamSearchResult.blazon}
+                          title={teamSearchResult.name}
+                          className="mx-auto size-8 object-cover"
+                          blur="blur-xs"
+                        />
+                      </td>
+                      <td className="truncate">{teamSearchResult.name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </footer>
+          </article>
           <article className="stack-y gap-0!">
             <header className="prose">
-              <h2>{t('shared.worldRanking')}</h2>
+              <h2>Rankings</h2>
             </header>
+            <nav className="grid grid-cols-2 gap-2 p-2">
+              <button
+                type="button"
+                className={cx(
+                  'btn border-base-content/10 h-10 rounded border font-semibold shadow-none',
+                  !Number.isInteger(selectedRankingFederationId)
+                    ? 'btn-primary'
+                    : 'btn-ghost bg-base-200 hover:bg-base-300',
+                )}
+                onClick={() => setSelectedRankingFederationId(undefined)}
+              >
+                World
+              </button>
+              {rankingFederations
+                .filter((federation) => federation.slug !== Constants.FederationSlug.ESPORTS_WORLD)
+                .map((federation, federationIdx, filteredFederations) => {
+                  const isLastOdd =
+                    (filteredFederations.length + 1) % 2 === 1 &&
+                    federationIdx === filteredFederations.length - 1;
+
+                  return (
+                    <button
+                      type="button"
+                      key={federation.id + '__ranking_filter'}
+                      className={cx(
+                        'btn border-base-content/10 h-10 rounded border font-semibold shadow-none',
+                        isLastOdd && 'col-span-2 mx-auto w-[calc(50%_-_0.25rem)]',
+                        selectedRankingFederationId === federation.id
+                          ? 'btn-primary'
+                          : 'btn-ghost bg-base-200 hover:bg-base-300',
+                      )}
+                      onClick={() => setSelectedRankingFederationId(federation.id)}
+                    >
+                      {federation.name}
+                    </button>
+                  );
+                })}
+            </nav>
             <footer>
               <table className="table table-fixed">
                 <thead>

@@ -13,6 +13,13 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { getTeamsTierLabel } from './labels';
 
+const HONOR_TIER_SLUGS = [
+  ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
+    (award) => award.target,
+  ),
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+];
+
 /**
  * Builds chart configuration for a set of league tiers.
  *
@@ -154,16 +161,9 @@ export default function () {
       return {};
     }
 
-    const awards = [
-      ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
-        (award) => award.target,
-      ),
-      Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
-    ];
-
     const found = competitions.filter(
       (competition) =>
-        awards.includes(competition.tier.slug as Constants.TierSlug) &&
+        HONOR_TIER_SLUGS.includes(competition.tier.slug as Constants.TierSlug) &&
         competition.competitors.some(
           (competitor) => competitor.teamId === team.id && competitor.position === 1,
         ),
@@ -351,12 +351,6 @@ export default function () {
                   <th title={t('main.teams.loss')} className="w-1/12 text-center">
                     {t('main.teams.lossAlt')}
                   </th>
-                  <th title={t('main.teams.draw')} className="w-1/12 text-center">
-                    {t('main.teams.drawAlt')}
-                  </th>
-                  <th title={t('main.teams.points')} className="w-1/12 text-center">
-                    {t('main.teams.pointsAlt')}
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -370,16 +364,21 @@ export default function () {
                       return;
                     }
                     const competitionLabel = buildCompetitionLabel(competition);
+                    const isHonorWinner =
+                      competitor.position === 1 &&
+                      HONOR_TIER_SLUGS.includes(competition.tier.slug as Constants.TierSlug);
                     return (
                       <tr key={competition.id + '__competition__' + competitor.id + '__competitor'}>
                         <td className="truncate" title={competitionLabel}>
                           {competitionLabel}
                         </td>
-                        <td className="text-center">{Util.toOrdinalSuffix(competitor.position)}</td>
+                        <td
+                          className={cx('text-center', isHonorWinner && 'text-warning font-bold')}
+                        >
+                          {Util.toOrdinalSuffix(competitor.position)}
+                        </td>
                         <td className="text-center">{competitor.win}</td>
                         <td className="text-center">{competitor.loss}</td>
-                        <td className="text-center">{competitor.draw}</td>
-                        <td className="text-center">{competitor.win * 3 + competitor.draw}</td>
                       </tr>
                     );
                   })}
