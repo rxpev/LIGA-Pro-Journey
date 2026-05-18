@@ -961,7 +961,7 @@ export const Prestige = [
  */
 export const PrizePool: Record<TierSlug | string, { total: number; distribution: Array<number> }> =
   {
-    [TierSlug.BLAST_FINALS]: { total: 0, distribution: [] },
+    [TierSlug.BLAST_FINALS]: { total: 750_000, distribution: [40, 18, 10, 10, 5.5, 5.5, 5.5, 5.5] },
     [TierSlug.CCT_GLOBAL_FINALS]: { total: 150_000, distribution: [50, 23.333333, 10, 10, 1.666667, 1.666667, 1.666667, 1.666667] },
     [TierSlug.CCT_OCE_PLAYOFFS]: { total: 20_000, distribution: [50, 25, 7.5, 7.5, 2.5, 2.5, 2.5, 2.5] },
     [TierSlug.CCT_OCE_SERIES]: { total: 0, distribution: [] },
@@ -969,7 +969,7 @@ export const PrizePool: Record<TierSlug | string, { total: number; distribution:
     [TierSlug.CCT_SERIES_PLAYOFFS]: { total: 50_000, distribution: [50, 20, 5, 5, 5, 5, 5, 5] },
     [TierSlug.ESEA_CASH_CUP]: { total: 25_000, distribution: [60, 20, 10, 10] },
     [TierSlug.ESL_CHALLENGER]: { total: 0, distribution: [] },
-    [TierSlug.ESL_CHALLENGER_PLAYOFFS]: { total: 0, distribution: [] },
+    [TierSlug.ESL_CHALLENGER_PLAYOFFS]: { total: 150_000, distribution: [50, 25, 12.5, 12.5] },
     [TierSlug.IEM_COLOGNE_GROUP_A]: { total: 0, distribution: [] },
     [TierSlug.IEM_COLOGNE_GROUP_B]: { total: 0, distribution: [] },
     [TierSlug.IEM_COLOGNE_OPEN_QUALIFIER]: { total: 0, distribution: [] },

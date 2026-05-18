@@ -17,6 +17,26 @@ import { FaChartBar } from 'react-icons/fa';
 /** @constant */
 const NUM_PREVIOUS = 5;
 
+/** @constant */
+const NUM_PRIZE_POOL_VISIBLE = 4;
+
+/** @constant */
+const WINNER_HISTORY_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.ESEA_CASH_CUP,
+  Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+]);
+
 /**
  * Exports this module.
  *
@@ -36,6 +56,9 @@ export default function () {
   const [winners, setWinners] = React.useState<
     Awaited<ReturnType<typeof api.competitions.winners>>
   >([]);
+  const [showAllPrizePool, setShowAllPrizePool] = React.useState(false);
+  const tierSlug = competition.tier.slug as Constants.TierSlug;
+  const showWinnerHistory = WINNER_HISTORY_TIER_SLUGS.has(tierSlug);
 
   // fetch competition start and end
   // dates when the data comes in
@@ -84,12 +107,29 @@ export default function () {
 
   // fetch previous winners
   React.useEffect(() => {
-    api.competitions.winners(competition.id).then(setWinners);
-  }, [competition]);
+    setWinners([]);
+
+    if (!showWinnerHistory) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    api.competitions.winners(competition.id).then((result) => {
+      if (isCurrent) {
+        setWinners(result);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition, showWinnerHistory]);
 
   // reset group selection when competition changes
   React.useEffect(() => {
     setSelectedGroup(null);
+    setShowAllPrizePool(false);
   }, [competition]);
 
   // grab user's team info
@@ -114,14 +154,34 @@ export default function () {
   );
 
   // competition prize pool
-  const prizePool = React.useMemo(
-    () => !!competition && Constants.PrizePool[competition.tier.slug as Constants.TierSlug],
-    [competition],
+  const prizePool = React.useMemo(() => Constants.PrizePool[tierSlug], [tierSlug]);
+  const prizePoolRows = React.useMemo(
+    () =>
+      competition.competitors
+        .filter(
+          (competitor) =>
+            Boolean(competitor.team) &&
+            Boolean(prizePool?.distribution[(competitor.position || 1) - 1]),
+        )
+        .sort((a, b) => a.position - b.position)
+        .map((competitor, idx) => ({
+          competitor,
+          placement: idx + 1,
+          percentage: prizePool.distribution[idx],
+        })),
+    [competition.competitors, prizePool],
   );
+  const visiblePrizePoolRows = showAllPrizePool
+    ? prizePoolRows
+    : prizePoolRows.slice(0, NUM_PRIZE_POOL_VISIBLE);
+  const showPrizePool =
+    competition.status === Constants.CompetitionStatus.COMPLETED &&
+    Boolean(prizePool?.total) &&
+    prizePoolRows.length > 0;
+  const canExpandPrizePool = prizePoolRows.length > NUM_PRIZE_POOL_VISIBLE;
+  const showWinners = showWinnerHistory && winners.length > 0;
 
-  const isSwiss = Boolean(
-    Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug],
-  );
+  const isSwiss = Boolean(Constants.TierSwissConfig[tierSlug]);
   const isBracketStandings = !competition.tier.groupSize && !isSwiss;
 
   return (
@@ -164,63 +224,99 @@ export default function () {
             </tbody>
           </table>
         </aside>
-        <table className="table table-fixed">
-          <thead>
-            <tr>
-              <th>{t('main.competitions.titleHolders')}</th>
-              <th>{t('shared.season')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!winners.length && (
-              <tr>
-                <td>{t('main.competitions.notApplicable')}</td>
-                <td>-</td>
-              </tr>
+        {(showWinners || showPrizePool) && (
+          <table className="table table-fixed">
+            {showWinners && (
+              <>
+                <thead>
+                  <tr>
+                    <th>{t('main.competitions.titleHolders')}</th>
+                    <th>{t('shared.season')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <span className="inline-flex items-center gap-2">
+                        <img
+                          alt={`${winners[0].team.name} logo`}
+                          src={winners[0].team.blazon}
+                          className="size-4"
+                        />
+                        <span>{winners[0].team.name}</span>
+                      </span>
+                    </td>
+                    <td>
+                      {t('shared.season')} {competition.season - 1}
+                    </td>
+                  </tr>
+                </tbody>
+              </>
             )}
-            {winners.length > 0 && (
-              <tr>
-                <td>
-                  <span className="inline-flex items-center gap-2">
-                    <img
-                      alt={`${winners[0].team.name} logo`}
-                      src={winners[0].team.blazon}
-                      className="size-4"
-                    />
-                    <span>{winners[0].team.name}</span>
-                  </span>
-                </td>
-                <td>
-                  {t('shared.season')} {competition.season - 1}
-                </td>
-              </tr>
+            {showPrizePool && (
+              <>
+                <thead>
+                  <tr>
+                    <th>{t('main.competitions.prizePool')}</th>
+                    <th>{t('shared.amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiblePrizePoolRows.map(({ competitor, placement, percentage }) => {
+                    return (
+                      <tr key={competitor.id + '__prize_pool'}>
+                        <td>
+                          <span className="grid grid-cols-[3rem_1rem_minmax(0,1fr)] items-center gap-3">
+                            <span>{Util.toOrdinalSuffix(placement)}</span>
+                            {!!competitor.team.blazon && (
+                              <img
+                                alt={`${competitor.team.name} logo`}
+                                src={competitor.team.blazon}
+                                className="size-4"
+                              />
+                            )}
+                            <Link
+                              to={`/teams?teamId=${competitor.team.id}`}
+                              className="link-hover truncate"
+                              title={competitor.team.name}
+                            >
+                              {competitor.team.name}
+                            </Link>
+                          </span>
+                        </td>
+                        <td>{Util.formatCurrency(prizePool.total * (percentage / 100))}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {canExpandPrizePool && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={2}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => setShowAllPrizePool((value) => !value)}
+                        >
+                          {showAllPrizePool
+                            ? t('main.competitions.showLess')
+                            : t('main.competitions.showAll')}
+                        </button>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </>
             )}
-          </tbody>
-          <thead>
-            <tr>
-              <th>{t('main.competitions.prizePool')}</th>
-              <th>{t('shared.amount')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!prizePool.total && (
-              <tr>
-                <td>{t('main.competitions.notApplicable')}</td>
-                <td>-</td>
-              </tr>
-            )}
-            {prizePool.distribution.map((value, idx) => {
-              return (
-                <tr key={idx + '__prize_pool'}>
-                  <td>{Util.toOrdinalSuffix(idx + 1)}</td>
-                  <td>{Util.formatCurrency(prizePool.total * (value / 100))}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          </table>
+        )}
         <aside>
-          <header className={cx('heading prose max-w-none', !prizePool.total && 'border-t-0!')}>
+          <header
+            className={cx(
+              'heading prose max-w-none',
+              !showWinners && !showPrizePool && 'border-t-0!',
+            )}
+          >
             <h2>{t('shared.recentMatchResults')}</h2>
           </header>
           <table className="table table-fixed">
@@ -309,42 +405,42 @@ export default function () {
             </tbody>
           </table>
         </aside>
-        <aside>
-          <header className="heading prose max-w-none">
-            <h2>{t('main.competitions.pastWinners')}</h2>
-          </header>
-          <table className="table table-fixed">
-            <thead>
-              <tr>
-                <th>{t('shared.name')}</th>
-                <th>{t('shared.season')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!winners.length && (
+        {showWinners && (
+          <aside>
+            <header className="heading prose max-w-none">
+              <h2>{t('main.competitions.pastWinners')}</h2>
+            </header>
+            <table className="table table-fixed">
+              <thead>
                 <tr>
-                  <td>{t('main.competitions.notApplicable')}</td>
-                  <td>-</td>
+                  <th>{t('shared.name')}</th>
+                  <th>{t('shared.season')}</th>
                 </tr>
-              )}
-              {winners.map((winner, idx) => (
-                <tr key={winner.id + '__winner'}>
-                  <td>
-                    <span className="inline-flex items-center gap-2">
-                      <img alt={`${winner.team.name} logo`} src={winner.team.blazon} className="size-4" />
-                      <Link to={`/teams?teamId=${winner.team.id}`} className="link-hover">
-                        {winner.team.name}
-                      </Link>
-                    </span>
-                  </td>
-                  <td>
-                    {t('shared.season')} {competition.season - (idx + 1)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </aside>
+              </thead>
+              <tbody>
+                {winners.map((winner, idx) => (
+                  <tr key={winner.id + '__winner'}>
+                    <td>
+                      <span className="inline-flex items-center gap-2">
+                        <img
+                          alt={`${winner.team.name} logo`}
+                          src={winner.team.blazon}
+                          className="size-4"
+                        />
+                        <Link to={`/teams?teamId=${winner.team.id}`} className="link-hover">
+                          {winner.team.name}
+                        </Link>
+                      </span>
+                    </td>
+                    <td>
+                      {t('shared.season')} {competition.season - (idx + 1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </aside>
+        )}
       </article>
       <article>
         <header className="heading prose max-w-none border-t-0!">

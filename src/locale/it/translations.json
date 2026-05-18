@@ -70,6 +70,8 @@
         "pastWinners": "Vincitori Passati",
         "prizePool": "Montepremi",
         "select": "Seleziona",
+        "showAll": "Mostra tutto",
+        "showLess": "Mostra meno",
         "startDate": "Data d'Inizio",
         "titleHolders": "Vincitori In Carica"
       },

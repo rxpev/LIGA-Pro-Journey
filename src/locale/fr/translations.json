@@ -70,6 +70,8 @@
         "pastWinners": "Vainqueurs précédents",
         "prizePool": "Récompenses",
         "select": "Choisir",
+        "showAll": "Tout afficher",
+        "showLess": "Afficher moins",
         "startDate": "Date de départ",
         "titleHolders": "Champion actuel"
       },
