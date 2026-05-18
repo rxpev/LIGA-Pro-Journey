@@ -64,6 +64,14 @@ const INTERNATIONAL_ORDER: Partial<Record<Constants.LeagueSlug | string, number>
   [Constants.LeagueSlug.ESPORTS_CCT_GLOBAL]: 70,
 };
 
+const ESEA_TOURNAMENT_ORDER: Partial<Record<string, number>> = {
+  [`${Constants.LeagueSlug.ESPORTS_LEAGUE}:Advanced Division`]: 10,
+  [`${Constants.LeagueSlug.ESPORTS_LEAGUE}:Main Division`]: 20,
+  [`${Constants.LeagueSlug.ESPORTS_LEAGUE}:Intermediate Division`]: 30,
+  [`${Constants.LeagueSlug.ESPORTS_LEAGUE}:Open Division`]: 40,
+  [Constants.LeagueSlug.ESPORTS_ESEA_CASH_CUP]: 50,
+};
+
 function getStageOrder(tier: CompetitionTier) {
   const slug = tier.slug as Constants.TierSlug;
   const stageOrder: Partial<Record<Constants.TierSlug, number>> = {
@@ -268,27 +276,23 @@ function sortTournamentCards(
 
   return [...cards].sort((a, b) => {
     const regionalOrder = (card: TournamentCard) => {
-      if (card.key === Constants.LeagueSlug.ESPORTS_ESEA_CASH_CUP) {
-        return 90;
-      }
-
       if (card.family === 'esea') {
-        return 10;
+        return ESEA_TOURNAMENT_ORDER[card.key] ?? 10;
       }
 
       if (card.family === 'major') {
-        return 20;
+        return 60;
       }
 
       if (card.family === 'cct') {
-        return 30;
+        return 70;
       }
 
       if (card.family === 'qualifiers') {
-        return 40;
+        return 80;
       }
 
-      return 50;
+      return 90;
     };
 
     const familyDiff = regionalOrder(a) - regionalOrder(b);

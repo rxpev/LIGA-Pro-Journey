@@ -22,20 +22,20 @@ const StandaloneLeagueNameByTierSlug: Record<string, string> = {
 };
 
 export const getTeamsTierLabel = (tierSlug: string, leagueName?: string) => {
-  if (leagueName) {
-    return Util.getCompetitionDisplayName(leagueName, tierSlug);
-  }
-
-  if (StandaloneLeagueNameByTierSlug[tierSlug]) {
-    return Util.getCompetitionDisplayName(StandaloneLeagueNameByTierSlug[tierSlug], tierSlug);
-  }
-
   if (tierSlug === Constants.TierSlug.LEAGUE_PRO) {
     return leagueName ?? ESL_PRO_LEAGUE_NAME;
   }
 
   if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
     return `${leagueName ?? ESL_PRO_LEAGUE_NAME} Playoffs`;
+  }
+
+  if (leagueName) {
+    return Util.getCompetitionDisplayName(leagueName, tierSlug);
+  }
+
+  if (StandaloneLeagueNameByTierSlug[tierSlug]) {
+    return Util.getCompetitionDisplayName(StandaloneLeagueNameByTierSlug[tierSlug], tierSlug);
   }
 
   return Constants.IdiomaticTier[tierSlug] ?? tierSlug;
