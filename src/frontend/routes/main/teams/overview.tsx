@@ -17,6 +17,9 @@ import { getTeamsDivisionLabel, getTeamsTierLabel } from './labels';
 /** @constant */
 const NUM_PREVIOUS = 5;
 
+/** @constant */
+const NUM_FORM_LOOKBACK = NUM_PREVIOUS * 2;
+
 /**
  * Exports this module.
  *
@@ -53,7 +56,7 @@ export default function () {
 
   // fetch data when team changes
   React.useEffect(() => {
-    api.matches.previous(Eagers.match, team.id, NUM_PREVIOUS).then(setMatches);
+    api.matches.previous(Eagers.match, team.id, NUM_FORM_LOOKBACK).then(setMatches);
     api.team.worldRanking(team.id).then(setWorldRanking);
     api.competitions
       .find({
@@ -215,9 +218,20 @@ export default function () {
   );
 
   // filler for previous matches
+  const playedMatches = React.useMemo(
+    () =>
+      matches
+        .filter((match) =>
+          match.competitors.some(
+            (competitor) => competitor.teamId != null && competitor.teamId !== team.id,
+          ),
+        )
+        .slice(0, NUM_PREVIOUS),
+    [matches, team.id],
+  );
   const previousFiller = React.useMemo(
-    () => [...Array(Math.max(0, NUM_PREVIOUS - matches.length))],
-    [matches.length],
+    () => [...Array(Math.max(0, NUM_PREVIOUS - playedMatches.length))],
+    [playedMatches.length],
   );
   const isProLeagueStage =
     competition?.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
@@ -342,9 +356,11 @@ export default function () {
           </header>
           <table className="table table-fixed">
             <tbody>
-              {!!matches.length &&
-                matches.slice(0, NUM_PREVIOUS).map((match) => {
-                  const opponent = match.competitors.find((c) => c.teamId !== team.id);
+              {!!playedMatches.length &&
+                playedMatches.map((match) => {
+                  const opponent = match.competitors.find(
+                    (c) => c.teamId != null && c.teamId !== team.id,
+                  );
                   const result = match.competitors.find((c) => c.teamId === team.id)?.result;
                   const onClick =
                     match._count.events > 0
@@ -412,7 +428,9 @@ export default function () {
                     {state.profile
                       ? format(
                           addDays(
-                            !matches.length ? state.profile.date : matches.slice(-1)[0].date,
+                            !playedMatches.length
+                              ? state.profile.date
+                              : playedMatches.slice(-1)[0].date,
                             idx - 1,
                           ),
                           'MM/dd',

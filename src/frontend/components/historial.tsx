@@ -27,15 +27,22 @@ interface Props {
 export default function (props: Props) {
   const badgeStyle = 'badge badge-xs';
   const fmtDate = useFormatAppDate();
-  const matches = props.matches || [];
+  const matches = React.useMemo(
+    () =>
+      (props.matches || [])
+        .filter((match) =>
+          match.competitors.some(
+            (competitor) => competitor.teamId != null && competitor.teamId !== props.teamId,
+          ),
+        )
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH),
+    [props.matches, props.teamId],
+  );
 
   // fill in data until it meets the minimum
   const data = React.useMemo<Array<Match | undefined>>(() => {
     if (matches.length < Constants.Application.SQUAD_MIN_LENGTH) {
-      return [
-        ...matches,
-        ...Array(Constants.Application.SQUAD_MIN_LENGTH - matches.length),
-      ];
+      return [...matches, ...Array(Constants.Application.SQUAD_MIN_LENGTH - matches.length)];
     }
 
     return matches;

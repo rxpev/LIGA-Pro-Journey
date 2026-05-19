@@ -81,6 +81,17 @@ export default function () {
             teamId: team.id,
           },
         },
+        AND: [
+          {
+            competitors: {
+              some: {
+                teamId: {
+                  not: team.id,
+                },
+              },
+            },
+          },
+        ],
       },
     }),
     [team, orderBy],

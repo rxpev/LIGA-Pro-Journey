@@ -199,7 +199,7 @@ export default function () {
     // match historial
     Promise.all(
       nextMatch.competitors.map((competitor) =>
-        api.matches.previous(Eagers.match, competitor.teamId),
+        api.matches.previous(Eagers.match, competitor.teamId, NUM_PREVIOUS * 2),
       ),
     ).then(setMatchHistorial);
 

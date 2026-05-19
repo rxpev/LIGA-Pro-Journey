@@ -44,6 +44,16 @@ function getCompetitionLabel(
 }
 
 /**
+ * @param match The match database record.
+ * @function
+ */
+function hasOpponent(
+  match: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number],
+) {
+  return match.competitors.filter((competitor) => competitor.teamId != null).length > 1;
+}
+
+/**
  * Exports this module.
  *
  * @module
@@ -80,26 +90,24 @@ export default function () {
   // in order to trigger a new data fetch
   const triggerMatchesFetch = () => setNumPage(-random(255));
 
-  // initial data fetch
-  React.useEffect(() => {
-    api.matches.count(matchesQuery.where).then(setNumMatches);
-  }, []);
-
   // reset page when changing sorting direction
   React.useEffect(triggerMatchesFetch, [orderBy, competition]);
 
   // apply matches filters
   React.useEffect(() => {
     setWorking(true);
-    api.matches.count(matchesQuery.where).then(setNumMatches);
     api.matches
       .all({
         ...matchesQuery,
-        take: PAGE_SIZE,
-        skip: PAGE_SIZE * ((numPage <= 0 ? 1 : numPage) - 1),
         include: Eagers.match.include,
       })
-      .then((result) => Promise.resolve(setMatches(result)))
+      .then((result) => {
+        const page = numPage <= 0 ? 1 : numPage;
+        const playedMatches = result.filter(hasOpponent);
+
+        setNumMatches(playedMatches.length);
+        setMatches(playedMatches.slice(PAGE_SIZE * (page - 1), PAGE_SIZE * page));
+      })
       .then(() => setWorking(false));
   }, [numPage]);
 

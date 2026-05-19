@@ -18,6 +18,9 @@ import { FaChartBar } from 'react-icons/fa';
 const NUM_PREVIOUS = 5;
 
 /** @constant */
+const NUM_RECENT_LOOKBACK = NUM_PREVIOUS * 2;
+
+/** @constant */
 const NUM_PRIZE_POOL_VISIBLE = 4;
 
 /** @constant */
@@ -36,6 +39,16 @@ const WINNER_HISTORY_TIER_SLUGS = new Set<Constants.TierSlug>([
   Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
   Constants.TierSlug.CCT_GLOBAL_FINALS,
 ]);
+
+/**
+ * @param match The match database record.
+ * @function
+ */
+function hasOpponent(
+  match: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number],
+) {
+  return match.competitors.filter((competitor) => competitor.teamId != null).length > 1;
+}
 
 /**
  * Exports this module.
@@ -87,7 +100,7 @@ export default function () {
     api.matches
       .all({
         include: Eagers.match.include,
-        take: NUM_PREVIOUS,
+        take: NUM_RECENT_LOOKBACK,
         orderBy: {
           date: 'desc',
         },
@@ -101,7 +114,7 @@ export default function () {
           },
         },
       })
-      .then(setMatches);
+      .then((result) => setMatches(result.filter(hasOpponent).slice(0, NUM_PREVIOUS)));
   }, [competition, state.profile]);
 
   // fetch previous winners
