@@ -9,6 +9,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
+import CompetitionLocationTag from './competition-location-tag';
 
 /** @enum */
 enum TabIdentifier {
@@ -885,8 +886,11 @@ export default function () {
                           card.accent,
                         )}
                       >
-                        <span className="text-base-content/60 block text-[0.65rem] font-bold tracking-wide uppercase">
-                          {card.eyebrow}
+                        <span className="flex items-start justify-between gap-2">
+                          <span className="text-base-content/60 block text-[0.65rem] font-bold tracking-wide uppercase">
+                            {card.eyebrow}
+                          </span>
+                          <CompetitionLocationTag tier={primaryTier} />
                         </span>
                         <span className="block truncate text-sm font-bold">{card.name}</span>
                       </span>
@@ -935,11 +939,14 @@ export default function () {
           <section className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
             <nav className="border-base-content/10 bg-base-200 flex items-center justify-between border-b px-3 py-2">
               <article className="min-w-0">
-                <p className="text-base-content/50 text-xs font-bold uppercase">
-                  {selectedFederation
-                    ? FEDERATION_LABELS[selectedFederation.slug as Constants.FederationSlug] ||
-                      selectedFederation.name
-                    : t('shared.competition')}
+                <p className="flex items-center gap-2 text-xs font-bold uppercase">
+                  <span className="text-base-content/50 truncate">
+                    {selectedFederation
+                      ? FEDERATION_LABELS[selectedFederation.slug as Constants.FederationSlug] ||
+                        selectedFederation.name
+                      : t('shared.competition')}
+                  </span>
+                  <CompetitionLocationTag tier={competition.tier} />
                 </p>
                 <h2 className="truncate text-lg font-black">
                   {selectedTournamentName
