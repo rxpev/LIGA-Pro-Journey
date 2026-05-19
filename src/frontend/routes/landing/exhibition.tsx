@@ -274,7 +274,10 @@ export default function () {
     Awaited<ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>>
   >([]);
   const [replacementCache, setReplacementCache] = React.useState<
-    Record<number, Awaited<ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>>[number]>
+    Record<
+      number,
+      Awaited<ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>>[number]
+    >
   >({});
   const [isUserCT, setIsUserCT] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
@@ -296,12 +299,12 @@ export default function () {
       api.app.detectGame(Constants.Settings.general.game),
       api.app.detectDedicatedServer(),
     ]).then(([steamPath, gamePath, dedicatedServerPath]) => {
-        const modified = cloneDeep(settings);
-        modified.general.steamPath = steamPath;
-        modified.general.gamePath = gamePath;
-        modified.general.dedicatedServerPath = dedicatedServerPath || null;
-        setSettings(modified);
-      });
+      const modified = cloneDeep(settings);
+      modified.general.steamPath = steamPath;
+      modified.general.gamePath = gamePath;
+      modified.general.dedicatedServerPath = dedicatedServerPath || null;
+      setSettings(modified);
+    });
 
     // fetch map pool
     api.mapPool
@@ -312,7 +315,8 @@ export default function () {
           },
         },
       })
-      .then(setMapPool);
+      .then(setMapPool)
+      .catch((): void => undefined);
   }, []);
 
   React.useEffect(() => {
@@ -352,7 +356,8 @@ export default function () {
           },
         },
       })
-      .then(setMapPool);
+      .then(setMapPool)
+      .catch((): void => undefined);
   };
 
   // validate settings
@@ -402,38 +407,40 @@ export default function () {
     setSettings(modified);
   };
 
-  const getDefaultRoster = React.useCallback((team?: TeamData, injectYou = false): Array<number | null> => {
-    if (!team) {
-      return [];
-    }
+  const getDefaultRoster = React.useCallback(
+    (team?: TeamData, injectYou = false): Array<number | null> => {
+      if (!team) {
+        return [];
+      }
 
-    const starters = team.players
-      .filter((player) => player.starter && !player.transferListed)
-      .slice(0, Constants.Application.SQUAD_MIN_LENGTH);
-    const fallback = team.players
-      .filter((player) => !player.transferListed)
-      .slice(0, Constants.Application.SQUAD_MIN_LENGTH);
+      const starters = team.players
+        .filter((player) => player.starter && !player.transferListed)
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH);
+      const fallback = team.players
+        .filter((player) => !player.transferListed)
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH);
 
-    const lineup = (starters.length ? starters : fallback).map((player) => player.id);
+      const lineup = (starters.length ? starters : fallback).map((player) => player.id);
 
-    if (injectYou && lineup.length) {
-      const awperIdx = team.players.findIndex(
-        (player) =>
-          lineup.includes(player.id) &&
-          (player.role === Constants.UserRole.AWPER || player.role === Constants.PlayerRole.SNIPER),
-      );
-      const replacementIdx = awperIdx >= 0 ? awperIdx : 0;
-      lineup[replacementIdx] = -1;
-    }
+      if (injectYou && lineup.length) {
+        const awperIdx = team.players.findIndex(
+          (player) =>
+            lineup.includes(player.id) &&
+            (player.role === Constants.UserRole.AWPER ||
+              player.role === Constants.PlayerRole.SNIPER),
+        );
+        const replacementIdx = awperIdx >= 0 ? awperIdx : 0;
+        lineup[replacementIdx] = -1;
+      }
 
-    return lineup
-      .slice(0, Constants.Application.SQUAD_MIN_LENGTH)
-      .concat(
+      return lineup.slice(0, Constants.Application.SQUAD_MIN_LENGTH).concat(
         Array.from({
           length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - lineup.length),
         }).map((): null => null),
       );
-  }, []);
+    },
+    [],
+  );
 
   React.useEffect(() => {
     if (!homeTeam) {
@@ -465,7 +472,9 @@ export default function () {
 
     (currentEditingTeam?.players || []).forEach((player) => lookup.set(player.id, player));
     playerPool.forEach((player) => lookup.set(player.id, player as TeamData['players'][number]));
-    allPlayersPool.forEach((player) => lookup.set(player.id, player as TeamData['players'][number]));
+    allPlayersPool.forEach((player) =>
+      lookup.set(player.id, player as TeamData['players'][number]),
+    );
     Object.values(replacementCache).forEach((player) =>
       lookup.set(player.id, player as TeamData['players'][number]),
     );
@@ -482,7 +491,8 @@ export default function () {
         const base =
           currentEditingTeam.players.find(
             (player) =>
-              player.role === Constants.UserRole.AWPER || player.role === Constants.PlayerRole.SNIPER,
+              player.role === Constants.UserRole.AWPER ||
+              player.role === Constants.PlayerRole.SNIPER,
           ) || currentEditingTeam.players[0];
 
         return {
@@ -534,7 +544,9 @@ export default function () {
   }, [editingTeamId, replacementFederationId]);
 
   const applyRosterReplacement = (
-    incomingPlayer: Awaited<ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>>[number],
+    incomingPlayer: Awaited<
+      ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>
+    >[number],
   ) => {
     if (!editingTeamId) {
       return;
@@ -551,8 +563,9 @@ export default function () {
     if (editingTeamId === homeTeam?.id && slotPlayerId === -1) {
       return;
     }
-    const duplicateInMatch = otherRoster.includes(incomingPlayerId)
-      || activeRoster.some(
+    const duplicateInMatch =
+      otherRoster.includes(incomingPlayerId) ||
+      activeRoster.some(
         (playerId, idx) => idx !== replacementSlot && playerId === incomingPlayerId,
       );
 
@@ -606,17 +619,21 @@ export default function () {
     const isHomeTeam = editingTeamId === homeTeam?.id;
     const activeRoster = isHomeTeam ? homeRoster : awayRoster;
     const otherRoster = isHomeTeam ? awayRoster : homeRoster;
-    const lockedYouSlotIndex = isHomeTeam ? activeRoster.findIndex((playerId) => playerId === -1) : -1;
+    const lockedYouSlotIndex = isHomeTeam
+      ? activeRoster.findIndex((playerId) => playerId === -1)
+      : -1;
 
     const allPlayers = allPlayersPool.length
       ? allPlayersPool
       : await api.play.exhibitionPlayers<typeof Eagers.player>(Eagers.player).then((players) => {
-        setAllPlayersPool(players);
-        return players;
-      });
+          setAllPlayersPool(players);
+          return players;
+        });
 
     const blockedPlayerIds = new Set(
-      otherRoster.filter((playerId): playerId is number => Number.isInteger(playerId) && playerId !== -1),
+      otherRoster.filter(
+        (playerId): playerId is number => Number.isInteger(playerId) && playerId !== -1,
+      ),
     );
     const candidatePool = (allPlayers.length ? allPlayers : currentEditingTeam?.players || [])
       .filter((player) => !blockedPlayerIds.has(player.id))
@@ -625,7 +642,10 @@ export default function () {
     const uniqueCandidatePool = Array.from(new Set(candidatePool));
     for (let i = uniqueCandidatePool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [uniqueCandidatePool[i], uniqueCandidatePool[j]] = [uniqueCandidatePool[j], uniqueCandidatePool[i]];
+      [uniqueCandidatePool[i], uniqueCandidatePool[j]] = [
+        uniqueCandidatePool[j],
+        uniqueCandidatePool[i],
+      ];
     }
 
     const nextRoster = Array.from(
@@ -704,9 +724,11 @@ export default function () {
           <article className="border-base-content/20 bg-base-300/20 h-12 w-44 rounded-md border p-0 shadow-sm">
             <details className="dropdown h-full w-full">
               <summary className="btn btn-ghost h-full w-full rounded-md text-center">
-                {selectedMap ? Util.convertMapPool(selectedMap, settings.general.game) : 'Choose Map'}
+                {selectedMap
+                  ? Util.convertMapPool(selectedMap, settings.general.game)
+                  : 'Choose Map'}
               </summary>
-              <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-44 flex-col overflow-y-auto overflow-x-hidden p-1 shadow">
+              <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-44 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
                 {mapPool.map((map) => (
                   <li key={map.gameMap.name} className="w-full">
                     <button
@@ -733,111 +755,111 @@ export default function () {
       <section className="flex flex-1 flex-col p-4">
         <form className="form-ios form-ios-col-2 w-full flex-1">
           <fieldset>
-              <article>
-                <header>
-                  <p>{t('settings.steamTitle')}</p>
-                  <p>
-                    e.g.: <code>C:\Program Files\Steam</code>
-                  </p>
-                  {!!steamPathError && (
-                    <span className="tooltip" data-tip={String(steamPathError)}>
-                      <FaExclamationTriangle className="text-error" />
-                    </span>
-                  )}
-                </header>
-                <aside className="join">
-                  <input
-                    readOnly
-                    type="text"
-                    className="input join-item bg-base-200 cursor-default text-sm"
-                    value={settings.general.steamPath || ''}
-                  />
-                  <button
-                    type="button"
-                    className="btn join-item"
-                    onClick={() =>
-                      api.app
-                        .dialog(Constants.WindowIdentifier.Landing, {
-                          properties: ['openDirectory'],
-                        })
-                        .then(
-                          (dialogData) =>
-                            !dialogData.canceled &&
-                            onSettingsUpdate('general.steamPath', dialogData.filePaths[0]),
-                        )
-                    }
-                  >
-                    <FaFolderOpen />
-                  </button>
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>{t('settings.gamePathTitle')}</p>
-                  <p>{t('settings.gamePathSubtitle')}</p>
-                  {!!gamePathError && (
-                    <span className="tooltip" data-tip={String(gamePathError)}>
-                      <FaExclamationTriangle className="text-error" />
-                    </span>
-                  )}
-                </header>
-                <aside className="join">
-                  <input
-                    readOnly
-                    type="text"
-                    className="input join-item bg-base-200 cursor-default text-sm"
-                    value={settings.general.gamePath || ''}
-                  />
-                  <button
-                    type="button"
-                    className="btn join-item"
-                    onClick={() =>
-                      api.app
-                        .dialog(Constants.WindowIdentifier.Landing, {
-                          properties: ['openDirectory'],
-                        })
-                        .then(
-                          (dialogData) =>
-                            !dialogData.canceled &&
-                            onSettingsUpdate('general.gamePath', dialogData.filePaths[0]),
-                        )
-                    }
-                  >
-                    <FaFolderOpen />
-                  </button>
-                </aside>
-              </article>
-              <article>
-                <header>
-                  <p>Dedicated Server Path</p>
-                  <p>Path to your CS:GO Dedicated Server (srcds) installation.</p>
-                </header>
-                <aside className="join">
-                  <input
-                    readOnly
-                    type="text"
-                    className="input join-item bg-base-200 cursor-default text-sm"
-                    value={settings.general.dedicatedServerPath || ''}
-                  />
-                  <button
-                    type="button"
-                    className="btn join-item"
-                    onClick={() =>
-                      api.app
-                        .dialog(Constants.WindowIdentifier.Landing, {
-                          properties: ['openDirectory'],
-                        })
-                        .then(
-                          (dialogData) =>
-                            !dialogData.canceled &&
-                            onSettingsUpdate('general.dedicatedServerPath', dialogData.filePaths[0]),
-                        )
-                    }
-                  >
-                    <FaFolderOpen />
-                  </button>
-                </aside>
-              </article>
+            <article>
+              <header>
+                <p>{t('settings.steamTitle')}</p>
+                <p>
+                  e.g.: <code>C:\Program Files\Steam</code>
+                </p>
+                {!!steamPathError && (
+                  <span className="tooltip" data-tip={String(steamPathError)}>
+                    <FaExclamationTriangle className="text-error" />
+                  </span>
+                )}
+              </header>
+              <aside className="join">
+                <input
+                  readOnly
+                  type="text"
+                  className="input join-item bg-base-200 cursor-default text-sm"
+                  value={settings.general.steamPath || ''}
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Landing, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('general.steamPath', dialogData.filePaths[0]),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </aside>
+            </article>
+            <article>
+              <header>
+                <p>{t('settings.gamePathTitle')}</p>
+                <p>{t('settings.gamePathSubtitle')}</p>
+                {!!gamePathError && (
+                  <span className="tooltip" data-tip={String(gamePathError)}>
+                    <FaExclamationTriangle className="text-error" />
+                  </span>
+                )}
+              </header>
+              <aside className="join">
+                <input
+                  readOnly
+                  type="text"
+                  className="input join-item bg-base-200 cursor-default text-sm"
+                  value={settings.general.gamePath || ''}
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Landing, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('general.gamePath', dialogData.filePaths[0]),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </aside>
+            </article>
+            <article>
+              <header>
+                <p>Dedicated Server Path</p>
+                <p>Path to your CS:GO Dedicated Server (srcds) installation.</p>
+              </header>
+              <aside className="join">
+                <input
+                  readOnly
+                  type="text"
+                  className="input join-item bg-base-200 cursor-default text-sm"
+                  value={settings.general.dedicatedServerPath || ''}
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Landing, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('general.dedicatedServerPath', dialogData.filePaths[0]),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </aside>
+            </article>
             <article>
               <header>
                 <p>{t('settings.launchOptionsTitle')}</p>
@@ -878,7 +900,9 @@ export default function () {
                   type="checkbox"
                   className="toggle"
                   checked={settings.gameSettings.isM4A1}
-                  onChange={(event) => onSettingsUpdate('gameSettings.isM4A1', event.target.checked)}
+                  onChange={(event) =>
+                    onSettingsUpdate('gameSettings.isM4A1', event.target.checked)
+                  }
                 />
               </aside>
             </article>
@@ -888,9 +912,7 @@ export default function () {
           className="btn btn-xl btn-block btn-primary"
           onMouseDown={audioClick}
           onClick={() => {
-            const orderedTeamIds = isUserCT
-              ? [awayTeamId, homeTeamId]
-              : [homeTeamId, awayTeamId];
+            const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
             return api.play.exhibition(
               settings,
@@ -917,7 +939,7 @@ export default function () {
         </button>
       </section>
       {editingTeamId && (
-        <aside className="bg-base-content/60 fixed inset-0 z-50 center p-6">
+        <aside className="bg-base-content/60 center fixed inset-0 z-50 p-6">
           <section className="bg-base-200 h-[620px] w-full max-w-5xl rounded-xl p-4">
             <header className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Edit Roster - {currentEditingTeam?.name}</h2>

@@ -106,28 +106,40 @@ function getExhibitionPlayerPerformance(
   player: ExhibitionPlayer,
   payload: ExhibitionPostgamePayload,
 ) {
-  const events = payload.events.map((event) => ({
-    ...event,
-    attackerId: getExhibitionEventPlayerId(
-      event.payload.attacker?.name,
-      payload.teams,
-      payload.fallbackPlayerId,
-    ),
-    assistId: getExhibitionEventPlayerId(
-      event.payload.assist?.name,
-      payload.teams,
-      payload.fallbackPlayerId,
-    ),
-    victimId: getExhibitionEventPlayerId(
-      event.payload.victim?.name,
-      payload.teams,
-      payload.fallbackPlayerId,
-    ),
-  }));
-  const kills = events.filter((event) => event.attackerId === player.id);
+  const killEvents = payload.events
+    .filter((event) => event.type === 'playerkilled')
+    .map((event) => ({
+      ...event,
+      attackerId: getExhibitionEventPlayerId(
+        event.payload.attacker?.name,
+        payload.teams,
+        payload.fallbackPlayerId,
+      ),
+      victimId: getExhibitionEventPlayerId(
+        event.payload.victim?.name,
+        payload.teams,
+        payload.fallbackPlayerId,
+      ),
+    }));
+  const assistEvents = payload.events
+    .filter((event) => event.type === 'playerassisted')
+    .map((event) => ({
+      ...event,
+      assistId: getExhibitionEventPlayerId(
+        event.payload.assist?.name,
+        payload.teams,
+        payload.fallbackPlayerId,
+      ),
+      victimId: getExhibitionEventPlayerId(
+        event.payload.victim?.name,
+        payload.teams,
+        payload.fallbackPlayerId,
+      ),
+    }));
+  const kills = killEvents.filter((event) => event.attackerId === player.id);
   const headshots = kills.filter((event) => event.payload.headshot);
-  const assists = events.filter((event) => event.assistId === player.id);
-  const deaths = events.filter((event) => event.victimId === player.id);
+  const assists = assistEvents.filter((event) => event.assistId === player.id);
+  const deaths = killEvents.filter((event) => event.victimId === player.id);
   const hsp = headshots.length / (kills.length || 1);
   const kd = kills.length - deaths.length;
   const rating = getPlayerRating(kills.length, deaths.length);

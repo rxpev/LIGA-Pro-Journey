@@ -83,6 +83,7 @@ export default function () {
         DatabaseClient.basePath,
         Util.getSaveFileName(exhibitionSaveId),
       );
+      let postgamePayload: unknown = null;
 
       await fs.promises.mkdir(path.dirname(exhibitionSavePath), { recursive: true });
       await fs.promises.copyFile(rootSavePath, exhibitionSavePath);
@@ -270,9 +271,6 @@ export default function () {
         const gameServer = new Game.Server(profile, match);
         await gameServer.start();
 
-        // restore window
-        landingWindow.restore();
-
         const sideTeamIds = gameServer.getSideTeamIds();
         const [tScore, ctScore] = gameServer.result.score;
         const scoreByTeamId = {
@@ -280,38 +278,43 @@ export default function () {
           [sideTeamIds?.ct ?? away.id]: ctScore,
         };
 
-        WindowManager.send(Constants.WindowIdentifier.Modal, {
-          target: '/postgame',
-          payload: {
-            type: 'exhibition',
-            map: gameServer.matchGame.map,
-            game: settings.general.game,
-            teams: [home, away].map((team) => ({
-              id: team.id,
-              name: team.name,
-              blazon: team.blazon,
-              score: scoreByTeamId[team.id] ?? 0,
-              players: team.players.map((player) => ({
-                id: player.id,
-                name: player.id === selectedUserPlayerId ? 'YOU' : player.name,
-                matchName: player.name,
-                country: 'country' in player ? player.country : null,
-              })),
+        postgamePayload = {
+          type: 'exhibition',
+          map: gameServer.matchGame.map,
+          game: settings.general.game,
+          teams: [home, away].map((team) => ({
+            id: team.id,
+            name: team.name,
+            blazon: team.blazon,
+            score: scoreByTeamId[team.id] ?? 0,
+            players: team.players.map((player) => ({
+              id: player.id,
+              name: player.id === selectedUserPlayerId ? 'YOU' : player.name,
+              matchName: player.name,
+              country: 'country' in player ? player.country : null,
             })),
-            fallbackPlayerId: selectedUserPlayerId,
-            events: gameServer.scorebotEvents.map((event) => ({
-              type: event.type,
-              payload: {
-                ...event.payload,
-                timestamp: event.payload.timestamp.toISOString(),
-              },
-            })),
-          },
-        });
+          })),
+          fallbackPlayerId: selectedUserPlayerId,
+          events: gameServer.scorebotEvents.map((event) => ({
+            type: event.type,
+            payload: {
+              ...event.payload,
+              timestamp: event.payload.timestamp.toISOString(),
+            },
+          })),
+        };
       } finally {
         await DatabaseClient.disconnect();
         await fs.promises.unlink(exhibitionSavePath).catch(() => Promise.resolve());
         await DatabaseClient.connect(previousSaveId);
+      }
+
+      if (postgamePayload) {
+        WindowManager.get(Constants.WindowIdentifier.Landing, false)?.restore();
+        WindowManager.send(Constants.WindowIdentifier.Modal, {
+          target: '/postgame',
+          payload: postgamePayload,
+        });
       }
     },
   );
