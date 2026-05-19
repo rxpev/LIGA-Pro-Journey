@@ -38,6 +38,28 @@ const exec = util.promisify(execSync);
  */
 let gameClientProcess: ChildProcessWithoutNullStreams;
 
+const LAN_TIER_SLUGS = new Set<string>([
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.MAJOR_AMERICAS_RMR,
+  Constants.TierSlug.MAJOR_ASIA_RMR,
+  Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+  Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+  Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+]);
+
 /**
  * Custom error to throw when a process
  * has been detected as running.
@@ -936,6 +958,7 @@ End\n
     const isUSP = this.settings.gameSettings?.isUSP ? 1 : 0;
     const isIGL = !this.spectating && user?.role === "IGL";
     const bot_defer_to_human_items = this.isFaceit ? 0 : (isIGL ? 1 : 0);
+    const isLan = this.getIsLanMatch() ? 1 : 0;
 
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
@@ -1077,6 +1100,7 @@ End\n
         isM4A1,
         isUSP,
         isFaceit: 1,
+        isLan,
         bot_defer_to_human_items,
 
         match_stat: 'FACEIT PUG',
@@ -1108,6 +1132,7 @@ End\n
         isM4A1,
         isUSP,
         isFaceit: 0,
+        isLan,
         bot_defer_to_human_items,
         humanteam,
 
@@ -1120,9 +1145,12 @@ End\n
         stat_ct: ctStats?.position ? Util.toOrdinalSuffix(ctStats.position) : '',
       };
 
-    const serverCfgRendered = Sqrl.render(serverTemplate, serverCfgData, {
+    let serverCfgRendered = Sqrl.render(serverTemplate, serverCfgData, {
       autoEscape: false,
     });
+    serverCfgRendered = /^\s*isLan\s+/im.test(serverCfgRendered)
+      ? serverCfgRendered.replace(/^\s*isLan\s+\S+.*$/im, `isLan "${isLan}"`)
+      : serverCfgRendered.replace(/\r?\n*$/, `\nisLan "${isLan}"\n`);
 
     await fs.promises.writeFile(serverCfgPath, serverCfgRendered, 'utf8');
     this.log.info(`Generated server.cfg at: ${serverCfgPath}`);
@@ -1173,6 +1201,46 @@ End\n
 
     await fs.promises.writeFile(botCmdPath, botCmdRendered, 'utf8');
     this.log.info(`Generated ${this.botCommandFile} at: ${botCmdPath}`);
+  }
+
+  private getIsLanMatch() {
+    if (this.isFaceit) {
+      return false;
+    }
+
+    const tierSlug = this.match?.competition?.tier?.slug;
+
+    if (tierSlug === Constants.TierSlug.EXHIBITION_FRIENDLY) {
+      return true;
+    }
+
+    return LAN_TIER_SLUGS.has(tierSlug) || Boolean(this.match?.competition?.tier?.lan);
+  }
+
+  private async applyLanConVar() {
+    if (!this.rcon) {
+      return;
+    }
+
+    const isLan = this.getIsLanMatch() ? 1 : 0;
+    await this.rcon.send(`isLan "${isLan}"`);
+    this.log.info(`Applied isLan "${isLan}" over RCON.`);
+  }
+
+  private scheduleLanConVarReapply() {
+    const delays = [1_000, 3_000, 6_000];
+
+    for (const delay of delays) {
+      setTimeout(() => {
+        this.applyLanConVar().catch((error) => {
+          this.log.warn(
+            'Unable to apply isLan over RCON after %dms: %s',
+            delay,
+            (error as Error)?.message || 'unknown error',
+          );
+        });
+      }, delay);
+    }
   }
 
   /**
@@ -1639,6 +1707,8 @@ End\n
 
     try {
       await this.rcon.init();
+      await this.applyLanConVar();
+      this.scheduleLanConVarReapply();
     } catch (error) {
       this.log.warn(error);
     }
