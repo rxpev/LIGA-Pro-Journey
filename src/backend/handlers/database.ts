@@ -269,6 +269,10 @@ export default function registerDatabaseHandlers() {
         where: { id: Number(id) },
       });
 
+      if (!competition) {
+        return [];
+      }
+
       const competitions = await prisma.competition.findMany({
         include: Eagers.competition.include,
         orderBy: { season: "desc" },
@@ -276,12 +280,13 @@ export default function registerDatabaseHandlers() {
           tierId: competition.tierId,
           federationId: competition.federationId,
           season: { lt: competition.season },
+          status: Constants.CompetitionStatus.COMPLETED,
         },
       });
 
-      return competitions.map(c =>
-        c.competitors.sort((a, b) => a.position - b.position)[0]
-      );
+      return competitions
+        .map((c) => c.competitors.sort((a, b) => a.position - b.position)[0])
+        .filter((winner) => Boolean(winner?.team));
     }
   );
 

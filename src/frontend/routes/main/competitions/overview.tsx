@@ -199,7 +199,11 @@ export default function () {
     Boolean(prizePool?.total) &&
     prizePoolRows.length > 0;
   const canExpandPrizePool = prizePoolRows.length > NUM_PRIZE_POOL_VISIBLE;
-  const showWinners = showWinnerHistory && winners.length > 0;
+  const validWinners = React.useMemo(
+    () => winners.filter((winner) => Boolean(winner?.team)),
+    [winners],
+  );
+  const showWinners = showWinnerHistory && validWinners.length > 0;
 
   const isSwiss = Boolean(Constants.TierSwissConfig[tierSlug]);
   const isBracketStandings = !competition.tier.groupSize && !isSwiss;
@@ -262,12 +266,15 @@ export default function () {
                     <td>
                       <span className="inline-flex items-center gap-2">
                         <img
-                          alt={`${winners[0].team.name} logo`}
-                          src={winners[0].team.blazon}
+                          alt={`${validWinners[0].team.name} logo`}
+                          src={validWinners[0].team.blazon}
                           className="size-4"
                         />
-                        <Link to={`/teams?teamId=${winners[0].team.id}`} className="link-hover">
-                          {winners[0].team.name}
+                        <Link
+                          to={`/teams?teamId=${validWinners[0].team.id}`}
+                          className="link-hover"
+                        >
+                          {validWinners[0].team.name}
                         </Link>
                       </span>
                     </td>
@@ -443,7 +450,7 @@ export default function () {
                 </tr>
               </thead>
               <tbody>
-                {winners.map((winner, idx) => (
+                {validWinners.map((winner, idx) => (
                   <tr key={winner.id + '__winner'}>
                     <td>
                       <span className="inline-flex items-center gap-2">
