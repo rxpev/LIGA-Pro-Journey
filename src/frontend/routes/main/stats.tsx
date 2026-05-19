@@ -48,6 +48,7 @@ type CompetitionGroupKey =
   | 'RMR_QUALIFIERS_OCEANIA';
 
 type TimeframeOption = '' | '6' | '3' | '1';
+type MatchTypeOption = '' | 'LAN' | 'ONLINE';
 
 const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   MAJOR: 'Major (Challengers + Legends + Champions)',
@@ -80,13 +81,21 @@ const CompetitionGroupOrder: CompetitionGroupKey[] = [
 ];
 
 const TimeframeLabels: Record<TimeframeOption, string> = {
-  '': 'All Time',
+  '': 'All time',
   '6': 'Last 6 months',
   '3': 'Last 3 months',
   '1': 'Last month',
 };
 
 const TimeframeOptions: TimeframeOption[] = ['', '6', '3', '1'];
+
+const MatchTypeLabels: Record<MatchTypeOption, string> = {
+  '': 'Any',
+  LAN: 'LAN',
+  ONLINE: 'Online',
+};
+
+const MatchTypeOptions: MatchTypeOption[] = ['', 'LAN', 'ONLINE'];
 
 enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
@@ -294,6 +303,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedMap, setSelectedMap] = React.useState<string>('');
   const [selectedSeason, setSelectedSeason] = React.useState<string>('');
   const [selectedTimeframe, setSelectedTimeframe] = React.useState<TimeframeOption>('');
+  const [selectedMatchType, setSelectedMatchType] = React.useState<MatchTypeOption>('');
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [matchPage, setMatchPage] = React.useState(1);
@@ -432,6 +442,11 @@ export default function LeagueStatsConcept(): JSX.Element {
       const byMap = selectedMap
         ? getPlayedGames(match).some((game: any) => game.map === selectedMap)
         : true;
+      const byMatchType = selectedMatchType
+        ? selectedMatchType === 'LAN'
+          ? Boolean(match.competition?.tier?.lan)
+          : !Boolean(match.competition?.tier?.lan)
+        : true;
       const bySeason = selectedSeason ? String(match.competition?.season) === selectedSeason : true;
       const byTimeframe = state.profile?.date
         ? isWithinTimeframe(match.date, state.profile.date, selectedTimeframe)
@@ -448,12 +463,13 @@ export default function LeagueStatsConcept(): JSX.Element {
         match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
       );
 
-      return byCompetition && byMap && bySeason && byTimeframe && byCareerTeam;
+      return byCompetition && byMap && byMatchType && bySeason && byTimeframe && byCareerTeam;
     });
   }, [
     matches,
     selectedCompetitionGroup,
     selectedMap,
+    selectedMatchType,
     selectedSeason,
     selectedTimeframe,
     selectedCareerTeamId,
@@ -560,6 +576,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     selectedSeason,
     selectedTimeframe,
     selectedMap,
+    selectedMatchType,
     selectedCareerTeamId,
     selectedTeammateId,
   ]);
@@ -744,7 +761,9 @@ export default function LeagueStatsConcept(): JSX.Element {
   const headerTeamLabel =
     activeTab === StatsTab.INDIVIDUAL
       ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
-      : selectedFilterTeam?.name || 'Any Team';
+      : selectedFilterTeam?.name || 'Any team';
+  const headerTeamLogo =
+    selectedFilterTeam?.blazon || state.profile?.team?.blazon || 'resources://blazonry/noteam.svg';
 
   const renderMatchTable = (rows: MatchPerformance[]) => {
     const flattenedRows = rows.flatMap((item: any) => {
@@ -1037,13 +1056,27 @@ export default function LeagueStatsConcept(): JSX.Element {
                 </select>
               </fieldset>
               <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Match type</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedMatchType}
+                  onChange={(e) => setSelectedMatchType(e.target.value as MatchTypeOption)}
+                >
+                  {MatchTypeOptions.map((option) => (
+                    <option key={option || 'any'} value={option}>
+                      {MatchTypeLabels[option]}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
                 <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
                   value={selectedCareerTeamId}
                   onChange={(e) => setSelectedCareerTeamId(e.target.value)}
                 >
-                  <option value="">Any Team</option>
+                  <option value="">Any team</option>
                   {careerTeamOptions.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -1074,6 +1107,10 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
                 )}
                 <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
+                  <img
+                    src={headerTeamLogo}
+                    className="absolute right-4 top-4 h-14 w-14 object-contain"
+                  />
                   <div className="mb-4 flex items-center gap-3">
                     <img
                       src={
