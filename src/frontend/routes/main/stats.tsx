@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { groupBy } from 'lodash';
-import { format } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
@@ -47,6 +47,8 @@ type CompetitionGroupKey =
   | 'RMR_QUALIFIERS_CHINA'
   | 'RMR_QUALIFIERS_OCEANIA';
 
+type TimeframeOption = '' | '6' | '3' | '1';
+
 const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   MAJOR: 'Major (Challengers + Legends + Champions)',
   ESL_PRO_LEAGUE: 'ESL Pro League (Groups + Playoffs)',
@@ -76,6 +78,15 @@ const CompetitionGroupOrder: CompetitionGroupKey[] = [
   'RMR_QUALIFIERS_CHINA',
   'RMR_QUALIFIERS_OCEANIA',
 ];
+
+const TimeframeLabels: Record<TimeframeOption, string> = {
+  '': 'All Time',
+  '6': 'Last 6 months',
+  '3': 'Last 3 months',
+  '1': 'Last month',
+};
+
+const TimeframeOptions: TimeframeOption[] = ['', '6', '3', '1'];
 
 enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
@@ -231,6 +242,22 @@ function isPlayedGame(game: any) {
   return scores.some((score: number) => score > 0);
 }
 
+function isWithinTimeframe(matchDate: Date | string, currentDate: Date | string, months: string) {
+  const parsedMonths = Number(months);
+  if (!Number.isFinite(parsedMonths) || parsedMonths <= 0) {
+    return true;
+  }
+
+  const date = new Date(matchDate);
+  const end = new Date(currentDate);
+  end.setHours(23, 59, 59, 999);
+
+  const start = subMonths(end, parsedMonths);
+  start.setHours(0, 0, 0, 0);
+
+  return date >= start && date <= end;
+}
+
 function getPlayedGames(match: MatchRecord) {
   return [...(match.games || [])]
     .filter((game: any) => isPlayedGame(game))
@@ -266,6 +293,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedCompetitionGroup, setSelectedCompetitionGroup] = React.useState<string>('');
   const [selectedMap, setSelectedMap] = React.useState<string>('');
   const [selectedSeason, setSelectedSeason] = React.useState<string>('');
+  const [selectedTimeframe, setSelectedTimeframe] = React.useState<TimeframeOption>('');
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [matchPage, setMatchPage] = React.useState(1);
@@ -405,6 +433,9 @@ export default function LeagueStatsConcept(): JSX.Element {
         ? getPlayedGames(match).some((game: any) => game.map === selectedMap)
         : true;
       const bySeason = selectedSeason ? String(match.competition?.season) === selectedSeason : true;
+      const byTimeframe = state.profile?.date
+        ? isWithinTimeframe(match.date, state.profile.date, selectedTimeframe)
+        : true;
       const eligibleStints = careerStints.filter((stint: any) => {
         if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
           return false;
@@ -417,16 +448,18 @@ export default function LeagueStatsConcept(): JSX.Element {
         match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
       );
 
-      return byCompetition && byMap && bySeason && byCareerTeam;
+      return byCompetition && byMap && bySeason && byTimeframe && byCareerTeam;
     });
   }, [
     matches,
     selectedCompetitionGroup,
     selectedMap,
     selectedSeason,
+    selectedTimeframe,
     selectedCareerTeamId,
     careerStints,
     activeTab,
+    state.profile?.date,
   ]);
 
   const ownPlayerPerformances = React.useMemo(() => {
@@ -506,7 +539,15 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [matchesByFilters, careerStints, selectedCareerTeamId, state.profile?.player?.id]);
 
   React.useEffect(() => {
-    if (!selectedTeammateId && teammates[0]) {
+    if (!teammates.length) {
+      setSelectedTeammateId('');
+      return;
+    }
+
+    if (
+      !selectedTeammateId ||
+      !teammates.some((teammate) => String(teammate.id) === selectedTeammateId)
+    ) {
       setSelectedTeammateId(String(teammates[0].id));
     }
   }, [teammates, selectedTeammateId]);
@@ -517,6 +558,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     activeTab,
     selectedCompetitionGroup,
     selectedSeason,
+    selectedTimeframe,
     selectedMap,
     selectedCareerTeamId,
     selectedTeammateId,
@@ -908,7 +950,7 @@ export default function LeagueStatsConcept(): JSX.Element {
           <aside className="border-base-content/10 bg-base-100 border-r p-4">
             <h2 className="text-2xl font-bold">Filters</h2>
             <p className="text-base-content/60 mt-1 text-xs">
-              Competition, season, map and team filters.
+              Timeframe, competition, season, map and team filters.
             </p>
 
             {activeTab === StatsTab.TEAMMATES && (
@@ -962,6 +1004,20 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <option value="">All seasons</option>
                   {seasonOptions.map((season) => (
                     <option key={season} value={season}>{`Season ${season}`}</option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Timeframe</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedTimeframe}
+                  onChange={(e) => setSelectedTimeframe(e.target.value as TimeframeOption)}
+                >
+                  {TimeframeOptions.map((option) => (
+                    <option key={option || 'all'} value={option}>
+                      {TimeframeLabels[option]}
+                    </option>
                   ))}
                 </select>
               </fieldset>

@@ -233,9 +233,6 @@ export default function () {
     () => [...Array(Math.max(0, NUM_PREVIOUS - playedMatches.length))],
     [playedMatches.length],
   );
-  const isProLeagueStage =
-    competition?.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
-    competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE;
   const divisionLabel = getTeamsDivisionLabel(
     competition?.tier.slug,
     competition?.tier.league.name,
@@ -283,9 +280,6 @@ export default function () {
                 {t('main.teams.division')}
               </p>
               <p className="truncate" title={divisionLabel}>
-                {!!group.length && !isProLeagueStage && (
-                  <span>{Util.toOrdinalSuffix(userTeam?.position)} in&nbsp;</span>
-                )}
                 {divisionLabel}
               </p>
             </article>
