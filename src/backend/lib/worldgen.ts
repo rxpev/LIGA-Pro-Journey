@@ -1784,7 +1784,7 @@ export async function rejectTransferOffer(transferId: number) {
         }),
         persona,
         profile.date,
-        false,
+        true,
       );
     }
 
@@ -1797,11 +1797,19 @@ export async function rejectTransferOffer(transferId: number) {
     return Promise.resolve();
   }
   await sendEmail(
-    `Re: Offer from ${transfer.from.name}`,
-    `You have declined the offer from ${transfer.from.name}.`,
+    Sqrl.render(locale.templates.OfferRejectedUser.SUBJECT, {
+      transfer,
+      profile,
+      offer,
+    }),
+    Sqrl.render(locale.templates.OfferRejectedUser.CONTENT, {
+      transfer,
+      profile,
+      offer,
+    }),
     persona,
     profile.date,
-    false,
+    true,
   );
 
   Engine.Runtime.Instance.log.info(
