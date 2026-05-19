@@ -237,6 +237,26 @@ function getPlayedGames(match: MatchRecord) {
     .sort((a: any, b: any) => Number(b.num ?? 0) - Number(a.num ?? 0));
 }
 
+function getCareerMatchCompetitor(
+  match: MatchRecord,
+  careerStints: CareerStintRecord[],
+  selectedCareerTeamId = '',
+) {
+  const matchingStints = careerStints
+    .filter((stint: any) => {
+      if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
+        return false;
+      }
+
+      return isWithinStint(match.date, stint.startedAt, stint.endedAt);
+    })
+    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+  return matchingStints
+    .map((stint) => match.competitors.find((competitor: any) => competitor.teamId === stint.teamId))
+    .find(Boolean);
+}
+
 export default function LeagueStatsConcept(): JSX.Element {
   const { state } = React.useContext(AppStateContext);
   const [loading, setLoading] = React.useState(true);
@@ -449,9 +469,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     const map = new Map<number, { id: number; name: string; avatar?: string }>();
 
     matchesByFilters.forEach((match: any) => {
-      const ownTeam = match.competitors.find((competitor: any) =>
-        careerTeamIds.includes(competitor.teamId),
-      );
+      const ownTeam = getCareerMatchCompetitor(match, careerStints, selectedCareerTeamId);
       const userTeamStints = careerStints.filter(
         (stint: any) =>
           stint.teamId === ownTeam?.teamId &&
@@ -485,7 +503,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     });
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [matchesByFilters, careerTeamIds, state.profile?.player?.id]);
+  }, [matchesByFilters, careerStints, selectedCareerTeamId, state.profile?.player?.id]);
 
   React.useEffect(() => {
     if (!selectedTeammateId && teammates[0]) {
@@ -537,9 +555,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     const teammateId = Number(selectedTeammateId);
 
     return matchesByFilters.flatMap((match: any) => {
-      const ownTeam = match.competitors.find((competitor: any) =>
-        careerTeamIds.includes(competitor.teamId),
-      );
+      const ownTeam = getCareerMatchCompetitor(match, careerStints, selectedCareerTeamId);
       const userTeamStints = careerStints.filter(
         (stint: any) =>
           stint.teamId === ownTeam?.teamId &&
@@ -592,7 +608,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       );
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, selectedTeammateId, selectedMap, careerTeamIds, careerStints]);
+  }, [matchesByFilters, selectedTeammateId, selectedMap, careerStints, selectedCareerTeamId]);
 
   const tournamentRows = React.useMemo(() => {
     const grouped = new Map<
@@ -611,9 +627,7 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     ownPlayerPerformances.forEach((item: any) => {
       const compId = item.match.competitionId || 0;
-      const ownTeam = item.match.competitors.find((competitor: any) =>
-        careerTeamIds.includes(competitor.teamId),
-      );
+      const ownTeam = getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
       const placement = item.match.competition?.competitors?.find(
         (c: any) => c.teamId === ownTeam?.teamId,
       )?.position;
@@ -645,7 +659,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       ...row,
       rating: (row.ratingSum / row.count).toFixed(2),
     }));
-  }, [ownPlayerPerformances, careerTeamIds]);
+  }, [ownPlayerPerformances, careerStints, selectedCareerTeamId]);
 
   const activePerformances =
     activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
@@ -692,9 +706,7 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   const renderMatchTable = (rows: MatchPerformance[]) => {
     const flattenedRows = rows.flatMap((item: any) => {
-      const ownTeam = item.match.competitors.find((competitor: any) =>
-        careerTeamIds.includes(competitor.teamId),
-      );
+      const ownTeam = getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
       const opponent = item.match.competitors.find(
         (competitor: any) => competitor.teamId !== ownTeam?.teamId,
       );
