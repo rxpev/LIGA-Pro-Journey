@@ -19,6 +19,38 @@ type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.al
 /** @type {MatchGame} */
 type MatchGame = Matches[number]['games'][number];
 
+type ExhibitionPostgamePayload = {
+  type: 'exhibition';
+  map: string;
+  game: Constants.Game;
+  fallbackPlayerId: number | null;
+  teams: Array<{
+    id: number;
+    name: string;
+    blazon?: string | null;
+    score: number;
+    players: Array<{
+      id: number;
+      name: string;
+      matchName: string;
+      country?: { code?: string | null } | null;
+    }>;
+  }>;
+  events: Array<{
+    type: string;
+    payload: {
+      timestamp: string;
+      attacker?: { name: string };
+      assist?: { name: string };
+      victim?: { name: string };
+      weapon?: string;
+      headshot?: boolean;
+    };
+  }>;
+};
+
+type ExhibitionPlayer = ExhibitionPostgamePayload['teams'][number]['players'][number];
+
 /** @interface */
 interface ScoreboardProps {
   competitor: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
@@ -52,6 +84,54 @@ function getPlayerRating(kills: number, deaths: number) {
   const scale = 0.5;
   const offset = 0.401;
   return scale * raw + offset;
+}
+
+function getExhibitionEventPlayerId(
+  playerName: string | undefined,
+  teams: ExhibitionPostgamePayload['teams'],
+  fallbackPlayerId: number | null,
+) {
+  if (!playerName) {
+    return fallbackPlayerId;
+  }
+
+  const players = teams.flatMap((team) => team.players);
+  return (
+    players.find((player) => player.matchName === playerName || player.name === playerName)?.id ??
+    fallbackPlayerId
+  );
+}
+
+function getExhibitionPlayerPerformance(
+  player: ExhibitionPlayer,
+  payload: ExhibitionPostgamePayload,
+) {
+  const events = payload.events.map((event) => ({
+    ...event,
+    attackerId: getExhibitionEventPlayerId(
+      event.payload.attacker?.name,
+      payload.teams,
+      payload.fallbackPlayerId,
+    ),
+    assistId: getExhibitionEventPlayerId(
+      event.payload.assist?.name,
+      payload.teams,
+      payload.fallbackPlayerId,
+    ),
+    victimId: getExhibitionEventPlayerId(
+      event.payload.victim?.name,
+      payload.teams,
+      payload.fallbackPlayerId,
+    ),
+  }));
+  const kills = events.filter((event) => event.attackerId === player.id);
+  const headshots = kills.filter((event) => event.payload.headshot);
+  const assists = events.filter((event) => event.assistId === player.id);
+  const deaths = events.filter((event) => event.victimId === player.id);
+  const hsp = headshots.length / (kills.length || 1);
+  const kd = kills.length - deaths.length;
+  const rating = getPlayerRating(kills.length, deaths.length);
+  return { assists, kills, deaths, hsp, kd, rating };
 }
 
 /**
@@ -242,6 +322,169 @@ function Scoreboard(props: ScoreboardProps) {
   );
 }
 
+function ExhibitionScoreboard(props: {
+  payload: ExhibitionPostgamePayload;
+  team: ExhibitionPostgamePayload['teams'][number];
+}) {
+  const t = useTranslation('windows');
+
+  return (
+    <table className="table-xs table">
+      <thead>
+        <tr className="border-t-base-content/10 border-t">
+          <th>
+            <p title={props.team.name}>
+              {!!props.team.blazon && (
+                <img src={props.team.blazon} className="mr-2 inline-block size-4" />
+              )}
+              {props.team.name}
+            </p>
+          </th>
+          <th title="Rating" className="w-[10%] text-center">
+            {t('postgame.rating')}
+          </th>
+          <th title={t('postgame.kills')} className="w-[10%] text-center">
+            {t('postgame.killsAlt')}
+          </th>
+          <th title={t('postgame.deaths')} className="w-[10%] text-center">
+            {t('postgame.deathsAlt')}
+          </th>
+          <th title={t('postgame.assists')} className="w-[10%] text-center">
+            {t('postgame.assistsAlt')}
+          </th>
+          <th title={t('postgame.headshots')} className="w-[10%] text-center">
+            {t('postgame.headshotsAlt')}
+          </th>
+          <th title={t('postgame.kd')} className="w-[10%] text-center">
+            {t('postgame.kdAlt')}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {props.team.players
+          .sort(
+            (playerA, playerB) =>
+              getExhibitionPlayerPerformance(playerB, props.payload).kd -
+              getExhibitionPlayerPerformance(playerA, props.payload).kd,
+          )
+          .map((player) => {
+            const report = getExhibitionPlayerPerformance(player, props.payload);
+
+            return (
+              <tr key={props.team.id + '_' + player.id + '__scoreboard'}>
+                <td>
+                  {!!player.country?.code && (
+                    <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
+                  )}
+                  <span>{player.name}</span>
+                </td>
+                <td
+                  className={cx(
+                    'text-center',
+                    report.rating <= Rating.LOW && 'text-error',
+                    report.rating > Rating.LOW && report.rating < Rating.HIGH && 'text-inherit',
+                    report.rating >= Rating.HIGH && 'text-success',
+                  )}
+                >
+                  {new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(report.rating)}
+                </td>
+                <td className="text-center">{report.kills.length}</td>
+                <td className="text-center">{report.deaths.length}</td>
+                <td className="text-center">{report.assists.length}</td>
+                <td className="text-center">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'percent',
+                  }).format(report.hsp)}
+                </td>
+                <td
+                  className={cx(
+                    'text-center',
+                    report.kd > 0 ? 'text-success' : 'text-error',
+                    report.kd === 0 && 'text-inherit',
+                  )}
+                >
+                  {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(report.kd)}
+                </td>
+              </tr>
+            );
+          })}
+      </tbody>
+    </table>
+  );
+}
+
+function ExhibitionPostgame(props: { payload: ExhibitionPostgamePayload }) {
+  const t = useTranslation('windows');
+  const [home, away] = props.payload.teams;
+
+  return (
+    <main className="flex h-screen w-full flex-col">
+      <header className="breadcrumbs border-base-content/10 bg-base-200 sticky top-0 z-30 border-b px-2 text-sm">
+        <ul>
+          <li>
+            <span>{t('landing.home.exhibition')}</span>
+          </li>
+          <li>{Util.convertMapPool(props.payload.map, props.payload.game)}</li>
+        </ul>
+      </header>
+      <section className="card image-full h-16 rounded-none before:rounded-none!">
+        <figure>
+          <Image
+            className="h-full w-full"
+            src={Util.convertMapPool(props.payload.map, props.payload.game, true)}
+          />
+        </figure>
+        <header className="card-body grid grid-cols-3 place-items-center p-0">
+          <article className="grid w-full grid-cols-2 place-items-center font-black">
+            {!!home.blazon && <img src={home.blazon} className="size-8" />}
+            <p>{home.name}</p>
+          </article>
+          <article className="grid grid-cols-3 place-items-center text-4xl font-bold">
+            <p
+              className={cx(
+                home.score > away.score && 'text-success',
+                home.score < away.score && 'text-error',
+              )}
+            >
+              {home.score}
+            </p>
+            <p>:</p>
+            <p
+              className={cx(
+                away.score > home.score && 'text-success',
+                away.score < home.score && 'text-error',
+              )}
+            >
+              {away.score}
+            </p>
+          </article>
+          <article className="grid w-full grid-cols-2 place-items-center font-black">
+            <p>{away.name}</p>
+            {!!away.blazon && <img src={away.blazon} className="size-8" />}
+          </article>
+        </header>
+      </section>
+      <ExhibitionScoreboard payload={props.payload} team={home} />
+      <ExhibitionScoreboard payload={props.payload} team={away} />
+      <section className="h-0 flex-grow" />
+    </main>
+  );
+}
+
+function isExhibitionPostgamePayload(payload: unknown): payload is ExhibitionPostgamePayload {
+  return Boolean(
+    payload &&
+      typeof payload === 'object' &&
+      'type' in payload &&
+      payload.type === 'exhibition' &&
+      'teams' in payload &&
+      Array.isArray(payload.teams),
+  );
+}
+
 /**
  * Exports this module.
  *
@@ -251,6 +494,13 @@ export default function () {
   const location = useLocation();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
+  const exhibitionPayload = React.useMemo(
+    () =>
+      isExhibitionPostgamePayload(location.state)
+        ? (location.state as ExhibitionPostgamePayload)
+        : null,
+    [location.state],
+  );
   const [match, setMatch] = React.useState<Matches<typeof Eagers.matchEvents>[number]>();
   const [matchGame, setMatchGame] = React.useState<MatchGame>();
   const [vetoes, setVetoes] = React.useState<Array<MatchVetoEntry>>([]);
@@ -258,7 +508,7 @@ export default function () {
 
   // grab match data
   React.useEffect(() => {
-    if (!location.state) {
+    if (!location.state || exhibitionPayload) {
       return;
     }
 
@@ -270,7 +520,7 @@ export default function () {
         include: Eagers.matchEvents.include,
       })
       .then((matches) => setMatch(matches[0]));
-  }, []);
+  }, [exhibitionPayload, location.state]);
 
   React.useEffect(() => {
     if (!match) {
@@ -308,6 +558,10 @@ export default function () {
     () => Math.max(...matchEvents.map((me) => me.half)) + 1,
     [matchEvents],
   );
+
+  if (exhibitionPayload) {
+    return <ExhibitionPostgame payload={exhibitionPayload} />;
+  }
 
   if (!state.profile || !match) {
     return (

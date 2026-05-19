@@ -10,8 +10,8 @@ import log from 'electron-log';
 import { ipcMain } from 'electron';
 import { flatten, merge, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
-import { saveFaceitResult } from "@liga/backend/lib/save-result";
-import * as XpEconomy from "@liga/backend/lib/xp-economy";
+import { saveFaceitResult } from '@liga/backend/lib/save-result';
+import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import {
   DatabaseClient,
   Game,
@@ -48,12 +48,16 @@ export default function () {
     withExhibitionRootPrisma((prisma) => prisma.federation.findMany()),
   );
 
-  ipcMain.handle(Constants.IPCRoute.PLAY_EXHIBITION_TEAMS, async (_, query: Prisma.TeamFindManyArgs) =>
-    withExhibitionRootPrisma((prisma) => prisma.team.findMany(query)),
+  ipcMain.handle(
+    Constants.IPCRoute.PLAY_EXHIBITION_TEAMS,
+    async (_, query: Prisma.TeamFindManyArgs) =>
+      withExhibitionRootPrisma((prisma) => prisma.team.findMany(query)),
   );
 
-  ipcMain.handle(Constants.IPCRoute.PLAY_EXHIBITION_PLAYERS, async (_, query?: Prisma.PlayerFindManyArgs) =>
-    withExhibitionRootPrisma((prisma) => prisma.player.findMany(query)),
+  ipcMain.handle(
+    Constants.IPCRoute.PLAY_EXHIBITION_PLAYERS,
+    async (_, query?: Prisma.PlayerFindManyArgs) =>
+      withExhibitionRootPrisma((prisma) => prisma.player.findMany(query)),
   );
 
   ipcMain.handle(
@@ -94,7 +98,8 @@ export default function () {
           },
           include: Eagers.mapPool.include,
         });
-        const selectedMap = settings.matchRules.mapOverride || sample(mapPool)?.gameMap.name || 'de_dust2';
+        const selectedMap =
+          settings.matchRules.mapOverride || sample(mapPool)?.gameMap.name || 'de_dust2';
 
         // minimize the landing window
         const landingWindow = WindowManager.get(Constants.WindowIdentifier.Landing);
@@ -134,34 +139,41 @@ export default function () {
           const externalPlayerIds = rosterIds.filter((playerId) => !teamPlayerMap.has(playerId));
           const externalPlayers = externalPlayerIds.length
             ? await DatabaseClient.prisma.player.findMany({
-              where: { id: { in: externalPlayerIds } },
-            })
+                where: { id: { in: externalPlayerIds } },
+              })
             : [];
           const externalPlayerMap = new Map(externalPlayers.map((player) => [player.id, player]));
           const forcedPlayers = rosterIds
             .map((playerId) => teamPlayerMap.get(playerId) || externalPlayerMap.get(playerId))
-            .filter((player): player is typeof team.players[number] => Boolean(player));
+            .filter((player): player is (typeof team.players)[number] => Boolean(player));
           const fallbackPlayers = team.players
             .filter((player) => !rosterIds.includes(player.id))
             .slice(0, Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - forcedPlayers.length));
-          let lineup = [...forcedPlayers, ...fallbackPlayers].slice(0, Constants.Application.SQUAD_MIN_LENGTH);
+          let lineup = [...forcedPlayers, ...fallbackPlayers].slice(
+            0,
+            Constants.Application.SQUAD_MIN_LENGTH,
+          );
 
           if (team.id === teamId) {
             const awperIdx = lineup.findIndex(
               (player) =>
-                player.role === Constants.UserRole.AWPER || player.role === Constants.PlayerRole.SNIPER,
+                player.role === Constants.UserRole.AWPER ||
+                player.role === Constants.PlayerRole.SNIPER,
             );
             const sourceIdx = awperIdx >= 0 ? awperIdx : 0;
 
             if (lineup.length > 0 && includesYou) {
               const controlPlayer =
-                team.players.find((player) => !rosterIds.includes(player.id))
-                || team.players[sourceIdx]
-                || team.players[0];
+                team.players.find((player) => !rosterIds.includes(player.id)) ||
+                team.players[sourceIdx] ||
+                team.players[0];
               selectedUserPlayerId = controlPlayer.id;
 
               if (!lineup.some((player) => player.id === controlPlayer.id)) {
-                lineup = [...lineup, controlPlayer].slice(0, Constants.Application.SQUAD_MIN_LENGTH);
+                lineup = [...lineup, controlPlayer].slice(
+                  0,
+                  Constants.Application.SQUAD_MIN_LENGTH,
+                );
               }
             } else if (lineup.length > 0 && !selectedUserPlayerId) {
               selectedUserPlayerId = lineup[sourceIdx].id;
@@ -173,8 +185,8 @@ export default function () {
             players: lineup.map((player, index) => ({
               ...player,
               starter:
-                index < Constants.Application.SQUAD_MIN_LENGTH
-                && player.id !== selectedUserPlayerId,
+                index < Constants.Application.SQUAD_MIN_LENGTH &&
+                player.id !== selectedUserPlayerId,
             })),
           };
         };
@@ -192,7 +204,10 @@ export default function () {
         away.players = away.players.filter((player) => !homeIds.has(player.id));
         if (away.players.length < Constants.Application.SQUAD_MIN_LENGTH) {
           const awayFallback = awayOriginalPlayers
-            .filter((player) => !homeIds.has(player.id) && !away.players.some((entry) => entry.id === player.id))
+            .filter(
+              (player) =>
+                !homeIds.has(player.id) && !away.players.some((entry) => entry.id === player.id),
+            )
             .slice(0, Constants.Application.SQUAD_MIN_LENGTH - away.players.length);
           away.players = [...away.players, ...awayFallback];
         }
@@ -257,6 +272,42 @@ export default function () {
 
         // restore window
         landingWindow.restore();
+
+        const sideTeamIds = gameServer.getSideTeamIds();
+        const [tScore, ctScore] = gameServer.result.score;
+        const scoreByTeamId = {
+          [sideTeamIds?.t ?? home.id]: tScore,
+          [sideTeamIds?.ct ?? away.id]: ctScore,
+        };
+
+        WindowManager.send(Constants.WindowIdentifier.Modal, {
+          target: '/postgame',
+          payload: {
+            type: 'exhibition',
+            map: gameServer.matchGame.map,
+            game: settings.general.game,
+            teams: [home, away].map((team) => ({
+              id: team.id,
+              name: team.name,
+              blazon: team.blazon,
+              score: scoreByTeamId[team.id] ?? 0,
+              players: team.players.map((player) => ({
+                id: player.id,
+                name: player.id === selectedUserPlayerId ? 'YOU' : player.name,
+                matchName: player.name,
+                country: 'country' in player ? player.country : null,
+              })),
+            })),
+            fallbackPlayerId: selectedUserPlayerId,
+            events: gameServer.scorebotEvents.map((event) => ({
+              type: event.type,
+              payload: {
+                ...event.payload,
+                timestamp: event.payload.timestamp.toISOString(),
+              },
+            })),
+          },
+        });
       } finally {
         await DatabaseClient.disconnect();
         await fs.promises.unlink(exhibitionSavePath).catch(() => Promise.resolve());
@@ -490,12 +541,15 @@ export default function () {
                     const winnerSideAtStart = invert
                       ? 1 - eventRoundOver.winner
                       : eventRoundOver.winner;
-                    const winnerTeamId = winnerSideAtStart === 0
-                      ? sideTeamIds?.t ?? match.competitors[0].teamId
-                      : sideTeamIds?.ct ?? match.competitors[1].teamId;
-                    const winnerCompetitorId = match.competitors.find(
-                      (competitor) => competitor.teamId === winnerTeamId,
-                    )?.id ?? match.competitors[invert ? 1 - eventRoundOver.winner : eventRoundOver.winner].id;
+                    const winnerTeamId =
+                      winnerSideAtStart === 0
+                        ? (sideTeamIds?.t ?? match.competitors[0].teamId)
+                        : (sideTeamIds?.ct ?? match.competitors[1].teamId);
+                    const winnerCompetitorId =
+                      match.competitors.find((competitor) => competitor.teamId === winnerTeamId)
+                        ?.id ??
+                      match.competitors[invert ? 1 - eventRoundOver.winner : eventRoundOver.winner]
+                        .id;
 
                     return {
                       half: currentHalf,
