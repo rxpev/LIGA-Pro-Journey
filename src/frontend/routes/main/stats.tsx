@@ -200,7 +200,6 @@ function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
   return { kills, deaths, plusMinus, rating };
 }
 
-
 function getSeriesAwarePerformance(
   playerId: number,
   eventsForStats: any[],
@@ -230,6 +229,12 @@ function isPlayedGame(game: any) {
   const scores = (game?.teams || []).map((team: any) => Number(team.score || 0));
   if (!scores.length) return false;
   return scores.some((score: number) => score > 0);
+}
+
+function getPlayedGames(match: MatchRecord) {
+  return [...(match.games || [])]
+    .filter((game: any) => isPlayedGame(game))
+    .sort((a: any, b: any) => Number(b.num ?? 0) - Number(a.num ?? 0));
 }
 
 export default function LeagueStatsConcept(): JSX.Element {
@@ -319,7 +324,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const mapOptions = React.useMemo(() => {
     const options = new Set<string>();
     matches.forEach((match: any) =>
-      match.games.forEach((game: any) => isPlayedGame(game) && game.map && options.add(game.map)),
+      getPlayedGames(match).forEach((game: any) => game.map && options.add(game.map)),
     );
 
     return [...options].sort((a, b) =>
@@ -358,7 +363,11 @@ export default function LeagueStatsConcept(): JSX.Element {
   const careerTeamOptions = React.useMemo(() => {
     const map = new Map<number, { id: number; name: string; blazon?: string }>();
     careerStints.forEach((stint: any) =>
-      map.set(stint.team.id, { id: stint.team.id, name: stint.team.name, blazon: stint.team.blazon }),
+      map.set(stint.team.id, {
+        id: stint.team.id,
+        name: stint.team.name,
+        blazon: stint.team.blazon,
+      }),
     );
     return [...map.values()];
   }, [careerStints]);
@@ -372,7 +381,9 @@ export default function LeagueStatsConcept(): JSX.Element {
       const byCompetition = selectedCompetitionGroup
         ? getCompetitionGroup(match) === selectedCompetitionGroup
         : true;
-      const byMap = selectedMap ? match.games.some((game: any) => game.map === selectedMap) : true;
+      const byMap = selectedMap
+        ? getPlayedGames(match).some((game: any) => game.map === selectedMap)
+        : true;
       const bySeason = selectedSeason ? String(match.competition?.season) === selectedSeason : true;
       const eligibleStints = careerStints.filter((stint: any) => {
         if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
@@ -388,7 +399,15 @@ export default function LeagueStatsConcept(): JSX.Element {
 
       return byCompetition && byMap && bySeason && byCareerTeam;
     });
-  }, [matches, selectedCompetitionGroup, selectedMap, selectedSeason, selectedCareerTeamId, careerStints, activeTab]);
+  }, [
+    matches,
+    selectedCompetitionGroup,
+    selectedMap,
+    selectedSeason,
+    selectedCareerTeamId,
+    careerStints,
+    activeTab,
+  ]);
 
   const ownPlayerPerformances = React.useMemo(() => {
     const playerId = state.profile?.player?.id;
@@ -402,8 +421,8 @@ export default function LeagueStatsConcept(): JSX.Element {
       }
 
       const gamesForStats = scopedSelectedMap
-        ? (match.games || []).filter((game: any) => game.map === scopedSelectedMap && isPlayedGame(game))
-        : (match.games || []).filter((game: any) => isPlayedGame(game));
+        ? getPlayedGames(match).filter((game: any) => game.map === scopedSelectedMap)
+        : getPlayedGames(match);
       if (!gamesForStats.length) {
         return [];
       }
@@ -411,7 +430,9 @@ export default function LeagueStatsConcept(): JSX.Element {
       const allEvents = match.events || [];
       const eventsForStats =
         scopedSelectedMap || (match.games || []).length > 1
-          ? allEvents.filter((event: any) => gamesForStats.some((game: any) => game.id === event.gameId))
+          ? allEvents.filter((event: any) =>
+              gamesForStats.some((game: any) => game.id === event.gameId),
+            )
           : allEvents;
 
       const performance = getSeriesAwarePerformance(
@@ -428,10 +449,13 @@ export default function LeagueStatsConcept(): JSX.Element {
     const map = new Map<number, { id: number; name: string; avatar?: string }>();
 
     matchesByFilters.forEach((match: any) => {
-      const ownTeam = match.competitors.find((competitor: any) => careerTeamIds.includes(competitor.teamId));
+      const ownTeam = match.competitors.find((competitor: any) =>
+        careerTeamIds.includes(competitor.teamId),
+      );
       const userTeamStints = careerStints.filter(
         (stint: any) =>
-          stint.teamId === ownTeam?.teamId && isWithinStint(match.date, stint.startedAt, stint.endedAt),
+          stint.teamId === ownTeam?.teamId &&
+          isWithinStint(match.date, stint.startedAt, stint.endedAt),
       );
       (match.players || []).forEach((player: any) => {
         if (player.id === selfId) {
@@ -440,7 +464,8 @@ export default function LeagueStatsConcept(): JSX.Element {
 
         const teammateStints = (player.careerStints || []).filter(
           (stint: any) =>
-            stint.teamId === ownTeam?.teamId && isWithinStint(match.date, stint.startedAt, stint.endedAt),
+            stint.teamId === ownTeam?.teamId &&
+            isWithinStint(match.date, stint.startedAt, stint.endedAt),
         );
         const hasOverlap = teammateStints.some((teammateStint: any) =>
           userTeamStints.some((userStint: any) =>
@@ -470,7 +495,14 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   React.useEffect(() => {
     setMatchPage(1);
-  }, [activeTab, selectedCompetitionGroup, selectedSeason, selectedMap, selectedCareerTeamId, selectedTeammateId]);
+  }, [
+    activeTab,
+    selectedCompetitionGroup,
+    selectedSeason,
+    selectedMap,
+    selectedCareerTeamId,
+    selectedTeammateId,
+  ]);
 
   React.useEffect(() => {
     setTournamentPage(1);
@@ -498,23 +530,20 @@ export default function LeagueStatsConcept(): JSX.Element {
     if (recentStint) {
       setSelectedCareerTeamId(String(recentStint.teamId));
     }
-  }, [
-    activeTab,
-    selectedCareerTeamId,
-    state.profile?.teamId,
-    careerTeamOptions,
-    careerStints,
-  ]);
+  }, [activeTab, selectedCareerTeamId, state.profile?.teamId, careerTeamOptions, careerStints]);
 
   const teammatePerformances = React.useMemo(() => {
     if (!selectedTeammateId) return [] as MatchPerformance[];
     const teammateId = Number(selectedTeammateId);
 
     return matchesByFilters.flatMap((match: any) => {
-      const ownTeam = match.competitors.find((competitor: any) => careerTeamIds.includes(competitor.teamId));
+      const ownTeam = match.competitors.find((competitor: any) =>
+        careerTeamIds.includes(competitor.teamId),
+      );
       const userTeamStints = careerStints.filter(
         (stint: any) =>
-          stint.teamId === ownTeam?.teamId && isWithinStint(match.date, stint.startedAt, stint.endedAt),
+          stint.teamId === ownTeam?.teamId &&
+          isWithinStint(match.date, stint.startedAt, stint.endedAt),
       );
       const teammate = (match.players || []).find((player: any) => player.id === teammateId);
       if (!teammate) {
@@ -523,7 +552,8 @@ export default function LeagueStatsConcept(): JSX.Element {
 
       const teammateStints = (teammate.careerStints || []).filter(
         (stint: any) =>
-          stint.teamId === ownTeam?.teamId && isWithinStint(match.date, stint.startedAt, stint.endedAt),
+          stint.teamId === ownTeam?.teamId &&
+          isWithinStint(match.date, stint.startedAt, stint.endedAt),
       );
       const playedAsTeammate = teammateStints.some((teammateStint: any) =>
         userTeamStints.some((userStint: any) =>
@@ -541,8 +571,8 @@ export default function LeagueStatsConcept(): JSX.Element {
       }
 
       const gamesForStats = selectedMap
-        ? (match.games || []).filter((game: any) => game.map === selectedMap && isPlayedGame(game))
-        : (match.games || []).filter((game: any) => isPlayedGame(game));
+        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+        : getPlayedGames(match);
       if (!gamesForStats.length) {
         return [];
       }
@@ -550,7 +580,9 @@ export default function LeagueStatsConcept(): JSX.Element {
       const allEvents = match.events || [];
       const eventsForStats =
         selectedMap || (match.games || []).length > 1
-          ? allEvents.filter((event: any) => gamesForStats.some((game: any) => game.id === event.gameId))
+          ? allEvents.filter((event: any) =>
+              gamesForStats.some((game: any) => game.id === event.gameId),
+            )
           : allEvents;
 
       const performance = getSeriesAwarePerformance(
@@ -579,10 +611,14 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     ownPlayerPerformances.forEach((item: any) => {
       const compId = item.match.competitionId || 0;
-      const ownTeam = item.match.competitors.find((competitor: any) => careerTeamIds.includes(competitor.teamId));
-      const placement = item.match.competition?.competitors?.find((c: any) => c.teamId === ownTeam?.teamId)?.position;
+      const ownTeam = item.match.competitors.find((competitor: any) =>
+        careerTeamIds.includes(competitor.teamId),
+      );
+      const placement = item.match.competition?.competitors?.find(
+        (c: any) => c.teamId === ownTeam?.teamId,
+      )?.position;
       const existing = grouped.get(compId);
-      const playedMaps = (item.match.games || []).filter((game: any) => isPlayedGame(game)).length;
+      const playedMaps = getPlayedGames(item.match).length;
 
       if (!existing) {
         grouped.set(compId, {
@@ -593,10 +629,9 @@ export default function LeagueStatsConcept(): JSX.Element {
           count: 1,
           mapsPlayed: playedMaps,
           teamBlazon: ownTeam?.team.blazon || 'resources://blazonry/noteam.svg',
-          href:
-            item.match.competition
-              ? `/competitions?federationId=${item.match.competition.federationId}&season=${item.match.competition.season}&tierId=${item.match.competition.tierId}`
-              : '/competitions',
+          href: item.match.competition
+            ? `/competitions?federationId=${item.match.competition.federationId}&season=${item.match.competition.season}&tierId=${item.match.competition.tierId}`
+            : '/competitions',
         });
       } else {
         existing.plusMinus += item.plusMinus;
@@ -612,16 +647,20 @@ export default function LeagueStatsConcept(): JSX.Element {
     }));
   }, [ownPlayerPerformances, careerTeamIds]);
 
-  const activePerformances = activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
+  const activePerformances =
+    activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
   const summary = React.useMemo(() => {
-    const totals = activePerformances.reduce((acc: any, item: any) => {
-      acc.matches += 1;
-      acc.kills += item.kills;
-      acc.deaths += item.deaths;
-      acc.plusMinus += item.plusMinus;
-      acc.ratingSum += item.rating;
-      return acc;
-    }, { matches: 0, kills: 0, deaths: 0, plusMinus: 0, ratingSum: 0 });
+    const totals = activePerformances.reduce(
+      (acc: any, item: any) => {
+        acc.matches += 1;
+        acc.kills += item.kills;
+        acc.deaths += item.deaths;
+        acc.plusMinus += item.plusMinus;
+        acc.ratingSum += item.rating;
+        return acc;
+      },
+      { matches: 0, kills: 0, deaths: 0, plusMinus: 0, ratingSum: 0 },
+    );
 
     return {
       ...totals,
@@ -629,7 +668,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       kdRatio: totals.deaths ? Number((totals.kills / totals.deaths).toFixed(2)) : totals.kills,
       avgKills: totals.matches ? Math.round(totals.kills / totals.matches) : 0,
       mapsPlayed: activePerformances.reduce((acc: number, item: any) => {
-        const playedGames = (item.match.games || []).filter((game: any) => isPlayedGame(game));
+        const playedGames = getPlayedGames(item.match);
         if (selectedMap) {
           return acc + playedGames.filter((game: any) => game.map === selectedMap).length;
         }
@@ -638,11 +677,14 @@ export default function LeagueStatsConcept(): JSX.Element {
     };
   }, [activePerformances, selectedMap]);
 
-  const featuredMapSlug = selectedMap || activePerformances[0]?.match.games[0]?.map || 'de_mirage';
+  const featuredMapSlug =
+    selectedMap || getPlayedGames(activePerformances[0]?.match || {})[0]?.map || 'de_mirage';
   const featuredMapImage = Util.convertMapPool(featuredMapSlug, settingsAll.general.game, true);
   const featuredMapLabel = Util.convertMapPool(featuredMapSlug, settingsAll.general.game);
   const hasMapSelected = !!selectedMap;
-  const selectedFilterTeam = careerTeamOptions.find((team: any) => String(team.id) === selectedCareerTeamId);
+  const selectedFilterTeam = careerTeamOptions.find(
+    (team: any) => String(team.id) === selectedCareerTeamId,
+  );
   const headerTeamLabel =
     activeTab === StatsTab.INDIVIDUAL
       ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
@@ -657,8 +699,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         (competitor: any) => competitor.teamId !== ownTeam?.teamId,
       );
       const games = selectedMap
-        ? item.match.games.filter((game: any) => game.map === selectedMap && isPlayedGame(game))
-        : item.match.games.filter((game: any) => isPlayedGame(game));
+        ? getPlayedGames(item.match).filter((game: any) => game.map === selectedMap)
+        : getPlayedGames(item.match);
 
       return games.map((game: any) => {
         const allEvents = item.match.events || [];
@@ -670,8 +712,12 @@ export default function LeagueStatsConcept(): JSX.Element {
           activeTab === StatsTab.TEAMMATES ? Number(selectedTeammateId) : state.profile?.player?.id;
         const { plusMinus, rating } = getPlayerPerformanceFromEvents(playerId, gameEvents);
 
-        const ownGameTeam = game.teams?.find((gameTeam: any) => gameTeam.teamId === ownTeam?.teamId);
-        const oppGameTeam = game.teams?.find((gameTeam: any) => gameTeam.teamId !== ownTeam?.teamId);
+        const ownGameTeam = game.teams?.find(
+          (gameTeam: any) => gameTeam.teamId === ownTeam?.teamId,
+        );
+        const oppGameTeam = game.teams?.find(
+          (gameTeam: any) => gameTeam.teamId !== ownTeam?.teamId,
+        );
         const didWin = (ownGameTeam?.score || 0) >= (oppGameTeam?.score || 0);
 
         return {
@@ -693,13 +739,23 @@ export default function LeagueStatsConcept(): JSX.Element {
     const pagedRows = flattenedRows.slice((matchPage - 1) * 15, matchPage * 15);
 
     return (
-      <article className="border border-base-content/10 rounded-none">
-        <header className="border-b border-base-content/10 px-4 py-3 text-sm font-semibold">Match History</header>
+      <article className="border-base-content/10 rounded-none border">
+        <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
+          Match History
+        </header>
         <div className="overflow-x-auto">
-          <table className="table table-zebra table-sm">
+          <table className="table-zebra table-sm table">
             <thead>
               <tr>
-                <th>Team</th><th className="text-center">Match Details</th><th>Date</th><th>Map</th><th>Opponent</th><th className="text-center">Result</th><th className="text-center">Score</th><th className="text-center">+ / -</th><th className="text-center">Rating</th>
+                <th>Team</th>
+                <th className="text-center">Match Details</th>
+                <th>Date</th>
+                <th>Map</th>
+                <th>Opponent</th>
+                <th className="text-center">Result</th>
+                <th className="text-center">Score</th>
+                <th className="text-center">+ / -</th>
+                <th className="text-center">Rating</th>
               </tr>
             </thead>
             <tbody>
@@ -707,7 +763,10 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <tr key={row.key}>
                   <td>
                     <span className="inline-flex items-center gap-2">
-                      <img src={row.ownTeam?.team?.blazon || 'resources://blazonry/noteam.svg'} className="h-5 w-5 object-contain" />
+                      <img
+                        src={row.ownTeam?.team?.blazon || 'resources://blazonry/noteam.svg'}
+                        className="h-5 w-5 object-contain"
+                      />
                       <span>{row.ownTeam?.team?.name || 'Unknown'}</span>
                     </span>
                   </td>
@@ -729,38 +788,63 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <td>{Util.convertMapPool(row.mapSlug, settingsAll.general.game)}</td>
                   <td>
                     <span className="inline-flex items-center gap-2">
-                      <img src={row.opponent?.team?.blazon || 'resources://blazonry/noteam.svg'} className="h-5 w-5 object-contain" />
+                      <img
+                        src={row.opponent?.team?.blazon || 'resources://blazonry/noteam.svg'}
+                        className="h-5 w-5 object-contain"
+                      />
                       <span>{row.opponent?.team?.name || 'TBD'}</span>
                     </span>
                   </td>
                   <td className="text-center">
                     <span
-                      className={`badge badge-sm border-0 text-white ${row.didWin ? 'bg-success/80' : 'bg-error/80'
-                        }`}
+                      className={`badge badge-sm border-0 text-white ${
+                        row.didWin ? 'bg-success/80' : 'bg-error/80'
+                      }`}
                     >
                       {row.didWin ? 'Win' : 'Loss'}
                     </span>
                   </td>
-                  <td className="text-center text-base-content/80">
+                  <td className="text-base-content/80 text-center">
                     {row.ownScore}-{row.oppScore}
                   </td>
-                  <td className={row.plusMinus > 0 ? 'text-success font-semibold text-center' : row.plusMinus < 0 ? 'text-error font-semibold text-center' : 'text-inherit font-semibold text-center'}>
-                    {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(row.plusMinus)}
+                  <td
+                    className={
+                      row.plusMinus > 0
+                        ? 'text-success text-center font-semibold'
+                        : row.plusMinus < 0
+                          ? 'text-error text-center font-semibold'
+                          : 'text-center font-semibold text-inherit'
+                    }
+                  >
+                    {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(
+                      row.plusMinus,
+                    )}
                   </td>
                   <td
-                    className={`font-semibold text-center ${row.rating > 1 ? 'text-success' : row.rating < 1 ? 'text-error' : 'text-inherit'
-                      }`}
+                    className={`text-center font-semibold ${
+                      row.rating > 1
+                        ? 'text-success'
+                        : row.rating < 1
+                          ? 'text-error'
+                          : 'text-inherit'
+                    }`}
                   >
                     {row.rating.toFixed(2)}
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={9} className="text-center py-8 text-sm text-base-content/60">No matches for selected filters.</td></tr>}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={9} className="text-base-content/60 py-8 text-center text-sm">
+                    No matches for selected filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
         {rows.length > 0 && (
-          <footer className="flex items-center justify-end gap-2 border-t border-base-content/10 px-3 py-2">
+          <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
             <button
               className="btn btn-ghost btn-xs rounded-none"
               disabled={matchPage <= 1}
@@ -774,9 +858,7 @@ export default function LeagueStatsConcept(): JSX.Element {
             <button
               className="btn btn-ghost btn-xs rounded-none"
               disabled={matchPage >= totalPages}
-              onClick={() =>
-                setMatchPage((page) => Math.min(totalPages, page + 1))
-              }
+              onClick={() => setMatchPage((page) => Math.min(totalPages, page + 1))}
             >
               Next
             </button>
@@ -787,7 +869,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   };
 
   return (
-    <section className="h-full overflow-hidden bg-base-300/40">
+    <section className="bg-base-300/40 h-full overflow-hidden">
       <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
         {Object.values(StatsTab).map((tab) => (
           <button
@@ -807,15 +889,19 @@ export default function LeagueStatsConcept(): JSX.Element {
         ))}
       </header>
 
-      <div className={`grid h-[calc(100%-48px)] grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS ? '' : 'xl:grid-cols-[310px_1fr]'}`}>
+      <div
+        className={`grid h-[calc(100%-48px)] grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS ? '' : 'xl:grid-cols-[310px_1fr]'}`}
+      >
         {activeTab !== StatsTab.TOURNAMENTS && (
-          <aside className="border-r border-base-content/10 bg-base-100 p-4">
+          <aside className="border-base-content/10 bg-base-100 border-r p-4">
             <h2 className="text-2xl font-bold">Filters</h2>
-            <p className="mt-1 text-xs text-base-content/60">Competition, season, map and team filters.</p>
+            <p className="text-base-content/60 mt-1 text-xs">
+              Competition, season, map and team filters.
+            </p>
 
             {activeTab === StatsTab.TEAMMATES && (
-              <section className="mt-4 border border-base-content/10 p-2">
-                <p className="mb-2 text-xs uppercase text-base-content/70">Teammates</p>
+              <section className="border-base-content/10 mt-4 border p-2">
+                <p className="text-base-content/70 mb-2 text-xs uppercase">Teammates</p>
                 <div
                   className={cx(
                     'grid grid-cols-3 gap-2',
@@ -828,7 +914,10 @@ export default function LeagueStatsConcept(): JSX.Element {
                       className={`border p-1 ${selectedTeammateId === String(teammate.id) ? 'border-primary' : 'border-base-content/10'}`}
                       onClick={() => setSelectedTeammateId(String(teammate.id))}
                     >
-                      <img src={teammate.avatar || 'resources://avatars/empty.png'} className="mx-auto h-14 w-14 object-cover" />
+                      <img
+                        src={teammate.avatar || 'resources://avatars/empty.png'}
+                        className="mx-auto h-14 w-14 object-cover"
+                      />
                     </button>
                   ))}
                 </div>
@@ -836,41 +925,134 @@ export default function LeagueStatsConcept(): JSX.Element {
             )}
 
             <div className="mt-4 space-y-3">
-              <fieldset><label className="label pb-1 text-xs font-semibold uppercase">Competition</label><select className="select select-sm select-bordered w-full rounded-none" value={selectedCompetitionGroup} onChange={(e) => setSelectedCompetitionGroup(e.target.value)}><option value="">Any competition</option>{competitionOptions.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></fieldset>
-              <fieldset><label className="label pb-1 text-xs font-semibold uppercase">Season</label><select className="select select-sm select-bordered w-full rounded-none" value={selectedSeason} onChange={(e) => setSelectedSeason(e.target.value)}><option value="">All seasons</option>{seasonOptions.map((season) => <option key={season} value={season}>{`Season ${season}`}</option>)}</select></fieldset>
-              <fieldset><label className="label pb-1 text-xs font-semibold uppercase">Map</label><select className="select select-sm select-bordered w-full rounded-none" value={selectedMap} onChange={(e) => setSelectedMap(e.target.value)}><option value="">Any map</option>{mapOptions.map((m) => <option key={m} value={m}>{Util.convertMapPool(m, settingsAll.general.game)}</option>)}</select></fieldset>
-              <fieldset><label className="label pb-1 text-xs font-semibold uppercase">Team</label><select className="select select-sm select-bordered w-full rounded-none" value={selectedCareerTeamId} onChange={(e) => setSelectedCareerTeamId(e.target.value)}><option value="">Any Team</option>{careerTeamOptions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Competition</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedCompetitionGroup}
+                  onChange={(e) => setSelectedCompetitionGroup(e.target.value)}
+                >
+                  <option value="">Any competition</option>
+                  {competitionOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Season</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedSeason}
+                  onChange={(e) => setSelectedSeason(e.target.value)}
+                >
+                  <option value="">All seasons</option>
+                  {seasonOptions.map((season) => (
+                    <option key={season} value={season}>{`Season ${season}`}</option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Map</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedMap}
+                  onChange={(e) => setSelectedMap(e.target.value)}
+                >
+                  <option value="">Any map</option>
+                  {mapOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {Util.convertMapPool(m, settingsAll.general.game)}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedCareerTeamId}
+                  onChange={(e) => setSelectedCareerTeamId(e.target.value)}
+                >
+                  <option value="">Any Team</option>
+                  {careerTeamOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
             </div>
           </aside>
         )}
 
         <main className="overflow-y-auto p-3">
-          {loading && <div className="flex h-full items-center justify-center"><span className="loading loading-bars loading-md" /></div>}
+          {loading && (
+            <div className="flex h-full items-center justify-center">
+              <span className="loading loading-bars loading-md" />
+            </div>
+          )}
 
           {!loading && activeTab !== StatsTab.TOURNAMENTS && (
             <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]">
-              <article className="relative border border-base-content/10">
+              <article className="border-base-content/10 relative border">
                 {hasMapSelected ? (
-                  <img src={featuredMapImage} className="h-full min-h-[520px] w-full object-cover" />
+                  <img
+                    src={featuredMapImage}
+                    className="h-full min-h-[520px] w-full object-cover"
+                  />
                 ) : (
-                  <div className="h-full min-h-[520px] w-full bg-base-300/40" />
+                  <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-base-300/95 via-base-300/80 to-base-300/45 p-4">
+                <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
                   <div className="mb-4 flex items-center gap-3">
-                    <img src={(activeTab === StatsTab.TEAMMATES ? teammates.find((t) => String(t.id) === selectedTeammateId)?.avatar : state.profile?.player?.avatar) || 'resources://avatars/empty.png'} className="h-24 w-24 border border-base-content/20 object-cover" />
+                    <img
+                      src={
+                        (activeTab === StatsTab.TEAMMATES
+                          ? teammates.find((t) => String(t.id) === selectedTeammateId)?.avatar
+                          : state.profile?.player?.avatar) || 'resources://avatars/empty.png'
+                      }
+                      className="border-base-content/20 h-24 w-24 border object-cover"
+                    />
                     <div>
-                      <p className="text-2xl font-bold">{activeTab === StatsTab.TEAMMATES ? teammates.find((t) => String(t.id) === selectedTeammateId)?.name || 'Teammate' : state.profile?.player?.name || 'Player'}</p>
-                      <p className="text-xs text-base-content/70">{headerTeamLabel}</p>
-                      <p className="text-xs text-primary">{hasMapSelected ? featuredMapLabel || featuredMapSlug : 'All maps'}</p>
+                      <p className="text-2xl font-bold">
+                        {activeTab === StatsTab.TEAMMATES
+                          ? teammates.find((t) => String(t.id) === selectedTeammateId)?.name ||
+                            'Teammate'
+                          : state.profile?.player?.name || 'Player'}
+                      </p>
+                      <p className="text-base-content/70 text-xs">{headerTeamLabel}</p>
+                      <p className="text-primary text-xs">
+                        {hasMapSelected ? featuredMapLabel || featuredMapSlug : 'All maps'}
+                      </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">Rating</p><p className="text-3xl font-black">{summary.avgRating.toFixed(2)}</p></article>
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">Avg Kills</p><p className="text-3xl font-black">{summary.avgKills}</p></article>
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">Kills</p><p className="text-3xl font-black">{summary.kills}</p></article>
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">Deaths</p><p className="text-3xl font-black">{summary.deaths}</p></article>
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">K/D</p><p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p></article>
-                    <article className="bg-base-200/55 p-4"><p className="text-xs uppercase opacity-70">Maps Played</p><p className="text-3xl font-black">{summary.mapsPlayed}</p></article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">Rating</p>
+                      <p className="text-3xl font-black">{summary.avgRating.toFixed(2)}</p>
+                    </article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">Avg Kills</p>
+                      <p className="text-3xl font-black">{summary.avgKills}</p>
+                    </article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">Kills</p>
+                      <p className="text-3xl font-black">{summary.kills}</p>
+                    </article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">Deaths</p>
+                      <p className="text-3xl font-black">{summary.deaths}</p>
+                    </article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">K/D</p>
+                      <p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p>
+                    </article>
+                    <article className="bg-base-200/55 p-4">
+                      <p className="text-xs uppercase opacity-70">Maps Played</p>
+                      <p className="text-3xl font-black">{summary.mapsPlayed}</p>
+                    </article>
                   </div>
                 </div>
               </article>
@@ -880,30 +1062,69 @@ export default function LeagueStatsConcept(): JSX.Element {
           )}
 
           {!loading && activeTab === StatsTab.TOURNAMENTS && (
-            <article className="border border-base-content/10">
-              <header className="border-b border-base-content/10 px-4 py-3 text-sm font-semibold">Participated tournaments</header>
+            <article className="border-base-content/10 border">
+              <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
+                Participated tournaments
+              </header>
               <div className="overflow-x-auto">
-                <table className="table table-zebra table-sm">
+                <table className="table-zebra table-sm table">
                   <thead>
-                    <tr><th>Team</th><th>Tournament</th><th>Placement</th><th className="text-center">+ / -</th><th>Rating</th><th>Maps</th></tr>
+                    <tr>
+                      <th>Team</th>
+                      <th>Tournament</th>
+                      <th>Placement</th>
+                      <th className="text-center">+ / -</th>
+                      <th>Rating</th>
+                      <th>Maps</th>
+                    </tr>
                   </thead>
                   <tbody>
-                    {tournamentRows.slice((tournamentPage - 1) * 15, tournamentPage * 15).map((row, idx) => (
-                      <tr key={row.label + idx}>
-                        <td><img src={row.teamBlazon} className="h-8 w-8 object-contain" /></td>
-                        <td><Link to={row.href} className="link link-hover">{row.label}</Link></td>
-                        <td>{row.placement}</td>
-                        <td className={row.plusMinus > 0 ? 'text-success font-semibold text-center' : row.plusMinus < 0 ? 'text-error font-semibold text-center' : 'text-inherit font-semibold text-center'}>{new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(row.plusMinus)}</td>
-                        <td className={`font-semibold ${Number(row.rating) > 1 ? 'text-success' : Number(row.rating) < 1 ? 'text-error' : 'text-inherit'}`}>{row.rating}</td>
-                        <td>{row.mapsPlayed}</td>
+                    {tournamentRows
+                      .slice((tournamentPage - 1) * 15, tournamentPage * 15)
+                      .map((row, idx) => (
+                        <tr key={row.label + idx}>
+                          <td>
+                            <img src={row.teamBlazon} className="h-8 w-8 object-contain" />
+                          </td>
+                          <td>
+                            <Link to={row.href} className="link link-hover">
+                              {row.label}
+                            </Link>
+                          </td>
+                          <td>{row.placement}</td>
+                          <td
+                            className={
+                              row.plusMinus > 0
+                                ? 'text-success text-center font-semibold'
+                                : row.plusMinus < 0
+                                  ? 'text-error text-center font-semibold'
+                                  : 'text-center font-semibold text-inherit'
+                            }
+                          >
+                            {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(
+                              row.plusMinus,
+                            )}
+                          </td>
+                          <td
+                            className={`font-semibold ${Number(row.rating) > 1 ? 'text-success' : Number(row.rating) < 1 ? 'text-error' : 'text-inherit'}`}
+                          >
+                            {row.rating}
+                          </td>
+                          <td>{row.mapsPlayed}</td>
+                        </tr>
+                      ))}
+                    {!tournamentRows.length && (
+                      <tr>
+                        <td colSpan={6} className="text-base-content/60 py-8 text-center text-sm">
+                          No tournament records for selected filters.
+                        </td>
                       </tr>
-                    ))}
-                    {!tournamentRows.length && <tr><td colSpan={6} className="py-8 text-center text-sm text-base-content/60">No tournament records for selected filters.</td></tr>}
+                    )}
                   </tbody>
                 </table>
               </div>
               {tournamentRows.length > 0 && (
-                <footer className="flex items-center justify-end gap-2 border-t border-base-content/10 px-3 py-2">
+                <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
                   <button
                     className="btn btn-ghost btn-xs rounded-none"
                     disabled={tournamentPage <= 1}
