@@ -3873,6 +3873,121 @@ function matchesTeamCountryPreference(
   return candidate.countryId === team.countryId;
 }
 
+function isInternationalTeamCountry(team: {
+  countryId: number;
+  country?: { code?: string | null; continent?: { code?: string | null } | null } | null;
+}) {
+  const teamRegionCode = getTeamRegionCode(team);
+  return Boolean(teamRegionCode && MIXED_REGION_COUNTRY_CODES.has(teamRegionCode));
+}
+
+function getTeamNationalityCohesion(team: {
+  countryId: number;
+  players?: Array<{
+    starter?: boolean | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null } | null } | null;
+  }> | null;
+  country?: { code?: string | null; continent?: { code?: string | null } | null } | null;
+}) {
+  const players = (team.players || []).filter((player) => player.starter !== false);
+  if (!players.length) return 0;
+
+  const preferredCount = players.filter((player) => matchesTeamCountryPreference(team, player))
+    .length;
+  return preferredCount / players.length;
+}
+
+function getAgeReplacementBonus(incoming: { age?: number | null }, victim: { age?: number | null }) {
+  const incomingAge = incoming.age ?? 24;
+  const victimAge = victim.age ?? 24;
+
+  if (incomingAge <= 23 && victimAge >= 30) return 10;
+  if (incomingAge <= 25 && victimAge >= 32) return 8;
+  if (incomingAge <= 27 && victimAge >= 35) return 6;
+  return 0;
+}
+
+function getVeteranOfferPenalty(player: { age?: number | null; xp?: number | null }) {
+  const age = player.age ?? 24;
+  if (age < 35) return 0;
+
+  const xp = player.xp ?? 0;
+  const eliteMitigation = Math.max(0, xp - 80);
+  return Math.max(10, 35 - eliteMitigation);
+}
+
+function getNationalReplacementXpTolerance(team: {
+  countryId: number;
+  players?: Array<{
+    starter?: boolean | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null } | null } | null;
+  }> | null;
+  country?: { code?: string | null; continent?: { code?: string | null } | null } | null;
+}) {
+  if (isInternationalTeamCountry(team)) return 0;
+
+  const cohesion = getTeamNationalityCohesion(team);
+  if (cohesion >= 0.95) return 22;
+  if (cohesion >= 0.8) return 18;
+  if (cohesion >= 0.6) return 14;
+  return 10;
+}
+
+function getNPCFreeAgentSignChance(team: { tier?: number | null }) {
+  const baseChance = Constants.TransferSettings.PBX_NPC_FREE_AGENT_SIGN;
+  const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
+  const proTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_PRO);
+  const teamTier = team.tier ?? 0;
+
+  if (teamTier >= proTierIdx) return Math.max(3, baseChance - 5);
+  if (teamTier >= advancedTierIdx) return Math.max(4, baseChance - 3);
+  return baseChance;
+}
+
+function canReplaceStarterWithPlayer(params: {
+  team: {
+    countryId: number;
+    players?: Array<{
+      starter?: boolean | null;
+      countryId?: number | null;
+      country?: { continent?: { code?: string | null } | null } | null;
+    }> | null;
+    country?: { code?: string | null; continent?: { code?: string | null } | null } | null;
+  };
+  incoming: {
+    xp?: number | null;
+    age?: number | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null } | null } | null;
+  };
+  victim: {
+    xp?: number | null;
+    age?: number | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null } | null } | null;
+  };
+}) {
+  const { team, incoming, victim } = params;
+  const incomingXp = incoming.xp ?? 0;
+  const victimXp = victim.xp ?? 0;
+
+  if (incomingXp > victimXp) return true;
+
+  const incomingMatchesCountry = matchesTeamCountryPreference(team, incoming);
+  const victimMatchesCountry = matchesTeamCountryPreference(team, victim);
+  if (
+    incomingMatchesCountry &&
+    !victimMatchesCountry &&
+    incomingXp >= victimXp - getNationalReplacementXpTolerance(team)
+  ) {
+    return true;
+  }
+
+  return incomingXp + getAgeReplacementBonus(incoming, victim) > victimXp;
+}
+
 function selectNPCFreeAgentCandidatesByCountryPreference<
   T extends {
     id: number;
@@ -3897,9 +4012,14 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
   const sameCountryCandidates = candidates.filter((candidate) =>
     matchesTeamCountryPreference(team, candidate),
   );
+  const cohesion = getTeamNationalityCohesion(team as any);
+  const sameCountryChance = Math.min(
+    100,
+    Math.round(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_COUNTRY + cohesion * 18),
+  );
   if (
     sameCountryCandidates.length &&
-    Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_COUNTRY)
+    Chance.rollD2(sameCountryChance)
   ) {
     return sameCountryCandidates;
   }
@@ -3957,9 +4077,7 @@ function selectNPCTargetCandidatesByCountryPreference<
 
   const teamRegionCode = getTeamRegionCode(team);
   const teamFederationId = team.competitionFederationId ?? null;
-  const isInternationalTeam = Boolean(
-    teamRegionCode && MIXED_REGION_COUNTRY_CODES.has(teamRegionCode),
-  );
+  const isInternationalTeam = isInternationalTeamCountry(team);
 
   const sameCountryCandidates = candidates.filter(
     (candidate) => candidate.countryId === team.countryId,
@@ -3997,9 +4115,18 @@ function selectNPCTargetCandidatesByCountryPreference<
     otherCountry: otherCountryCandidates,
   } as const;
 
+  const cohesion = getTeamNationalityCohesion(team as any);
+  const sameCountryCutoff = isInternationalTeam ? 30 : Math.min(96, Math.round(70 + cohesion * 25));
+  const internationalCutoff = isInternationalTeam
+    ? 98
+    : Math.min(99, sameCountryCutoff + Math.max(2, Math.round(20 - cohesion * 16)));
   const roll = random(1, 100);
   const pickedBucket =
-    roll <= 65 ? 'sameCountry' : roll <= 99 ? 'federationInternational' : 'otherCountry';
+    roll <= sameCountryCutoff
+      ? 'sameCountry'
+      : roll <= internationalCutoff
+        ? 'federationInternational'
+        : 'otherCountry';
 
   if (weightedBuckets[pickedBucket].length) {
     return weightedBuckets[pickedBucket];
@@ -4667,15 +4794,37 @@ async function isUserBenchWorthyForReplacement(params: {
 }
 
 async function selectBenchVictim(params: {
-  teamPlayers: Array<{ id: number; role?: string | null; starter?: boolean; xp?: number | null }>;
+  teamPlayers: Array<{
+    id: number;
+    role?: string | null;
+    starter?: boolean;
+    xp?: number | null;
+    age?: number | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null } | null } | null;
+  }>;
   teamId: number;
   profile?: any;
   now?: Date;
   incomingPlayerId: number;
   incomingRole: string;
   incomingXp: number;
+  incomingAge?: number | null;
+  incomingCountryId?: number | null;
+  incomingCountry?: { continent?: { code?: string | null } | null } | null;
 }) {
-  const { teamPlayers, teamId, profile, now, incomingPlayerId, incomingRole, incomingXp } = params;
+  const {
+    teamPlayers,
+    teamId,
+    profile,
+    now,
+    incomingPlayerId,
+    incomingRole,
+    incomingXp,
+    incomingAge,
+    incomingCountryId,
+    incomingCountry,
+  } = params;
 
   const userId = profile?.playerId;
   const userTeamId = profile?.teamId;
@@ -4733,9 +4882,44 @@ async function selectBenchVictim(params: {
     candidates = teamPlayers.filter((p) => p.starter && p.id !== incomingPlayerId);
   }
 
+  const team = await DatabaseClient.prisma.team.findFirst({
+    where: { id: teamId },
+    include: { country: { include: { continent: true } } },
+  });
+  if (!team) return null;
+
+  const incoming = {
+    xp: incomingXp,
+    age: incomingAge,
+    countryId: incomingCountryId,
+    country: incomingCountry,
+  };
+
   const lowerXp = candidates
-    .filter((p) => (p.xp ?? 0) < incomingXp)
-    .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0));
+    .filter((victim) =>
+      canReplaceStarterWithPlayer({
+        team,
+        incoming,
+        victim,
+      }),
+    )
+    .sort((a, b) => {
+      const aNationalUpgrade =
+        matchesTeamCountryPreference(team, incoming) && !matchesTeamCountryPreference(team, a)
+          ? 1
+          : 0;
+      const bNationalUpgrade =
+        matchesTeamCountryPreference(team, incoming) && !matchesTeamCountryPreference(team, b)
+          ? 1
+          : 0;
+      if (aNationalUpgrade !== bNationalUpgrade) return bNationalUpgrade - aNationalUpgrade;
+
+      const aAgeBonus = getAgeReplacementBonus(incoming, a);
+      const bAgeBonus = getAgeReplacementBonus(incoming, b);
+      if (aAgeBonus !== bAgeBonus) return bAgeBonus - aAgeBonus;
+
+      return (a.xp ?? 0) - (b.xp ?? 0);
+    });
 
   return lowerXp[0] ?? null;
 }
@@ -5194,7 +5378,7 @@ async function processNPCContractExtensions() {
       contractEnd: { lte: now },
       userControlled: false,
     },
-    include: { team: true },
+    include: { country: { include: { continent: true } }, team: true },
     take: 40,
   });
 
@@ -5236,6 +5420,12 @@ async function processNPCContractExtensions() {
       },
     });
 
+    await tryPlaceEliteNPCFreeAgent({
+      player,
+      date: now,
+      previousTeamId: player.teamId,
+    });
+
     if (player.starter) {
       await ensureNPCStarterFloorAndAwper(player.teamId, player.role);
     }
@@ -5255,7 +5445,7 @@ async function processNPCContractExtensions() {
       userControlled: false,
     },
     include: {
-      team: true,
+      team: { include: { country: { include: { continent: true } } } },
     },
     take: 20,
   });
@@ -5264,6 +5454,19 @@ async function processNPCContractExtensions() {
 
   for (const player of shuffle(expiring).slice(0, 5)) {
     if (!player.teamId || !player.team || player.transferListed || !player.starter) continue;
+
+    const isNationalTeam = !isInternationalTeamCountry(player.team as any);
+    const betterNationalTeams = isNationalTeam
+      ? await DatabaseClient.prisma.team.count({
+          where: {
+            id: { not: player.team.id },
+            countryId: player.team.countryId,
+            elo: { gt: player.team.elo || 0 },
+            tier: { gte: player.team.tier ?? 0 },
+          },
+        })
+      : 0;
+    const hasBetterNationalPath = betterNationalTeams > 0;
 
     const tierTeams = await DatabaseClient.prisma.team.findMany({
       where: { tier: player.team.tier, profile: null },
@@ -5277,6 +5480,7 @@ async function processNPCContractExtensions() {
     let teamOfferPbx = (player.team.elo || 0) >= avgElo ? 82 : 30;
     const daysLeft = differenceInDays(player.contractEnd!, now);
     if (daysLeft <= 14) teamOfferPbx += 10;
+    if (isNationalTeam && !hasBetterNationalPath) teamOfferPbx += 18;
 
     if (!Chance.rollD2(Math.max(5, Math.min(95, Math.round(teamOfferPbx))))) {
       continue;
@@ -5286,6 +5490,9 @@ async function processNPCContractExtensions() {
     let playerAcceptPbx = 65;
     if (typeof peakTier === 'number' && peakTier < player.team.tier) {
       playerAcceptPbx -= 20;
+    }
+    if (isNationalTeam && !hasBetterNationalPath) {
+      playerAcceptPbx += 20;
     }
 
     if (!Chance.rollD2(Math.max(5, Math.min(95, Math.round(playerAcceptPbx))))) {
@@ -5315,7 +5522,7 @@ async function trySignNPCFreeAgent(params: {
 
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
 
-  if (!Chance.rollD2(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SIGN)) {
+  if (!Chance.rollD2(getNPCFreeAgentSignChance(from))) {
     return Promise.resolve(false);
   }
 
@@ -5339,16 +5546,29 @@ async function trySignNPCFreeAgent(params: {
     return Promise.resolve(false);
   }
 
+  const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
   const roleCandidates = freeAgents.filter((player) => {
+    if ((player.xp || 0) >= 80 && (from.tier ?? 0) < advancedTierIdx) {
+      return false;
+    }
+
     const role = normalizeRole(player.role);
-    const sameRole = (from.players || []).filter((p) => normalizeRole(p.role) === role);
+    const sameRole = (from.players || []).filter((p) => p.starter && normalizeRole(p.role) === role);
 
     if (role === 'RIFLER' && !sameRole.length) {
       return false;
     }
 
-    const weakestRoleXp = Math.min(...sameRole.map((p) => p.xp || 0), Number.MAX_SAFE_INTEGER);
-    return (player.xp || 0) > weakestRoleXp || sameRole.length === 0;
+    return (
+      sameRole.length === 0 ||
+      sameRole.some((victim) =>
+        canReplaceStarterWithPlayer({
+          team: from,
+          incoming: player,
+          victim,
+        }),
+      )
+    );
   });
 
   if (!roleCandidates.length) {
@@ -5361,7 +5581,19 @@ async function trySignNPCFreeAgent(params: {
     return Promise.resolve(false);
   }
 
-  const target = sample(candidates);
+  const sortedCandidates = [...candidates].sort((a, b) => {
+    const cohesion = getTeamNationalityCohesion(from);
+    const aScore =
+      (a.xp || 0) +
+      (matchesTeamCountryPreference(from, a) ? 45 + Math.round(cohesion * 70) : -Math.round(cohesion * 45)) -
+      getVeteranOfferPenalty(a);
+    const bScore =
+      (b.xp || 0) +
+      (matchesTeamCountryPreference(from, b) ? 45 + Math.round(cohesion * 70) : -Math.round(cohesion * 45)) -
+      getVeteranOfferPenalty(b);
+    return bScore - aScore;
+  });
+  const target = sample(sortedCandidates.slice(0, Math.max(1, Math.min(12, sortedCandidates.length))));
   if (!target) return Promise.resolve(false);
 
   const victim = await selectBenchVictim({
@@ -5372,6 +5604,9 @@ async function trySignNPCFreeAgent(params: {
     incomingPlayerId: target.id,
     incomingRole: normalizeRole(target.role),
     incomingXp: target.xp || 0,
+    incomingAge: target.age,
+    incomingCountryId: target.countryId,
+    incomingCountry: target.country,
   });
 
   if (!victim) {
@@ -5444,6 +5679,160 @@ async function trySignNPCFreeAgent(params: {
   return Promise.resolve(true);
 }
 
+async function tryPlaceEliteNPCFreeAgent(params: {
+  player: {
+    id: number;
+    name: string;
+    xp?: number | null;
+    age?: number | null;
+    role?: string | null;
+    wages?: number | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null; federationId?: number | null } | null } | null;
+  };
+  date: Date;
+  previousTeamId?: number | null;
+}) {
+  const { player, date, previousTeamId } = params;
+
+  if ((player.xp || 0) < 80) return Promise.resolve(false);
+
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
+
+  const topTeams = await DatabaseClient.prisma.team.findMany({
+    where: {
+      id: previousTeamId ? { not: previousTeamId } : undefined,
+      tier: { gte: advancedTierIdx },
+      OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
+    },
+    orderBy: { elo: 'desc' },
+    take: 20,
+    include: Eagers.team.include,
+  });
+
+  if (!topTeams.length) return Promise.resolve(false);
+
+  const scoredTeams: Array<{ team: Prisma.TeamGetPayload<typeof Eagers.team>; score: number }> = [];
+  for (const team of topTeams) {
+    const victim = await selectBenchVictim({
+      teamPlayers: team.players as any,
+      teamId: team.id,
+      profile,
+      now: date,
+      incomingPlayerId: player.id,
+      incomingRole: normalizeRole(player.role),
+      incomingXp: player.xp || 0,
+      incomingAge: player.age,
+      incomingCountryId: player.countryId,
+    });
+
+    if (!victim) continue;
+
+    const sameCountry = matchesTeamCountryPreference(team, player);
+    const internationalTeam = isInternationalTeamCountry(team);
+    let score = (team.elo || 0) / 10;
+
+    if (sameCountry) {
+      score += 120 + Math.round(getTeamNationalityCohesion(team) * 80);
+    } else if (internationalTeam) {
+      score += 45;
+    } else {
+      score -= 45 + Math.round(getTeamNationalityCohesion(team) * 70);
+    }
+
+    score -= getVeteranOfferPenalty(player);
+    scoredTeams.push({ team, score });
+  }
+
+  scoredTeams.sort((a, b) => b.score - a.score);
+  const topSlice = scoredTeams.slice(0, Math.max(1, Math.min(5, scoredTeams.length)));
+  const targetTeam = sample(topSlice.map((entry) => entry.team));
+  if (!targetTeam) return Promise.resolve(false);
+
+  const victim = await selectBenchVictim({
+    teamPlayers: targetTeam.players as any,
+    teamId: targetTeam.id,
+    profile,
+    now: date,
+    incomingPlayerId: player.id,
+    incomingRole: normalizeRole(player.role),
+    incomingXp: player.xp || 0,
+    incomingAge: player.age,
+    incomingCountryId: player.countryId,
+    incomingCountry: player.country,
+  });
+
+  if (!victim) return Promise.resolve(false);
+
+  await DatabaseClient.prisma.player.update({
+    where: { id: victim.id },
+    data: { starter: false, transferListed: true, lastOfferAt: date },
+  });
+  await closeOpenCareerStints(DatabaseClient.prisma, victim.id, date);
+  await startCareerStint(DatabaseClient.prisma, {
+    playerId: victim.id,
+    teamId: targetTeam.id,
+    tier: targetTeam.tier,
+    starter: false,
+    startedAt: date,
+  });
+
+  const years = getTierContractYears(targetTeam.tier);
+  const contractEnd = addYears(date, years);
+
+  await DatabaseClient.prisma.player.update({
+    where: { id: player.id },
+    data: {
+      teamId: targetTeam.id,
+      starter: true,
+      transferListed: false,
+      contractEnd,
+      lastOfferAt: null,
+    },
+  });
+
+  await DatabaseClient.prisma.transfer.create({
+    data: {
+      status: Constants.TransferStatus.TEAM_ACCEPTED,
+      from: { connect: { id: targetTeam.id } },
+      to: { connect: { id: targetTeam.id } },
+      target: { connect: { id: player.id } },
+      offers: {
+        create: [
+          {
+            status: Constants.TransferStatus.TEAM_ACCEPTED,
+            cost: 0,
+            wages: player.wages || 0,
+            contractYears: years,
+          },
+        ],
+      },
+    },
+  });
+
+  await closeOpenCareerStints(DatabaseClient.prisma, player.id, date);
+  await startCareerStint(DatabaseClient.prisma, {
+    playerId: player.id,
+    teamId: targetTeam.id,
+    tier: targetTeam.tier,
+    starter: true,
+    startedAt: date,
+  });
+
+  await recalculateTeamCountryIdentity(targetTeam.id);
+
+  Engine.Runtime.Instance.log.info(
+    'Elite free agent placed: %s -> %s (xp=%d, years=%d)',
+    player.name,
+    targetTeam.name,
+    player.xp || 0,
+    years,
+  );
+
+  return Promise.resolve(true);
+}
+
 export async function sendNPCTransferOffer() {
   await processNPCContractExtensions();
 
@@ -5494,11 +5883,20 @@ export async function sendNPCTransferOffer() {
       const topXp = Math.max(...(team.players || []).map((p) => p.xp || 0), 0);
       let score = 0;
 
-      if (matchesTeamCountryPreference(from, team)) score += 40;
+      if (matchesTeamCountryPreference(from, team)) {
+        score += 50 + Math.round(getTeamNationalityCohesion(from) * 35);
+      }
+
+      if (team.tier === from.tier) {
+        score += from.tier >= Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED)
+          ? 35
+          : 15;
+      }
 
       // lower-division same-country high-XP talent bias
       if (team.tier < from.tier) {
-        score += 20;
+        const tierGap = (from.tier || 0) - (team.tier || 0);
+        score += tierGap === 1 ? 34 : 12;
         score += Math.round(topXp / 500);
       }
 
@@ -5561,11 +5959,16 @@ export async function sendTransferOffer(
         return false;
       }
 
-      const weakestRoleXp = Math.min(
-        ...sameRoleFrom.map((p) => p.xp || 0),
-        Number.MAX_SAFE_INTEGER,
+      return (
+        sameRoleFrom.length === 0 ||
+        sameRoleFrom.some((victim) =>
+          canReplaceStarterWithPlayer({
+            team: from,
+            incoming: player,
+            victim,
+          }),
+        )
       );
-      return (player.xp || 0) > weakestRoleXp || sameRoleFrom.length === 0;
     });
 
   const candidates: typeof preCandidates = [];
@@ -5580,6 +5983,8 @@ export async function sendTransferOffer(
       incomingPlayerId: player.id,
       incomingRole: role,
       incomingXp: player.xp || 0,
+      incomingAge: player.age,
+      incomingCountryId: player.countryId,
     });
 
     if (!victim) {
@@ -5614,13 +6019,19 @@ export async function sendTransferOffer(
       }
 
       if (matchesTeamCountryPreference(from, player)) {
-        score += Constants.TransferSettings.PBX_NPC_SAME_COUNTRY_BOOST;
+        score +=
+          Constants.TransferSettings.PBX_NPC_SAME_COUNTRY_BOOST +
+          Math.round(getTeamNationalityCohesion(from) * 60);
 
         // allow picking strong same-country players from lower divisions
         if (to.tier < from.tier && (player.xp || 0) >= 70) {
           score += 30;
         }
+      } else if (!isInternationalTeamCountry(from)) {
+        score -= Math.round(30 + getTeamNationalityCohesion(from) * 55);
       }
+
+      score -= getVeteranOfferPenalty(player);
 
       if ((to.elo || 0) > (from.elo || 0)) {
         score -= Constants.TransferSettings.PBX_NPC_SELLING_TEAM_PERFORMANCE_DAMPENER;
@@ -5812,6 +6223,8 @@ export async function onTransferParse(entry: Calendar) {
     incomingPlayerId: transfer.target.id,
     incomingRole: role,
     incomingXp: transfer.target.xp || 0,
+    incomingAge: transfer.target.age,
+    incomingCountryId: transfer.target.countryId,
   });
 
   // strict rule: incoming non-snipers must bench one lower-XP player at destination
