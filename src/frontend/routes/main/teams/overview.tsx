@@ -373,6 +373,7 @@ export default function () {
                     match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE
                       ? tierLabel
                       : tierLabel;
+                  const competitionLink = `/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`;
 
                   return (
                     <tr
@@ -411,7 +412,13 @@ export default function () {
                         {!opponent?.team && <span>BYE</span>}
                       </td>
                       <td className="w-3/12 truncate" title={competitionLabel}>
-                        {competitionLabel}
+                        <Link
+                          to={competitionLink}
+                          className="link-hover"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {competitionLabel}
+                        </Link>
                       </td>
                     </tr>
                   );

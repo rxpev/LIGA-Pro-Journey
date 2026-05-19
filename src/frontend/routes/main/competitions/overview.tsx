@@ -266,7 +266,9 @@ export default function () {
                           src={winners[0].team.blazon}
                           className="size-4"
                         />
-                        <span>{winners[0].team.name}</span>
+                        <Link to={`/teams?teamId=${winners[0].team.id}`} className="link-hover">
+                          {winners[0].team.name}
+                        </Link>
                       </span>
                     </td>
                     <td>
