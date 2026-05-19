@@ -981,6 +981,11 @@ function normalizeRole(r: unknown): string {
   return String(r ?? '').toUpperCase();
 }
 
+function isSniperRole(r: unknown): boolean {
+  const role = normalizeRole(r);
+  return role === 'SNIPER' || role === 'AWPER';
+}
+
 function resolveUserRole(profile: any, player: any): UserRole {
   const role = player?.role ?? profile?.player?.role ?? profile?.role;
 
@@ -4598,10 +4603,10 @@ function getTierContractYears(tierIdx: number | null | undefined) {
 }
 
 function countStarterSnipers(players: Array<{ starter?: boolean; role?: string | null }>) {
-  return players.filter((p) => p.starter && normalizeRole(p.role) === 'SNIPER').length;
+  return players.filter((p) => p.starter && isSniperRole(p.role)).length;
 }
 function countSnipers(players: Array<{ role?: string | null }>) {
-  return players.filter((p) => normalizeRole(p.role) === 'SNIPER').length;
+  return players.filter((p) => isSniperRole(p.role)).length;
 }
 
 function ensureTeamFloorAndSniper(params: {
@@ -4680,13 +4685,13 @@ async function selectBenchVictim(params: {
   const userRole = normalizeRole(userPlayer?.role);
 
   // Hard rule for snipers: bench a starter sniper so teams don't field two starter snipers.
-  if (incomingRole === 'SNIPER') {
-    if (isUserStarter && userRole === 'SNIPER') {
+  if (isSniperRole(incomingRole)) {
+    if (isUserStarter && isSniperRole(userRole)) {
       return userPlayer;
     }
 
     const starterSnipers = teamPlayers
-      .filter((p) => p.starter && p.id !== incomingPlayerId && normalizeRole(p.role) === 'SNIPER')
+      .filter((p) => p.starter && p.id !== incomingPlayerId && isSniperRole(p.role))
       .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0));
 
     return starterSnipers[0] ?? null;
@@ -4818,7 +4823,7 @@ async function enforceStarterLimit(params: { teamId: number; date: Date; maxStar
   const starters = [...(team.players || [])];
   if (starters.length <= maxStarters) return;
 
-  const starterSnipers = starters.filter((p) => normalizeRole(p.role) === 'SNIPER').length;
+  const starterSnipers = starters.filter((p) => isSniperRole(p.role)).length;
   let removableSnipers = Math.max(0, starterSnipers - 1);
 
   const benchCount = starters.length - maxStarters;
@@ -4829,7 +4834,7 @@ async function enforceStarterLimit(params: { teamId: number; date: Date; maxStar
     if (!candidates.length) break;
 
     const keepOneStarterSniper = candidates.filter((player) => {
-      if (normalizeRole(player.role) !== 'SNIPER') return true;
+      if (!isSniperRole(player.role)) return true;
       return removableSnipers > 0;
     });
 
@@ -4849,7 +4854,7 @@ async function enforceStarterLimit(params: { teamId: number; date: Date; maxStar
 
     if (!victim) break;
 
-    if (normalizeRole(victim.role) === 'SNIPER' && removableSnipers > 0) {
+    if (isSniperRole(victim.role) && removableSnipers > 0) {
       removableSnipers -= 1;
     }
 
@@ -5006,14 +5011,24 @@ async function processNPCContractExtensions() {
     const needsAwper = () => countStarterSnipers(team.players as any) < 1;
 
     while (needsStarter() || needsAwper()) {
-      const desiredRole = needsAwper() ? 'SNIPER' : normalizeRole(preferredRole || '');
+      const fillingAwperSlot = needsAwper();
+      const preferredFillRole = normalizeRole(preferredRole || '');
+      const desiredRole =
+        fillingAwperSlot ? 'SNIPER' : !isSniperRole(preferredFillRole) ? preferredFillRole : '';
+      const canFillWithRole = (role: string | null | undefined) => {
+        if (desiredRole) return normalizeRole(role) === desiredRole;
+        return fillingAwperSlot || !isSniperRole(role);
+      };
 
       const promote =
         team.players
           .filter((p) => !p.starter)
-          .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole)
+          .filter((p) => canFillWithRole(p.role))
           .sort((a, b) => (b.xp || 0) - (a.xp || 0))[0] ||
-        team.players.filter((p) => !p.starter).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
+        team.players
+          .filter((p) => !p.starter)
+          .filter((p) => fillingAwperSlot || !isSniperRole(p.role))
+          .sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
 
       if (promote) {
         await prisma.player.update({
@@ -5042,7 +5057,7 @@ async function processNPCContractExtensions() {
 
       const freeAgentCandidates = freeAgents
         .filter((p) => !blockedRejoin.has(p.id))
-        .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole);
+        .filter((p) => canFillWithRole(p.role));
 
       const freeAgent = selectNPCFreeAgentCandidatesByCountryPreference(
         team,
@@ -5064,7 +5079,7 @@ async function processNPCContractExtensions() {
           },
         });
 
-        if (incomingRole === 'SNIPER') {
+        if (isSniperRole(incomingRole)) {
           await enforceSingleStarterSniper({
             teamId: team.id,
             keepStarterPlayerId: freeAgent.id,
@@ -5076,7 +5091,7 @@ async function processNPCContractExtensions() {
               return { ...p, starter: true, transferListed: false, lastOfferAt: null };
             }
 
-            if (p.starter && normalizeRole(p.role) === 'SNIPER') {
+            if (p.starter && isSniperRole(p.role)) {
               return { ...p, starter: false, transferListed: true, lastOfferAt: now };
             }
 
@@ -5133,7 +5148,7 @@ async function processNPCContractExtensions() {
       const teamRegionCode = getTeamRegionCode(team);
 
       const donor = benched
-        .filter((p) => !desiredRole || normalizeRole(p.role) === desiredRole)
+        .filter((p) => canFillWithRole(p.role))
         .filter(
           (p) =>
             matchesTeamCountryPreference(team, p) ||
