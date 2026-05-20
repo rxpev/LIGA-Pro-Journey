@@ -6,6 +6,7 @@ import Scoreboard from "./scoreboard";
 import { levelFromElo } from "@liga/backend/lib/levels";
 import { Constants, Util } from "@liga/shared";
 import { AppStateContext } from "@liga/frontend/redux";
+import awperIcon from "../../../assets/awper.png";
 import {
   faceitMatchCompleted,
   faceitRoomSet,
@@ -94,6 +95,12 @@ function resolvePlayerLevel(player: Pick<MatchPlayer, "level" | "elo">): number 
 
   const fallback = levelFromElo(player.elo);
   return Math.max(1, Math.min(10, fallback));
+}
+
+function isAwperRole(role?: string | null): boolean {
+  if (!role) return false;
+  const normalized = String(role).toUpperCase();
+  return normalized === "AWPER" || normalized === "SNIPER";
 }
 
 function pickCaptain(team: MatchPlayer[], seed: string): MatchPlayer | undefined {
@@ -677,7 +684,7 @@ export default function MatchRoom({
                     return (
                       <div
                         key={p.id}
-                        className="bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
+                        className="group bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
                       >
                         {isQueued && (
                           <>
@@ -696,11 +703,17 @@ export default function MatchRoom({
 
                         <div className="flex items-center gap-2">
                           <span className={`fp ${countryMap.get(p.countryId)}`} />
-                          <span>
+                          <span className="relative">
                             {p.name}
                             {p.id === captainA?.id && (
                               <span className="ml-1 text-xs text-blue-400">
                                 [C]
+                              </span>
+                            )}
+                            {isAwperRole(p.role) && (
+                              <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden h-6 min-w-[68px] -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm border border-[#ff7300]/70 bg-[#ff7300] px-2 text-[10px] leading-none font-bold tracking-normal text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] group-hover:inline-flex">
+                                <img src={awperIcon} className="h-3.5 w-3.5 object-contain" alt="" />
+                                AWPer
                               </span>
                             )}
                           </span>
@@ -940,15 +953,21 @@ export default function MatchRoom({
                     return (
                       <div
                         key={p.id}
-                        className="bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
+                        className="group bg-neutral-800 p-3 rounded flex justify-between items-center relative overflow-visible"
                       >
                         <div className="flex items-center gap-2">
                           <span className={`fp ${countryMap.get(p.countryId)}`} />
-                          <span>
+                          <span className="relative">
                             {p.name}
                             {p.id === captainB?.id && (
                               <span className="ml-1 text-xs text-blue-400">
                                 [C]
+                              </span>
+                            )}
+                            {isAwperRole(p.role) && (
+                              <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden h-6 min-w-[68px] -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm border border-[#ff7300]/70 bg-[#ff7300] px-2 text-[10px] leading-none font-bold tracking-normal text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] group-hover:inline-flex">
+                                <img src={awperIcon} className="h-3.5 w-3.5 object-contain" alt="" />
+                                AWPer
                               </span>
                             )}
                           </span>
