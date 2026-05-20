@@ -26,6 +26,21 @@ type MapVetoAction = {
   map: string;
 };
 
+type HistoricalMatch = {
+  games: Array<{
+    map: string;
+    teams: Array<{
+      teamId: number | null;
+      result: number | null;
+    }>;
+  }>;
+};
+
+type MapPerformance = {
+  played: number;
+  wins: number;
+};
+
 /** @type {Matches} */
 type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.all<T>>>;
 
@@ -34,6 +49,12 @@ const CPU_THINKING_TIME_MAX = 3000;
 
 /** @constant */
 const CPU_THINKING_TIME_MIN = 1000;
+
+/** @constant */
+const MAP_WINRATE_PRIOR_GAMES = 4;
+
+/** @constant */
+const MAP_RANDOMNESS = 0.35;
 
 /** @constants */
 const VETO_STYLES = {
@@ -48,6 +69,83 @@ const VETO_STYLES = {
     [Constants.MapVetoAction.PICK]: 'border-success shadow-success',
   },
 };
+
+function getMapPerformance(matches: Array<HistoricalMatch>, teamId?: number | null) {
+  const performances: Record<string, MapPerformance> = {};
+
+  if (!teamId) {
+    return performances;
+  }
+
+  matches.forEach((historicalMatch) => {
+    historicalMatch.games.forEach((historicalGame) => {
+      const teamResult = historicalGame.teams.find((team) => team.teamId === teamId);
+
+      if (!teamResult || teamResult.result == null) {
+        return;
+      }
+
+      const performance = performances[historicalGame.map] || { played: 0, wins: 0 };
+
+      performance.played += 1;
+      performance.wins +=
+        teamResult.result === Constants.MatchResult.WIN
+          ? 1
+          : teamResult.result === Constants.MatchResult.DRAW
+            ? 0.5
+            : 0;
+
+      performances[historicalGame.map] = performance;
+    });
+  });
+
+  return performances;
+}
+
+function getMapStrength(performance?: MapPerformance) {
+  const played = performance?.played || 0;
+  const wins = performance?.wins || 0;
+  const adjustedWinRate =
+    (wins + MAP_WINRATE_PRIOR_GAMES * 0.5) / (played + MAP_WINRATE_PRIOR_GAMES);
+  const confidence = 1 - Math.exp(-played / 4);
+
+  return adjustedWinRate * 0.78 + confidence * 0.22;
+}
+
+function getMapWeakness(performance?: MapPerformance) {
+  const played = performance?.played || 0;
+  const lowSampleBonus = Math.exp(-played / 3);
+
+  return (1 - getMapStrength(performance)) * 0.8 + lowSampleBonus * 0.2;
+}
+
+function weightedMapSample(
+  maps: Array<string>,
+  getWeight: (map: string) => number,
+  fallback?: string,
+) {
+  const weights = maps.map((map) => {
+    const weight = Math.max(0.01, getWeight(map));
+    return weight * (1 - MAP_RANDOMNESS + Math.random() * MAP_RANDOMNESS * 2);
+  });
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+
+  if (!maps.length || total <= 0) {
+    return fallback;
+  }
+
+  let cursor = Math.random() * total;
+
+  for (let i = 0; i < maps.length; i += 1) {
+    cursor -= weights[i];
+
+    if (cursor <= 0) {
+      return maps[i];
+    }
+  }
+
+  return maps[maps.length - 1];
+}
 
 /**
  * Exports this module.
@@ -66,6 +164,8 @@ export default function () {
   const [vetoHistory, setVetoHistory] = React.useState<Array<MapVetoAction>>([]);
   const [working, setWorking] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
+  const [historicalMatches, setHistoricalMatches] = React.useState<Array<HistoricalMatch>>([]);
+  const [historicalMatchesLoaded, setHistoricalMatchesLoaded] = React.useState(false);
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -109,6 +209,42 @@ export default function () {
     () => state.profile?.player?.role === Constants.UserRole.IGL,
     [state.profile],
   );
+  const mapPerformance = React.useMemo(
+    () => getMapPerformance(historicalMatches, state.profile?.teamId),
+    [historicalMatches, state.profile?.teamId],
+  );
+
+  React.useEffect(() => {
+    if (!state.profile?.teamId || !match) {
+      return;
+    }
+
+    setHistoricalMatchesLoaded(false);
+    api.matches
+      .all({
+        where: {
+          id: {
+            not: match.id,
+          },
+          matchType: 'LEAGUE',
+          status: Constants.MatchStatus.COMPLETED,
+          competitors: {
+            some: {
+              teamId: state.profile.teamId,
+            },
+          },
+        },
+        include: {
+          games: {
+            include: {
+              teams: true,
+            },
+          },
+        },
+      })
+      .then((matches) => setHistoricalMatches(matches as Array<HistoricalMatch>))
+      .finally(() => setHistoricalMatchesLoaded(true));
+  }, [match, state.profile?.teamId]);
 
   // load map veto info
   const vetoMapList = React.useMemo(
@@ -199,12 +335,58 @@ export default function () {
 
     return mapPool[0]?.gameMap.name || game?.map;
   }, [cpuPool, game?.map, mapPool, match?.games.length, vetoMapList]);
+  const selectAutomatedVetoMap = React.useCallback(
+    (teamIdx?: number | false, type?: Constants.MapVetoAction) => {
+      if (!match) {
+        return sample(cpuPool);
+      }
+
+      const isUserTeamTurn = teamIdx === userCompetitorIdx;
+      const getPerformance = (map: string) => mapPerformance[map];
+
+      if (isUserTeamTurn && type === Constants.MapVetoAction.PICK) {
+        return weightedMapSample(
+          cpuPool,
+          (map) => getMapStrength(getPerformance(map)),
+          sample(cpuPool),
+        );
+      }
+
+      if (isUserTeamTurn && type === Constants.MapVetoAction.BAN) {
+        return weightedMapSample(
+          cpuPool,
+          (map) => getMapWeakness(getPerformance(map)),
+          sample(cpuPool),
+        );
+      }
+
+      if (!isUserTeamTurn && type === Constants.MapVetoAction.BAN) {
+        return weightedMapSample(
+          cpuPool,
+          (map) => getMapStrength(getPerformance(map)),
+          sample(cpuPool),
+        );
+      }
+
+      if (!isUserTeamTurn && type === Constants.MapVetoAction.PICK) {
+        return weightedMapSample(
+          cpuPool,
+          (map) => getMapWeakness(getPerformance(map)),
+          sample(cpuPool),
+        );
+      }
+
+      return weightedMapSample(cpuPool, () => 1, sample(cpuPool));
+    },
+    [cpuPool, mapPerformance, match, userCompetitorIdx],
+  );
+
   React.useEffect(() => {
     const isCpuTurn = !!vetoSequenceStep && vetoSequenceStep.team === cpuIdx;
     const isUserAutomatedTurn =
       !!vetoSequenceStep && vetoSequenceStep.team === userCompetitorIdx && !isIgl;
 
-    if (!isCpuTurn && !isUserAutomatedTurn) {
+    if ((!isCpuTurn && !isUserAutomatedTurn) || !historicalMatchesLoaded) {
       return;
     }
 
@@ -212,18 +394,25 @@ export default function () {
 
     const timeout = setTimeout(
       () => {
-        onVetoSelection(sample(cpuPool));
+        onVetoSelection(selectAutomatedVetoMap(vetoSequenceStep.team, vetoSequenceStep.type));
         setWorking(false);
       },
       random(CPU_THINKING_TIME_MIN, CPU_THINKING_TIME_MAX),
     );
 
     return () => clearTimeout(timeout);
-  }, [cpuIdx, cpuPool, isIgl, userCompetitorIdx, vetoSequenceStep]);
+  }, [
+    cpuIdx,
+    historicalMatchesLoaded,
+    isIgl,
+    selectAutomatedVetoMap,
+    userCompetitorIdx,
+    vetoSequenceStep,
+  ]);
 
   // figure out the decider
   React.useEffect(() => {
-    if (!match || vetoSequenceComplete || vetoSequenceStep) {
+    if (!match || vetoSequenceComplete || vetoSequenceStep || !historicalMatchesLoaded) {
       return;
     }
 
@@ -231,14 +420,20 @@ export default function () {
 
     const timeout = setTimeout(
       () => {
-        onVetoSelection(sample(cpuPool));
+        onVetoSelection(selectAutomatedVetoMap());
         setWorking(false);
       },
       random(CPU_THINKING_TIME_MIN, CPU_THINKING_TIME_MAX),
     );
 
     return () => clearTimeout(timeout);
-  }, [cpuPool, match, vetoSequenceComplete, vetoSequenceStep]);
+  }, [
+    historicalMatchesLoaded,
+    match,
+    selectAutomatedVetoMap,
+    vetoSequenceComplete,
+    vetoSequenceStep,
+  ]);
 
   if (!state.profile || !match) {
     return (
