@@ -581,7 +581,7 @@ export default function () {
     if (matchCompleted) {
       await XpEconomy.applyMatchXpFromCompletedMatch({
         matchId: match.id,
-        profile: { teamId: profile.teamId, playerId: profile.playerId },
+        profile: { id: profile.id, teamId: profile.teamId, playerId: profile.playerId },
       });
     }
 

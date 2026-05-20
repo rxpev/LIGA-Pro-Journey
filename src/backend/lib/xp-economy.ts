@@ -1,14 +1,27 @@
-import { Prisma } from "@prisma/client";
-import { Constants, Chance, Util, Bot } from "@liga/shared";
-import DatabaseClient from "./database-client";
-import { computeLifetimeStats } from "./faceitstats";
+import { Prisma } from '@prisma/client';
+import { Constants, Chance, Util, Bot } from '@liga/shared';
+import DatabaseClient from './database-client';
+import { computeLifetimeStats } from './faceitstats';
 
 const XP_MAX = 100;
 const TEAM_DELTA_MAX = 2;
 const PLAYER_DELTA_MAX = 2;
-const K_FACTOR = 4;           // scales (actual-expected) into small ints
+const K_FACTOR = 4; // scales (actual-expected) into small ints
+const USER_TEAMMATE_SEASON_XP_SOFT_CAP = 5;
+const USER_TEAMMATE_SEASON_XP_HARD_CAP = 7;
+const USER_TEAMMATE_SEASON_XP_SOFT_CAP_GATE = 25;
 
 type TeamWithPlayers = Prisma.TeamGetPayload<{ include: { players: true } }>;
+type MatchXpContext = {
+  tierSlug?: string | null;
+  leagueSlug?: string | null;
+  federationSlug?: string | null;
+  federationId?: number | null;
+  userTeamTier?: number | null;
+  season?: number | null;
+  profileId?: number | null;
+  userTeammateIds?: Set<number>;
+};
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
@@ -35,18 +48,18 @@ function pickDistinct<T>(arr: T[], n: number): T[] {
 function ageGainMult(age?: number | null) {
   if (age == null) return 1.0;
   if (age <= 19) return 1.25;
-  if (age <= 24) return 1.10;
-  if (age <= 29) return 1.00;
-  if (age <= 32) return 0.90;
+  if (age <= 24) return 1.1;
+  if (age <= 29) return 1.0;
+  if (age <= 32) return 0.9;
   return 0.75;
 }
 
 function ageLossMult(age?: number | null) {
   if (age == null) return 1.0;
-  if (age <= 19) return 0.90;
+  if (age <= 19) return 0.9;
   if (age <= 24) return 0.95;
-  if (age <= 29) return 1.00;
-  if (age <= 32) return 1.10;
+  if (age <= 29) return 1.0;
+  if (age <= 32) return 1.1;
   return 1.25;
 }
 
@@ -58,10 +71,7 @@ function ceilingGainMult(xp: number) {
 }
 
 // Convert expected/actual to a small team delta and add a "not guaranteed" gate.
-function computeTeamDelta(params: {
-  expectedHome: number;
-  actualHome: number;
-}) {
+function computeTeamDelta(params: { expectedHome: number; actualHome: number }) {
   const { expectedHome, actualHome } = params;
 
   const surprise = actualHome - expectedHome;
@@ -122,9 +132,221 @@ function applyFloatDeltaToInt(params: { baseInt: number; mult: number }) {
   return sign * out;
 }
 
+function tierSlugFromTeamTier(teamTier?: number | null) {
+  if (typeof teamTier !== 'number') return null;
+  return Constants.Prestige[teamTier] ?? null;
+}
+
+function getXpTierWeight(tierSlug?: string | null, leagueSlug?: string | null) {
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) return 1.28;
+
+  switch (tierSlug) {
+    case Constants.TierSlug.MAJOR_CHAMPIONS_STAGE:
+      return 1.85;
+    case Constants.TierSlug.MAJOR_LEGENDS_STAGE:
+      return 1.62;
+    case Constants.TierSlug.MAJOR_CHALLENGERS_STAGE:
+      return 1.45;
+    case Constants.TierSlug.MAJOR_EUROPE_RMR_A:
+    case Constants.TierSlug.MAJOR_EUROPE_RMR_B:
+    case Constants.TierSlug.MAJOR_AMERICAS_RMR:
+    case Constants.TierSlug.MAJOR_ASIA_RMR:
+      return 1.25;
+    case Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1:
+    case Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2:
+    case Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3:
+    case Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4:
+    case Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1:
+    case Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2:
+    case Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1:
+    case Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2:
+    case Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1:
+    case Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2:
+    case Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1:
+    case Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2:
+      return 0.78;
+    case Constants.TierSlug.IEM_COLOGNE_PLAYOFFS:
+    case Constants.TierSlug.IEM_KRAKOW_PLAYOFFS:
+      return 1.55;
+    case Constants.TierSlug.IEM_COLOGNE_GROUP_A:
+    case Constants.TierSlug.IEM_COLOGNE_GROUP_B:
+    case Constants.TierSlug.IEM_KRAKOW_GROUP_A:
+    case Constants.TierSlug.IEM_KRAKOW_GROUP_B:
+      return 1.3;
+    case Constants.TierSlug.BLAST_FINALS:
+      return 1.38;
+    case Constants.TierSlug.CCT_GLOBAL_FINALS:
+    case Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS:
+      return 1.0;
+    case Constants.TierSlug.ESL_CHALLENGER:
+    case Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER:
+    case Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER:
+      return 0.9;
+    case Constants.TierSlug.CCT_SERIES_PLAYOFFS:
+    case Constants.TierSlug.CCT_OCE_PLAYOFFS:
+      return 0.75;
+    case Constants.TierSlug.CCT_SERIES:
+    case Constants.TierSlug.CCT_OCE_SERIES:
+      return 0.62;
+    case Constants.TierSlug.LEAGUE_PRO:
+    case Constants.TierSlug.LEAGUE_PRO_PLAYOFFS:
+      return 1.18;
+    case Constants.TierSlug.LEAGUE_ADVANCED:
+    case Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS:
+      return 0.9;
+    case Constants.TierSlug.LEAGUE_MAIN:
+    case Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS:
+      return 0.72;
+    case Constants.TierSlug.LEAGUE_INTERMEDIATE:
+    case Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS:
+      return 0.5;
+    case Constants.TierSlug.LEAGUE_OPEN:
+    case Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS:
+      return 0.34;
+    default:
+      return 0.85;
+  }
+}
+
+function getXpFederationWeight(federationSlug?: string | null, federationId?: number | null) {
+  switch (federationSlug) {
+    case Constants.FederationSlug.ESPORTS_EUROPA:
+      return 1.12;
+    case Constants.FederationSlug.ESPORTS_AMERICAS:
+      return 1.0;
+    case Constants.FederationSlug.ESPORTS_ASIA:
+      return 0.78;
+    case Constants.FederationSlug.ESPORTS_OCE:
+      return 0.7;
+    case Constants.FederationSlug.ESPORTS_WORLD:
+      return 1.22;
+  }
+
+  switch (federationId) {
+    case 2:
+      return 1.12;
+    case 1:
+      return 1.0;
+    case 3:
+      return 0.78;
+    case 4:
+      return 0.7;
+    case 5:
+      return 1.22;
+    default:
+      return 1.0;
+  }
+}
+
+function getMatchXpMultiplier(context?: MatchXpContext) {
+  if (!context) return 1.0;
+
+  const teamTierSlug = tierSlugFromTeamTier(context.userTeamTier);
+  const tierSlug = context.tierSlug ?? teamTierSlug;
+  const tierWeight = getXpTierWeight(tierSlug, context.leagueSlug);
+  const federationWeight = getXpFederationWeight(context.federationSlug, context.federationId);
+
+  return clamp(tierWeight * federationWeight, 0.2, 2.25);
+}
+
+async function loadMatchXpContext(params: {
+  matchId: number;
+  homeTeam: TeamWithPlayers;
+  awayTeam: TeamWithPlayers;
+  profile?: { id?: number | null; teamId: number | null; playerId: number | null };
+}): Promise<MatchXpContext | undefined> {
+  const match = await DatabaseClient.prisma.match.findFirst({
+    where: { id: params.matchId },
+    include: {
+      competition: {
+        include: {
+          federation: true,
+          tier: { include: { league: true } },
+        },
+      },
+    },
+  });
+
+  if (!match?.competition) return undefined;
+
+  const userTeam =
+    params.profile?.teamId === params.homeTeam.id
+      ? params.homeTeam
+      : params.profile?.teamId === params.awayTeam.id
+        ? params.awayTeam
+        : undefined;
+
+  return {
+    tierSlug: match.competition.tier?.slug,
+    leagueSlug: match.competition.tier?.league?.slug,
+    federationSlug: userTeam?.competitionFederationId
+      ? undefined
+      : match.competition.federation?.slug,
+    federationId: userTeam?.competitionFederationId ?? match.competition.federationId,
+    userTeamTier: userTeam?.tier ?? null,
+    season: match.competition.season,
+    profileId: params.profile?.id ?? match.profileId ?? null,
+    userTeammateIds: getUserTeammateIds(userTeam, params.profile),
+  };
+}
+
+function getUserTeammateIds(
+  userTeam?: TeamWithPlayers,
+  profile?: { playerId: number | null } | null,
+) {
+  if (!userTeam || !profile?.playerId) return undefined;
+  return new Set(userTeam.players.filter((p) => p.id !== profile.playerId).map((p) => p.id));
+}
+
+async function applyUserTeammateSeasonXpCap(params: {
+  context?: MatchXpContext;
+  playerId: number;
+  xpNow: number;
+  delta: number;
+}) {
+  const { context, playerId, xpNow } = params;
+  let { delta } = params;
+
+  if (delta <= 0) return delta;
+  if (!context?.profileId || context.season == null) return delta;
+  if (!context.userTeammateIds?.has(playerId)) return delta;
+
+  const baseline = await DatabaseClient.prisma.userTeammateSeasonXp.upsert({
+    where: {
+      profileId_playerId_season: {
+        profileId: context.profileId,
+        playerId,
+        season: context.season,
+      },
+    },
+    update: {},
+    create: {
+      profileId: context.profileId,
+      playerId,
+      season: context.season,
+      baselineXp: xpNow,
+    },
+  });
+
+  const gainedThisSeason = Math.max(0, xpNow - baseline.baselineXp);
+  const remaining = USER_TEAMMATE_SEASON_XP_HARD_CAP - gainedThisSeason;
+
+  if (remaining <= 0) return 0;
+  delta = Math.min(delta, remaining);
+
+  if (
+    gainedThisSeason >= USER_TEAMMATE_SEASON_XP_SOFT_CAP &&
+    !Chance.rollD2(USER_TEAMMATE_SEASON_XP_SOFT_CAP_GATE)
+  ) {
+    return 0;
+  }
+
+  return delta;
+}
+
 function computeTeamStrength(
   team: TeamWithPlayers,
-  profile?: { teamId: number | null; playerId: number | null }
+  profile?: { teamId: number | null; playerId: number | null },
 ) {
   const userTeamId = profile?.teamId ?? null;
   const userPlayerId = profile?.playerId ?? null;
@@ -132,8 +354,8 @@ function computeTeamStrength(
   const isUserTeam = team.id === userTeamId;
 
   const forceSizeExcludingUser = isUserTeam
-    ? Constants.Application.SQUAD_MIN_LENGTH - 1   // 4
-    : Constants.Application.SQUAD_MIN_LENGTH;     // 5
+    ? Constants.Application.SQUAD_MIN_LENGTH - 1 // 4
+    : Constants.Application.SQUAD_MIN_LENGTH; // 5
 
   const squad = Util.getSquad(
     team as any,
@@ -154,11 +376,18 @@ export async function applyMatchXpFromSim(params: {
   awayTeam: TeamWithPlayers;
   simulationResult: Record<number, number>;
   allowDraw: boolean;
-  profile?: { teamId: number | null; playerId: number | null };
+  profile?: { id?: number | null; teamId: number | null; playerId: number | null };
 }) {
   const prisma = DatabaseClient.prisma;
 
   const { homeTeam, awayTeam, simulationResult, profile } = params;
+  const matchXpContext = await loadMatchXpContext({
+    matchId: params.matchId,
+    homeTeam,
+    awayTeam,
+    profile,
+  });
+  const matchXpMultiplier = getMatchXpMultiplier(matchXpContext);
 
   const home = computeTeamStrength(homeTeam, profile);
   const away = computeTeamStrength(awayTeam, profile);
@@ -207,12 +436,20 @@ export async function applyMatchXpFromSim(params: {
     } else {
       mult *= ageLossMult(p.age);
     }
+    mult *= matchXpMultiplier;
 
     let delta = applyFloatDeltaToInt({ baseInt: base, mult });
     delta = clamp(delta, -PLAYER_DELTA_MAX, PLAYER_DELTA_MAX);
 
     const playerGate = base > 0 ? 70 : 60;
     if (delta !== 0 && !Chance.rollD2(playerGate)) delta = 0;
+
+    delta = await applyUserTeammateSeasonXpCap({
+      context: matchXpContext,
+      playerId: id,
+      xpNow,
+      delta,
+    });
 
     if (delta === 0) continue;
 
@@ -236,7 +473,7 @@ export async function applyMatchXpFromSim(params: {
 
 export async function applyMatchXpFromCompletedMatch(params: {
   matchId: number;
-  profile?: { teamId: number | null; playerId: number | null };
+  profile?: { id?: number | null; teamId: number | null; playerId: number | null };
 }) {
   const prisma = DatabaseClient.prisma;
 
@@ -248,7 +485,12 @@ export async function applyMatchXpFromCompletedMatch(params: {
           team: { include: { players: true } },
         },
       },
-      competition: { include: { tier: true } },
+      competition: {
+        include: {
+          federation: true,
+          tier: { include: { league: true } },
+        },
+      },
     },
   });
 
@@ -256,11 +498,39 @@ export async function applyMatchXpFromCompletedMatch(params: {
   if (match.status !== Constants.MatchStatus.COMPLETED) return;
 
   // Optional skips (recommended):
-  if ((match as any).matchType === "FACEIT_PUG") return;
+  if ((match as any).matchType === 'FACEIT_PUG') return;
   if (match.competition?.tier?.slug === Constants.TierSlug.EXHIBITION_FRIENDLY) return;
 
   const [homeC, awayC] = match.competitors;
   if (!homeC?.team || !awayC?.team) return;
+
+  const userTeam =
+    params.profile?.teamId === homeC.team.id
+      ? homeC.team
+      : params.profile?.teamId === awayC.team.id
+        ? awayC.team
+        : undefined;
+  const matchXpMultiplier = getMatchXpMultiplier({
+    tierSlug: match.competition?.tier?.slug,
+    leagueSlug: match.competition?.tier?.league?.slug,
+    federationSlug: userTeam?.competitionFederationId
+      ? undefined
+      : match.competition?.federation?.slug,
+    federationId: userTeam?.competitionFederationId ?? match.competition?.federationId,
+    userTeamTier: userTeam?.tier ?? null,
+  });
+  const matchXpContext: MatchXpContext = {
+    tierSlug: match.competition?.tier?.slug,
+    leagueSlug: match.competition?.tier?.league?.slug,
+    federationSlug: userTeam?.competitionFederationId
+      ? undefined
+      : match.competition?.federation?.slug,
+    federationId: userTeam?.competitionFederationId ?? match.competition?.federationId,
+    userTeamTier: userTeam?.tier ?? null,
+    season: match.competition?.season ?? null,
+    profileId: params.profile?.id ?? match.profileId ?? null,
+    userTeammateIds: getUserTeammateIds(userTeam as any, params.profile),
+  };
 
   // Expected based on your XP+prestige+tier rating
   const home = computeTeamStrength(homeC.team as any, params.profile);
@@ -308,12 +578,20 @@ export async function applyMatchXpFromCompletedMatch(params: {
     } else {
       mult *= ageLossMult(p.age);
     }
+    mult *= matchXpMultiplier;
 
     let delta = applyFloatDeltaToInt({ baseInt: base, mult });
     delta = clamp(delta, -PLAYER_DELTA_MAX, PLAYER_DELTA_MAX);
 
     const playerGate = base > 0 ? 70 : 60;
     if (delta !== 0 && !Chance.rollD2(playerGate)) delta = 0;
+
+    delta = await applyUserTeammateSeasonXpCap({
+      context: matchXpContext,
+      playerId: id,
+      xpNow,
+      delta,
+    });
 
     if (delta === 0) continue;
 
@@ -383,10 +661,7 @@ export function computeSeedXp(params: { kd: number }) {
  * Seeds the USER player's XP exactly after their 3rd completed FACEIT pug,
  * based primarily on KD over the first 3 games.
  */
-export async function seedUserXp(params: {
-  profileId: number;
-  teamlessOnly?: boolean;
-}) {
+export async function seedUserXp(params: { profileId: number; teamlessOnly?: boolean }) {
   const prisma = DatabaseClient.prisma;
   const teamlessOnly = params.teamlessOnly ?? true;
 
@@ -401,7 +676,7 @@ export async function seedUserXp(params: {
   const played = await prisma.match.count({
     where: {
       profileId: profile.id,
-      matchType: "FACEIT_PUG",
+      matchType: 'FACEIT_PUG',
       status: Constants.MatchStatus.COMPLETED,
     },
   });

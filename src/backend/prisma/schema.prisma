@@ -4,7 +4,7 @@
 // ----------------------------------------------------------
 
 generator client {
-  provider  = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 // ----------------------------------------------------------
@@ -12,10 +12,10 @@ generator client {
 // ----------------------------------------------------------
 
 datasource db {
-  provider  = "sqlite"
+  provider = "sqlite"
 
   // @note: setting connection limit fixes https://github.com/prisma/prisma/issues/9562
-  url       = "file:saves/save_0.db?connection_limit=1"
+  url = "file:saves/save_0.db?connection_limit=1"
 }
 
 // ----------------------------------------------------------
@@ -23,30 +23,30 @@ datasource db {
 // ----------------------------------------------------------
 
 model Achievement {
-  id                  String              @id
-  award               Int?                @default(0)
-  unlocked            Boolean?            @default(false)
+  id       String   @id
+  award    Int?     @default(0)
+  unlocked Boolean? @default(false)
 }
 
 model Bonus {
-  id                  Int                 @id @default(autoincrement())
-  type                Int
-  name                String              @unique
-  stats               String?
-  cost                Int?
-  active              Boolean?            @default(false)
+  id     Int      @id @default(autoincrement())
+  type   Int
+  name   String   @unique
+  stats  String?
+  cost   Int?
+  active Boolean? @default(false)
 
   // belongs to
-  profile             Profile?            @relation(fields: [profileId], references: [id])
-  profileId           Int?
+  profile   Profile? @relation(fields: [profileId], references: [id])
+  profileId Int?
 }
 
 model Calendar {
-  id                  Int                 @id @default(autoincrement())
-  date                DateTime
-  type                String
-  completed           Boolean?            @default(false)
-  payload             String?
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  type      String
+  completed Boolean? @default(false)
+  payload   String?
 
   // a composite key helps uniquely identify
   // any duplicate calendar entries
@@ -54,436 +54,450 @@ model Calendar {
 }
 
 model Competition {
-  id                  Int                 @id @default(autoincrement())
-  season              Int?                @default(1)
-  status              Int?                @default(0)
-  tournament          String?
+  id         Int     @id @default(autoincrement())
+  season     Int?    @default(1)
+  status     Int?    @default(0)
+  tournament String?
 
   // has many
-  matches             Match[]
-  competitors         CompetitionToTeam[]
+  matches     Match[]
+  competitors CompetitionToTeam[]
 
   // belongs to
-  federation          Federation          @relation(fields: [federationId], references: [id])
-  federationId        Int
-  tier                Tier                @relation(fields: [tierId], references: [id])
-  tierId              Int
+  federation   Federation @relation(fields: [federationId], references: [id])
+  federationId Int
+  tier         Tier       @relation(fields: [tierId], references: [id])
+  tierId       Int
 }
 
 model CompetitionToTeam {
-  id                  Int                 @id @default(autoincrement())
-  position            Int?                @default(1)
-  win                 Int?                @default(0)
-  loss                Int?                @default(0)
-  draw                Int?                @default(0)
-  group               Int?
-  seed                Int?
+  id       Int  @id @default(autoincrement())
+  position Int? @default(1)
+  win      Int? @default(0)
+  loss     Int? @default(0)
+  draw     Int? @default(0)
+  group    Int?
+  seed     Int?
 
   // belongs to
-  competition         Competition         @relation(fields: [competitionId], references: [id])
-  competitionId       Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  competition   Competition @relation(fields: [competitionId], references: [id])
+  competitionId Int
+  team          Team?       @relation(fields: [teamId], references: [id])
+  teamId        Int?
 }
 
 model Continent {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  code                String              @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  code String @unique
 
   // has many
-  countries           Country[]
+  countries Country[]
 
   // belongs to
-  federation          Federation          @relation(fields: [federationId], references: [id])
-  federationId        Int
+  federation   Federation @relation(fields: [federationId], references: [id])
+  federationId Int
 }
 
 model Country {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  code                String              @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  code String @unique
 
   // has many
-  players             Player[]
-  teams               Team[]
+  players Player[]
+  teams   Team[]
 
   // belongs to
-  continent           Continent           @relation(fields: [continentId], references: [id])
-  continentId         Int
+  continent   Continent @relation(fields: [continentId], references: [id])
+  continentId Int
 }
 
 model Dialogue {
-  id                  Int                 @id @default(autoincrement())
-  completed           Boolean?            @default(false)
-  content             String
-  sentAt              DateTime
+  id        Int      @id @default(autoincrement())
+  completed Boolean? @default(false)
+  content   String
+  sentAt    DateTime
 
   // belongs to
-  email               Email               @relation(fields: [emailId], references: [id], onDelete: Cascade)
-  emailId             Int
-  from                Persona             @relation("from", fields: [fromId], references: [id])
-  fromId              Int
+  email   Email   @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  emailId Int
+  from    Persona @relation("from", fields: [fromId], references: [id])
+  fromId  Int
 }
 
 model Email {
-  id                  Int                 @id @default(autoincrement())
-  read                Boolean?            @default(false)
-  sentAt              DateTime
-  subject             String              @unique
+  id      Int      @id @default(autoincrement())
+  read    Boolean? @default(false)
+  sentAt  DateTime
+  subject String   @unique
 
   // has many
-  dialogues           Dialogue[]
+  dialogues Dialogue[]
 
   // belongs to
-  from                Persona             @relation("from", fields: [fromId], references: [id])
-  fromId              Int
+  from   Persona @relation("from", fields: [fromId], references: [id])
+  fromId Int
 }
 
 model Federation {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  slug                String              @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  slug String @unique
 
   // has many
-  leagues             League[]
-  competitions        Competition[]
-  continents          Continent[]
-  teams               Team[]              @relation("competitionFederation")
+  leagues      League[]
+  competitions Competition[]
+  continents   Continent[]
+  teams        Team[]        @relation("competitionFederation")
 }
 
 model Game {
-  id                  Int                 @id @default(autoincrement())
-  map                 String
-  num                 Int
-  status              Int
+  id     Int    @id @default(autoincrement())
+  map    String
+  num    Int
+  status Int
 
   // has many
-  teams               GameToTeam[]
-  events              MatchEvent[]
+  teams  GameToTeam[]
+  events MatchEvent[]
 
   // belongs to
-  match               Match               @relation(fields: [matchId], references: [id])
-  matchId             Int
+  match   Match @relation(fields: [matchId], references: [id])
+  matchId Int
 }
 
 model GameMap {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
+  id   Int    @id @default(autoincrement())
+  name String @unique
 
   // has many
-  gameVersions        MapPool[]
+  gameVersions MapPool[]
 }
 
 model GameToTeam {
-  id                  Int                 @id @default(autoincrement())
-  result              Int?
-  score               Int?
-  seed                Int
+  id     Int  @id @default(autoincrement())
+  result Int?
+  score  Int?
+  seed   Int
 
   // belongs to
-  game                Game                @relation(fields: [gameId], references: [id])
-  gameId              Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  game   Game  @relation(fields: [gameId], references: [id])
+  gameId Int
+  team   Team? @relation(fields: [teamId], references: [id])
+  teamId Int?
 }
 
 model GameVersion {
-  id                  Int                 @id @default(autoincrement())
-  slug                String              @unique
+  id   Int    @id @default(autoincrement())
+  slug String @unique
 
   // has many
-  gameMaps            MapPool[]
+  gameMaps MapPool[]
 }
 
 model League {
-  id                  Int                 @id @default(autoincrement())
-  name                String
-  slug                String              @unique
-  startOffsetDays     Int?                @default(1)
+  id              Int    @id @default(autoincrement())
+  name            String
+  slug            String @unique
+  startOffsetDays Int?   @default(1)
 
   // has many
-  federations         Federation[]
-  tiers               Tier[]
+  federations Federation[]
+  tiers       Tier[]
 }
 
 model MapPool {
-  id                  Int                 @id @default(autoincrement())
-  position            Int?
+  id       Int  @id @default(autoincrement())
+  position Int?
 
   // belongs to
-  gameMap             GameMap             @relation(fields: [gameMapId], references: [id])
-  gameMapId           Int
-  gameVersion         GameVersion         @relation(fields: [gameVersionId], references: [id])
-  gameVersionId       Int
+  gameMap       GameMap     @relation(fields: [gameMapId], references: [id])
+  gameMapId     Int
+  gameVersion   GameVersion @relation(fields: [gameVersionId], references: [id])
+  gameVersionId Int
+
   @@unique([gameMapId, gameVersionId])
 }
 
 model Match {
-  id                  Int                 @id @default(autoincrement())
-  matchType           String              @default("LEAGUE")
-  date                DateTime
-  payload             String
-  faceitEloDelta      Int?
-  faceitRating        Float?
-  faceitIsWin         Boolean?
-  faceitTeammates     String?
-  faceitOpponents     String?
-  round               Int?
-  status              Int
-  totalRounds         Int?
+  id              Int      @id @default(autoincrement())
+  matchType       String   @default("LEAGUE")
+  date            DateTime
+  payload         String
+  faceitEloDelta  Int?
+  faceitRating    Float?
+  faceitIsWin     Boolean?
+  faceitTeammates String?
+  faceitOpponents String?
+  round           Int?
+  status          Int
+  totalRounds     Int?
 
   // has many
-  events              MatchEvent[]
-  games               Game[]
-  competitors         MatchToTeam[]
-  vetoes              MatchVeto[]
+  events      MatchEvent[]
+  games       Game[]
+  competitors MatchToTeam[]
+  vetoes      MatchVeto[]
 
   // belongs to
-  competition         Competition?        @relation(fields: [competitionId], references: [id])
-  competitionId       Int?
-  players             Player[]
-  profileId           Int?
-  profile             Profile?            @relation(fields: [profileId], references: [id])
+  competition   Competition? @relation(fields: [competitionId], references: [id])
+  competitionId Int?
+  players       Player[]
+  profileId     Int?
+  profile       Profile?     @relation(fields: [profileId], references: [id])
 }
 
 model MatchEvent {
-  id                  Int                 @id @default(autoincrement())
-  half                Int
-  headshot            Boolean             @default(false)
-  payload             String
-  result              String?
-  timestamp           DateTime
-  weapon              String?
+  id        Int      @id @default(autoincrement())
+  half      Int
+  headshot  Boolean  @default(false)
+  payload   String
+  result    String?
+  timestamp DateTime
+  weapon    String?
 
   // belongs to
-  match               Match               @relation(fields: [matchId], references: [id])
-  matchId             Int
-  attacker            Player?             @relation("attacker", fields: [attackerId], references: [id])
-  attackerId          Int?
-  assist              Player?             @relation("assist", fields: [assistId], references: [id])
-  assistId            Int?
-  game                Game?               @relation(fields: [gameId], references: [id])
-  gameId              Int?
-  victim              Player?             @relation("victim", fields: [victimId], references: [id])
-  victimId            Int?
-  winner              MatchToTeam?        @relation(fields: [winnerId], references: [id])
-  winnerId            Int?
+  match      Match        @relation(fields: [matchId], references: [id])
+  matchId    Int
+  attacker   Player?      @relation("attacker", fields: [attackerId], references: [id])
+  attackerId Int?
+  assist     Player?      @relation("assist", fields: [assistId], references: [id])
+  assistId   Int?
+  game       Game?        @relation(fields: [gameId], references: [id])
+  gameId     Int?
+  victim     Player?      @relation("victim", fields: [victimId], references: [id])
+  victimId   Int?
+  winner     MatchToTeam? @relation(fields: [winnerId], references: [id])
+  winnerId   Int?
 }
 
 model MatchToTeam {
-  id                  Int                 @id @default(autoincrement())
-  result              Int?
-  score               Int?
-  seed                Int
+  id     Int  @id @default(autoincrement())
+  result Int?
+  score  Int?
+  seed   Int
 
   // has many
-  rounds              MatchEvent[]
+  rounds MatchEvent[]
 
   // belongs to
-  match               Match               @relation(fields: [matchId], references: [id])
-  matchId             Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  match   Match @relation(fields: [matchId], references: [id])
+  matchId Int
+  team    Team? @relation(fields: [teamId], references: [id])
+  teamId  Int?
 }
 
 model MatchVeto {
-  id                  Int                 @id @default(autoincrement())
-  type                String
-  map                 String
+  id   Int    @id @default(autoincrement())
+  type String
+  map  String
 
   // belongs to
-  match               Match               @relation(fields: [matchId], references: [id])
-  matchId             Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  match   Match @relation(fields: [matchId], references: [id])
+  matchId Int
+  team    Team? @relation(fields: [teamId], references: [id])
+  teamId  Int?
 }
 
 model Persona {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  role                String
+  id   Int    @id @default(autoincrement())
+  name String @unique
+  role String
 
   // has many
-  emails              Email[]             @relation("from")
-  dialogues           Dialogue[]          @relation("from")
+  emails    Email[]    @relation("from")
+  dialogues Dialogue[] @relation("from")
 
   // belongs to
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  team   Team? @relation(fields: [teamId], references: [id])
+  teamId Int?
 }
 
 model Player {
-  id                  Int                 @id @default(autoincrement())
-  name                String
-  personality         String?
-  role                String?
-  xp                  Int                 @default(0)
-  elo                 Int                 @default(0)
-  cost                Int?                @default(0)
-  wages               Int?                @default(0)
-  starter             Boolean             @default(false)
-  transferListed      Boolean             @default(false)
-  avatar              String?
-  prestige            Int?
-  userControlled      Boolean             @default(false)
-  age                 Int?
-  contractEnd         DateTime?
-  lastOfferAt         DateTime?
+  id             Int       @id @default(autoincrement())
+  name           String
+  personality    String?
+  role           String?
+  xp             Int       @default(0)
+  elo            Int       @default(0)
+  cost           Int?      @default(0)
+  wages          Int?      @default(0)
+  starter        Boolean   @default(false)
+  transferListed Boolean   @default(false)
+  avatar         String?
+  prestige       Int?
+  userControlled Boolean   @default(false)
+  age            Int?
+  contractEnd    DateTime?
+  lastOfferAt    DateTime?
 
   // has many
-  matches             Match[]
-  shortlist           Shortlist[]
-  transfers           Transfer[]
-  assists             MatchEvent[]        @relation("assist")
-  kills               MatchEvent[]        @relation("attacker")
-  deaths              MatchEvent[]        @relation("victim")
-  careerStints        CareerStint[]
+  matches      Match[]
+  shortlist    Shortlist[]
+  transfers    Transfer[]
+  assists      MatchEvent[]  @relation("assist")
+  kills        MatchEvent[]  @relation("attacker")
+  deaths       MatchEvent[]  @relation("victim")
+  careerStints CareerStint[]
 
   // has one
-  profile             Profile?
+  profile Profile?
 
   // belongs to
-  country             Country             @relation(fields: [countryId], references: [id])
-  countryId           Int
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?
+  country   Country @relation(fields: [countryId], references: [id])
+  countryId Int
+  team      Team?   @relation(fields: [teamId], references: [id])
+  teamId    Int?
 }
 
 model Profile {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  date                DateTime
-  issues              String?
-  season              Int?                @default(0)
-  settings            String?
-  trainedAt           DateTime?
-  updatedAt           DateTime?           @default(now())
-  faceitElo           Int                 @default(1200)
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  date      DateTime
+  issues    String?
+  season    Int?      @default(0)
+  settings  String?
+  trainedAt DateTime?
+  updatedAt DateTime? @default(now())
+  faceitElo Int       @default(1200)
 
   // has many
-  bonuses             Bonus[]
-  matches             Match[]
+  bonuses Bonus[]
+  matches Match[]
 
   // belongs to
-  team                Team?               @relation(fields: [teamId], references: [id])
-  teamId              Int?                @unique
-  player              Player?             @relation(fields: [playerId], references: [id])
-  playerId            Int?                @unique
+  team     Team?   @relation(fields: [teamId], references: [id])
+  teamId   Int?    @unique
+  player   Player? @relation(fields: [playerId], references: [id])
+  playerId Int?    @unique
+}
+
+model UserTeammateSeasonXp {
+  id         Int      @id @default(autoincrement())
+  profileId  Int
+  playerId   Int
+  season     Int
+  baselineXp Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([profileId, playerId, season])
+  @@index([profileId, season])
 }
 
 model Shortlist {
-  // composite key
-  @@id([teamId, playerId])
 
   // belongs to
-  team                Team                @relation(fields: [teamId], references: [id])
-  teamId              Int
-  player              Player              @relation(fields: [playerId], references: [id])
-  playerId            Int
+  team     Team   @relation(fields: [teamId], references: [id])
+  teamId   Int
+  player   Player @relation(fields: [playerId], references: [id])
+  playerId Int
+
+  // composite key
+  @@id([teamId, playerId])
 }
 
 model Team {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  slug                String              @unique
-  earnings            Int?                @default(0)
-  prestige            Int?
-  blazon              String?
-  tier                Int?
-  elo                 Int?                @default(1000)
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  slug     String  @unique
+  earnings Int?    @default(0)
+  prestige Int?
+  blazon   String?
+  tier     Int?
+  elo      Int?    @default(1000)
+
+  // has many
+  competitions CompetitionToTeam[]
+  games        GameToTeam[]
+  matches      MatchToTeam[]
+  players      Player[]
+  personas     Persona[]
+  shortlist    Shortlist[]
+  transfersIn  Transfer[]          @relation("to")
+  transfersOut Transfer[]          @relation("from")
+  careerStints CareerStint[]
+  vetoes       MatchVeto[]
+
+  // has one
+  profile Profile?
+
+  // belongs to
+  country                 Country     @relation(fields: [countryId], references: [id])
+  countryId               Int
+  competitionFederation   Federation? @relation("competitionFederation", fields: [competitionFederationId], references: [id])
+  competitionFederationId Int?
 
   // improves sorting performance
   @@index([elo, id])
-
-  // has many
-  competitions        CompetitionToTeam[]
-  games               GameToTeam[]
-  matches             MatchToTeam[]
-  players             Player[]
-  personas            Persona[]
-  shortlist           Shortlist[]
-  transfersIn         Transfer[]          @relation("to")
-  transfersOut        Transfer[]          @relation("from")
-  careerStints        CareerStint[]
-  vetoes              MatchVeto[]
-
-  // has one
-  profile             Profile?
-
-  // belongs to
-  country             Country             @relation(fields: [countryId], references: [id])
-  countryId           Int
-  competitionFederation   Federation?     @relation("competitionFederation", fields: [competitionFederationId], references: [id])
-  competitionFederationId Int?
-
   @@index([competitionFederationId])
 }
 
 model Tier {
-  id                  Int                 @id @default(autoincrement())
-  name                String              @unique
-  slug                String              @unique
-  size                Int                 @default(0)
-  groupSize           Int?
-  triggerTierSlug     String?
-  triggerOffsetDays   Int?
-  lan                 Boolean?            @default(false)
+  id                Int      @id @default(autoincrement())
+  name              String   @unique
+  slug              String   @unique
+  size              Int      @default(0)
+  groupSize         Int?
+  triggerTierSlug   String?
+  triggerOffsetDays Int?
+  lan               Boolean? @default(false)
 
   // has many
-  competitions        Competition[]
+  competitions Competition[]
 
   // belongs to
-  league              League              @relation(fields: [leagueId], references: [id])
-  leagueId            Int
+  league   League @relation(fields: [leagueId], references: [id])
+  leagueId Int
 }
 
 model Transfer {
-  id                  Int                 @id @default(autoincrement())
-  status              Int
+  id     Int @id @default(autoincrement())
+  status Int
 
   // has many
-  offers              Offer[]
+  offers Offer[]
 
   // belongs to
-  from                Team                @relation("from", fields: [teamIdFrom], references: [id])
-  teamIdFrom          Int
-  to                  Team?               @relation("to", fields: [teamIdTo], references: [id])
-  teamIdTo            Int?
-  target              Player              @relation(fields: [playerId], references: [id])
-  playerId            Int
+  from       Team   @relation("from", fields: [teamIdFrom], references: [id])
+  teamIdFrom Int
+  to         Team?  @relation("to", fields: [teamIdTo], references: [id])
+  teamIdTo   Int?
+  target     Player @relation(fields: [playerId], references: [id])
+  playerId   Int
 }
 
 model Offer {
-  id                  Int                 @id @default(autoincrement())
-  status              Int
-  cost                Int?                @default(0)
-  wages               Int?                @default(0)
-  contractYears       Int?                @default(1)
-  expiresAt           DateTime?
-  createdAt           DateTime            @default(now())
+  id            Int       @id @default(autoincrement())
+  status        Int
+  cost          Int?      @default(0)
+  wages         Int?      @default(0)
+  contractYears Int?      @default(1)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   // belongs to
-  transfer            Transfer            @relation(fields: [transferId], references: [id])
-  transferId          Int
+  transfer   Transfer @relation(fields: [transferId], references: [id])
+  transferId Int
 }
 
 model CareerStint {
-  id                  Int                 @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // belongs to
-  player              Player              @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  playerId            Int
-  team                Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  teamId              Int?
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId Int
+  team     Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  teamId   Int?
 
   // snapshot of team tier at the time (Open..Premier index)
-  tier                Int?
-  starter             Boolean             @default(true)
+  tier    Int?
+  starter Boolean @default(true)
 
-  startedAt           DateTime
-  endedAt             DateTime?
-  createdAt           DateTime            @default(now())
+  startedAt DateTime
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([playerId, endedAt])
   @@index([teamId, startedAt])

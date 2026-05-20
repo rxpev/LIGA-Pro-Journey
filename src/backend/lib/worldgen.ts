@@ -358,9 +358,7 @@ const THREE_MATCHES_PER_WEEK_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_ADVANCED,
 ]);
 
-const DOUBLE_ELIMINATION_TIERS = new Set<Constants.TierSlug>([
-  Constants.TierSlug.BLAST_FINALS,
-]);
+const DOUBLE_ELIMINATION_TIERS = new Set<Constants.TierSlug>([Constants.TierSlug.BLAST_FINALS]);
 
 const IEM_GROUP_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_COLOGNE_GROUP_A,
@@ -935,9 +933,7 @@ async function closeOpenCareerStints(
         where: { id: stint.id },
         data: {
           endedAt,
-          ...(stint.teamId == null && stint.startedAt > endedAt
-            ? { startedAt: seasonStart }
-            : {}),
+          ...(stint.teamId == null && stint.startedAt > endedAt ? { startedAt: seasonStart } : {}),
         },
       }),
     ),
@@ -3901,12 +3897,16 @@ function getTeamNationalityCohesion(team: {
   const players = (team.players || []).filter((player) => player.starter !== false);
   if (!players.length) return 0;
 
-  const preferredCount = players.filter((player) => matchesTeamCountryPreference(team, player))
-    .length;
+  const preferredCount = players.filter((player) =>
+    matchesTeamCountryPreference(team, player),
+  ).length;
   return preferredCount / players.length;
 }
 
-function getAgeReplacementBonus(incoming: { age?: number | null }, victim: { age?: number | null }) {
+function getAgeReplacementBonus(
+  incoming: { age?: number | null },
+  victim: { age?: number | null },
+) {
   const incomingAge = incoming.age ?? 24;
   const victimAge = victim.age ?? 24;
 
@@ -4025,10 +4025,7 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     100,
     Math.round(Constants.TransferSettings.PBX_NPC_FREE_AGENT_SAME_COUNTRY + cohesion * 18),
   );
-  if (
-    sameCountryCandidates.length &&
-    Chance.rollD2(sameCountryChance)
-  ) {
+  if (sameCountryCandidates.length && Chance.rollD2(sameCountryChance)) {
     return sameCountryCandidates;
   }
 
@@ -5205,8 +5202,11 @@ async function processNPCContractExtensions() {
     while (needsStarter() || needsAwper()) {
       const fillingAwperSlot = needsAwper();
       const preferredFillRole = normalizeRole(preferredRole || '');
-      const desiredRole =
-        fillingAwperSlot ? 'SNIPER' : !isSniperRole(preferredFillRole) ? preferredFillRole : '';
+      const desiredRole = fillingAwperSlot
+        ? 'SNIPER'
+        : !isSniperRole(preferredFillRole)
+          ? preferredFillRole
+          : '';
       const canFillWithRole = (role: string | null | undefined) => {
         if (desiredRole) return normalizeRole(role) === desiredRole;
         return fillingAwperSlot || !isSniperRole(role);
@@ -5561,7 +5561,9 @@ async function trySignNPCFreeAgent(params: {
     }
 
     const role = normalizeRole(player.role);
-    const sameRole = (from.players || []).filter((p) => p.starter && normalizeRole(p.role) === role);
+    const sameRole = (from.players || []).filter(
+      (p) => p.starter && normalizeRole(p.role) === role,
+    );
 
     if (role === 'RIFLER' && !sameRole.length) {
       return false;
@@ -5593,15 +5595,21 @@ async function trySignNPCFreeAgent(params: {
     const cohesion = getTeamNationalityCohesion(from);
     const aScore =
       (a.xp || 0) +
-      (matchesTeamCountryPreference(from, a) ? 45 + Math.round(cohesion * 70) : -Math.round(cohesion * 45)) -
+      (matchesTeamCountryPreference(from, a)
+        ? 45 + Math.round(cohesion * 70)
+        : -Math.round(cohesion * 45)) -
       getVeteranOfferPenalty(a);
     const bScore =
       (b.xp || 0) +
-      (matchesTeamCountryPreference(from, b) ? 45 + Math.round(cohesion * 70) : -Math.round(cohesion * 45)) -
+      (matchesTeamCountryPreference(from, b)
+        ? 45 + Math.round(cohesion * 70)
+        : -Math.round(cohesion * 45)) -
       getVeteranOfferPenalty(b);
     return bScore - aScore;
   });
-  const target = sample(sortedCandidates.slice(0, Math.max(1, Math.min(12, sortedCandidates.length))));
+  const target = sample(
+    sortedCandidates.slice(0, Math.max(1, Math.min(12, sortedCandidates.length))),
+  );
   if (!target) return Promise.resolve(false);
 
   const victim = await selectBenchVictim({
@@ -5896,9 +5904,10 @@ export async function sendNPCTransferOffer() {
       }
 
       if (team.tier === from.tier) {
-        score += from.tier >= Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED)
-          ? 35
-          : 15;
+        score +=
+          from.tier >= Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED)
+            ? 35
+            : 15;
       }
 
       // lower-division same-country high-XP talent bias
@@ -6357,23 +6366,27 @@ export async function syncTiers() {
   // build a transaction for all the updates
   const transaction: Prisma.PrismaPromise<Prisma.BatchPayload>[] = competitions.reduce(
     (queries: Prisma.PrismaPromise<Prisma.BatchPayload>[], competition) => {
-    const prestigeIdx = getPrestigeIndexForTierSlug(competition.tier.slug);
-    if (prestigeIdx < 0) {
+      const prestigeIdx = getPrestigeIndexForTierSlug(competition.tier.slug);
+      if (prestigeIdx < 0) {
+        return queries;
+      }
+
+      queries.push(
+        DatabaseClient.prisma.team.updateMany({
+          where: {
+            id: { in: competition.competitors.map((competitor) => competitor.teamId) },
+          },
+          data: {
+            tier: prestigeIdx,
+            prestige: prestigeIdx,
+          },
+        }),
+      );
+
       return queries;
-    }
-
-    queries.push(DatabaseClient.prisma.team.updateMany({
-      where: {
-        id: { in: competition.competitors.map((competitor) => competitor.teamId) },
-      },
-      data: {
-        tier: prestigeIdx,
-        prestige: prestigeIdx,
-      },
-    }));
-
-    return queries;
-  }, []);
+    },
+    [],
+  );
 
   // run the transaction
   return DatabaseClient.prisma.$transaction(transaction);
@@ -6770,9 +6783,11 @@ export async function onMatchdayNPC(entry: Calendar) {
 
   // load sim settings if this is a user matchday
   const simulator = new Simulator.Score();
+  let userMatchdayProfile: Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>;
 
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {
     const profile = await DatabaseClient.prisma.profile.findFirst();
+    userMatchdayProfile = profile;
     const settings = Util.loadSettings(profile.settings);
     simulator.mode = settings.general.simulationMode;
     simulator.userPlayerId = profile.playerId;
@@ -6858,7 +6873,11 @@ export async function onMatchdayNPC(entry: Calendar) {
     allowDraw: simulator.allowDraw,
     profile:
       entry.type === Constants.CalendarEntry.MATCHDAY_USER
-        ? { teamId: simulator.userTeamId, playerId: simulator.userPlayerId }
+        ? {
+            id: userMatchdayProfile?.id,
+            teamId: simulator.userTeamId,
+            playerId: simulator.userPlayerId,
+          }
         : undefined,
   });
 
