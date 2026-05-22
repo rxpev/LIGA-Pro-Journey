@@ -39,6 +39,10 @@ export default function () {
   const [rankings, setRankings] = React.useState<typeof teams>([]);
   const [selectedRankingFederationId, setSelectedRankingFederationId] = React.useState<number>();
   const [teamSearch, setTeamSearch] = React.useState('');
+  const requestedTeamId = React.useMemo(() => {
+    const teamId = Number(searchParams.get('teamId'));
+    return Number.isInteger(teamId) && teamId > 0 ? teamId : undefined;
+  }, [searchParams]);
 
   const rankingFederations = React.useMemo(
     () => [...federations].sort((a, b) => a.id - b.id),
@@ -93,21 +97,24 @@ export default function () {
 
   // load team from query params
   React.useEffect(() => {
-    const teamId = Number(searchParams.get('teamId'));
-    if (!Number.isInteger(teamId) || !teams.length) {
+    if (!Number.isInteger(requestedTeamId) || !teams.length) {
       return;
     }
 
-    const matched = teams.find((tteam) => tteam.id === teamId);
+    const matched = teams.find((tteam) => tteam.id === requestedTeamId);
     if (matched) {
       setTeam(matched);
     }
-  }, [searchParams, teams]);
+  }, [requestedTeamId, teams]);
 
   // fallback: auto-select world #1 team when teamless
   React.useEffect(() => {
     // only run after main data loads
     if (!teams.length || team) {
+      return;
+    }
+
+    if (Number.isInteger(requestedTeamId) && teams.some((tteam) => tteam.id === requestedTeamId)) {
       return;
     }
 
@@ -118,7 +125,7 @@ export default function () {
         setTeam(sorted[0]);
       }
     }
-  }, [state.profile, teams, team]);
+  }, [state.profile, teams, team, requestedTeamId]);
 
   return (
     <div className="dashboard">
