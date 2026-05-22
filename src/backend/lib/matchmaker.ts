@@ -334,7 +334,7 @@ export class FaceitMatchmaker {
     // -------------------------------------------------
     // 3. Get bots in region & Elo range
     // -------------------------------------------------
-    const bots = await this.getBotsNearElo(prisma, queueElo, 20, federationId);
+    const bots = await this.getBotsNearElo(prisma, queueElo, 100, federationId);
 
     if (bots.length < 10) {
       throw new Error("FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS");
