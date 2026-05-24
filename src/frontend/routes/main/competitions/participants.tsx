@@ -243,6 +243,90 @@ const QUALIFICATION_SOURCE_RULES: SourceRule[] = [
     end: 8,
   },
   {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 2,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 2,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 1,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 1,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+    federation: Constants.FederationSlug.ESPORTS_OCE,
+    start: 1,
+    end: 1,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_ASIA_RMR,
+    source: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+    federation: Constants.FederationSlug.ESPORTS_OCE,
+    start: 1,
+    end: 1,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+    source: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+    federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    start: 1,
+    end: 4,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+    source: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+    federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    start: 1,
+    end: 4,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+    source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+    source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+    source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
+    target: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+    source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
     target: Constants.TierSlug.LEAGUE_ADVANCED,
     source: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
     federation: Constants.FederationSlug.ESPORTS_ASIA,
@@ -452,6 +536,87 @@ const QUALIFICATION_SOURCE_RULES: SourceRule[] = [
   },
 ];
 
+const RMR_SLOT_SOURCE_RULES: Partial<Record<Constants.TierSlug, SourceRule[]>> = {
+  [Constants.TierSlug.MAJOR_ASIA_RMR]: [
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_ASIA,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_OCE,
+    },
+    {
+      target: Constants.TierSlug.MAJOR_ASIA_RMR,
+      source: Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_OCE,
+    },
+  ],
+  [Constants.TierSlug.MAJOR_AMERICAS_RMR]: [
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+      source: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    })),
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+      source: Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    })),
+  ],
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_A]: [
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+      source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+      federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    })),
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+      source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+      federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    })),
+  ],
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_B]: [
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+      source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+      federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    })),
+    ...Array.from({ length: 4 }, () => ({
+      target: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+      source: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
+      federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    })),
+  ],
+};
+
 const EXPLICIT_FEEDER_TIER_SLUGS: Partial<Record<string, string[]>> = {
   [Constants.TierSlug.IEM_COLOGNE_GROUP_A]: [Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER],
   [Constants.TierSlug.IEM_COLOGNE_GROUP_B]: [Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER],
@@ -561,6 +726,13 @@ function getCompetitionSourceLabel(
   return `${displayName} ${federationLabel}`;
 }
 
+function getTierSourceLabel(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+) {
+  return `${Constants.IdiomaticTier[tierSlug]} ${getFederationLabel(federationSlug)}`;
+}
+
 function isExplicitFeeder(currentTierSlug: string, sourceTierSlug: string) {
   return EXPLICIT_FEEDER_TIER_SLUGS[currentTierSlug]?.includes(sourceTierSlug) === true;
 }
@@ -629,6 +801,34 @@ function getRuleSource(current: Competition, source: Competition, teamId: number
   });
 }
 
+function getRuleSourceIndex(current: Competition, source: Competition, teamId: number) {
+  const rule = getRuleSource(current, source, teamId);
+
+  return rule ? QUALIFICATION_SOURCE_RULES.indexOf(rule) : Number.POSITIVE_INFINITY;
+}
+
+function getRmrSlotSourceLabel(competition: Competition, teamId: number) {
+  const slotRules = RMR_SLOT_SOURCE_RULES[competition.tier.slug as Constants.TierSlug];
+
+  if (!slotRules) {
+    return null;
+  }
+
+  const competitorIndex = [...competition.competitors]
+    .sort((a, b) => a.id - b.id)
+    .findIndex((competitor) => competitor.teamId === teamId);
+  const rule = competitorIndex >= 0 ? slotRules[competitorIndex] : null;
+
+  if (!rule) {
+    return getRankingFallbackLabel(competition);
+  }
+
+  return getTierSourceLabel(
+    rule.source,
+    (rule.federation ?? competition.federation.slug) as Constants.FederationSlug,
+  );
+}
+
 function isLikelyQualificationSource(current: Competition, source: Competition, teamId: number) {
   if (source.id === current.id) {
     return false;
@@ -664,6 +864,12 @@ function getQualificationSourceLabel(
   seasonCompetitions: Competition[],
   teamId: number,
 ) {
+  const rmrSlotSourceLabel = getRmrSlotSourceLabel(competition, teamId);
+
+  if (rmrSlotSourceLabel) {
+    return rmrSlotSourceLabel;
+  }
+
   const source = seasonCompetitions
     .filter((candidate) => isLikelyQualificationSource(competition, candidate, teamId))
     .sort((a, b) => {
@@ -672,6 +878,13 @@ function getQualificationSourceLabel(
 
       if (Boolean(aRule) !== Boolean(bRule)) {
         return aRule ? -1 : 1;
+      }
+
+      const ruleIndexDelta =
+        getRuleSourceIndex(competition, a, teamId) - getRuleSourceIndex(competition, b, teamId);
+
+      if (ruleIndexDelta !== 0) {
+        return ruleIndexDelta;
       }
 
       const aPosition =
