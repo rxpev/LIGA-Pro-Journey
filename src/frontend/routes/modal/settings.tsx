@@ -372,6 +372,26 @@ export default function () {
                 />
               </article>
             </section>
+            <section>
+              <header>
+                <p>{t('settings.faceitMatchFoundTuneTitle')}</p>
+              </header>
+              <article>
+                <select
+                  className="select"
+                  onChange={(event) =>
+                    onSettingsUpdate('general.faceitMatchFoundTune', event.target.value || null)
+                  }
+                  value={settings.general.faceitMatchFoundTune || ''}
+                >
+                  {Constants.FaceitMatchFoundTunes.map((tune) => (
+                    <option key={tune.value || 'off'} value={tune.value || ''}>
+                      {tune.label}
+                    </option>
+                  ))}
+                </select>
+              </article>
+            </section>
           </fieldset>
         )}
         {activeTab === Tab.GAME_SETTINGS && (

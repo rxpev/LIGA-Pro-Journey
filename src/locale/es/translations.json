@@ -224,7 +224,8 @@
       "simTitle": "Modo de Simulación",
       "steamTitle": "Ruta de Steam",
       "themeTitle": "Tema",
-      "volumeTitle": "Volume Level"
+      "volumeTitle": "Volume Level",
+      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune"
     }
   },
   "components": {

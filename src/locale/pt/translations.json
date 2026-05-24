@@ -224,7 +224,8 @@
       "simTitle": "Manipular resultado",
       "steamTitle": "Endereço da steam",
       "themeTitle": "Tema do aplicativo",
-      "volumeTitle": "Volume Level"
+      "volumeTitle": "Volume Level",
+      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune"
     }
   },
   "components": {

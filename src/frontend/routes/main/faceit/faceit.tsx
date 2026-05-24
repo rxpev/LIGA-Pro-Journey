@@ -23,6 +23,7 @@ import deathsIcon from "../../../assets/faceit/deaths.png";
 import headshotIcon from "../../../assets/faceit/headshot.png";
 import { Image } from "@liga/frontend/components";
 import { Constants, Util } from "@liga/shared";
+import { useAudio } from "@liga/frontend/hooks";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from "react-icons/fa";
@@ -304,6 +305,7 @@ export default function Faceit(): JSX.Element {
   }, [state.profile]);
 
   const gameSlug = settingsAll.general.game;
+  const playMatchFoundTune = useAudio(settingsAll.general.faceitMatchFoundTune);
 
   const leaderboardRegionTitle = React.useMemo(() => {
     const userCountryId = state.profile?.player?.countryId;
@@ -667,6 +669,7 @@ export default function Faceit(): JSX.Element {
         )
       );
       setShowMatchRoom(true);
+      playMatchFoundTune();
     } finally {
       clearQueueInterval();
       dispatch(faceitQueueClear());

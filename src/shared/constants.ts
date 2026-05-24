@@ -1027,6 +1027,7 @@ export const Settings = {
     theme: ThemeType.SYSTEM,
     locale: null as LocaleIdentifier,
     volume: 0.05,
+    faceitMatchFoundTune: 'whoosh_whip.wav' as string | null,
   },
   calendar: {
     calendarDateFormat: CalendarDateFormat.EU,
@@ -1045,6 +1046,13 @@ export const Settings = {
     isCZ: false,
   },
 };
+
+export const FaceitMatchFoundTunes = [
+  { label: 'Off', value: null as string | null },
+  { label: 'Whoosh', value: 'whoosh_whip.wav' },
+  { label: 'Found Tone', value: 'found_tone.wav' },
+  { label: 'Lone Wolf Howling', value: 'lone_wolf_howling.wav' },
+] as const;
 
 /**
  * Match config for tiers such as

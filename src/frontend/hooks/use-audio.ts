@@ -13,12 +13,17 @@ import { AppStateContext } from '@liga/frontend/redux';
  * @param src The audio source.
  * @function
  */
-export function useAudio(src: string) {
+export function useAudio(src: string | null) {
   // load audio file
   const audioRef = React.useRef<HTMLAudioElement>();
+  const srcRef = React.useRef<string | null>(null);
 
-  if (!audioRef.current) {
+  if (src && (!audioRef.current || srcRef.current !== src)) {
     audioRef.current = new Audio('resources://audio/' + src);
+    srcRef.current = src;
+  } else if (!src) {
+    audioRef.current = undefined;
+    srcRef.current = null;
   }
 
   // load settings
@@ -39,7 +44,7 @@ export function useAudio(src: string) {
 
   // playback audio
   const play = () => {
-    if (audioRef.current) {
+    if (src && audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play();
     }
