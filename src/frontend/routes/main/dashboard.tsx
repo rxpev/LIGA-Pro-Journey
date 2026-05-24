@@ -109,6 +109,7 @@ export default function () {
     () => state.profile?.player?.transferListed === true,
     [state.profile],
   );
+  const isFaceitMatchroomLocked = !!state.faceitMatchRoom && !state.faceitMatchCompleted;
   const [settings, setSettings] = React.useState(Constants.Settings);
   const [upcoming, setUpcoming] = React.useState<
     Awaited<ReturnType<typeof api.matches.upcoming<typeof Eagers.match>>>
@@ -495,9 +496,14 @@ export default function () {
               <button
                 title={t('main.dashboard.advanceCalendar')}
                 className="day day-btn border-t-0"
-                disabled={!state.profile || state.working || (isMatchday && !isBenched)}
+                disabled={
+                  !state.profile ||
+                  state.working ||
+                  isFaceitMatchroomLocked ||
+                  (isMatchday && !isBenched)
+                }
                 onClick={async () => {
-                  if (state.working || !state.profile) {
+                  if (state.working || !state.profile || isFaceitMatchroomLocked) {
                     return;
                   }
 

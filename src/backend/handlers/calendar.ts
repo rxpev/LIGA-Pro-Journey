@@ -431,6 +431,19 @@ export default function () {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const settings = Util.loadSettings(profile.settings);
 
+    const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
+      where: {
+        profileId: profile.id,
+        matchType: 'FACEIT_PUG',
+        status: { not: Constants.MatchStatus.COMPLETED },
+      },
+      select: { id: true },
+    });
+
+    if (activeFaceitMatch) {
+      throw new Error('CALENDAR_BLOCKED_FACEIT_MATCHROOM');
+    }
+
     // First-run logic for competitions remains unchanged.
     if (!(await DatabaseClient.prisma.competition.count())) {
       Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');

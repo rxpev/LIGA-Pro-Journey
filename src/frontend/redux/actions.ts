@@ -91,8 +91,11 @@ export const workingUpdate = (payload: AppState["working"]) => ({
 export function calendarAdvance(days?: number) {
   return async (dispatch: AppDispatch) => {
     dispatch(workingUpdate(true));
-    await api.calendar.start(days);
-    dispatch(workingUpdate(false));
+    try {
+      await api.calendar.start(days);
+    } finally {
+      dispatch(workingUpdate(false));
+    }
   };
 }
 
