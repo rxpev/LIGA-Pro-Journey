@@ -23,7 +23,7 @@ import {
   startOfDay,
   subDays,
 } from 'date-fns';
-import { compact, differenceBy, flatten, groupBy, random, sample, shuffle } from 'lodash';
+import { compact, differenceBy, flatten, groupBy, random, sample, shuffle, sortBy } from 'lodash';
 import { Calendar, Prisma, PrismaClient } from '@prisma/client';
 import {
   Constants,
@@ -376,17 +376,29 @@ const SEEDED_TOURNAMENT_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.BLAST_FINALS,
   Constants.TierSlug.CCT_GLOBAL_FINALS,
   Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  Constants.TierSlug.CCT_SERIES,
   Constants.TierSlug.CCT_SERIES_PLAYOFFS,
   Constants.TierSlug.ESL_CHALLENGER,
   Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
   Constants.TierSlug.IEM_COLOGNE_GROUP_A,
   Constants.TierSlug.IEM_COLOGNE_GROUP_B,
-  Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
   Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
   Constants.TierSlug.IEM_KRAKOW_GROUP_A,
   Constants.TierSlug.IEM_KRAKOW_GROUP_B,
-  Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
   Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.MAJOR_ASIA_RMR,
+  Constants.TierSlug.MAJOR_AMERICAS_RMR,
+  Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+  Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+  Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+  Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
 ]);
 
 const MAJOR_RMR_TIERS = new Set<Constants.TierSlug>([
@@ -414,6 +426,170 @@ const LEAGUE_PLAYOFF_TIER_TO_DIVISION: Partial<Record<Constants.TierSlug, Consta
   [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: Constants.TierSlug.LEAGUE_ADVANCED,
   [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: Constants.TierSlug.LEAGUE_PRO,
 };
+
+type TournamentCompetitor = Prisma.CompetitionToTeamGetPayload<{
+  include: {
+    team: true;
+  };
+}>;
+
+function sortCompetitorsByWorldRanking<T extends TournamentCompetitor>(competitors: T[]): T[] {
+  return sortBy(competitors, [
+    (competitor) => -(competitor.team?.elo ?? 0),
+    (competitor) => competitor.teamId,
+    (competitor) => competitor.id,
+  ]);
+}
+
+function seedGroupsByWorldRanking<T extends TournamentCompetitor>(
+  competitors: T[],
+  groupSize: number,
+): T[] {
+  const rankedCompetitors = sortCompetitorsByWorldRanking(competitors);
+  const groupCount = Math.max(1, Math.ceil(rankedCompetitors.length / groupSize));
+  const groups: T[][] = Array.from({ length: groupCount }, (): T[] => []);
+
+  rankedCompetitors.forEach((competitor, index) => {
+    const row = Math.floor(index / groupCount);
+    const column = index % groupCount;
+    const groupIndex = row % 2 === 0 ? column : groupCount - 1 - column;
+    groups[groupIndex].push(competitor);
+  });
+
+  return flatten(groups);
+}
+
+function seedIemPlayoffCompetitors<T extends TournamentCompetitor>(competitors: T[]): T[] {
+  if (competitors.length !== 6) {
+    return competitors;
+  }
+
+  return [
+    competitors[0],
+    competitors[3],
+    competitors[1],
+    competitors[2],
+    competitors[4],
+    competitors[5],
+  ].filter(Boolean) as T[];
+}
+
+function seedSwissPlayoffCompetitors<T extends TournamentCompetitor>(competitors: T[]): T[] {
+  const unbeaten = sortBy(
+    competitors.filter((competitor) => (competitor.win ?? 0) === 3 && (competitor.loss ?? 0) === 0),
+    ['position', 'id'],
+  );
+  const twoLosses = sortBy(
+    competitors.filter((competitor) => (competitor.win ?? 0) === 3 && (competitor.loss ?? 0) === 2),
+    ['position', 'id'],
+  );
+
+  if (unbeaten.length < 2 || twoLosses.length < 2) {
+    return competitors;
+  }
+
+  const middle = sortBy(
+    competitors.filter(
+      (competitor) => !unbeaten.includes(competitor) && !twoLosses.includes(competitor),
+    ),
+    ['loss', 'position', 'id'],
+  );
+
+  if (competitors.length === 8) {
+    return [
+      unbeaten[0],
+      unbeaten[1],
+      middle[0],
+      middle[1],
+      middle[2],
+      middle[3],
+      twoLosses[1],
+      twoLosses[0],
+    ].filter(Boolean) as T[];
+  }
+
+  return [...unbeaten, ...middle, ...twoLosses.reverse()];
+}
+
+function getFirstRoundSeedPairs(size: number): number[][] {
+  const tournament = new Tournament(size, { short: true });
+  tournament.start();
+  return tournament.brackets.rounds()[0]?.map((match) => match.p) || [];
+}
+
+function seedGroupPlayoffCompetitors<T extends TournamentCompetitor>(
+  competitors: T[],
+  groupCount: number,
+): T[] {
+  if (competitors.length !== groupCount * 2) {
+    return competitors;
+  }
+
+  const winners = competitors.slice(0, groupCount);
+  const runnersUp = competitors.slice(groupCount);
+  const seeded = new Array<T>(competitors.length);
+
+  winners.forEach((winner, index) => {
+    seeded[index] = winner;
+  });
+
+  getFirstRoundSeedPairs(competitors.length).forEach(([homeSeed, awaySeed]) => {
+    const winnerSeed = homeSeed <= groupCount ? homeSeed : awaySeed;
+    const runnerSeed = winnerSeed === homeSeed ? awaySeed : homeSeed;
+    const winnerIndex = winnerSeed - 1;
+    const runnerIndex = winnerIndex % 2 === 0 ? winnerIndex + 1 : winnerIndex - 1;
+    seeded[runnerSeed - 1] = runnersUp[runnerIndex] || runnersUp[winnerIndex];
+  });
+
+  return seeded.filter(Boolean);
+}
+
+function seedTournamentCompetitors<T extends TournamentCompetitor>(
+  competitors: T[],
+  competition: Prisma.CompetitionGetPayload<{ include: { tier: { include: { league: true } } } }>,
+): T[] {
+  const tierSlug = competition.tier.slug as Constants.TierSlug;
+
+  if (
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+  ) {
+    return seedIemPlayoffCompetitors(competitors);
+  }
+
+  if (
+    tierSlug === Constants.TierSlug.CCT_SERIES_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE
+  ) {
+    return seedSwissPlayoffCompetitors(competitors);
+  }
+
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS) {
+    return seedGroupPlayoffCompetitors(competitors, 2);
+  }
+
+  if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return seedGroupPlayoffCompetitors(competitors, 8);
+  }
+
+  if (
+    tierSlug === Constants.TierSlug.ESL_CHALLENGER ||
+    tierSlug === Constants.TierSlug.LEAGUE_PRO
+  ) {
+    return seedGroupsByWorldRanking(competitors, competition.tier.groupSize || competitors.length);
+  }
+
+  if (
+    tierSlug === Constants.TierSlug.BLAST_FINALS ||
+    tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS ||
+    tierSlug === Constants.TierSlug.MAJOR_ASIA_RMR ||
+    Constants.TierSwissConfig[tierSlug]
+  ) {
+    return sortCompetitorsByWorldRanking(competitors);
+  }
+
+  return competitors;
+}
 
 function getPrestigeIndexForTierSlug(tierSlug?: string | null) {
   const normalizedTierSlug =
@@ -6634,7 +6810,7 @@ export async function onCompetitionStart(entry: Calendar) {
   const tournamentCompetitors = SEEDED_TOURNAMENT_TIERS.has(
     competition.tier.slug as Constants.TierSlug,
   )
-    ? competition.competitors.slice(0, tournamentSize)
+    ? seedTournamentCompetitors(competition.competitors, competition).slice(0, tournamentSize)
     : shuffle(competition.competitors).slice(0, tournamentSize);
 
   tournament.addCompetitors(tournamentCompetitors.map((competitor) => competitor.id));

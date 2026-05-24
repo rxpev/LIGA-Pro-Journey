@@ -189,6 +189,34 @@ class SwissTournament {
     this.generateNextRound();
   }
 
+  private buildHighLowPairings(
+    seeds: number[],
+    allowRematches = false,
+  ): Array<[number, number]> | null {
+    if (seeds.length === 0) {
+      return [];
+    }
+
+    const orderedSeeds = sortBy(seeds, (seed) => seed);
+    const [home] = orderedSeeds;
+    const awayCandidates = [...orderedSeeds.slice(1)].reverse();
+
+    for (const away of awayCandidates) {
+      if (!allowRematches && this.records[home].opponents.includes(away)) {
+        continue;
+      }
+
+      const remainingSeeds = orderedSeeds.filter((seed) => seed !== home && seed !== away);
+      const remainingPairings = this.buildHighLowPairings(remainingSeeds, allowRematches);
+
+      if (remainingPairings) {
+        return [[home, away], ...remainingPairings];
+      }
+    }
+
+    return null;
+  }
+
   private buildPairings(seeds: number[], allowRematches = false): Array<[number, number]> | null {
     if (seeds.length === 0) {
       return [];
@@ -267,7 +295,7 @@ class SwissTournament {
       for (const candidate of floatCandidates) {
         const pairingSeeds =
           candidate == null ? [...seeds] : seeds.filter((seed) => seed !== candidate);
-        const candidatePairings = this.buildPairings(pairingSeeds);
+        const candidatePairings = this.buildHighLowPairings(pairingSeeds);
 
         if (candidatePairings) {
           groupPairings = candidatePairings;
@@ -277,7 +305,14 @@ class SwissTournament {
       }
 
       if (!groupPairings) {
-        throw new Error(`Unable to generate non-rematch swiss pairings for record bucket ${key}.`);
+        groupPairings = this.buildHighLowPairings(
+          floatSeed != null ? [floatSeed, ...sortBy(groupedSeeds[key], (seed) => seed)] : seeds,
+          true,
+        );
+      }
+
+      if (!groupPairings) {
+        throw new Error(`Unable to generate swiss pairings for record bucket ${key}.`);
       }
 
       pairings.push(...groupPairings);
