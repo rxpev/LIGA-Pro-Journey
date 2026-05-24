@@ -228,6 +228,72 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   return Promise.resolve();
 }
 
+const WEEKLY_NPC_FACEIT_ELO_SAMPLE_MIN = 300;
+const WEEKLY_NPC_FACEIT_ELO_SAMPLE_MAX = 500;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function randomInt(min: number, max: number) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function randomSample<T>(items: T[], sampleSize: number) {
+  const copy = [...items];
+
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+
+  return copy.slice(0, sampleSize);
+}
+
+function highEloPressure(elo = 0) {
+  if (elo >= 5000) return 0.55;
+  if (elo >= 4750) return 0.48;
+  if (elo >= 4500) return 0.4;
+  if (elo >= 4250) return 0.34;
+  if (elo >= 4000) return 0.28;
+  if (elo >= 3750) return 0.21;
+  if (elo >= 3500) return 0.15;
+  if (elo >= 3250) return 0.1;
+  if (elo >= 3000) return 0.06;
+  if (elo >= 2750) return 0.03;
+
+  return 0;
+}
+
+function highEloGainMultiplier(elo = 0) {
+  if (elo >= 5000) return 0;
+  if (elo >= 4750) return 0.15;
+  if (elo >= 4500) return 0.25;
+  if (elo >= 4250) return 0.35;
+  if (elo >= 4000) return 0.45;
+  if (elo >= 3750) return 0.55;
+  if (elo >= 3500) return 0.65;
+  if (elo >= 3250) return 0.75;
+  if (elo >= 3000) return 0.85;
+  if (elo >= 2750) return 0.92;
+
+  return 1;
+}
+
+function highEloLossMultiplier(elo = 0, xp = 0) {
+  const lowXpMultiplier = xp < 35 ? 1.45 : xp < 50 ? 1.25 : 1;
+
+  if (elo >= 5000) return 2.2 * lowXpMultiplier;
+  if (elo >= 4750) return 1.9 * lowXpMultiplier;
+  if (elo >= 4500) return 1.65 * lowXpMultiplier;
+  if (elo >= 4250) return 1.45 * lowXpMultiplier;
+  if (elo >= 4000) return 1.3 * lowXpMultiplier;
+  if (elo >= 3750) return 1.18;
+  if (elo >= 3500) return 1.1;
+
+  return 1;
+}
+
 function randomWeeklyFaceitDelta() {
   // Max weekly movement is +/-50, biased toward +/-25 and +/-30.
   const weightedDeltas: Array<{ delta: number; weight: number }> = [
@@ -259,30 +325,44 @@ function randomWeeklyFaceitDelta() {
   return 0;
 }
 
-function randomWeeklyFaceitDeltaForXp(xp = 0) {
+function randomWeeklyFaceitDeltaForXp(xp = 0, elo = 0) {
   const rawDelta = randomWeeklyFaceitDelta();
 
-  if (xp < 50 || rawDelta === 0) {
-    return rawDelta;
+  if (rawDelta === 0) {
+    return 0;
   }
 
   const magnitude = Math.abs(rawDelta);
-  const gainRoll = Math.random() < 0.65;
+  const xpGainBias = xp >= 80 ? 0.16 : xp >= 65 ? 0.1 : xp >= 50 ? 0.06 : 0;
+  const lowXpHighEloPressure = xp < 50 && elo >= 4000 ? 0.12 : 0;
+  const gainChance = clampNumber(0.5 + xpGainBias - highEloPressure(elo) - lowXpHighEloPressure, 0.08, 0.72);
+  const gainRoll = Math.random() < gainChance;
 
-  return gainRoll ? magnitude : -magnitude;
+  if (gainRoll) {
+    const gainMultiplier = highEloGainMultiplier(elo) * (xp < 50 && elo >= 4000 ? 0.5 : 1);
+    return Math.round(magnitude * gainMultiplier);
+  }
+
+  return -Math.round(magnitude * highEloLossMultiplier(elo, xp));
 }
 
 async function simulateWeeklyNpcFaceitElo(
   prisma: typeof DatabaseClient.prisma,
   userPlayerId?: number | null,
 ) {
-  const players = await prisma.player.findMany({
+  const eligiblePlayers = await prisma.player.findMany({
     where: userPlayerId ? { id: { not: userPlayerId } } : {},
     select: {
       id: true,
       xp: true,
+      elo: true,
     },
   });
+  const sampleSize = Math.min(
+    eligiblePlayers.length,
+    randomInt(WEEKLY_NPC_FACEIT_ELO_SAMPLE_MIN, WEEKLY_NPC_FACEIT_ELO_SAMPLE_MAX),
+  );
+  const players = randomSample(eligiblePlayers, sampleSize);
 
   const chunkSize = 500;
   for (let i = 0; i < players.length; i += chunkSize) {
@@ -290,7 +370,7 @@ async function simulateWeeklyNpcFaceitElo(
 
     await prisma.$transaction(
       chunk.map((player) => {
-        const delta = randomWeeklyFaceitDeltaForXp(player.xp);
+        const delta = randomWeeklyFaceitDeltaForXp(player.xp, player.elo);
 
         return prisma.player.update({
           where: { id: player.id },
@@ -305,20 +385,9 @@ async function simulateWeeklyNpcFaceitElo(
     await prisma.player.updateMany({
       where: {
         id: { in: chunk.map((player) => player.id) },
-        elo: { gt: 5100 },
+        elo: { gt: 5000 },
       },
       data: { elo: 5000 },
-    });
-
-    await prisma.player.updateMany({
-      where: {
-        id: { in: chunk.map((player) => player.id) },
-        elo: { gte: 5000, lte: 5100 },
-      },
-      data: {
-        // Keep top ratings around the 5000-5100 band by nudging back down.
-        elo: { decrement: 75 },
-      },
     });
 
     await prisma.player.updateMany({
@@ -331,8 +400,9 @@ async function simulateWeeklyNpcFaceitElo(
   }
 
   Engine.Runtime.Instance.log.info(
-    'Weekly FACEIT Elo simulation applied to %d players (excluding user).',
+    'Weekly FACEIT Elo simulation applied to %d of %d eligible NPC players.',
     players.length,
+    eligiblePlayers.length,
   );
 }
 
