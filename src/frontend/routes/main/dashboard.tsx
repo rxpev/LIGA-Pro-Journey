@@ -386,7 +386,7 @@ export default function () {
                             : `${t('shared.group')} ${Util.toAlpha(userTeam.group)}`
                         }
                         zones={
-                          standings.competition.status === Constants.CompetitionStatus.STARTED &&
+                          Util.shouldShowStandingsZones(standings.competition.status) &&
                           Util.getTierZonesByGroup(
                             standings.competition.tier.slug as Constants.TierSlug,
                             standings.competition.federation.slug as Constants.FederationSlug,
@@ -395,6 +395,7 @@ export default function () {
                                 (competitor) => competitor.group,
                               ),
                             ).size,
+                            standings.competition.tier.groupSize,
                           )
                         }
                       />

@@ -90,11 +90,12 @@ export default function () {
                 : `${t('shared.group')} ${Util.toAlpha(group)}`
             }
             zones={
-              competition.status === Constants.CompetitionStatus.STARTED &&
+              Util.shouldShowStandingsZones(competition.status) &&
               Util.getTierZonesByGroup(
                 competition.tier.slug as Constants.TierSlug,
                 competition.federation.slug as Constants.FederationSlug,
                 Object.keys(groups).length,
+                competition.tier.groupSize,
               )
             }
           />
@@ -112,6 +113,14 @@ export default function () {
           mode="swiss"
           teamLink={(team) => `/teams?teamId=${team.id}`}
           title={Constants.IdiomaticTier[competition.tier.slug]}
+          zones={
+            Util.shouldShowStandingsZones(competition.status) &&
+            Util.getTierAdvancementZones(
+              competition.tier.slug as Constants.TierSlug,
+              competition.federation.slug as Constants.FederationSlug,
+              competition.competitors.length,
+            )
+          }
         />
       </section>
     );

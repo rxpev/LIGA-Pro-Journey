@@ -277,7 +277,13 @@ export function getTierZonesByGroup(
   tierSlug: Constants.TierSlug,
   federationSlug: Constants.FederationSlug,
   groupCount: number,
+  groupSize?: number,
 ) {
+  const groupZones = groupSize ? getTierGroupZones(tierSlug, federationSlug, groupSize) : undefined;
+  if (groupZones) {
+    return groupZones;
+  }
+
   const zones = getTierZones(tierSlug, federationSlug);
   if (groupCount <= 1) {
     return zones;
@@ -292,6 +298,130 @@ export function getTierZonesByGroup(
     const groupedEnd = Math.max(groupedStart, Math.floor(end / groupCount));
     return [groupedStart, groupedEnd];
   });
+}
+
+/**
+ * Returns whether standings zones should be visible.
+ *
+ * @param status The competition status.
+ * @function
+ */
+export function shouldShowStandingsZones(status: Constants.CompetitionStatus) {
+  return [
+    Constants.CompetitionStatus.STARTED,
+    Constants.CompetitionStatus.COMPLETED,
+  ].includes(status);
+}
+
+/**
+ * Returns the last advancing placement for knockout or ranking standings.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @function
+ */
+export function getTierAdvancementEnd(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+) {
+  if (tierSlug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS) {
+    if (federationSlug === Constants.FederationSlug.ESPORTS_EUROPA) return 8;
+    if (federationSlug === Constants.FederationSlug.ESPORTS_AMERICAS) return 4;
+    if (federationSlug === Constants.FederationSlug.ESPORTS_ASIA) return 3;
+    if (federationSlug === Constants.FederationSlug.ESPORTS_OCE) return 1;
+  }
+
+  const leagueZones = Constants.LeagueTierZonesByFederation[federationSlug]?.[tierSlug];
+  const leagueAdvancementEnd = Math.max(leagueZones?.[0]?.[1] || 0, leagueZones?.[1]?.[1] || 0);
+  if (leagueAdvancementEnd) {
+    return leagueAdvancementEnd;
+  }
+
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1) return 2;
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2) return 2;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4) return 4;
+
+  if (tierSlug === Constants.TierSlug.CCT_SERIES) return 8;
+  if (tierSlug === Constants.TierSlug.CCT_OCE_SERIES) return 4;
+
+  if (tierSlug === Constants.TierSlug.CCT_SERIES_PLAYOFFS) {
+    if (federationSlug === Constants.FederationSlug.ESPORTS_EUROPA) return 4;
+    if (federationSlug === Constants.FederationSlug.ESPORTS_AMERICAS) return 2;
+    if (federationSlug === Constants.FederationSlug.ESPORTS_ASIA) return 1;
+  }
+
+  if (tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS) return 1;
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER) return 2;
+  if (tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A) return 3;
+  if (tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B) return 3;
+  if (tierSlug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER) return 1;
+  if (tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_A) return 3;
+  if (tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_B) return 3;
+  if (tierSlug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_RMR) return 3;
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_RMR) return 5;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A) return 8;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_B) return 8;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) return 8;
+  if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) return 8;
+
+  return undefined;
+}
+
+/**
+ * Returns advancement/elimination zones for standings.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @param fieldSize       The number of teams in the standings.
+ * @function
+ */
+export function getTierAdvancementZones(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+  fieldSize: number,
+) {
+  const advancementEnd = getTierAdvancementEnd(tierSlug, federationSlug);
+  if (!advancementEnd) {
+    return undefined;
+  }
+
+  return [
+    [0, 0],
+    [1, Math.min(advancementEnd, fieldSize)],
+    [Math.min(advancementEnd, fieldSize) + 1, fieldSize],
+  ];
+}
+
+/**
+ * Returns advancement/elimination zones for grouped standings.
+ *
+ * @param tierSlug        The tier slug.
+ * @param federationSlug  The federation slug.
+ * @param groupSize       The number of teams in each group.
+ * @function
+ */
+export function getTierGroupZones(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+  groupSize: number,
+) {
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER) {
+    return [
+      [1, 2],
+      [0, 0],
+      [3, groupSize],
+    ];
+  }
 }
 
 /**

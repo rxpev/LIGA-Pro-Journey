@@ -567,12 +567,13 @@ export default function () {
           highlight={team.id}
           teamLink={(memberTeam) => `/teams?teamId=${memberTeam.id}`}
           zones={
-            competition.status === Constants.CompetitionStatus.STARTED &&
+            Util.shouldShowStandingsZones(competition.status) &&
             competition.tier.groupSize &&
             Util.getTierZonesByGroup(
               competition.tier.slug as Constants.TierSlug,
               competition.federation.slug as Constants.FederationSlug,
               new Set(competition.competitors.map((competitor) => competitor.group)).size,
+              competition.tier.groupSize,
             )
           }
         />

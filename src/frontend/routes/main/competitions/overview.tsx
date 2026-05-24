@@ -151,12 +151,13 @@ export default function () {
   const groupKeys = React.useMemo(() => Object.keys(groups), [groups]);
   const groupZones = React.useMemo(
     () =>
-      competition.status === Constants.CompetitionStatus.STARTED &&
+      Util.shouldShowStandingsZones(competition.status) &&
       competition.tier.groupSize &&
       Util.getTierZonesByGroup(
         tierSlug,
         competition.federation.slug as Constants.FederationSlug,
         groupKeys.length,
+        competition.tier.groupSize,
       ),
     [
       competition.status,
@@ -207,6 +208,16 @@ export default function () {
 
   const isSwiss = Boolean(Constants.TierSwissConfig[tierSlug]);
   const isBracketStandings = !competition.tier.groupSize && !isSwiss;
+  const advancementZones = React.useMemo(
+    () =>
+      Util.shouldShowStandingsZones(competition.status) &&
+      Util.getTierAdvancementZones(
+        tierSlug,
+        competition.federation.slug as Constants.FederationSlug,
+        competition.competitors.length,
+      ),
+    [competition.competitors.length, competition.federation.slug, competition.status, tierSlug],
+  );
   const hideSmallGroupPoints = Boolean(
     competition.tier.groupSize && competition.tier.groupSize <= 4,
   );
@@ -500,6 +511,7 @@ export default function () {
             competitors={competition.competitors}
             mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
             teamLink={(team) => `/teams?teamId=${team.id}`}
+            zones={isBracketStandings || isSwiss ? advancementZones : undefined}
           />
         )}
       </article>
