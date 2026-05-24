@@ -906,6 +906,20 @@ export default function () {
                 />
               </aside>
             </article>
+            <article>
+              <header>
+                <p>Use CZ75-Auto</p>
+                <p>Enable to use CZ75-Auto as your pistol.</p>
+              </header>
+              <aside>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  checked={settings.gameSettings.isCZ}
+                  onChange={(event) => onSettingsUpdate('gameSettings.isCZ', event.target.checked)}
+                />
+              </aside>
+            </article>
           </fieldset>
         </form>
         <button

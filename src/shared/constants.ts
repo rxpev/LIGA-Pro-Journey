@@ -1042,6 +1042,7 @@ export const Settings = {
   gameSettings: {
     isM4A1: false,
     isUSP: false,
+    isCZ: false,
   },
 };
 

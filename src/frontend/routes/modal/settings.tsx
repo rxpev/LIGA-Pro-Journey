@@ -381,6 +381,22 @@ export default function () {
                 />
               </article>
             </section>
+            <section>
+              <header>
+                <p>Equip CZ75-Auto</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  onChange={(event) =>
+                    onSettingsUpdate('gameSettings.isCZ', event.target.checked)
+                  }
+                  checked={settings.gameSettings.isCZ}
+                  value={String(settings.gameSettings.isCZ)}
+                />
+              </article>
+            </section>
           </fieldset>
         )}
         {activeTab === Tab.CALENDAR && (

@@ -956,6 +956,7 @@ End\n
     const isAWP = !this.spectating && (isUserAwper || shouldForceAwpForCustomGame) ? 1 : 0;
     const isM4A1 = this.settings.gameSettings?.isM4A1 ? 1 : 0;
     const isUSP = this.settings.gameSettings?.isUSP ? 1 : 0;
+    const isCZ = this.settings.gameSettings?.isCZ ? 1 : 0;
     const isIGL = !this.spectating && user?.role === "IGL";
     const bot_defer_to_human_items = this.isFaceit ? 0 : (isIGL ? 1 : 0);
     const isLan = this.getIsLanMatch() ? 1 : 0;
@@ -1099,6 +1100,7 @@ End\n
         isAWP,
         isM4A1,
         isUSP,
+        isCZ,
         isFaceit: 1,
         isLan,
         bot_defer_to_human_items,
@@ -1131,6 +1133,7 @@ End\n
         isAWP,
         isM4A1,
         isUSP,
+        isCZ,
         isFaceit: 0,
         isLan,
         bot_defer_to_human_items,
@@ -1151,6 +1154,9 @@ End\n
     serverCfgRendered = /^\s*isLan\s+/im.test(serverCfgRendered)
       ? serverCfgRendered.replace(/^\s*isLan\s+\S+.*$/im, `isLan "${isLan}"`)
       : serverCfgRendered.replace(/\r?\n*$/, `\nisLan "${isLan}"\n`);
+    serverCfgRendered = /^\s*isCZ\s+/im.test(serverCfgRendered)
+      ? serverCfgRendered.replace(/^\s*isCZ\s+\S+.*$/im, `isCZ "${isCZ}"`)
+      : serverCfgRendered.replace(/\r?\n*$/, `\nisCZ "${isCZ}"\n`);
 
     await fs.promises.writeFile(serverCfgPath, serverCfgRendered, 'utf8');
     this.log.info(`Generated server.cfg at: ${serverCfgPath}`);
