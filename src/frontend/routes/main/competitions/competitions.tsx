@@ -20,6 +20,7 @@ enum TabIdentifier {
 }
 
 type CompetitionTier = Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>[number];
+type Competition = Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>[number];
 type TournamentFamily = 'all' | 'esea' | 'major' | 'cct' | 'qualifiers';
 
 type TournamentCard = {
@@ -306,6 +307,18 @@ function sortTournamentCards(
   });
 }
 
+function isCompetitionVisibleForSeason(
+  competition: Competition,
+  selectedSeasonId: number,
+  currentSeason?: number | null,
+) {
+  if (!currentSeason || selectedSeasonId >= currentSeason) {
+    return true;
+  }
+
+  return competition.status === Constants.CompetitionStatus.COMPLETED;
+}
+
 /**
  * Exports this module.
  *
@@ -576,7 +589,13 @@ export default function () {
 
     const seasonCompetitionTierIds =
       selectedSeasonId > 0
-        ? new Set((seasonCompetitions ?? []).map((competition) => competition.tierId))
+        ? new Set(
+            (seasonCompetitions ?? [])
+              .filter((competition) =>
+                isCompetitionVisibleForSeason(competition, selectedSeasonId, state.profile?.season),
+              )
+              .map((competition) => competition.tierId),
+          )
         : null;
 
     return tiers.filter((tier) => {
@@ -676,7 +695,7 @@ export default function () {
         selectedFederation.slug as Constants.FederationSlug,
       );
     });
-  }, [seasonCompetitions, selectedFederation, selectedSeasonId, tiers]);
+  }, [seasonCompetitions, selectedFederation, selectedSeasonId, state.profile?.season, tiers]);
 
   const federationTabs = React.useMemo(
     () =>
