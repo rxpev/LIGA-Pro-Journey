@@ -142,20 +142,23 @@ export function toOrdinalSuffix(num: string | number) {
  * @function
  */
 export function formatCurrency(value: number | string, opts?: Intl.NumberFormatOptions) {
+  const maximumFractionDigits = opts?.maximumFractionDigits ?? 2;
+
   // setup base options
   const options: Intl.NumberFormatOptions = {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 2,
+    maximumFractionDigits,
     ...opts,
   };
 
   // convert string to number
   const num = typeof value === 'string' ? Number(value) : value;
+  const roundedNum = Number(num.toFixed(maximumFractionDigits));
 
   // only show decimals if necessary
   const formatter =
-    num % 1 === 0
+    roundedNum % 1 === 0
       ? new Intl.NumberFormat('en-US', {
           ...options,
           minimumFractionDigits: 0,
@@ -163,7 +166,7 @@ export function formatCurrency(value: number | string, opts?: Intl.NumberFormatO
       : new Intl.NumberFormat('en-US', options);
 
   // format the number
-  return formatter.format(num);
+  return formatter.format(roundedNum);
 }
 
 /**
