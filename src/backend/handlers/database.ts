@@ -8,6 +8,7 @@ import { ipcMain } from "electron";
 import { Prisma } from "@prisma/client";
 import { DatabaseClient } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
+import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
 
 export default function registerDatabaseHandlers() {
   // CONNECT
@@ -20,6 +21,24 @@ export default function registerDatabaseHandlers() {
     const profile = await prisma.profile.findFirst();
 
     if (!profile) return;
+
+    const faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
+
+    if (!faceitEloIntegrity.valid) {
+      log.warn(
+        'Blocked save load because FACEIT ELO integrity failed: actual=%d expected=%d',
+        faceitEloIntegrity.actualElo,
+        faceitEloIntegrity.expectedElo,
+      );
+
+      await DatabaseClient.disconnect();
+      await DatabaseClient.connect();
+
+      return {
+        blocked: true,
+        reason: 'FACEIT_ELO_TAMPERED',
+      };
+    }
 
     // Load profile settings
     const settings = Util.loadSettings(profile.settings);
