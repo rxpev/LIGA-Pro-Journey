@@ -346,6 +346,8 @@ export default function () {
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
   const [selectedTierId, setSelectedTierId] = React.useState<number>(-1);
   const [selectedFamily, setSelectedFamily] = React.useState<TournamentFamily>('all');
+  const [preserveTournamentOnSeasonChange, setPreserveTournamentOnSeasonChange] =
+    React.useState(false);
 
   const [initializedFromQuery, setInitializedFromQuery] = React.useState(false);
   // Used to ensure we only auto-initialize filters once from the profile.
@@ -756,6 +758,7 @@ export default function () {
 
   const loadTier = React.useCallback(
     async (tierId: number) => {
+      setPreserveTournamentOnSeasonChange(false);
       setSelectedTierId(tierId);
 
       if (selectedFederationId < 0 || selectedSeasonId < 0) {
@@ -827,8 +830,8 @@ export default function () {
     if (selectedFederationId < 0) return;
     if (!visibleTiers.length) return;
 
-    // Don't override user choice
-    if (selectedTierId > 0 && competition) return;
+    // Don't override user choice or season-filter reloads.
+    if (selectedTierId > 0 || preserveTournamentOnSeasonChange) return;
 
     let defaultTier: (typeof tiers)[number] | undefined;
 
@@ -850,6 +853,18 @@ export default function () {
       // On the team's true federation: prefer the team's current league tier.
       const desiredSlug = Constants.Prestige[state.profile.team.tier];
       defaultTier = visibleTiers.find((tier) => tier.slug === desiredSlug);
+    }
+
+    if (
+      !defaultTier &&
+      !state.profile.teamId &&
+      selectedFederation?.slug === Constants.FederationSlug.ESPORTS_WORLD
+    ) {
+      defaultTier = visibleTiers.find(
+        (tier) =>
+          getTournamentMeta(tier, selectedFederation.slug as Constants.FederationSlug).key ===
+          'major:international',
+      );
     }
 
     // In all other cases (teamless or non-team federation), use top division in that region.
@@ -877,7 +892,8 @@ export default function () {
     selectedSeasonId,
     visibleTiers,
     selectedTierId,
-    competition,
+    preserveTournamentOnSeasonChange,
+    selectedFederation,
     loadCompetition,
   ]);
 
@@ -935,6 +951,7 @@ export default function () {
                       setSelectedTierId(-1);
                       setCompetition(undefined);
                       setSelectedFamily('all');
+                      setPreserveTournamentOnSeasonChange(false);
                     }}
                   >
                     {FEDERATION_LABELS[federation.slug as Constants.FederationSlug] ||
@@ -952,9 +969,8 @@ export default function () {
                   className="select"
                   onChange={(event) => {
                     setSelectedSeasonId(Number(event.target.value));
-                    setSelectedTierId(-1);
                     setCompetition(undefined);
-                    setSelectedFamily('all');
+                    setPreserveTournamentOnSeasonChange(true);
                   }}
                   value={selectedSeasonId || -1}
                 >
