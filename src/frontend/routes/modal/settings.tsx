@@ -11,6 +11,9 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaExclamationTriangle, FaFolderOpen } from 'react-icons/fa';
 import { ReduxActions } from '@liga/frontend/redux/actions';
+import cz75AutoIcon from '@liga/frontend/assets/cz75auto.png';
+import m4a1sIcon from '@liga/frontend/assets/m4a1s.png';
+import uspsIcon from '@liga/frontend/assets/usps.png';
 
 /** @enum */
 enum Tab {
@@ -18,6 +21,30 @@ enum Tab {
   CALENDAR,
   GAME_SETTINGS,
 }
+
+const weaponSettings = [
+  {
+    iconClassName: 'scale-125',
+    icon: uspsIcon,
+    label: 'Equip USP-S',
+    path: 'gameSettings.isUSP',
+    setting: 'isUSP',
+  },
+  {
+    iconClassName: 'scale-105',
+    icon: m4a1sIcon,
+    label: 'Equip M4A1-S',
+    path: 'gameSettings.isM4A1',
+    setting: 'isM4A1',
+  },
+  {
+    iconClassName: 'scale-150',
+    icon: cz75AutoIcon,
+    label: 'Equip CZ75-Auto',
+    path: 'gameSettings.isCZ',
+    setting: 'isCZ',
+  },
+] as const;
 
 /**
  * Exports this module.
@@ -349,54 +376,32 @@ export default function () {
         )}
         {activeTab === Tab.GAME_SETTINGS && (
           <fieldset>
-            <section>
-              <header>
-                <p>Equip USP-S</p>
-              </header>
-              <article>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  onChange={(event) =>
-                    onSettingsUpdate('gameSettings.isUSP', event.target.checked)
-                  }
-                  checked={settings.gameSettings.isUSP}
-                  value={String(settings.gameSettings.isUSP)}
-                />
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>Equip M4A1-S</p>
-              </header>
-              <article>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  onChange={(event) =>
-                    onSettingsUpdate('gameSettings.isM4A1', event.target.checked)
-                  }
-                  checked={settings.gameSettings.isM4A1}
-                  value={String(settings.gameSettings.isM4A1)}
-                />
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>Equip CZ75-Auto</p>
-              </header>
-              <article>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  onChange={(event) =>
-                    onSettingsUpdate('gameSettings.isCZ', event.target.checked)
-                  }
-                  checked={settings.gameSettings.isCZ}
-                  value={String(settings.gameSettings.isCZ)}
-                />
-              </article>
-            </section>
+            {weaponSettings.map((weapon) => (
+              <section key={weapon.path}>
+                <header>
+                  <p className="flex items-center gap-4 not-italic">
+                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                      <img
+                        alt=""
+                        className={cx('h-14 w-14 object-contain', weapon.iconClassName)}
+                        draggable={false}
+                        src={weapon.icon}
+                      />
+                    </span>
+                    <span>{weapon.label}</span>
+                  </p>
+                </header>
+                <article>
+                  <input
+                    type="checkbox"
+                    className="toggle"
+                    onChange={(event) => onSettingsUpdate(weapon.path, event.target.checked)}
+                    checked={settings.gameSettings[weapon.setting]}
+                    value={String(settings.gameSettings[weapon.setting])}
+                  />
+                </article>
+              </section>
+            ))}
           </fieldset>
         )}
         {activeTab === Tab.CALENDAR && (
