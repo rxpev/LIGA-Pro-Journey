@@ -694,6 +694,40 @@ export default function () {
   );
 
   React.useEffect(() => {
+    if (selectedFederationId <= 0 || selectedSeasonId <= 0 || selectedTierId <= 0) {
+      return;
+    }
+
+    if (
+      competition?.federationId === selectedFederationId &&
+      competition.season === selectedSeasonId &&
+      competition.tierId === selectedTierId
+    ) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    loadCompetition(selectedFederationId, selectedSeasonId, selectedTierId).then((result) => {
+      if (isCurrent) {
+        setCompetition(result);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [
+    competition?.federationId,
+    competition?.season,
+    competition?.tierId,
+    loadCompetition,
+    selectedFederationId,
+    selectedSeasonId,
+    selectedTierId,
+  ]);
+
+  React.useEffect(() => {
     if (selectedTierId <= 0 || !visibleTiers.length) {
       return;
     }
