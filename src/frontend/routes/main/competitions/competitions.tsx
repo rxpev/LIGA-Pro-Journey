@@ -325,6 +325,9 @@ export default function () {
   const [tiers, setTiers] = React.useState<
     Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>
   >([]);
+  const [seasonCompetitions, setSeasonCompetitions] = React.useState<
+    Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>> | null
+  >(null);
 
   const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
@@ -424,6 +427,34 @@ export default function () {
     },
     [tiers],
   );
+
+  React.useEffect(() => {
+    if (selectedFederationId <= 0 || selectedSeasonId <= 0) {
+      setSeasonCompetitions(null);
+      return;
+    }
+
+    let isCurrent = true;
+    setSeasonCompetitions(null);
+
+    api.competitions
+      .all({
+        ...Eagers.competition,
+        where: {
+          federationId: selectedFederationId,
+          season: selectedSeasonId,
+        },
+      })
+      .then((competitions) => {
+        if (isCurrent) {
+          setSeasonCompetitions(competitions);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedFederationId, selectedSeasonId]);
 
   // Initial data fetch
   React.useEffect(() => {
@@ -531,11 +562,36 @@ export default function () {
   );
 
   const visibleTiers = React.useMemo(() => {
+    if (selectedFederationId > 0 && !selectedFederation) {
+      return [];
+    }
+
     if (!selectedFederation) {
       return tiers;
     }
 
+    if (selectedSeasonId > 0 && seasonCompetitions === null) {
+      return [];
+    }
+
+    const seasonCompetitionTierIds =
+      selectedSeasonId > 0
+        ? new Set((seasonCompetitions ?? []).map((competition) => competition.tierId))
+        : null;
+
     return tiers.filter((tier) => {
+      if (seasonCompetitionTierIds && !seasonCompetitionTierIds.has(tier.id)) {
+        return false;
+      }
+
+      const leagueFederationSlugs = tier.league.federations.map(
+        (federation) => federation.slug as Constants.FederationSlug,
+      );
+
+      if (!leagueFederationSlugs.includes(selectedFederation.slug as Constants.FederationSlug)) {
+        return false;
+      }
+
       if (tier.league.slug !== Constants.LeagueSlug.ESPORTS_LEAGUE) {
         if (tier.league.slug === Constants.LeagueSlug.ESPORTS_CCT) {
           const regionalSeriesTiers = [
@@ -620,7 +676,7 @@ export default function () {
         selectedFederation.slug as Constants.FederationSlug,
       );
     });
-  }, [tiers, selectedFederation]);
+  }, [seasonCompetitions, selectedFederation, selectedSeasonId, tiers]);
 
   const federationTabs = React.useMemo(
     () =>
@@ -875,7 +931,12 @@ export default function () {
               <article>
                 <select
                   className="select"
-                  onChange={(event) => setSelectedSeasonId(Number(event.target.value))}
+                  onChange={(event) => {
+                    setSelectedSeasonId(Number(event.target.value));
+                    setSelectedTierId(-1);
+                    setCompetition(undefined);
+                    setSelectedFamily('all');
+                  }}
                   value={selectedSeasonId || -1}
                 >
                   <option disabled value={-1}>

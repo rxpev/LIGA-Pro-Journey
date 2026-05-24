@@ -479,7 +479,7 @@ export async function syncLeagueSchedule(prisma: PrismaClient) {
         slug: league.slug,
         startOffsetDays: league.startOffsetDays,
         federations: {
-          connect: leagueFederations,
+          set: leagueFederations,
         },
       },
       create: {
