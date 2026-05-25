@@ -8,7 +8,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
 import LandingVideo from '@liga/frontend/assets/landing.webm';
-import { createMemoryRouter, RouterProvider, Outlet } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider, Outlet, useLocation } from 'react-router-dom';
 import { Constants, Eagers } from '@liga/shared';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import {
@@ -20,6 +20,12 @@ import {
 } from '@liga/frontend/redux/actions';
 import { VideoBackground } from '@liga/frontend/components';
 import '@liga/frontend/assets/styles.css';
+
+const LANDING_ROUTE_STORAGE_KEY = 'landingRoute';
+const initialLandingRoute =
+  window.sessionStorage.getItem(LANDING_ROUTE_STORAGE_KEY) === '/exhibition'
+    ? '/exhibition'
+    : '/';
 
 /**
  * Configure routes.
@@ -81,7 +87,24 @@ const routes = createMemoryRouter([
       },
     ],
   },
-]);
+], {
+  initialEntries: [initialLandingRoute],
+});
+
+function RoutePersistence(): React.ReactNode {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    if (location.pathname === '/exhibition') {
+      window.sessionStorage.setItem(LANDING_ROUTE_STORAGE_KEY, location.pathname);
+      return;
+    }
+
+    window.sessionStorage.removeItem(LANDING_ROUTE_STORAGE_KEY);
+  }, [location.pathname]);
+
+  return null;
+}
 
 /**
  * The root component.
@@ -119,6 +142,7 @@ function Root() {
       <VideoBackground>
         <source src={LandingVideo} type="video/mp4" />
       </VideoBackground>
+      <RoutePersistence />
       <div className="relative z-10 h-screen">
         <Outlet />
       </div>

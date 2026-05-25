@@ -9,7 +9,7 @@ import path from 'node:path';
 import log from 'electron-log';
 import { ipcMain } from 'electron';
 import { glob } from 'glob';
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import { DatabaseClient, Game, WindowManager } from '@liga/backend/lib';
 
@@ -114,11 +114,33 @@ export default function registerProfileHandlers() {
       const databaseId = Number(databaseIdStr);
       if (!Number.isFinite(databaseId) || databaseId === 0) continue;
 
-      await DatabaseClient.disconnect();
-      await DatabaseClient.connect(databaseId);
+      const dbPath = path.join(DatabaseClient.basePath, file);
+      const readProfile = async () => {
+        const prisma = new PrismaClient({
+          datasources: {
+            db: {
+              url: `file:${dbPath}?connection_limit=1`,
+            },
+          },
+        });
 
-      const profile = await DatabaseClient.prisma.profile.findFirst({
-        include: { player: true },
+        return prisma.profile
+          .findFirst({
+            select: {
+              id: true,
+              name: true,
+              updatedAt: true,
+            },
+          })
+          .finally(() => prisma.$disconnect());
+      };
+
+      const profile = await readProfile().catch(async (error) => {
+        log.warn('Could not read save profile for %s. Attempting migration before retry.', dbPath);
+        log.warn(error);
+
+        await DatabaseClient.migrate(databaseId);
+        return readProfile();
       });
 
       if (profile) {
@@ -126,9 +148,6 @@ export default function registerProfileHandlers() {
         saves.push(profile);
       }
     }
-
-    await DatabaseClient.disconnect();
-    await DatabaseClient.connect(0);
 
     return saves.filter((save) => !!save && save.id !== 0);
   });

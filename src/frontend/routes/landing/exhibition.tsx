@@ -28,6 +28,15 @@ interface TeamSelectorProps {
   onEditRoster?: (team: TeamData) => void;
   initialFederationId?: number;
   initialTierId?: number;
+  initialTeamId?: number;
+}
+
+const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
+const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
+
+function getStoredTeamId(key: string) {
+  const value = Number(window.sessionStorage.getItem(key));
+  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 /**
@@ -104,9 +113,13 @@ function TeamSelector(props: TeamSelectorProps) {
       return;
     }
 
-    const randomTeam = sample(teams);
+    const initialTeam = props.initialTeamId
+      ? teams.find((team) => team.id === props.initialTeamId)
+      : undefined;
+    const randomTeam = initialTeam || sample(teams);
+
     setSelectedTeam({ value: randomTeam.id, label: randomTeam.name, ...randomTeam });
-  }, [selectedTeam, teams]);
+  }, [props.initialTeamId, selectedTeam, teams]);
 
   // callback handler
   React.useEffect(() => {
@@ -248,8 +261,12 @@ function TeamSelector(props: TeamSelectorProps) {
 export default function () {
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
   const [settings, setSettings] = React.useState(Constants.Settings);
-  const [homeTeamId, setHomeTeamId] = React.useState<number>();
-  const [awayTeamId, setAwayTeamId] = React.useState<number>();
+  const [homeTeamId, setHomeTeamId] = React.useState<number>(() =>
+    getStoredTeamId(EXHIBITION_HOME_TEAM_STORAGE_KEY),
+  );
+  const [awayTeamId, setAwayTeamId] = React.useState<number>(() =>
+    getStoredTeamId(EXHIBITION_AWAY_TEAM_STORAGE_KEY),
+  );
   const [homeTeam, setHomeTeam] = React.useState<TeamData>();
   const [awayTeam, setAwayTeam] = React.useState<TeamData>();
   const [homeRoster, setHomeRoster] = React.useState<Array<number | null>>([]);
@@ -281,7 +298,6 @@ export default function () {
   >({});
   const [isUserCT, setIsUserCT] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
-  const hasAttemptedDedicatedDetection = React.useRef(false);
   const navigate = useNavigate();
   const t = useTranslation('windows');
 
@@ -292,17 +308,42 @@ export default function () {
   React.useEffect(() => {
     api.play.exhibitionFederations().then(setReplacementFederations);
 
-    // detect steam and game paths together
-    // which avoid a race-condition
-    Promise.all([
-      api.app.detectSteam(),
-      api.app.detectGame(Constants.Settings.general.game),
-      api.app.detectDedicatedServer(),
-    ]).then(([steamPath, gamePath, dedicatedServerPath]) => {
-      const modified = cloneDeep(settings);
+    api.profiles.current().then(async (profile) => {
+      const profileSettings = profile?.settings
+        ? (JSON.parse(profile.settings) as typeof Constants.Settings)
+        : Constants.Settings;
+
+      const modified = cloneDeep({
+        ...Constants.Settings,
+        ...profileSettings,
+        general: {
+          ...Constants.Settings.general,
+          ...profileSettings.general,
+        },
+        gameSettings: {
+          ...Constants.Settings.gameSettings,
+          ...profileSettings.gameSettings,
+        },
+        matchRules: {
+          ...Constants.Settings.matchRules,
+          ...profileSettings.matchRules,
+        },
+      });
+
+      const [steamPath, gamePath, dedicatedServerPath] = await Promise.all([
+        modified.general.steamPath
+          ? Promise.resolve(modified.general.steamPath)
+          : api.app.detectSteam(),
+        modified.general.gamePath
+          ? Promise.resolve(modified.general.gamePath)
+          : api.app.detectGame(modified.general.game),
+        Promise.resolve(modified.general.dedicatedServerPath),
+      ]);
+
       modified.general.steamPath = steamPath;
       modified.general.gamePath = gamePath;
       modified.general.dedicatedServerPath = dedicatedServerPath || null;
+
       setSettings(modified);
     });
 
@@ -318,23 +359,6 @@ export default function () {
       .then(setMapPool)
       .catch((): void => undefined);
   }, []);
-
-  React.useEffect(() => {
-    if (settings.general.dedicatedServerPath || hasAttemptedDedicatedDetection.current) {
-      return;
-    }
-
-    hasAttemptedDedicatedDetection.current = true;
-    api.app.detectDedicatedServer().then((dedicatedServerPath) => {
-      if (!dedicatedServerPath) {
-        return;
-      }
-
-      const modified = cloneDeep(settings);
-      modified.general.dedicatedServerPath = dedicatedServerPath;
-      setSettings(modified);
-    });
-  }, [settings]);
 
   // handle settings updates
   const onSettingsUpdate = (path: string, value: unknown) => {
@@ -390,6 +414,18 @@ export default function () {
   }, [appStatus]);
 
   const selectedMap = settings.matchRules.mapOverride || mapPool[0]?.gameMap?.name;
+
+  React.useEffect(() => {
+    if (homeTeamId) {
+      window.sessionStorage.setItem(EXHIBITION_HOME_TEAM_STORAGE_KEY, String(homeTeamId));
+    }
+  }, [homeTeamId]);
+
+  React.useEffect(() => {
+    if (awayTeamId) {
+      window.sessionStorage.setItem(EXHIBITION_AWAY_TEAM_STORAGE_KEY, String(awayTeamId));
+    }
+  }, [awayTeamId]);
 
   React.useEffect(() => {
     if (!mapPool.length || settings.matchRules.mapOverride) {
@@ -688,6 +724,7 @@ export default function () {
       <TeamSelector
         initialFederationId={1}
         initialTierId={4}
+        initialTeamId={homeTeamId}
         onChange={setHomeTeamId}
         onTeamUpdate={setHomeTeam}
         onEditRoster={openRosterEditor}
@@ -748,6 +785,7 @@ export default function () {
       <TeamSelector
         initialFederationId={2}
         initialTierId={4}
+        initialTeamId={awayTeamId}
         onChange={setAwayTeamId}
         onTeamUpdate={setAwayTeam}
         onEditRoster={openRosterEditor}
