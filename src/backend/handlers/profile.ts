@@ -128,7 +128,7 @@ export default function registerProfileHandlers() {
     }
 
     await DatabaseClient.disconnect();
-    await DatabaseClient.connect();
+    await DatabaseClient.connect(0);
 
     return saves.filter((save) => !!save && save.id !== 0);
   });
