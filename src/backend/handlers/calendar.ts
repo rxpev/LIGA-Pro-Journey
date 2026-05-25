@@ -143,6 +143,67 @@ async function reconcileOverdueMatchdays(
 }
 
 /**
+ * Remove FACEIT match placeholders that were created before the game launched
+ * but never reached result persistence. These rows cannot be resumed from the
+ * database, and they otherwise block calendar advancement forever.
+ */
+async function cleanupOrphanedFaceitReadyMatches(profileId: number) {
+  const orphanedMatches = await DatabaseClient.prisma.match.findMany({
+    where: {
+      profileId,
+      matchType: 'FACEIT_PUG',
+      status: Constants.MatchStatus.READY,
+      faceitEloDelta: null,
+      faceitRating: null,
+      faceitIsWin: null,
+    },
+    select: { id: true },
+  });
+
+  const matchIds = orphanedMatches.map((match) => match.id);
+  if (!matchIds.length) {
+    return;
+  }
+
+  await DatabaseClient.prisma.$transaction([
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "MatchEvent"
+      WHERE "matchId" IN (${Prisma.join(matchIds)})
+    `,
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "MatchVeto"
+      WHERE "matchId" IN (${Prisma.join(matchIds)})
+    `,
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "GameToTeam"
+      WHERE "gameId" IN (
+        SELECT "id" FROM "Game" WHERE "matchId" IN (${Prisma.join(matchIds)})
+      )
+    `,
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "Game"
+      WHERE "matchId" IN (${Prisma.join(matchIds)})
+    `,
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "MatchToTeam"
+      WHERE "matchId" IN (${Prisma.join(matchIds)})
+    `,
+    DatabaseClient.prisma.$executeRaw`
+      DELETE FROM "_MatchToPlayer"
+      WHERE "A" IN (${Prisma.join(matchIds)})
+    `,
+    DatabaseClient.prisma.match.deleteMany({
+      where: { id: { in: matchIds } },
+    }),
+  ]);
+
+  Engine.Runtime.Instance.log.warn(
+    'Removed %d orphaned FACEIT READY match rows before calendar advance.',
+    matchIds.length,
+  );
+}
+
+/**
  * Engine middleware: start of each tick.
  */
 async function onTickStart() {
@@ -335,7 +396,11 @@ function randomWeeklyFaceitDeltaForXp(xp = 0, elo = 0) {
   const magnitude = Math.abs(rawDelta);
   const xpGainBias = xp >= 80 ? 0.16 : xp >= 65 ? 0.1 : xp >= 50 ? 0.06 : 0;
   const lowXpHighEloPressure = xp < 50 && elo >= 4000 ? 0.12 : 0;
-  const gainChance = clampNumber(0.5 + xpGainBias - highEloPressure(elo) - lowXpHighEloPressure, 0.08, 0.72);
+  const gainChance = clampNumber(
+    0.5 + xpGainBias - highEloPressure(elo) - lowXpHighEloPressure,
+    0.08,
+    0.72,
+  );
   const gainRoll = Math.random() < gainChance;
 
   if (gainRoll) {
@@ -501,11 +566,15 @@ export default function () {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     const settings = Util.loadSettings(profile.settings);
 
+    await cleanupOrphanedFaceitReadyMatches(profile.id);
+
     const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
       where: {
         profileId: profile.id,
         matchType: 'FACEIT_PUG',
-        status: { not: Constants.MatchStatus.COMPLETED },
+        status: {
+          in: [Constants.MatchStatus.WAITING, Constants.MatchStatus.PLAYING],
+        },
       },
       select: { id: true },
     });
