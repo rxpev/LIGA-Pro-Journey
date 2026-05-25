@@ -11,6 +11,9 @@ import { cx } from '@liga/frontend/lib';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
+import cz75AutoIcon from '@liga/frontend/assets/cz75auto.png';
+import m4a1sIcon from '@liga/frontend/assets/m4a1s.png';
+import uspsIcon from '@liga/frontend/assets/usps.png';
 import {
   FaArrowLeft,
   FaCaretLeft,
@@ -33,6 +36,33 @@ interface TeamSelectorProps {
 
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
+
+const weaponSettings = [
+  {
+    iconClassName: 'scale-125',
+    icon: uspsIcon,
+    label: 'Equip USP-S',
+    subtitle: 'Enable to use USP-S as your CT pistol.',
+    path: 'gameSettings.isUSP',
+    setting: 'isUSP',
+  },
+  {
+    iconClassName: 'scale-105',
+    icon: m4a1sIcon,
+    label: 'Equip M4A1-S',
+    subtitle: 'Enable to use M4A1-S as your CT rifle.',
+    path: 'gameSettings.isM4A1',
+    setting: 'isM4A1',
+  },
+  {
+    iconClassName: 'scale-150',
+    icon: cz75AutoIcon,
+    label: 'Equip CZ75-Auto',
+    subtitle: 'Enable to use CZ75-Auto as your pistol.',
+    path: 'gameSettings.isCZ',
+    setting: 'isCZ',
+  },
+] as const;
 
 function getStoredTeamId(key: string) {
   const value = Number(window.sessionStorage.getItem(key));
@@ -718,7 +748,7 @@ export default function () {
     <main className="frosted flex h-full w-full">
       <FaArrowLeft
         className="absolute top-5 left-5 size-5 cursor-pointer"
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/')}
         onMouseDown={audioRelease}
       />
       <TeamSelector
@@ -914,50 +944,32 @@ export default function () {
                 />
               </aside>
             </article>
-            <article>
-              <header>
-                <p>Use USP-S</p>
-                <p>Enable to use USP-S as your CT pistol.</p>
-              </header>
-              <aside>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  checked={settings.gameSettings.isUSP}
-                  onChange={(event) => onSettingsUpdate('gameSettings.isUSP', event.target.checked)}
-                />
-              </aside>
-            </article>
-            <article>
-              <header>
-                <p>Use M4A1-S</p>
-                <p>Enable to use M4A1-S as your CT rifle.</p>
-              </header>
-              <aside>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  checked={settings.gameSettings.isM4A1}
-                  onChange={(event) =>
-                    onSettingsUpdate('gameSettings.isM4A1', event.target.checked)
-                  }
-                />
-              </aside>
-            </article>
-            <article>
-              <header>
-                <p>Use CZ75-Auto</p>
-                <p>Enable to use CZ75-Auto as your pistol.</p>
-              </header>
-              <aside>
-                <input
-                  type="checkbox"
-                  className="toggle"
-                  checked={settings.gameSettings.isCZ}
-                  onChange={(event) => onSettingsUpdate('gameSettings.isCZ', event.target.checked)}
-                />
-              </aside>
-            </article>
+            {weaponSettings.map((weapon) => (
+              <article key={weapon.path}>
+                <header>
+                  <p className="flex items-center gap-4 not-italic">
+                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                      <img
+                        alt=""
+                        className={cx('h-14 w-14 object-contain', weapon.iconClassName)}
+                        draggable={false}
+                        src={weapon.icon}
+                      />
+                    </span>
+                    <span>{weapon.label}</span>
+                  </p>
+                  <p>{weapon.subtitle}</p>
+                </header>
+                <aside>
+                  <input
+                    type="checkbox"
+                    className="toggle"
+                    checked={settings.gameSettings[weapon.setting]}
+                    onChange={(event) => onSettingsUpdate(weapon.path, event.target.checked)}
+                  />
+                </aside>
+              </article>
+            ))}
           </fieldset>
         </form>
         <button
