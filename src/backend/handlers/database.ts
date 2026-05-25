@@ -26,9 +26,10 @@ export default function registerDatabaseHandlers() {
 
     if (!faceitEloIntegrity.valid) {
       log.warn(
-        'Blocked save load because FACEIT ELO integrity failed: actual=%d expected=%d',
+        'Blocked save load because FACEIT ELO integrity failed: actual=%d expected=%d invalidDeltaMatchIds=%j',
         faceitEloIntegrity.actualElo,
         faceitEloIntegrity.expectedElo,
+        faceitEloIntegrity.invalidDeltaMatchIds,
       );
 
       await DatabaseClient.disconnect();
