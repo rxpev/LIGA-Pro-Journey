@@ -308,6 +308,8 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [matchPage, setMatchPage] = React.useState(1);
   const [tournamentPage, setTournamentPage] = React.useState(1);
+  const previousActiveTab = React.useRef<StatsTab>(activeTab);
+  const shouldDefaultTeammateTeam = React.useRef(false);
 
   const settingsAll = React.useMemo(() => {
     if (!state.profile) {
@@ -586,26 +588,41 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [activeTab]);
 
   React.useEffect(() => {
+    const enteredTeammatesTab =
+      activeTab === StatsTab.TEAMMATES && previousActiveTab.current !== StatsTab.TEAMMATES;
+    previousActiveTab.current = activeTab;
+
+    if (enteredTeammatesTab) {
+      shouldDefaultTeammateTeam.current = true;
+    }
+
     if (activeTab !== StatsTab.TEAMMATES) {
       return;
     }
 
     if (selectedCareerTeamId) {
+      shouldDefaultTeammateTeam.current = false;
+      return;
+    }
+
+    if (!shouldDefaultTeammateTeam.current) {
       return;
     }
 
     const currentTeamId = state.profile?.teamId;
+    if (!currentTeamId) {
+      shouldDefaultTeammateTeam.current = false;
+      return;
+    }
+
     if (currentTeamId && careerTeamOptions.some((team: any) => team.id === currentTeamId)) {
+      shouldDefaultTeammateTeam.current = false;
       setSelectedCareerTeamId(String(currentTeamId));
       return;
     }
 
-    const [recentStint] = [...careerStints].sort(
-      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
-    );
-
-    if (recentStint) {
-      setSelectedCareerTeamId(String(recentStint.teamId));
+    if (careerTeamOptions.length || careerStints.length) {
+      shouldDefaultTeammateTeam.current = false;
     }
   }, [activeTab, selectedCareerTeamId, state.profile?.teamId, careerTeamOptions, careerStints]);
 
@@ -686,7 +703,7 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     ownPlayerPerformances.forEach((item: any) => {
       const compId = item.match.competitionId || 0;
-      const ownTeam = getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
+      const ownTeam = getCareerMatchCompetitor(item.match, careerStints);
       const placement = item.match.competition?.competitors?.find(
         (c: any) => c.teamId === ownTeam?.teamId,
       )?.position;
@@ -718,7 +735,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       ...row,
       rating: (row.ratingSum / row.count).toFixed(2),
     }));
-  }, [ownPlayerPerformances, careerStints, selectedCareerTeamId]);
+  }, [ownPlayerPerformances, careerStints]);
 
   const activePerformances =
     activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
@@ -763,7 +780,11 @@ export default function LeagueStatsConcept(): JSX.Element {
       ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
       : selectedFilterTeam?.name || 'Any team';
   const headerTeamLogo =
-    selectedFilterTeam?.blazon || state.profile?.team?.blazon || 'resources://blazonry/noteam.svg';
+    activeTab === StatsTab.TEAMMATES && !selectedCareerTeamId
+      ? null
+      : selectedFilterTeam?.blazon ||
+        state.profile?.team?.blazon ||
+        'resources://blazonry/noteam.svg';
 
   const renderMatchTable = (rows: MatchPerformance[]) => {
     const flattenedRows = rows.flatMap((item: any) => {
@@ -1107,10 +1128,12 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
                 )}
                 <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
-                  <img
-                    src={headerTeamLogo}
-                    className="absolute right-4 top-4 h-14 w-14 object-contain"
-                  />
+                  {headerTeamLogo && (
+                    <img
+                      src={headerTeamLogo}
+                      className="absolute right-4 top-4 h-14 w-14 object-contain"
+                    />
+                  )}
                   <div className="mb-4 flex items-center gap-3">
                     <img
                       src={
