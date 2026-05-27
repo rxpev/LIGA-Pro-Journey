@@ -11,10 +11,10 @@ import { cx } from '@liga/frontend/lib';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
-import cz75AutoIcon from '@liga/frontend/assets/cz75auto.png';
-import m4a1sIcon from '@liga/frontend/assets/m4a1s.png';
+import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
+import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
 import spectatingIcon from '@liga/frontend/assets/spectating.png';
-import uspsIcon from '@liga/frontend/assets/usps.png';
+import uspsIcon from '@liga/frontend/assets/weapons/2D/usp_silencer.svg';
 import {
   FaArrowLeft,
   FaCaretLeft,
@@ -40,7 +40,6 @@ const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
 
 const weaponSettings = [
   {
-    iconClassName: 'scale-125',
     icon: uspsIcon,
     label: 'Equip USP-S',
     subtitle: 'Enable to use USP-S as your CT pistol.',
@@ -48,7 +47,6 @@ const weaponSettings = [
     setting: 'isUSP',
   },
   {
-    iconClassName: 'scale-105',
     icon: m4a1sIcon,
     label: 'Equip M4A1-S',
     subtitle: 'Enable to use M4A1-S as your CT rifle.',
@@ -56,7 +54,6 @@ const weaponSettings = [
     setting: 'isM4A1',
   },
   {
-    iconClassName: 'scale-150',
     icon: cz75AutoIcon,
     label: 'Equip CZ75-Auto',
     subtitle: 'Enable to use CZ75-Auto as your pistol.',
@@ -1015,10 +1012,10 @@ export default function () {
               <article key={weapon.path}>
                 <header>
                   <p className="flex items-center gap-4 not-italic">
-                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
                       <img
                         alt=""
-                        className={cx('h-14 w-14 object-contain', weapon.iconClassName)}
+                        className="h-10 w-20 object-contain"
                         draggable={false}
                         src={weapon.icon}
                       />

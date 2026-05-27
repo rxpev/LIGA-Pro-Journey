@@ -11,9 +11,9 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { FaExclamationTriangle, FaFolderOpen } from 'react-icons/fa';
 import { ReduxActions } from '@liga/frontend/redux/actions';
-import cz75AutoIcon from '@liga/frontend/assets/cz75auto.png';
-import m4a1sIcon from '@liga/frontend/assets/m4a1s.png';
-import uspsIcon from '@liga/frontend/assets/usps.png';
+import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
+import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
+import uspsIcon from '@liga/frontend/assets/weapons/2D/usp_silencer.svg';
 
 /** @enum */
 enum Tab {
@@ -24,21 +24,18 @@ enum Tab {
 
 const weaponSettings = [
   {
-    iconClassName: 'scale-125',
     icon: uspsIcon,
     label: 'Equip USP-S',
     path: 'gameSettings.isUSP',
     setting: 'isUSP',
   },
   {
-    iconClassName: 'scale-105',
     icon: m4a1sIcon,
     label: 'Equip M4A1-S',
     path: 'gameSettings.isM4A1',
     setting: 'isM4A1',
   },
   {
-    iconClassName: 'scale-150',
     icon: cz75AutoIcon,
     label: 'Equip CZ75-Auto',
     path: 'gameSettings.isCZ',
@@ -73,13 +70,15 @@ export default function () {
     // we detect steam and game paths together
     // which avoids a race-condition
     if (localSettings.general.steamPath === null || localSettings.general.gamePath === null) {
-      Promise.all([api.app.detectSteam(), api.app.detectGame(GAME_SLUG)]).then(([steamPath, gamePath]) => {
-        const modified = cloneDeep(localSettings);
-        modified.general.game = GAME_SLUG;
-        modified.general.steamPath = steamPath;
-        modified.general.gamePath = gamePath;
-        setSettings(modified);
-      });
+      Promise.all([api.app.detectSteam(), api.app.detectGame(GAME_SLUG)]).then(
+        ([steamPath, gamePath]) => {
+          const modified = cloneDeep(localSettings);
+          modified.general.game = GAME_SLUG;
+          modified.general.steamPath = steamPath;
+          modified.general.gamePath = gamePath;
+          setSettings(modified);
+        },
+      );
       return;
     }
 
@@ -99,7 +98,6 @@ export default function () {
     }
 
     api.app.status(settings).then((status) => setAppStatus(status ? JSON.parse(status) : null));
-
   }, [settings]);
 
   // handle settings updates
@@ -129,7 +127,11 @@ export default function () {
   };
 
   React.useEffect(() => {
-    if (!state.profile || settings.general.dedicatedServerPath || hasAttemptedDedicatedDetection.current) {
+    if (
+      !state.profile ||
+      settings.general.dedicatedServerPath ||
+      hasAttemptedDedicatedDetection.current
+    ) {
       return;
     }
 
@@ -316,7 +318,10 @@ export default function () {
                   onChange={(event) =>
                     onSettingsUpdate(
                       'general.gameLaunchTimeout',
-                      Math.max(1, Number(event.target.value) || Constants.Settings.general.gameLaunchTimeout),
+                      Math.max(
+                        1,
+                        Number(event.target.value) || Constants.Settings.general.gameLaunchTimeout,
+                      ),
                     )
                   }
                 />
@@ -400,10 +405,10 @@ export default function () {
               <section key={weapon.path}>
                 <header>
                   <p className="flex items-center gap-4 not-italic">
-                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
                       <img
                         alt=""
-                        className={cx('h-14 w-14 object-contain', weapon.iconClassName)}
+                        className="h-10 w-20 object-contain"
                         draggable={false}
                         src={weapon.icon}
                       />
@@ -434,7 +439,9 @@ export default function () {
               <article>
                 <select
                   className="select"
-                  onChange={(event) => onSettingsUpdate('calendar.calendarDateFormat', event.target.value)}
+                  onChange={(event) =>
+                    onSettingsUpdate('calendar.calendarDateFormat', event.target.value)
+                  }
                   value={settings.calendar.calendarDateFormat}
                 >
                   {Object.values(Constants.CalendarDateFormat).map((format) => (
