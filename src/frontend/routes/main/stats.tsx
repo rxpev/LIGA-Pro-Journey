@@ -12,7 +12,20 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { FaChartBar } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 
+declare const require: {
+  context: (
+    path: string,
+    recursive: boolean,
+    regExp: RegExp,
+  ) => {
+    (id: string): string;
+    keys(): string[];
+  };
+};
+
 type MatchRecord = any;
+
+const weaponAssetContext = require.context('@liga/frontend/assets/weapons/3D', false, /\.png$/);
 
 type CareerStintRecord = {
   teamId: number;
@@ -31,6 +44,15 @@ type MatchPerformance = {
   deaths: number;
   plusMinus: number;
   rating: number;
+};
+
+type WeaponPerformance = {
+  weapon: string;
+  label: string;
+  image?: string;
+  kills: number;
+  headshots: number;
+  hsPercent: number;
 };
 
 type CompetitionGroupKey =
@@ -101,6 +123,7 @@ enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
   TOURNAMENTS = 'TOURNAMENTS',
   TEAMMATES = 'TEAMMATES',
+  WEAPONS = 'WEAPONS',
 }
 
 function isLeagueMatch(match: MatchRecord) {
@@ -271,6 +294,82 @@ function getPlayedGames(match: MatchRecord) {
   return [...(match.games || [])]
     .filter((game: any) => isPlayedGame(game))
     .sort((a: any, b: any) => Number(b.num ?? 0) - Number(a.num ?? 0));
+}
+
+function getWeaponKey(weapon: string) {
+  const normalized = weapon.replace(/^weapon_/, '').toLowerCase();
+
+  if (['incgrenade', 'inferno', 'molotov'].includes(normalized)) {
+    return 'incgrenade';
+  }
+
+  return normalized;
+}
+
+function getWeaponImage(weapon: string) {
+  const weaponKey = getWeaponKey(weapon);
+  const assetKey = `./weapon_${weaponKey}.png`;
+
+  if (weaponAssetContext.keys().includes(assetKey)) {
+    return weaponAssetContext(assetKey);
+  }
+
+  if (weaponKey.startsWith('knife')) {
+    return weaponAssetContext('./weapon_knife.png');
+  }
+
+  return undefined;
+}
+
+function formatWeaponName(weapon: string) {
+  const normalized = getWeaponKey(weapon);
+  const labels: Record<string, string> = {
+    ak47: 'AK-47',
+    aug: 'AUG',
+    awp: 'AWP',
+    bizon: 'PP-Bizon',
+    cz75a: 'CZ75-Auto',
+    deagle: 'Desert Eagle',
+    elite: 'Dual Berettas',
+    famas: 'FAMAS',
+    fiveseven: 'Five-SeveN',
+    g3sg1: 'G3SG1',
+    galilar: 'Galil AR',
+    glock: 'Glock-18',
+    hegrenade: 'HE Grenade',
+    hkp2000: 'P2000',
+    incgrenade: 'Fire Grenade',
+    m249: 'M249',
+    m4a1: 'M4A4',
+    m4a1_silencer: 'M4A1-S',
+    mac10: 'MAC-10',
+    mag7: 'MAG-7',
+    mp5sd: 'MP5-SD',
+    mp7: 'MP7',
+    mp9: 'MP9',
+    negev: 'Negev',
+    nova: 'Nova',
+    p250: 'P250',
+    p90: 'P90',
+    revolver: 'R8 Revolver',
+    sawedoff: 'Sawed-Off',
+    scar20: 'SCAR-20',
+    sg556: 'SG 553',
+    ssg08: 'SSG 08',
+    tec9: 'Tec-9',
+    ump45: 'UMP-45',
+    usp_silencer: 'USP-S',
+    xm1014: 'XM1014',
+  };
+
+  return (
+    labels[normalized] ||
+    normalized
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  );
 }
 
 function getCareerMatchCompetitor(
@@ -737,6 +836,64 @@ export default function LeagueStatsConcept(): JSX.Element {
     }));
   }, [ownPlayerPerformances, careerStints]);
 
+  const weaponRows = React.useMemo(() => {
+    const playerId = state.profile?.player?.id;
+    if (!playerId) return [] as WeaponPerformance[];
+
+    const grouped = new Map<string, { kills: number; headshots: number }>();
+
+    matchesByFilters.forEach((match: any) => {
+      if (match.matchType === 'FACEIT_PUG') {
+        return;
+      }
+
+      const played = (match.players || []).some((player: any) => player.id === playerId);
+      if (!played) {
+        return;
+      }
+
+      const gamesForStats = selectedMap
+        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+        : getPlayedGames(match);
+      if (!gamesForStats.length) {
+        return;
+      }
+
+      const gameIds = new Set(gamesForStats.map((game: any) => game.id));
+      const eventsForStats =
+        selectedMap || (match.games || []).length > 1
+          ? (match.events || []).filter((event: any) => gameIds.has(event.gameId))
+          : match.events || [];
+
+      eventsForStats.forEach((event: any) => {
+        if (event.attackerId !== playerId || !event.weapon) {
+          return;
+        }
+
+        const weapon = getWeaponKey(String(event.weapon));
+        const entry = grouped.get(weapon) || { kills: 0, headshots: 0 };
+        entry.kills += 1;
+        if (event.headshot) {
+          entry.headshots += 1;
+        }
+        grouped.set(weapon, entry);
+      });
+    });
+
+    return [...grouped.entries()]
+      .map(([weapon, entry]) => ({
+        weapon,
+        label: formatWeaponName(weapon),
+        image: getWeaponImage(weapon),
+        kills: entry.kills,
+        headshots: entry.headshots,
+        hsPercent: entry.kills ? Math.round((entry.headshots / entry.kills) * 100) : 0,
+      }))
+      .sort(
+        (a, b) => b.kills - a.kills || b.hsPercent - a.hsPercent || a.label.localeCompare(b.label),
+      );
+  }, [matchesByFilters, selectedMap, state.profile?.player?.id]);
+
   const activePerformances =
     activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
   const summary = React.useMemo(() => {
@@ -776,7 +933,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     (team: any) => String(team.id) === selectedCareerTeamId,
   );
   const headerTeamLabel =
-    activeTab === StatsTab.INDIVIDUAL
+    activeTab !== StatsTab.TEAMMATES
       ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
       : selectedFilterTeam?.name || 'Any team';
   const headerTeamLogo =
@@ -962,6 +1119,65 @@ export default function LeagueStatsConcept(): JSX.Element {
     );
   };
 
+  const renderWeaponTable = (rows: WeaponPerformance[]) => (
+    <article className="border-base-content/10 rounded-none border">
+      <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
+        Weapons
+      </header>
+      <div className="overflow-x-auto">
+        <table className="table-zebra table-sm table">
+          <thead>
+            <tr>
+              <th>Weapon</th>
+              <th className="text-center">Kills</th>
+              <th className="text-center">HS Kills</th>
+              <th className="text-center">HS %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.weapon}>
+                <td>
+                  <span className="inline-flex items-center gap-3 font-semibold">
+                    <span className="border-base-content/10 bg-base-200/70 flex h-16 w-28 items-center justify-center border">
+                      {row.image ? (
+                        <img src={row.image} className="max-h-14 max-w-24 object-contain" />
+                      ) : (
+                        <span className="text-base-content/40 text-xs">-</span>
+                      )}
+                    </span>
+                    <span>{row.label}</span>
+                  </span>
+                </td>
+                <td className="text-center">{row.kills}</td>
+                <td className="text-center">{row.headshots}</td>
+                <td
+                  className={cx(
+                    'text-center font-semibold',
+                    row.hsPercent >= 50
+                      ? 'text-success'
+                      : row.hsPercent <= 20
+                        ? 'text-error'
+                        : 'text-inherit',
+                  )}
+                >
+                  {row.hsPercent}%
+                </td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td colSpan={4} className="text-base-content/60 py-8 text-center text-sm">
+                  No weapon stats for selected filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+
   return (
     <section className="bg-base-300/40 h-full overflow-hidden">
       <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
@@ -978,7 +1194,9 @@ export default function LeagueStatsConcept(): JSX.Element {
               ? 'Individual'
               : tab === StatsTab.TOURNAMENTS
                 ? 'Tournaments'
-                : 'Teammates'}
+                : tab === StatsTab.TEAMMATES
+                  ? 'Teammates'
+                  : 'Weapons'}
           </button>
         ))}
       </header>
@@ -1131,7 +1349,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                   {headerTeamLogo && (
                     <img
                       src={headerTeamLogo}
-                      className="absolute right-4 top-4 h-14 w-14 object-contain"
+                      className="absolute top-4 right-4 h-14 w-14 object-contain"
                     />
                   )}
                   <div className="mb-4 flex items-center gap-3">
@@ -1185,7 +1403,9 @@ export default function LeagueStatsConcept(): JSX.Element {
                 </div>
               </article>
 
-              {renderMatchTable(activePerformances)}
+              {activeTab === StatsTab.WEAPONS
+                ? renderWeaponTable(weaponRows)
+                : renderMatchTable(activePerformances)}
             </div>
           )}
 
