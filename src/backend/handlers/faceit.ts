@@ -1,20 +1,20 @@
-import { ipcMain } from "electron";
-import { DatabaseClient, Worldgen } from "@liga/backend/lib";
-import log from "electron-log";
-import { levelFromElo } from "@liga/backend/lib/levels";
-import { FaceitMatchmaker } from "@liga/backend/lib/matchmaker";
-import { Server as Game } from "@liga/backend/lib/game";
-import { Constants } from "@liga/shared";
-import { saveFaceitResult } from "@liga/backend/lib/save-result";
+import { ipcMain } from 'electron';
+import { DatabaseClient, Worldgen } from '@liga/backend/lib';
+import log from 'electron-log';
+import { levelFromElo } from '@liga/backend/lib/levels';
+import { FaceitMatchmaker } from '@liga/backend/lib/matchmaker';
+import { Server as Game } from '@liga/backend/lib/game';
+import { Constants } from '@liga/shared';
+import { saveFaceitResult } from '@liga/backend/lib/save-result';
 import {
   computeLifetimeStats,
   getRecentMatches,
   isFaceitKillEvent,
-} from "@liga/backend/lib/faceitstats";
-import { Eagers } from "@liga/shared";
-import { sample } from "lodash";
-import { Engine } from "@liga/backend/lib";
-import { Util } from "@liga/shared";
+} from '@liga/backend/lib/faceitstats';
+import { Eagers } from '@liga/shared';
+import { sample } from 'lodash';
+import { Engine } from '@liga/backend/lib';
+import { Util } from '@liga/shared';
 
 // ------------------------------
 // Types sent to frontend
@@ -30,7 +30,7 @@ type MatchPlayer = {
   countryId: number;
   teamId: number | null;
   queueId?: string;
-  queueType?: "COUNTRY" | "TEAM" | "BOTH";
+  queueType?: 'COUNTRY' | 'TEAM' | 'BOTH';
 };
 
 export type MatchRoom = {
@@ -64,12 +64,12 @@ async function getFaceitDailyState(prisma: any, profile: any) {
   // Pull matchday entries for today
   const matchdayEntries = profile.teamId
     ? await prisma.calendar.findMany({
-      where: {
-        date: { gte: start, lt: end },
-        type: Constants.CalendarEntry.MATCHDAY_USER,
-      },
-      select: { id: true, payload: true },
-    })
+        where: {
+          date: { gte: start, lt: end },
+          type: Constants.CalendarEntry.MATCHDAY_USER,
+        },
+        select: { id: true, payload: true },
+      })
     : [];
   const matchIds = matchdayEntries
     .map((e: any) => Number(e.payload))
@@ -87,7 +87,7 @@ async function getFaceitDailyState(prisma: any, profile: any) {
   const playedToday = await prisma.match.count({
     where: {
       profileId: profile.id,
-      matchType: "FACEIT_PUG",
+      matchType: 'FACEIT_PUG',
       date: { gte: start, lt: end },
       status: Constants.MatchStatus.COMPLETED,
     },
@@ -115,7 +115,7 @@ async function getFaceitLeaderboard(
     federationId?: number;
     countryCode?: string;
     limit?: number;
-  }
+  },
 ) {
   const players = await prisma.player.findMany({
     include: {
@@ -138,17 +138,15 @@ async function getFaceitLeaderboard(
 
   const rankedEntries = players
     .map((player: any) => {
-      const playerElo =
-        player.id === baseProfile.playerId
-          ? baseProfile.faceitElo
-          : player.elo;
+      const playerElo = player.id === baseProfile.playerId ? baseProfile.faceitElo : player.elo;
 
       return {
         playerId: player.id,
-        nickname: player.name || "Unknown",
+        nickname: player.name || 'Unknown',
         countryCode: player.country?.code?.toLowerCase() || null,
         countryName: player.country?.name || null,
-        federationId: player.team?.competitionFederationId ?? player.country?.continent?.federation?.id ?? null,
+        federationId:
+          player.team?.competitionFederationId ?? player.country?.continent?.federation?.id ?? null,
         federationSlug:
           player.team?.competitionFederation?.slug ||
           player.country?.continent?.federation?.slug ||
@@ -167,7 +165,8 @@ async function getFaceitLeaderboard(
     })
     .sort((a: any, b: any) => b.faceitElo - a.faceitElo);
 
-  const limited = typeof options?.limit === "number" ? rankedEntries.slice(0, options.limit) : rankedEntries;
+  const limited =
+    typeof options?.limit === 'number' ? rankedEntries.slice(0, options.limit) : rankedEntries;
 
   return limited.map((entry: any, index: number) => ({
     rank: index + 1,
@@ -183,28 +182,28 @@ function getFaceitTeamName(team: MatchPlayer[], fallback: string): string {
   return `Team_${team[0].name}`;
 }
 function buildFaceitPseudoMatch(profile: any, room: MatchRoom, dbMatchId: number) {
-  const teamAName = getFaceitTeamName(room.teamA, "Team_A");
-  const teamBName = getFaceitTeamName(room.teamB, "Team_B");
+  const teamAName = getFaceitTeamName(room.teamA, 'Team_A');
+  const teamBName = getFaceitTeamName(room.teamB, 'Team_B');
 
   const teamA = {
     id: 1,
     name: teamAName,
-    slug: teamAName.toLowerCase().replace(/\s+/g, "-"),
+    slug: teamAName.toLowerCase().replace(/\s+/g, '-'),
     countryId: profile.player?.countryId ?? 0,
-    country: profile.player?.country ?? { code: "EU" },
+    country: profile.player?.country ?? { code: 'EU' },
     players: room.teamA,
-    blazon: "",
+    blazon: '',
     tier: 1,
   };
 
   const teamB = {
     id: 2,
     name: teamBName,
-    slug: teamBName.toLowerCase().replace(/\s+/g, "-"),
+    slug: teamBName.toLowerCase().replace(/\s+/g, '-'),
     countryId: profile.player?.countryId ?? 0,
-    country: profile.player?.country ?? { code: "EU" },
+    country: profile.player?.country ?? { code: 'EU' },
     players: room.teamB,
-    blazon: "",
+    blazon: '',
     tier: 1,
   };
 
@@ -219,15 +218,15 @@ function buildFaceitPseudoMatch(profile: any, room: MatchRoom, dbMatchId: number
 
     competition: {
       id: 0,
-      name: "FACEIT",
-      slug: "faceit",
-      federation: { id: 0, name: "FACEIT", slug: "faceit" },
+      name: 'FACEIT',
+      slug: 'faceit',
+      federation: { id: 0, name: 'FACEIT', slug: 'faceit' },
       tier: {
         id: 0,
-        name: "FACEIT",
-        slug: "faceit",
+        name: 'FACEIT',
+        slug: 'faceit',
         groupSize: 0,
-        league: { id: 0, name: "FACEIT", slug: "faceit" },
+        league: { id: 0, name: 'FACEIT', slug: 'faceit' },
       },
       competitors: [
         { id: 1, teamId: 1, team: teamA },
@@ -273,17 +272,18 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
   const matches = await prisma.match.findMany({
     where: {
       profileId: profile.id,
-      matchType: "FACEIT_PUG",
+      matchType: 'FACEIT_PUG',
       status: Constants.MatchStatus.COMPLETED,
     },
     include: {
       events: true,
       games: true,
     },
-    orderBy: { date: "desc" },
+    orderBy: { date: 'desc' },
   });
 
   const mapStats: Record<string, any> = {};
+  const weaponStats: Record<string, any> = {};
   let kills = 0;
   let deaths = 0;
   let headshots = 0;
@@ -304,11 +304,11 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
       date: match.date,
       elo: currentEloAfterMatch,
       eloDelta: Number(match.faceitEloDelta || 0),
-      map: match.games?.[0]?.map || "unknown",
+      map: match.games?.[0]?.map || 'unknown',
     });
     currentEloAfterMatch -= Number(match.faceitEloDelta || 0);
 
-    const mapSlug = match.games?.[0]?.map || "unknown";
+    const mapSlug = match.games?.[0]?.map || 'unknown';
     let matchKills = 0;
     let matchDeaths = 0;
     let matchHeadshots = 0;
@@ -317,8 +317,25 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
       if (!isFaceitKillEvent(event)) continue;
 
       if (event.attackerId === playerId) {
+        const rawWeapon = String(event.weapon || '')
+          .replace(/^weapon_/, '')
+          .toLowerCase();
+        const weapon = ['incgrenade', 'inferno', 'molotov'].includes(rawWeapon)
+          ? 'molotov'
+          : rawWeapon;
+
         matchKills++;
         if (event.headshot) matchHeadshots++;
+
+        if (weapon) {
+          const weaponEntry = weaponStats[weapon] || {
+            kills: 0,
+            headshots: 0,
+          };
+          weaponEntry.kills += 1;
+          if (event.headshot) weaponEntry.headshots += 1;
+          weaponStats[weapon] = weaponEntry;
+        }
       }
       if (event.victimId === playerId) {
         matchDeaths++;
@@ -371,6 +388,17 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
     byMap[mapSlug] = normalize(entry);
   }
 
+  const byWeapon = Object.entries(weaponStats)
+    .map(([weapon, entry]) => ({
+      weapon,
+      kills: entry.kills,
+      headshots: entry.headshots,
+      hsPercent: entry.kills > 0 ? (entry.headshots / entry.kills) * 100 : 0,
+    }))
+    .sort(
+      (a, b) => b.kills - a.kills || b.hsPercent - a.hsPercent || a.weapon.localeCompare(b.weapon),
+    );
+
   const eloHistory = [...eloHistoryDesc].reverse();
 
   return {
@@ -384,39 +412,38 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
       losses,
     }),
     byMap,
+    byWeapon,
     eloHistory,
   };
 }
 
-
 export default function registerFaceitHandlers() {
-
   // ------------------------------------------------------
   // GET FACEIT PROFILE
   // ------------------------------------------------------
-  ipcMain.handle("faceit:getProfile", async () => {
+  ipcMain.handle('faceit:getProfile', async () => {
     try {
       const prisma = await DatabaseClient.connect();
       const profile = await prisma.profile.findFirst();
 
-      if (!profile) throw new Error("No active profile found");
+      if (!profile) throw new Error('No active profile found');
 
       const fullPlayer = profile.playerId
         ? await prisma.player.findFirst({
-          where: { id: profile.playerId },
-          include: {
-            country: {
-              include: {
-                continent: true,
+            where: { id: profile.playerId },
+            include: {
+              country: {
+                include: {
+                  continent: true,
+                },
+              },
+              team: {
+                select: {
+                  competitionFederationId: true,
+                },
               },
             },
-            team: {
-              select: {
-                competitionFederationId: true,
-              },
-            },
-          },
-        })
+          })
         : null;
 
       const recent = await getRecentMatches(profile.id);
@@ -424,11 +451,11 @@ export default function registerFaceitHandlers() {
       const daily = await getFaceitDailyState(prisma, profile);
       const leaderboard = fullPlayer
         ? await getFaceitLeaderboard(prisma, profile, {
-          federationId:
-            fullPlayer?.team?.competitionFederationId ??
-            fullPlayer?.country?.continent?.federationId,
-          limit: 10,
-        })
+            federationId:
+              fullPlayer?.team?.competitionFederationId ??
+              fullPlayer?.country?.continent?.federationId,
+            limit: 10,
+          })
         : [];
       return {
         faceitElo: profile.faceitElo,
@@ -450,171 +477,182 @@ export default function registerFaceitHandlers() {
     }
   });
 
+  ipcMain.handle(
+    'faceit:getLeaderboard',
+    async (
+      _event,
+      args?: {
+        page?: number;
+        perPage?: number;
+        region?: 'ALL' | 'EUROPE' | 'AMERICAS' | 'ASIA' | 'OCEANIA';
+        countryCode?: string;
+      },
+    ) => {
+      const prisma = await DatabaseClient.connect();
+      const profile = await prisma.profile.findFirst();
+      if (!profile) throw new Error('No active profile found');
 
-  ipcMain.handle("faceit:getLeaderboard", async (_event, args?: {
-    page?: number;
-    perPage?: number;
-    region?: "ALL" | "EUROPE" | "AMERICAS" | "ASIA" | "OCEANIA";
-    countryCode?: string;
-  }) => {
-    const prisma = await DatabaseClient.connect();
-    const profile = await prisma.profile.findFirst();
-    if (!profile) throw new Error("No active profile found");
+      const regionToFederationSlug: Record<string, string | null> = {
+        ALL: null,
+        EUROPE: Constants.FederationSlug.ESPORTS_EUROPA,
+        AMERICAS: Constants.FederationSlug.ESPORTS_AMERICAS,
+        ASIA: Constants.FederationSlug.ESPORTS_ASIA,
+        OCEANIA: Constants.FederationSlug.ESPORTS_OCE,
+      };
 
-    const regionToFederationSlug: Record<string, string | null> = {
-      ALL: null,
-      EUROPE: Constants.FederationSlug.ESPORTS_EUROPA,
-      AMERICAS: Constants.FederationSlug.ESPORTS_AMERICAS,
-      ASIA: Constants.FederationSlug.ESPORTS_ASIA,
-      OCEANIA: Constants.FederationSlug.ESPORTS_OCE,
-    };
+      const rawRegion = String(args?.region || 'ALL').toUpperCase();
+      const region = Object.keys(regionToFederationSlug).includes(rawRegion) ? rawRegion : 'ALL';
+      const federationSlug = regionToFederationSlug[region];
 
-    const rawRegion = String(args?.region || "ALL").toUpperCase();
-    const region = Object.keys(regionToFederationSlug).includes(rawRegion) ? rawRegion : "ALL";
-    const federationSlug = regionToFederationSlug[region];
-
-    let federationId: number | undefined;
-    if (federationSlug) {
-      const federation = await prisma.federation.findFirst({ where: { slug: federationSlug } });
-      federationId = federation?.id;
-    }
-
-    const countryCode = args?.countryCode ? String(args.countryCode).toUpperCase() : undefined;
-    const page = Math.max(1, Math.floor(Number(args?.page) || 1));
-    const perPage = Math.max(1, Math.floor(Number(args?.perPage) || 50));
-
-    const regionEntries = await getFaceitLeaderboard(prisma, profile, {
-      federationId,
-    });
-
-    const allEntries = countryCode
-      ? regionEntries.filter((entry: any) => entry.countryCode?.toUpperCase() === countryCode)
-      : regionEntries;
-
-    const countriesByCode = new Map<string, string>();
-    regionEntries.forEach((entry: any) => {
-      if (entry.countryCode) {
-        countriesByCode.set(entry.countryCode.toUpperCase(), entry.countryName || entry.countryCode.toUpperCase());
+      let federationId: number | undefined;
+      if (federationSlug) {
+        const federation = await prisma.federation.findFirst({ where: { slug: federationSlug } });
+        federationId = federation?.id;
       }
-    });
 
-    const total = allEntries.length;
-    const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
-    const offset = (page - 1) * perPage;
+      const countryCode = args?.countryCode ? String(args.countryCode).toUpperCase() : undefined;
+      const page = Math.max(1, Math.floor(Number(args?.page) || 1));
+      const perPage = Math.max(1, Math.floor(Number(args?.perPage) || 50));
 
-    return {
-      entries: allEntries.slice(offset, offset + perPage),
-      page,
-      perPage,
-      total,
-      totalPages,
-      region,
-      countryCode: countryCode || null,
-      availableCountries: Array.from(countriesByCode.entries())
-        .map(([code, name]) => ({ code, name }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    };
-  });
+      const regionEntries = await getFaceitLeaderboard(prisma, profile, {
+        federationId,
+      });
+
+      const allEntries = countryCode
+        ? regionEntries.filter((entry: any) => entry.countryCode?.toUpperCase() === countryCode)
+        : regionEntries;
+
+      const countriesByCode = new Map<string, string>();
+      regionEntries.forEach((entry: any) => {
+        if (entry.countryCode) {
+          countriesByCode.set(
+            entry.countryCode.toUpperCase(),
+            entry.countryName || entry.countryCode.toUpperCase(),
+          );
+        }
+      });
+
+      const total = allEntries.length;
+      const totalPages = total === 0 ? 0 : Math.ceil(total / perPage);
+      const offset = (page - 1) * perPage;
+
+      return {
+        entries: allEntries.slice(offset, offset + perPage),
+        page,
+        perPage,
+        total,
+        totalPages,
+        region,
+        countryCode: countryCode || null,
+        availableCountries: Array.from(countriesByCode.entries())
+          .map(([code, name]) => ({ code, name }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    },
+  );
 
   // ------------------------------------------------------
   // GET RECENT MATCHES
   // ------------------------------------------------------
-  ipcMain.handle("faceit:getRecentMatches", async () => {
+  ipcMain.handle('faceit:getRecentMatches', async () => {
     const prisma = await DatabaseClient.connect();
     const profile = await prisma.profile.findFirst({ include: { player: true } });
-    if (!profile) throw new Error("No active profile");
+    if (!profile) throw new Error('No active profile');
     return getRecentMatches(profile.id);
   });
 
   // ------------------------------------------------------
   // GET LIFETIME STATISTICS
   // ------------------------------------------------------
-  ipcMain.handle("faceit:getLifetimeStats", async () => {
+  ipcMain.handle('faceit:getLifetimeStats', async () => {
     const prisma = await DatabaseClient.connect();
     const profile = await prisma.profile.findFirst({ include: { player: true } });
-    if (!profile) throw new Error("No active profile");
+    if (!profile) throw new Error('No active profile');
     return computeLifetimeStats(profile.id, profile.playerId);
   });
 
-  ipcMain.handle("faceit:getLast20Stats", async () => {
+  ipcMain.handle('faceit:getLast20Stats', async () => {
     const prisma = await DatabaseClient.connect();
     const profile = await prisma.profile.findFirst({ include: { player: true } });
-    if (!profile) throw new Error("No active profile");
+    if (!profile) throw new Error('No active profile');
 
     return computeLifetimeStats(profile.id, profile.playerId, 20);
   });
 
-  ipcMain.handle("faceit:getDetailedStats", async () => {
+  ipcMain.handle('faceit:getDetailedStats', async () => {
     const prisma = await DatabaseClient.connect();
     const profile = await prisma.profile.findFirst({ include: { player: true } });
-    if (!profile) throw new Error("No active profile");
+    if (!profile) throw new Error('No active profile');
     return getDetailedFaceitStats(prisma, profile);
   });
 
   // ------------------------------------------------------
   // QUEUE PUG
   // ------------------------------------------------------
-  ipcMain.handle("faceit:queuePug", async (_, payload?: { queueElo?: number; maxPartyEloDelta?: number }) => {
-    try {
-      await DatabaseClient.connect();
-      const prisma = DatabaseClient.prisma;
+  ipcMain.handle(
+    'faceit:queuePug',
+    async (_, payload?: { queueElo?: number; maxPartyEloDelta?: number }) => {
+      try {
+        await DatabaseClient.connect();
+        const prisma = DatabaseClient.prisma;
 
-      const profile = await prisma.profile.findFirst({
-        include: {
-          player: {
-            include: {
-              country: {
-                include: {
-                  continent: { include: { federation: true } },
+        const profile = await prisma.profile.findFirst({
+          include: {
+            player: {
+              include: {
+                country: {
+                  include: {
+                    continent: { include: { federation: true } },
+                  },
                 },
               },
             },
           },
-        },
-      });
+        });
 
-      if (!profile) throw new Error("No active profile found");
+        if (!profile) throw new Error('No active profile found');
 
-      const daily = await getFaceitDailyState(prisma, profile);
-      if (daily.playedToday >= daily.maxToday) {
-        throw new Error(
-          daily.hasPendingUserMatchday
-            ? "FACEIT_BLOCKED_MATCHDAY_USER_TODAY"
-            : "FACEIT_BLOCKED_DAILY_LIMIT"
-        );
+        const daily = await getFaceitDailyState(prisma, profile);
+        if (daily.playedToday >= daily.maxToday) {
+          throw new Error(
+            daily.hasPendingUserMatchday
+              ? 'FACEIT_BLOCKED_MATCHDAY_USER_TODAY'
+              : 'FACEIT_BLOCKED_DAILY_LIMIT',
+          );
+        }
+
+        const requestedQueueElo = Number(payload?.queueElo);
+        const queueElo = Number.isFinite(requestedQueueElo)
+          ? Math.max(100, Math.min(5000, Math.round(requestedQueueElo)))
+          : undefined;
+
+        const requestedMaxPartyDelta = Number(payload?.maxPartyEloDelta);
+        const maxPartyEloDelta = Number.isFinite(requestedMaxPartyDelta)
+          ? Math.max(0, Math.min(5000, Math.round(requestedMaxPartyDelta)))
+          : undefined;
+
+        const user = {
+          id: profile.player.id,
+          name: profile.player.name,
+          elo: profile.faceitElo,
+          queueElo,
+          maxPartyEloDelta,
+        };
+
+        const room = await FaceitMatchmaker.createMatchRoom(prisma, user);
+
+        return room;
+      } catch (err) {
+        log.error(err);
+        throw err;
       }
-
-      const requestedQueueElo = Number(payload?.queueElo);
-      const queueElo = Number.isFinite(requestedQueueElo)
-        ? Math.max(100, Math.min(5000, Math.round(requestedQueueElo)))
-        : undefined;
-
-      const requestedMaxPartyDelta = Number(payload?.maxPartyEloDelta);
-      const maxPartyEloDelta = Number.isFinite(requestedMaxPartyDelta)
-        ? Math.max(0, Math.min(5000, Math.round(requestedMaxPartyDelta)))
-        : undefined;
-
-      const user = {
-        id: profile.player.id,
-        name: profile.player.name,
-        elo: profile.faceitElo,
-        queueElo,
-        maxPartyEloDelta,
-      };
-
-      const room = await FaceitMatchmaker.createMatchRoom(prisma, user);
-
-      return room;
-    } catch (err) {
-      log.error(err);
-      throw err;
-    }
-  });
+    },
+  );
 
   // ------------------------------------------------------
   // START FACEIT MATCH
   // ------------------------------------------------------
-  ipcMain.handle("faceit:startMatch", async (_, room: MatchRoom) => {
+  ipcMain.handle('faceit:startMatch', async (_, room: MatchRoom) => {
     try {
       await DatabaseClient.connect();
       const prisma = DatabaseClient.prisma;
@@ -623,18 +661,16 @@ export default function registerFaceitHandlers() {
         include: { player: { include: { country: true } } },
       });
 
-      if (!profile) throw new Error("No active profile found");
+      if (!profile) throw new Error('No active profile found');
 
-      const settings = profile.settings
-        ? JSON.parse(profile.settings)
-        : Constants.Settings;
+      const settings = profile.settings ? JSON.parse(profile.settings) : Constants.Settings;
 
       const daily = await getFaceitDailyState(prisma, profile);
       if (daily.playedToday >= daily.maxToday) {
         throw new Error(
           daily.hasPendingUserMatchday
-            ? "FACEIT_BLOCKED_MATCHDAY_USER_TODAY"
-            : "FACEIT_BLOCKED_DAILY_LIMIT"
+            ? 'FACEIT_BLOCKED_MATCHDAY_USER_TODAY'
+            : 'FACEIT_BLOCKED_DAILY_LIMIT',
         );
       }
 
@@ -648,15 +684,14 @@ export default function registerFaceitHandlers() {
       const selectedMapFromUi = room.selectedMap;
 
       const selectedMap =
-        selectedMapFromUi ||
-        (mapPool.length > 0 ? mapPool[0].gameMap.name : "de_inferno");
+        selectedMapFromUi || (mapPool.length > 0 ? mapPool[0].gameMap.name : 'de_inferno');
 
       settings.matchRules.mapOverride = selectedMap;
       profile.settings = JSON.stringify(settings);
 
       const dbMatch = await prisma.match.create({
         data: {
-          matchType: "FACEIT_PUG",
+          matchType: 'FACEIT_PUG',
           payload: JSON.stringify(room),
           profileId: profile.id,
           date: profile.date.toISOString(),
@@ -664,8 +699,8 @@ export default function registerFaceitHandlers() {
           competitors: {
             create: [
               { teamId: 1, seed: 0, score: 0, result: null },
-              { teamId: 2, seed: 1, score: 0, result: null }
-            ]
+              { teamId: 2, seed: 1, score: 0, result: null },
+            ],
           },
           games: {
             create: [
@@ -676,13 +711,13 @@ export default function registerFaceitHandlers() {
                 teams: {
                   create: [
                     { teamId: 1, seed: 0, score: 0, result: null },
-                    { teamId: 2, seed: 1, score: 0, result: null }
-                  ]
-                }
-              }
-            ]
-          }
-        }
+                    { teamId: 2, seed: 1, score: 0, result: null },
+                  ],
+                },
+              },
+            ],
+          },
+        },
       });
 
       const realMatchId = dbMatch.id;
@@ -726,7 +761,7 @@ export default function registerFaceitHandlers() {
   // ------------------------------------------------------
   // GET MATCH DATA (scoreboard)
   // ------------------------------------------------------
-  ipcMain.handle("faceit:getMatchData", async (_, matchId: number | string | null | undefined) => {
+  ipcMain.handle('faceit:getMatchData', async (_, matchId: number | string | null | undefined) => {
     await DatabaseClient.connect();
     const prisma = DatabaseClient.prisma;
 

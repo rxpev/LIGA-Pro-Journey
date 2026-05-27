@@ -106,7 +106,7 @@ export const ElectronRendererWebpackConfig: Configuration = {
         ],
       },
       {
-        test: /(\.mp4|\.png|\.webm)$/,
+        test: /(\.mp4|\.png|\.svg|\.webm)$/,
         type: 'asset/inline',
       },
     ],

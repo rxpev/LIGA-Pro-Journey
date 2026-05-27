@@ -97,13 +97,15 @@ export default {
         Constants.IPCRoute.COMPETITIONS_PARTICIPANT_LINEUP,
         competitionId,
         teamId,
-      ) as Promise<Array<{
-        id: number;
-        name: string;
-        country: {
-          code: string;
-        };
-      }>>,
+      ) as Promise<
+        Array<{
+          id: number;
+          name: string;
+          country: {
+            code: string;
+          };
+        }>
+      >,
     winners: (id: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.COMPETITIONS_WINNERS, id) as Promise<
         Prisma.CompetitionGetPayload<typeof Eagers.competition>['competitors']
@@ -144,7 +146,7 @@ export default {
   },
   faceit: {
     profile: () =>
-      ipcRenderer.invoke("faceit:getProfile") as Promise<{
+      ipcRenderer.invoke('faceit:getProfile') as Promise<{
         faceitElo: number;
         faceitLevel: number;
         recent: any[];
@@ -174,12 +176,15 @@ export default {
     leaderboard: (
       page = 1,
       perPage = 50,
-      filters?: { region?: "ALL" | "EUROPE" | "AMERICAS" | "ASIA" | "OCEANIA"; countryCode?: string | null },
+      filters?: {
+        region?: 'ALL' | 'EUROPE' | 'AMERICAS' | 'ASIA' | 'OCEANIA';
+        countryCode?: string | null;
+      },
     ) =>
-      ipcRenderer.invoke("faceit:getLeaderboard", {
+      ipcRenderer.invoke('faceit:getLeaderboard', {
         page,
         perPage,
-        region: filters?.region || "ALL",
+        region: filters?.region || 'ALL',
         countryCode: filters?.countryCode || undefined,
       }) as Promise<{
         entries: Array<{
@@ -194,26 +199,23 @@ export default {
         perPage: number;
         total: number;
         totalPages: number;
-        region: "ALL" | "EUROPE" | "AMERICAS" | "ASIA" | "OCEANIA";
+        region: 'ALL' | 'EUROPE' | 'AMERICAS' | 'ASIA' | 'OCEANIA';
         countryCode: string | null;
         availableCountries: Array<{ code: string; name: string }>;
       }>,
-    startMatch: (
-      room: {
-        fakeRoomId: string;
-        teamA: any[];
-        teamB: any[];
-        expectedWinA: number;
-        expectedWinB: number;
-        eloGain: number;
-        eloLoss: number;
-        selectedMap?: string;
-      }
-    ) => ipcRenderer.invoke("faceit:startMatch", room),
-    getMatchData: (id: number | string) =>
-      ipcRenderer.invoke("faceit:getMatchData", id),
+    startMatch: (room: {
+      fakeRoomId: string;
+      teamA: any[];
+      teamB: any[];
+      expectedWinA: number;
+      expectedWinB: number;
+      eloGain: number;
+      eloLoss: number;
+      selectedMap?: string;
+    }) => ipcRenderer.invoke('faceit:startMatch', room),
+    getMatchData: (id: number | string) => ipcRenderer.invoke('faceit:getMatchData', id),
     last20Stats: () =>
-      ipcRenderer.invoke("faceit:getLast20Stats") as Promise<{
+      ipcRenderer.invoke('faceit:getLast20Stats') as Promise<{
         matchesPlayed: number;
         wins: number;
         losses: number;
@@ -225,7 +227,7 @@ export default {
         hsPercent: number;
       }>,
     detailedStats: () =>
-      ipcRenderer.invoke("faceit:getDetailedStats") as Promise<{
+      ipcRenderer.invoke('faceit:getDetailedStats') as Promise<{
         allTime: {
           kills: number;
           deaths: number;
@@ -257,6 +259,12 @@ export default {
           elo: number;
           eloDelta: number;
           map: string;
+        }>;
+        byWeapon: Array<{
+          weapon: string;
+          kills: number;
+          headshots: number;
+          hsPercent: number;
         }>;
       }>,
   },
@@ -299,11 +307,17 @@ export default {
         Prisma.MatchGetPayload<unknown>
       >,
     findVetoList: (id: number) =>
-      ipcRenderer.invoke(Constants.IPCRoute.MATCH_FIND_VETO_LIST, id) as Promise<Array<MatchVetoRecord>>,
+      ipcRenderer.invoke(Constants.IPCRoute.MATCH_FIND_VETO_LIST, id) as Promise<
+        Array<MatchVetoRecord>
+      >,
     updateMapList: (id: number, mapList: Array<string>) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCH_UPDATE_MAP_LIST, id, mapList) as Promise<unknown>,
     updateVetoList: (id: number, vetoList: Array<MatchVetoInput>) =>
-      ipcRenderer.invoke(Constants.IPCRoute.MATCH_UPDATE_VETO_LIST, id, vetoList) as Promise<unknown>,
+      ipcRenderer.invoke(
+        Constants.IPCRoute.MATCH_UPDATE_VETO_LIST,
+        id,
+        vetoList,
+      ) as Promise<unknown>,
   },
   matches: {
     all: <T = typeof Eagers.match>(query: Prisma.MatchFindManyArgs) =>
@@ -382,17 +396,13 @@ export default {
         user?: Partial<Prisma.PlayerGetPayload<unknown>>;
         team?: Partial<Prisma.TeamGetPayload<unknown>>;
         today?: Date;
-        faceitElo: 1200,
-        faceitLevel: 4,
+        faceitElo: 1200;
+        faceitLevel: 4;
       },
       settings?: string,
     ) => ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CREATE, data, settings) as Promise<Profile>,
 
-    createPlayerCareer: (data: {
-      playerName: string;
-      countryId: number;
-      role: string;
-    }) =>
+    createPlayerCareer: (data: { playerName: string; countryId: number; role: string }) =>
       ipcRenderer.invoke('profiles:createPlayerCareer', data) as Promise<Profile>,
 
     current: <T = typeof Eagers.profile>() =>
