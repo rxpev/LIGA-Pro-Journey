@@ -1040,7 +1040,7 @@ export default function () {
                   <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
                     <img
                       alt=""
-                      className="h-8 w-8 object-contain"
+                      className="h-14 w-14 object-contain"
                       draggable={false}
                       src={spectatingIcon}
                     />
@@ -1088,7 +1088,7 @@ export default function () {
             );
           }}
         >
-          {t('main.dashboard.play')}
+          {spectating ? 'Spectate' : t('main.dashboard.play')}
         </button>
       </section>
       {editingTeamId && (
