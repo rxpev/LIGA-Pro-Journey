@@ -13,6 +13,7 @@ import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import cz75AutoIcon from '@liga/frontend/assets/cz75auto.png';
 import m4a1sIcon from '@liga/frontend/assets/m4a1s.png';
+import spectatingIcon from '@liga/frontend/assets/spectating.png';
 import uspsIcon from '@liga/frontend/assets/usps.png';
 import {
   FaArrowLeft,
@@ -327,9 +328,11 @@ export default function () {
     >
   >({});
   const [isUserCT, setIsUserCT] = React.useState(false);
+  const [spectating, setSpectating] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
   const navigate = useNavigate();
   const t = useTranslation('windows');
+  const previousHomeTeamId = React.useRef<number>();
 
   // load audio files
   const audioRelease = useAudio('button-release.wav');
@@ -513,8 +516,13 @@ export default function () {
       return;
     }
 
-    setHomeRoster(getDefaultRoster(homeTeam, true));
-  }, [homeTeam, getDefaultRoster]);
+    if (previousHomeTeamId.current === homeTeam.id) {
+      return;
+    }
+
+    previousHomeTeamId.current = homeTeam.id;
+    setHomeRoster(getDefaultRoster(homeTeam, !spectating));
+  }, [homeTeam, getDefaultRoster, spectating]);
 
   React.useEffect(() => {
     if (!awayTeam) {
@@ -523,6 +531,61 @@ export default function () {
 
     setAwayRoster(getDefaultRoster(awayTeam));
   }, [awayTeam, getDefaultRoster]);
+
+  const getRosterWithoutYou = React.useCallback(
+    (team: TeamData, roster: Array<number | null>) => {
+      const defaultRoster = getDefaultRoster(team);
+      const nextRoster = roster.map((playerId, index) =>
+        playerId === -1 ? defaultRoster[index] || null : playerId,
+      );
+
+      return nextRoster.slice(0, Constants.Application.SQUAD_MIN_LENGTH).concat(
+        Array.from({
+          length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - nextRoster.length),
+        }).map((): null => null),
+      );
+    },
+    [getDefaultRoster],
+  );
+
+  const getRosterWithYou = React.useCallback(
+    (team: TeamData, roster: Array<number | null>) => {
+      if (roster.includes(-1)) {
+        return roster;
+      }
+
+      const defaultRoster = getDefaultRoster(team);
+      const awperIdx = defaultRoster.findIndex((playerId) => {
+        const player = team.players.find((entry) => entry.id === playerId);
+        return (
+          player?.role === Constants.UserRole.AWPER || player?.role === Constants.PlayerRole.SNIPER
+        );
+      });
+      const replacementIdx = awperIdx >= 0 ? awperIdx : 0;
+      const nextRoster = [...roster];
+
+      nextRoster[replacementIdx] = -1;
+
+      return nextRoster.slice(0, Constants.Application.SQUAD_MIN_LENGTH).concat(
+        Array.from({
+          length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - nextRoster.length),
+        }).map((): null => null),
+      );
+    },
+    [getDefaultRoster],
+  );
+
+  const onSpectatingToggle = (checked: boolean) => {
+    setSpectating(checked);
+
+    if (!homeTeam) {
+      return;
+    }
+
+    setHomeRoster((prev) =>
+      checked ? getRosterWithoutYou(homeTeam, prev) : getRosterWithYou(homeTeam, prev),
+    );
+  };
 
   const currentEditingTeam = editingTeamId === homeTeam?.id ? homeTeam : awayTeam;
   const currentEditingRoster = editingTeamId === homeTeam?.id ? homeRoster : awayRoster;
@@ -761,7 +824,11 @@ export default function () {
       />
       <section className="center w-24 gap-4 text-center">
         <p>
-          <em>Pick your starting side</em>
+          <em>
+            {spectating && homeTeam
+              ? `Pick ${homeTeam.name}'s starting side`
+              : 'Pick your starting side'}
+          </em>
         </p>
         <label className="swap swap-flip [&_article]:center [&_article]:gap-4 [&_article_svg]:size-8">
           <input
@@ -970,6 +1037,30 @@ export default function () {
                 </aside>
               </article>
             ))}
+            <article>
+              <header>
+                <p className="flex items-center gap-4 not-italic">
+                  <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                    <img
+                      alt=""
+                      className="h-8 w-8 object-contain"
+                      draggable={false}
+                      src={spectatingIcon}
+                    />
+                  </span>
+                  <span>Spectate Match</span>
+                </p>
+                <p>Spectate the match.</p>
+              </header>
+              <aside>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  checked={spectating}
+                  onChange={(event) => onSpectatingToggle(event.target.checked)}
+                />
+              </aside>
+            </article>
           </fieldset>
         </form>
         <button
@@ -996,6 +1087,7 @@ export default function () {
                   ),
                 },
               ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
+              spectating,
             );
           }}
         >

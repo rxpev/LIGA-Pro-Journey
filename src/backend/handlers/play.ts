@@ -68,6 +68,7 @@ export default function () {
       teamIds: Array<number>,
       teamId: number,
       rosterOverrides: Array<{ teamId: number; playerIds: Array<number> }> = [],
+      spectating = false,
     ) => {
       let previousPath = '';
       try {
@@ -134,7 +135,7 @@ export default function () {
             0,
             Constants.Application.SQUAD_MIN_LENGTH,
           );
-          const includesYou = team.id === teamId && uniquePlayerIds.includes(-1);
+          const includesYou = !spectating && team.id === teamId && uniquePlayerIds.includes(-1);
           const rosterIds = uniquePlayerIds.filter((playerId) => playerId !== -1);
           const teamPlayerMap = new Map(team.players.map((player) => [player.id, player]));
           const externalPlayerIds = rosterIds.filter((playerId) => !teamPlayerMap.has(playerId));
@@ -155,7 +156,7 @@ export default function () {
             Constants.Application.SQUAD_MIN_LENGTH,
           );
 
-          if (team.id === teamId) {
+          if (!spectating && team.id === teamId) {
             const awperIdx = lineup.findIndex(
               (player) =>
                 player.role === Constants.UserRole.AWPER ||
@@ -227,7 +228,7 @@ export default function () {
         // manually build the match-related objects
         const profile = {
           teamId: userTeam.id,
-          playerId: selectedUserPlayerId || userTeam.players[0].id,
+          playerId: spectating ? -1 : selectedUserPlayerId || userTeam.players[0].id,
           settings: JSON.stringify(settings),
         } as Prisma.ProfileGetPayload<unknown>;
 
@@ -268,7 +269,7 @@ export default function () {
         } as unknown as Prisma.MatchGetPayload<typeof Eagers.match>;
 
         // start the server and play the match
-        const gameServer = new Game.Server(profile, match);
+        const gameServer = new Game.Server(profile, match, null, spectating);
         await gameServer.start();
 
         const sideTeamIds = gameServer.getSideTeamIds();
@@ -289,7 +290,7 @@ export default function () {
             score: scoreByTeamId[team.id] ?? 0,
             players: team.players.map((player) => ({
               id: player.id,
-              name: player.id === selectedUserPlayerId ? 'YOU' : player.name,
+              name: !spectating && player.id === selectedUserPlayerId ? 'YOU' : player.name,
               matchName: player.name,
               country: 'country' in player ? player.country : null,
             })),

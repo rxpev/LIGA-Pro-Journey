@@ -349,6 +349,7 @@ export default {
       teamIds: Array<number>,
       teamId: number,
       rosterOverrides?: Array<{ teamId: number; playerIds: Array<number> }>,
+      spectating?: boolean,
     ) =>
       ipcRenderer.invoke(
         Constants.IPCRoute.PLAY_EXHIBITION,
@@ -356,6 +357,7 @@ export default {
         teamIds,
         teamId,
         rosterOverrides,
+        spectating,
       ),
     start: (spectating?: boolean) => ipcRenderer.invoke(Constants.IPCRoute.PLAY_START, spectating),
   },
