@@ -11,6 +11,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { FaChartBar } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
+import CompetitionLocationTag from './competitions/competition-location-tag';
 
 declare const require: {
   context: (
@@ -797,6 +798,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         mapsPlayed: number;
         teamBlazon: string;
         href: string;
+        tier?: { lan?: boolean | null };
       }
     >();
 
@@ -818,6 +820,7 @@ export default function LeagueStatsConcept(): JSX.Element {
           count: 1,
           mapsPlayed: playedMaps,
           teamBlazon: ownTeam?.team.blazon || 'resources://blazonry/noteam.svg',
+          tier: item.match.competition?.tier,
           href: item.match.competition
             ? `/competitions?federationId=${item.match.competition.federationId}&season=${item.match.competition.season}&tierId=${item.match.competition.tierId}`
             : '/competitions',
@@ -1419,7 +1422,12 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <thead>
                     <tr>
                       <th>Team</th>
-                      <th>Tournament</th>
+                      <th>
+                        <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
+                          <span />
+                          <span>Tournament</span>
+                        </span>
+                      </th>
                       <th>Placement</th>
                       <th className="text-center">+ / -</th>
                       <th>Rating</th>
@@ -1435,11 +1443,23 @@ export default function LeagueStatsConcept(): JSX.Element {
                             <img src={row.teamBlazon} className="h-8 w-8 object-contain" />
                           </td>
                           <td>
-                            <Link to={row.href} className="link link-hover">
-                              {row.label}
-                            </Link>
+                            <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
+                              <span className="inline-flex justify-start">
+                                {row.tier?.lan && <CompetitionLocationTag tier={row.tier} />}
+                              </span>
+                              <Link to={row.href} className="link link-hover">
+                                {row.label}
+                              </Link>
+                            </span>
                           </td>
-                          <td>{row.placement}</td>
+                          <td
+                            className={cx(
+                              'font-semibold',
+                              row.placement === '#1' ? 'text-warning' : 'text-inherit',
+                            )}
+                          >
+                            {row.placement}
+                          </td>
                           <td
                             className={
                               row.plusMinus > 0
