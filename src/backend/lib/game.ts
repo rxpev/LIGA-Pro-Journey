@@ -957,8 +957,9 @@ End\n
     const isM4A1 = this.settings.gameSettings?.isM4A1 ? 1 : 0;
     const isUSP = this.settings.gameSettings?.isUSP ? 1 : 0;
     const isCZ = this.settings.gameSettings?.isCZ ? 1 : 0;
-    const isIGL = !this.spectating && user?.role === "IGL";
-    const bot_defer_to_human_items = this.isFaceit ? 0 : (isIGL ? 1 : 0);
+    const userIsIGL = !this.spectating && user?.role === Constants.UserRole.IGL;
+    const isIGL = !this.isFaceit && userIsIGL ? 1 : 0;
+    const bot_defer_to_human_items = isIGL;
     const isLan = this.getIsLanMatch() ? 1 : 0;
 
     // ------------------------------
@@ -1103,6 +1104,7 @@ End\n
         isCZ,
         isFaceit: 1,
         isLan,
+        isIGL,
         bot_defer_to_human_items,
 
         match_stat: 'FACEIT PUG',
@@ -1136,6 +1138,7 @@ End\n
         isCZ,
         isFaceit: 0,
         isLan,
+        isIGL,
         bot_defer_to_human_items,
         humanteam,
 
@@ -1157,6 +1160,9 @@ End\n
     serverCfgRendered = /^\s*isCZ\s+/im.test(serverCfgRendered)
       ? serverCfgRendered.replace(/^\s*isCZ\s+\S+.*$/im, `isCZ "${isCZ}"`)
       : serverCfgRendered.replace(/\r?\n*$/, `\nisCZ "${isCZ}"\n`);
+    serverCfgRendered = /^\s*isIGL\s+/im.test(serverCfgRendered)
+      ? serverCfgRendered.replace(/^\s*isIGL\s+\S+.*$/im, `isIGL "${isIGL}"`)
+      : serverCfgRendered.replace(/\r?\n*$/, `\nisIGL "${isIGL}"\n`);
 
     await fs.promises.writeFile(serverCfgPath, serverCfgRendered, 'utf8');
     this.log.info(`Generated server.cfg at: ${serverCfgPath}`);
