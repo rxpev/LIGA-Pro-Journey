@@ -67,25 +67,6 @@ enum Rating {
   HIGH = 1.1,
 }
 
-/**
- * Computed a simple HLTV-style rating using only k/d ratio.
- *
- * @param kills   Number of kills.
- * @param deaths  Number of deaths.
- * @function
- */
-function getPlayerRating(kills: number, deaths: number) {
-  // give a small k/d boost
-  const boost = 0.05;
-  const raw = (kills + 1) / (deaths + 1) + boost * (kills - deaths);
-
-  // now scale to common or average hltv
-  // ratings you'd see in actual games
-  const scale = 0.5;
-  const offset = 0.401;
-  return scale * raw + offset;
-}
-
 function getExhibitionEventPlayerId(
   playerName: string | undefined,
   teams: ExhibitionPostgamePayload['teams'],
@@ -142,7 +123,7 @@ function getExhibitionPlayerPerformance(
   const deaths = killEvents.filter((event) => event.victimId === player.id);
   const hsp = headshots.length / (kills.length || 1);
   const kd = kills.length - deaths.length;
-  const rating = getPlayerRating(kills.length, deaths.length);
+  const rating = Util.getPlayerRating(kills.length, deaths.length, assists.length);
   return { assists, kills, deaths, hsp, kd, rating };
 }
 
@@ -164,7 +145,7 @@ function getPlayerPerformance(
   const deaths = events.filter((event) => event.victimId === player.id && !event.assistId);
   const hsp = headshots.length / (kills.length || 1);
   const kd = kills.length - deaths.length;
-  const rating = getPlayerRating(kills.length, deaths.length);
+  const rating = Util.getPlayerRating(kills.length, deaths.length, assists.length);
   return { events, assists, kills, deaths, hsp, kd, rating };
 }
 

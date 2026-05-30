@@ -225,22 +225,15 @@ function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
   return null;
 }
 
-function getPlayerRating(kills: number, deaths: number) {
-  const boost = 0.05;
-  const raw = (kills + 1) / (deaths + 1) + boost * (kills - deaths);
-  const scale = 0.5;
-  const offset = 0.401;
-  return scale * raw + offset;
-}
-
 function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
   const killOrAssistEvents = events.filter((event: any) => !!event.attackerId || !!event.assistId);
   const kills = killOrAssistEvents.filter((event: any) => event.attackerId === playerId).length;
+  const assists = killOrAssistEvents.filter((event: any) => event.assistId === playerId).length;
   const deaths = killOrAssistEvents.filter(
     (event: any) => event.victimId === playerId && !event.assistId,
   ).length;
   const plusMinus = kills - deaths;
-  const rating = getPlayerRating(kills, deaths);
+  const rating = Util.getPlayerRating(kills, deaths, assists);
   return { kills, deaths, plusMinus, rating };
 }
 

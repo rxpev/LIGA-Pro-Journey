@@ -11,6 +11,28 @@ import { differenceBy, merge, set } from 'lodash';
 import * as Constants from './constants';
 
 /**
+ * Computes a compact HLTV-style player rating from scoreboard stats.
+ *
+ * Assists count as partial kill impact, strong positive games are compressed
+ * logarithmically, and poor games lose rating a little more gently.
+ *
+ * @param kills    Number of kills.
+ * @param deaths   Number of deaths.
+ * @param assists  Number of assists.
+ * @function
+ */
+export function getPlayerRating(kills: number, deaths: number, assists = 0) {
+  const effectiveKills = kills + assists * 0.4;
+  const ratio = (effectiveKills + 1) / (deaths + 1);
+  const plusMinus = effectiveKills - deaths;
+
+  const ratioScore = ratio >= 1 ? 1 + Math.log(ratio) * 0.7 : 1 + (ratio - 1) * 0.8;
+  const impactScore = Math.sign(plusMinus) * Math.sqrt(Math.abs(plusMinus)) * 0.05;
+
+  return ratioScore + impactScore;
+}
+
+/**
  * Builds team query from provided filters.
  *
  * @param federationId    Limit search to a specific federation.
