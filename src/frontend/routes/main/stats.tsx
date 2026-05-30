@@ -72,6 +72,7 @@ type CompetitionGroupKey =
 
 type TimeframeOption = '' | '6' | '3' | '1';
 type MatchTypeOption = '' | 'LAN' | 'ONLINE';
+type CompetitionStageOption = '' | 'GROUP_STAGE' | 'PLAYOFFS';
 
 const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   MAJOR: 'Major (Challengers + Legends + Champions)',
@@ -119,6 +120,47 @@ const MatchTypeLabels: Record<MatchTypeOption, string> = {
 };
 
 const MatchTypeOptions: MatchTypeOption[] = ['', 'LAN', 'ONLINE'];
+
+const CompetitionStageLabels: Record<CompetitionStageOption, string> = {
+  '': 'Any',
+  GROUP_STAGE: 'Group Stage',
+  PLAYOFFS: 'Playoffs',
+};
+
+const CompetitionStageOptions: CompetitionStageOption[] = ['', 'GROUP_STAGE', 'PLAYOFFS'];
+
+const PlayoffStageTierSlugs = new Set<string>([
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+]);
+
+const GroupStageTierSlugs = new Set<string>([
+  Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+  Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
+  Constants.TierSlug.CCT_SERIES,
+  Constants.TierSlug.CCT_OCE_SERIES,
+  Constants.TierSlug.LEAGUE_PRO,
+  Constants.TierSlug.ESL_CHALLENGER,
+]);
 
 enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
@@ -221,6 +263,20 @@ function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
   if (tierSlug.includes('major:asia:open-qualifier')) return 'RMR_QUALIFIERS_ASIA';
   if (tierSlug.includes('major:china:open-qualifier')) return 'RMR_QUALIFIERS_CHINA';
   if (tierSlug.includes('major:oce:open-qualifier')) return 'RMR_QUALIFIERS_OCEANIA';
+
+  return null;
+}
+
+function getCompetitionStage(match: MatchRecord): Exclude<CompetitionStageOption, ''> | null {
+  const tierSlug = String(match.competition?.tier?.slug || '');
+
+  if (PlayoffStageTierSlugs.has(tierSlug)) {
+    return 'PLAYOFFS';
+  }
+
+  if (GroupStageTierSlugs.has(tierSlug)) {
+    return 'GROUP_STAGE';
+  }
 
   return null;
 }
@@ -397,6 +453,8 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedSeason, setSelectedSeason] = React.useState<string>('');
   const [selectedTimeframe, setSelectedTimeframe] = React.useState<TimeframeOption>('');
   const [selectedMatchType, setSelectedMatchType] = React.useState<MatchTypeOption>('');
+  const [selectedCompetitionStage, setSelectedCompetitionStage] =
+    React.useState<CompetitionStageOption>('');
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [matchPage, setMatchPage] = React.useState(1);
@@ -542,6 +600,9 @@ export default function LeagueStatsConcept(): JSX.Element {
           ? Boolean(match.competition?.tier?.lan)
           : !Boolean(match.competition?.tier?.lan)
         : true;
+      const byCompetitionStage = selectedCompetitionStage
+        ? getCompetitionStage(match) === selectedCompetitionStage
+        : true;
       const bySeason = selectedSeason ? String(match.competition?.season) === selectedSeason : true;
       const byTimeframe = state.profile?.date
         ? isWithinTimeframe(match.date, state.profile.date, selectedTimeframe)
@@ -558,13 +619,22 @@ export default function LeagueStatsConcept(): JSX.Element {
         match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
       );
 
-      return byCompetition && byMap && byMatchType && bySeason && byTimeframe && byCareerTeam;
+      return (
+        byCompetition &&
+        byMap &&
+        byMatchType &&
+        byCompetitionStage &&
+        bySeason &&
+        byTimeframe &&
+        byCareerTeam
+      );
     });
   }, [
     matches,
     selectedCompetitionGroup,
     selectedMap,
     selectedMatchType,
+    selectedCompetitionStage,
     selectedSeason,
     selectedTimeframe,
     selectedCareerTeamId,
@@ -672,6 +742,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     selectedTimeframe,
     selectedMap,
     selectedMatchType,
+    selectedCompetitionStage,
     selectedCareerTeamId,
     selectedTeammateId,
   ]);
@@ -1300,6 +1371,24 @@ export default function LeagueStatsConcept(): JSX.Element {
                   {MatchTypeOptions.map((option) => (
                     <option key={option || 'any'} value={option}>
                       {MatchTypeLabels[option]}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
+              <fieldset>
+                <label className="label pb-1 text-xs font-semibold uppercase">
+                  Competition stage
+                </label>
+                <select
+                  className="select select-sm select-bordered w-full rounded-none"
+                  value={selectedCompetitionStage}
+                  onChange={(e) =>
+                    setSelectedCompetitionStage(e.target.value as CompetitionStageOption)
+                  }
+                >
+                  {CompetitionStageOptions.map((option) => (
+                    <option key={option || 'any'} value={option}>
+                      {CompetitionStageLabels[option]}
                     </option>
                   ))}
                 </select>
