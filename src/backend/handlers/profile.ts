@@ -130,6 +130,23 @@ export default function registerProfileHandlers() {
               id: true,
               name: true,
               updatedAt: true,
+              player: {
+                select: {
+                  role: true,
+                  team: {
+                    select: {
+                      name: true,
+                      blazon: true,
+                    },
+                  },
+                },
+              },
+              team: {
+                select: {
+                  name: true,
+                  blazon: true,
+                },
+              },
             },
           })
           .finally(() => prisma.$disconnect());

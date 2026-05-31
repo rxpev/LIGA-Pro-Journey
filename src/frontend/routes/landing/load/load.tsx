@@ -9,8 +9,40 @@ import { formatRelative } from 'date-fns';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
+import type { AppState } from '@liga/frontend/redux/state';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { FaArrowLeft, FaTrash } from 'react-icons/fa';
+import awperIcon from '@liga/frontend/assets/awper.png';
+import iglIcon from '@liga/frontend/assets/igl.png';
+import riflerIcon from '@liga/frontend/assets/rifler.png';
+
+const ROLE_ICONS: Record<string, string> = {
+  AWPER: awperIcon,
+  IGL: iglIcon,
+  RIFLER: riflerIcon,
+};
+
+const ROLE_BADGE_STYLES: Record<string, string> = {
+  AWPER: 'bg-purple-300',
+  IGL: 'bg-green-300',
+  RIFLER: 'bg-blue-300',
+};
+
+const NO_TEAM_ICON = 'resources://blazonry/noteam.svg';
+
+type SaveListProfile = AppState['profiles'][number] & {
+  player?: {
+    role?: string | null;
+    team?: {
+      name?: string | null;
+      blazon?: string | null;
+    } | null;
+  } | null;
+  team?: {
+    name?: string | null;
+    blazon?: string | null;
+  } | null;
+};
 
 /**
  * Exports this module.
@@ -27,45 +59,83 @@ export default function () {
   const audioClick = useAudio('button-click.wav');
 
   return (
-    <main className="frosted center h-full w-2/5 p-5 xl:w-1/3">
+    <main className="frosted center h-full w-3/5 overflow-y-auto p-5 xl:w-1/2">
       <FaArrowLeft
         className="absolute top-5 left-5 size-5 cursor-pointer"
         onClick={() => navigate(-1)}
         onMouseDown={audioRelease}
       />
       <table className="table table-fixed">
-        <thead>
+        <colgroup>
+          <col className="w-1/5" />
+          <col className="w-1/5" />
+          <col className="w-1/5" />
+          <col className="w-1/5" />
+          <col className="w-1/5" />
+        </colgroup>
+        <thead className="bg-base-300 sticky top-0 z-10">
           <tr>
             <th>{t('shared.name')}</th>
+            <th className="text-center">Role</th>
+            <th>{t('shared.team')}</th>
             <th>{t('landing.load.lastUpdated')}</th>
             <th className="text-center">{t('shared.delete')}</th>
           </tr>
         </thead>
         <tbody>
-          {state.profiles.map((profile) => (
-            <tr
-              key={profile.id}
-              className="hover:bg-base-content/10 cursor-pointer"
-              onClick={() => navigate('/connect/' + profile.id)}
-              onMouseDown={audioClick}
-            >
-              <td>
-                <p>{profile.name}</p>
-                <p className="text-muted">
-                  <em>{Util.getSaveFileName(profile.id)}</em>
-                </p>
-              </td>
-              <td>{upperFirst(formatRelative(profile.updatedAt, new Date()))}</td>
-              <td className="text-center" onClick={(event) => event.stopPropagation()}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => navigate('/load/delete/' + profile.id)}
-                >
-                  <FaTrash />
-                </button>
-              </td>
-            </tr>
-          ))}
+          {state.profiles.map((profile) => {
+            const save = profile as SaveListProfile;
+            const role = save.player?.role || 'RIFLER';
+            const roleIcon = ROLE_ICONS[role] || riflerIcon;
+            const roleBadgeStyle = ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.RIFLER;
+            const team = save.team || save.player?.team;
+            const teamBlazon = team?.blazon || NO_TEAM_ICON;
+            const teamName = team?.name || 'No Team';
+
+            return (
+              <tr
+                key={profile.id}
+                className="hover:bg-base-content/10 cursor-pointer"
+                onClick={() => navigate('/connect/' + profile.id)}
+                onMouseDown={audioClick}
+              >
+                <td>
+                  <p>{profile.name}</p>
+                  <p className="text-muted">
+                    <em>{Util.getSaveFileName(profile.id)}</em>
+                  </p>
+                </td>
+                <td className="text-center">
+                  <span
+                    title={role}
+                    className={`inline-grid size-9 place-items-center rounded-full ${roleBadgeStyle}`}
+                  >
+                    <img src={roleIcon} alt={role} className="size-8 object-contain opacity-95" />
+                  </span>
+                </td>
+                <td>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={teamBlazon}
+                      alt={teamName}
+                      title={teamName}
+                      className="size-8 shrink-0 object-contain"
+                    />
+                    <span className="truncate">{team?.name || 'No Team'}</span>
+                  </div>
+                </td>
+                <td>{upperFirst(formatRelative(profile.updatedAt, new Date()))}</td>
+                <td className="text-center" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => navigate('/load/delete/' + profile.id)}
+                  >
+                    <FaTrash />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       <Outlet />
