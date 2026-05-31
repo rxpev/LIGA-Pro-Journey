@@ -47,7 +47,7 @@ export function useFormatAppDate() {
 
 export function useFormatAppShortDate() {
   const fmt = useDateFormat();
-  const shortFmt = React.useMemo(() => fmt.replace('yyyy', 'yy'), [fmt]);
+  const shortFmt = React.useMemo(() => fmt.replace(/\/yyyy$/, ''), [fmt]);
 
   return React.useCallback(
     (value: Dateish, fallback = '-') => {

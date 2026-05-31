@@ -124,7 +124,7 @@ export default function () {
 
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
 
-  const toDashboardTeamTierLabel = (tierSlug: Constants.TierSlug): string =>
+  const toDashboardTeamTierLabel = (tierSlug: Constants.TierSlug | string): string =>
     tierSlug === Constants.TierSlug.LEAGUE_PRO
       ? 'ESL Pro League'
       : Constants.IdiomaticTier[tierSlug];
@@ -305,7 +305,7 @@ export default function () {
                       <td className="w-1/5" title={format(match.date, 'PPPP')}>
                         {fmtShortDate(match.date)}
                       </td>
-                      <td className="w-3/6 truncate" title={opponent?.team?.name || '-'}>
+                      <td className="w-2/5 truncate" title={opponent?.team?.name || '-'}>
                         <img
                           src={opponent?.team?.blazon || 'resources://blazonry/009400.png'}
                           className="mr-2 inline-block size-4"
@@ -313,13 +313,13 @@ export default function () {
                         <span>{opponent?.team.name || '-'}</span>
                       </td>
                       <td
-                        className="w-2/6 truncate"
+                        className="w-2/5 truncate"
                         title={Util.getCompetitionDisplayName(
                           match.competition.tier.league.name,
                           match.competition.tier.slug,
                         )}
                       >
-                        {Constants.IdiomaticTier[match.competition.tier.slug]}
+                        {toDashboardTeamTierLabel(match.competition.tier.slug)}
                       </td>
                     </tr>
                   );
@@ -336,8 +336,8 @@ export default function () {
                           )
                         : '-'}
                     </td>
-                    <td className="w-3/6 truncate">{t('main.dashboard.noMatchScheduled')}</td>
-                    <td className="w-2/6">-</td>
+                    <td className="w-2/5 truncate">{t('main.dashboard.noMatchScheduled')}</td>
+                    <td className="w-2/5">-</td>
                   </tr>
                 ))}
               </tbody>
@@ -1014,7 +1014,7 @@ export default function () {
                                     match.competition.tier.slug,
                                   )}
                                 >
-                                  {Constants.IdiomaticTier[match.competition.tier.slug]}
+                                  {toDashboardTeamTierLabel(match.competition.tier.slug)}
                                 </td>
                               </tr>
                             );
