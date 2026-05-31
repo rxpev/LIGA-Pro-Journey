@@ -1,6 +1,12 @@
 import { Constants, Util } from '@liga/shared';
 
 const ESL_PRO_LEAGUE_NAME = 'ESL Pro League';
+const EseaDivisionHonorNameByTierSlug: Record<string, string> = {
+  [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: 'ESEA Open Division',
+  [Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 'ESEA Intermediate Division',
+  [Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS]: 'ESEA Main Division',
+  [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'ESEA Advanced Division',
+};
 const StandaloneLeagueNameByTierSlug: Record<string, string> = {
   [Constants.TierSlug.BLAST_FINALS]: 'BLAST Finals',
   [Constants.TierSlug.CCT_GLOBAL_FINALS]: 'CCT Global Finals',
@@ -39,6 +45,26 @@ export const getTeamsTierLabel = (tierSlug: string, leagueName?: string) => {
   }
 
   return Constants.IdiomaticTier[tierSlug] ?? tierSlug;
+};
+
+export const getTeamsHonorLabel = (tierSlug: string, leagueName?: string) => {
+  if (EseaDivisionHonorNameByTierSlug[tierSlug]) {
+    return leagueName
+      ? EseaDivisionHonorNameByTierSlug[tierSlug].replace(/^ESEA/i, leagueName)
+      : EseaDivisionHonorNameByTierSlug[tierSlug];
+  }
+
+  const hostedEventTitle = Util.getHostedEventTitleDisplayName(tierSlug);
+
+  if (hostedEventTitle) {
+    return hostedEventTitle;
+  }
+
+  if (StandaloneLeagueNameByTierSlug[tierSlug]) {
+    return StandaloneLeagueNameByTierSlug[tierSlug];
+  }
+
+  return getTeamsTierLabel(tierSlug, leagueName);
 };
 
 export const getTeamsDivisionLabel = (tierSlug: string, leagueName?: string) => {

@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { useLocation } from 'react-router-dom';
+import { FaStar } from 'react-icons/fa';
 import { levelFromElo } from '@liga/backend/lib/levels';
 import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -24,23 +25,25 @@ import faceitLevel9 from '../../assets/faceit/9.png';
 import faceitLevel10 from '../../assets/faceit/10.png';
 
 /** @type {Player} */
-type Player = (NonNullable<Awaited<ReturnType<typeof api.players.find<typeof Eagers.player>>>> & {
-  profile?: {
-    faceitElo: number;
-  } | null;
-  careerStints?: Array<{
-    id: number;
-    teamId: number | null;
-    starter: boolean;
-    startedAt: Date;
-    endedAt: Date | null;
-    team?: {
-      id: number;
-      name: string;
-      blazon: string;
-    } | null;
-  }>;
-}) | null;
+type Player =
+  | (NonNullable<Awaited<ReturnType<typeof api.players.find<typeof Eagers.player>>>> & {
+      profile?: {
+        faceitElo: number;
+      } | null;
+      careerStints?: Array<{
+        id: number;
+        teamId: number | null;
+        starter: boolean;
+        startedAt: Date;
+        endedAt: Date | null;
+        team?: {
+          id: number;
+          name: string;
+          blazon: string;
+        } | null;
+      }>;
+    })
+  | null;
 
 type HonorOccurrence = {
   key: string;
@@ -92,6 +95,14 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   if (end) end.setHours(23, 59, 59, 999);
 
   return start <= date && (!end || end >= date);
+}
+
+function MajorHonorBadge() {
+  return (
+    <span className="absolute right-0 bottom-0 grid size-5 translate-x-1/4 translate-y-1/4 place-items-center rounded-full border border-yellow-300/70 bg-yellow-600/80 text-[10px] text-yellow-100 shadow-sm">
+      <FaStar />
+    </span>
+  );
 }
 
 export default function TransferModal() {
@@ -180,8 +191,13 @@ export default function TransferModal() {
         const stints = player.careerStints ?? [];
 
         const occurrences = competitions.reduce<HonorOccurrence[]>((acc, competition) => {
-          const championshipMatch = competition.matches.reduce<(typeof competition.matches)[number] | null>(
-            (latest: (typeof competition.matches)[number] | null, match: (typeof competition.matches)[number]) => {
+          const championshipMatch = competition.matches.reduce<
+            (typeof competition.matches)[number] | null
+          >(
+            (
+              latest: (typeof competition.matches)[number] | null,
+              match: (typeof competition.matches)[number],
+            ) => {
               if (!latest || match.date > latest.date) return match;
               return latest;
             },
@@ -259,7 +275,8 @@ export default function TransferModal() {
   }, [honors]);
 
   const majorWinCount = React.useMemo(
-    () => honors.filter((honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
+    () =>
+      honors.filter((honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
     [honors],
   );
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
@@ -310,9 +327,7 @@ export default function TransferModal() {
                     <span className="inline-flex items-baseline gap-1">
                       {player.team.name}
                       {!player.starter && (
-                        <span className="text-[8px] uppercase text-red-400">
-                          (BENCHED)
-                        </span>
+                        <span className="text-[8px] text-red-400 uppercase">(BENCHED)</span>
                       )}
                     </span>
                   </>
@@ -326,7 +341,9 @@ export default function TransferModal() {
 
           <thead>
             <tr>
-              <th colSpan={3} className="py-2">Stats</th>
+              <th colSpan={3} className="py-2">
+                Stats
+              </th>
               <th className="py-2 text-right">
                 {majorWinCount > 0 && (
                   <span className="badge border-yellow-300 bg-yellow-500/20 px-3 py-2 font-semibold text-yellow-200">
@@ -368,30 +385,36 @@ export default function TransferModal() {
       </section>
 
       <section className="border-base-content/10 flex min-h-12 items-center gap-4 border-t px-4 py-2">
-        {Object.keys(honorGroups).length === 0 && <span className="text-sm opacity-60">No honors yet.</span>}
+        {Object.keys(honorGroups).length === 0 && (
+          <span className="text-sm opacity-60">No honors yet.</span>
+        )}
         {Object.values(honorGroups).map((honor) => {
           const seasonsList = [...honor.seasons]
             .sort((a, b) => a - b)
             .map((season) => `Season ${season}`)
             .join(', ');
+          const isMajor = Util.isMajorStageTier(honor.tierSlug);
 
           return (
             <div key={honor.key} className="tooltip flex items-center gap-2" data-tip={seasonsList}>
-              <Image
-                className="h-12 w-12 object-contain"
-                src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                  location: honor.location,
-                  organizer: honor.organizer,
-                })}
-              />
-              <span className="text-base font-bold">x{honor.count}</span>
+              <span className="relative inline-flex">
+                <Image
+                  className="h-12 w-12 object-contain"
+                  src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                    location: honor.location,
+                    organizer: honor.organizer,
+                  })}
+                />
+                {isMajor && <MajorHonorBadge />}
+              </span>
+              {honor.count > 1 && <span className="text-base font-bold">x{honor.count}</span>}
             </div>
           );
         })}
       </section>
 
       <section className="flex-1 overflow-y-scroll">
-        <table className="table table-fixed table-pin-rows">
+        <table className="table-pin-rows table table-fixed">
           <thead>
             <tr>
               <th className="w-4/12">Time period</th>
@@ -429,9 +452,7 @@ export default function TransferModal() {
                         <span className="inline-flex items-baseline gap-1">
                           {stint.team.name}
                           {!stint.starter && (
-                            <span className="text-[8px] uppercase text-red-400">
-                              (BENCHED)
-                            </span>
+                            <span className="text-[8px] text-red-400 uppercase">(BENCHED)</span>
                           )}
                         </span>
                       </div>
@@ -451,13 +472,16 @@ export default function TransferModal() {
                             className="tooltip"
                             data-tip={`Season ${honor.season}`}
                           >
-                            <Image
-                              className="h-9 w-9 object-contain"
-                              src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                                location: honor.location,
-                                organizer: honor.organizer,
-                              })}
-                            />
+                            <span className="relative inline-flex">
+                              <Image
+                                className="h-9 w-9 object-contain"
+                                src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                  location: honor.location,
+                                  organizer: honor.organizer,
+                                })}
+                              />
+                              {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
+                            </span>
                           </div>
                         ))}
                       </div>

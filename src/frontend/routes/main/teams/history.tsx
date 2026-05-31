@@ -11,7 +11,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
-import { getTeamsTierLabel } from './labels';
+import { getTeamsHonorLabel, getTeamsTierLabel } from './labels';
 
 const HONOR_TIER_SLUGS = [
   ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
@@ -175,40 +175,39 @@ export default function () {
         {
           count: number;
           federationSlug: string;
+          leagueName?: string;
           location: string | null;
           organizer: string | null;
           seasons: number[];
           tierSlug: string;
         }
       >
-    >(
-      (acc, competition) => {
-        const isMajor = Util.isMajorStageTier(competition.tier.slug);
-        const key = isMajor
-          ? [
-              competition.tier.slug,
-              competition.federation.slug,
-              competition.organizer,
-              competition.location,
-            ].join('__')
-          : `${competition.tier.slug}__${competition.federation.slug}`;
+    >((acc, competition) => {
+      const isMajor = Util.isMajorStageTier(competition.tier.slug);
+      const key = isMajor
+        ? [
+            competition.tier.slug,
+            competition.federation.slug,
+            competition.organizer,
+            competition.location,
+          ].join('__')
+        : `${competition.tier.slug}__${competition.federation.slug}`;
 
-        if (!acc[key]) {
-          acc[key] = {
-            count: 0,
-            federationSlug: competition.federation.slug,
-            location: competition.location,
-            organizer: competition.organizer,
-            seasons: [],
-            tierSlug: competition.tier.slug,
-          };
-        }
-        acc[key].count += 1;
-        acc[key].seasons.push(competition.season);
-        return acc;
-      },
-      {},
-    );
+      if (!acc[key]) {
+        acc[key] = {
+          count: 0,
+          federationSlug: competition.federation.slug,
+          leagueName: competition.tier.league?.name,
+          location: competition.location,
+          organizer: competition.organizer,
+          seasons: [],
+          tierSlug: competition.tier.slug,
+        };
+      }
+      acc[key].count += 1;
+      acc[key].seasons.push(competition.season);
+      return acc;
+    }, {});
   }, [competitions]);
 
   const buildCompetitionLabel = (
@@ -318,7 +317,13 @@ export default function () {
             const isMajor = Util.isMajorStageTier(honor.tierSlug);
             return (
               <aside
-                key={honor.tierSlug + honor.federationSlug + honor.organizer + honor.location + '__award'}
+                key={
+                  honor.tierSlug +
+                  honor.federationSlug +
+                  honor.organizer +
+                  honor.location +
+                  '__award'
+                }
                 className="flex flex-col items-center text-center"
                 title={seasonsList}
               >
@@ -334,7 +339,7 @@ export default function () {
                 <p className="text-sm">
                   {isMajor
                     ? Util.getMajorEventDisplayName(honor.location, honor.organizer)
-                    : getTeamsTierLabel(honor.tierSlug)}
+                    : getTeamsHonorLabel(honor.tierSlug, honor.leagueName)}
                 </p>
               </aside>
             );
