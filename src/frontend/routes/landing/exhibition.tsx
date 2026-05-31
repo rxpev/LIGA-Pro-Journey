@@ -21,6 +21,7 @@ import {
   FaCaretRight,
   FaExclamationTriangle,
   FaFolderOpen,
+  FaRandom,
 } from 'react-icons/fa';
 
 type TeamData = Awaited<ReturnType<typeof api.play.exhibitionTeams<typeof Eagers.team>>>[number];
@@ -67,6 +68,10 @@ function getStoredTeamId(key: string) {
   return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+function toTeamOption(team: TeamData) {
+  return { value: team.id, label: team.name, ...team };
+}
+
 /**
  * Team selector component.
  *
@@ -90,6 +95,13 @@ function TeamSelector(props: TeamSelectorProps) {
   const selectedFederation = React.useMemo(
     () => federations.find((federation) => federation.id === selectedFederationId),
     [federations, selectedFederationId],
+  );
+  const selectableFederations = React.useMemo(
+    () =>
+      federations.filter(
+        (federation) => federation.slug !== Constants.FederationSlug.ESPORTS_WORLD,
+      ),
+    [federations],
   );
   const isFederationSlug = (slug: string): slug is Constants.FederationSlug =>
     Object.values(Constants.FederationSlug).includes(slug as Constants.FederationSlug);
@@ -123,6 +135,20 @@ function TeamSelector(props: TeamSelectorProps) {
     api.play.exhibitionTeams<typeof Eagers.team>(teamQuery).then(setTeams);
   }, [teamQuery]);
 
+  const setTeamSelection = React.useCallback((team: TeamData) => {
+    const federationId = team.country?.continent?.federation?.id;
+
+    if (federationId) {
+      setSelectedFederationId(federationId);
+    }
+
+    setSelectedTierId(team.tier);
+    setTeams((currentTeams) =>
+      currentTeams.some((currentTeam) => currentTeam.id === team.id) ? currentTeams : [team],
+    );
+    setSelectedTeam(toTeamOption(team));
+  }, []);
+
   // reset tier selection if the federation does not support it
   React.useEffect(() => {
     if (!Number.isInteger(selectedTierId)) {
@@ -146,8 +172,44 @@ function TeamSelector(props: TeamSelectorProps) {
       : undefined;
     const randomTeam = initialTeam || sample(teams);
 
-    setSelectedTeam({ value: randomTeam.id, label: randomTeam.name, ...randomTeam });
+    setSelectedTeam(toTeamOption(randomTeam));
   }, [props.initialTeamId, selectedTeam, teams]);
+
+  const onFederationSelection = (federationId: number) => {
+    setSelectedFederationId(federationId);
+    setTeams([]);
+    setSelectedTeam(undefined);
+  };
+
+  const onTierSelection = (tierId: number) => {
+    setSelectedTierId(tierId);
+    setTeams([]);
+    setSelectedTeam(undefined);
+  };
+
+  const onRandomTeamSelection = async () => {
+    const candidateTeams = await api.play.exhibitionTeams<typeof Eagers.team>({
+      ...Eagers.team,
+    });
+    const randomTeam = sample(
+      candidateTeams.filter((candidateTeam) => {
+        const federationSlug = candidateTeam.country?.continent?.federation?.slug;
+        const tierSlug = Constants.Prestige[candidateTeam.tier];
+
+        return (
+          federationSlug &&
+          federationSlug !== Constants.FederationSlug.ESPORTS_WORLD &&
+          isFederationSlug(federationSlug) &&
+          tierSlug &&
+          Util.isLeagueTierEnabledForFederation(tierSlug, federationSlug)
+        );
+      }),
+    );
+
+    if (randomTeam) {
+      setTeamSelection(randomTeam);
+    }
+  };
 
   // callback handler
   React.useEffect(() => {
@@ -210,18 +272,14 @@ function TeamSelector(props: TeamSelectorProps) {
             <aside>
               <select
                 className="select w-full"
-                onChange={(event) => setSelectedFederationId(Number(event.target.value))}
+                onChange={(event) => onFederationSelection(Number(event.target.value))}
                 value={selectedFederationId}
               >
-                {federations
-                  .filter(
-                    (federation) => federation.slug !== Constants.FederationSlug.ESPORTS_WORLD,
-                  )
-                  .map((federation) => (
-                    <option key={federation.id} value={federation.id}>
-                      {federation.name}
-                    </option>
-                  ))}
+                {selectableFederations.map((federation) => (
+                  <option key={federation.id} value={federation.id}>
+                    {federation.name}
+                  </option>
+                ))}
               </select>
             </aside>
           </article>
@@ -232,7 +290,7 @@ function TeamSelector(props: TeamSelectorProps) {
             <aside>
               <select
                 className="select w-full"
-                onChange={(event) => setSelectedTierId(Number(event.target.value))}
+                onChange={(event) => onTierSelection(Number(event.target.value))}
                 value={selectedTierId}
               >
                 {Constants.Prestige.filter((prestige) => isTierEnabled(prestige)).map(
@@ -269,13 +327,23 @@ function TeamSelector(props: TeamSelectorProps) {
         </fieldset>
       </form>
       {!!team && (
-        <button
-          type="button"
-          className="btn btn-outline btn-sm"
-          onClick={() => props.onEditRoster?.(team)}
-        >
-          Edit Roster
-        </button>
+        <section className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-outline btn-sm gap-2"
+            onClick={onRandomTeamSelection}
+          >
+            <FaRandom />
+            Random Team
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => props.onEditRoster?.(team)}
+          >
+            Edit Roster
+          </button>
+        </section>
       )}
     </section>
   );
