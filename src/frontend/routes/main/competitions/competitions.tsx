@@ -755,6 +755,27 @@ export default function () {
 
     return allTournamentCards.find((card) => card.key === selectedTournamentKey)?.name ?? null;
   }, [allTournamentCards, selectedTournamentKey]);
+  const competitionLocationCountryCode = Util.getCompetitionHostingLocationCountryCode(
+    competition?.location,
+  );
+  const competitionTitle = React.useMemo(() => {
+    if (competition && Util.isMajorStageTier(competition.tier.slug)) {
+      return Util.getMajorEventDisplayName(competition.location, competition.organizer);
+    }
+
+    const hostedEventLabel = competition
+      ? Util.getHostedEventTitleDisplayName(competition.tier.slug, competition.location)
+      : null;
+    if (hostedEventLabel) {
+      return hostedEventLabel;
+    }
+
+    return selectedTournamentName
+      ? selectedTournamentName
+      : competition
+        ? Util.getCompetitionDisplayName(competition.tier.league.name, competition.tier.slug)
+        : '';
+  }, [competition, selectedTournamentName]);
 
   const loadTier = React.useCallback(
     async (tierId: number) => {
@@ -1079,13 +1100,16 @@ export default function () {
                   <CompetitionLocationTag tier={competition.tier} />
                 </p>
                 <h2 className="truncate text-lg font-black">
-                  {selectedTournamentName
-                    ? selectedTournamentName
-                    : Util.getCompetitionDisplayName(
-                        competition.tier.league.name,
-                        competition.tier.slug,
-                      )}
+                  {competitionTitle}
                 </h2>
+                {competition.location && (
+                  <p className="text-base-content/70 mt-0.5 flex items-center gap-2 text-xs font-semibold">
+                    {competitionLocationCountryCode && (
+                      <span className={cx('fp', competitionLocationCountryCode)} />
+                    )}
+                    <span className="truncate">{competition.location}</span>
+                  </p>
+                )}
               </article>
               <article className="join shrink-0">
                 {FAMILY_FILTERS.map((filter) => (

@@ -169,11 +169,39 @@ export default function () {
         ),
     );
 
-    return found.reduce<Record<string, { count: number; seasons: number[] }>>(
+    return found.reduce<
+      Record<
+        string,
+        {
+          count: number;
+          federationSlug: string;
+          location: string | null;
+          organizer: string | null;
+          seasons: number[];
+          tierSlug: string;
+        }
+      >
+    >(
       (acc, competition) => {
-        const key = `${competition.tier.slug}__${competition.federation.slug}`;
+        const isMajor = Util.isMajorStageTier(competition.tier.slug);
+        const key = isMajor
+          ? [
+              competition.tier.slug,
+              competition.federation.slug,
+              competition.organizer,
+              competition.location,
+            ].join('__')
+          : `${competition.tier.slug}__${competition.federation.slug}`;
+
         if (!acc[key]) {
-          acc[key] = { count: 0, seasons: [] };
+          acc[key] = {
+            count: 0,
+            federationSlug: competition.federation.slug,
+            location: competition.location,
+            organizer: competition.organizer,
+            seasons: [],
+            tierSlug: competition.tier.slug,
+          };
         }
         acc[key].count += 1;
         acc[key].seasons.push(competition.season);
@@ -188,6 +216,14 @@ export default function () {
       ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
     >[number],
   ) => {
+    if (Util.isMajorStageTier(competition.tier.slug)) {
+      return Util.getMajorMatchDisplayName(
+        competition.tier.slug,
+        competition.location,
+        competition.organizer,
+      );
+    }
+
     const tierLabel = getTeamsTierLabel(competition.tier.slug, competition.tier.league?.name);
 
     if (competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
@@ -273,27 +309,33 @@ export default function () {
               )}
             </footer>
           )}
-          {Object.keys(honors).map((honor) => {
-            const [tierSlug, federationSlug] = honor.split('__');
-            const honorData = honors[honor];
+          {Object.values(honors).map((honor) => {
             const seasonLabel = t('shared.season');
-            const seasonsList = [...honorData.seasons]
+            const seasonsList = [...honor.seasons]
               .sort((a, b) => a - b)
               .map((season) => `${seasonLabel} ${season}`)
               .join('\n');
+            const isMajor = Util.isMajorStageTier(honor.tierSlug);
             return (
               <aside
-                key={honor + '__award'}
+                key={honor.tierSlug + honor.federationSlug + honor.organizer + honor.location + '__award'}
                 className="flex flex-col items-center text-center"
                 title={seasonsList}
               >
                 <Image
-                  alt={tierSlug}
+                  alt={honor.tierSlug}
                   className="w-2/3"
-                  src={Util.getCompetitionLogo(tierSlug, federationSlug)}
+                  src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                    location: honor.location,
+                    organizer: honor.organizer,
+                  })}
                 />
-                <p className="text-4xl font-bold">{honorData.count}</p>
-                <p className="text-sm">{getTeamsTierLabel(tierSlug)}</p>
+                <p className="text-4xl font-bold">{honor.count}</p>
+                <p className="text-sm">
+                  {isMajor
+                    ? Util.getMajorEventDisplayName(honor.location, honor.organizer)
+                    : getTeamsTierLabel(honor.tierSlug)}
+                </p>
               </aside>
             );
           })}

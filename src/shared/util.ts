@@ -572,8 +572,36 @@ export function getSaveFileName(id: number) {
 export function getCompetitionLogo(
   tierSlug: Constants.TierSlug | string,
   federationSlug?: Constants.FederationSlug | string,
+  options?: {
+    location?: string | null;
+    organizer?: string | null;
+  },
 ) {
   const protocol = 'resources://competitions/';
+  const city = getCompetitionHostingLocationCity(options?.location);
+
+  if (isMajorStageTier(tierSlug) && city && options?.organizer) {
+    const organizerLogoConfig: Record<string, { folder: string; prefix: string }> = {
+      BLAST: { folder: 'BLAST', prefix: 'blast' },
+      IEM: { folder: 'IEM', prefix: 'iem' },
+      PerfectWorld: { folder: 'PW', prefix: 'pw' },
+      PGL: { folder: 'PGL', prefix: 'pgl' },
+    };
+    const organizerKey = options.organizer.replace(/\s+/g, '');
+    const config = organizerLogoConfig[organizerKey];
+
+    if (config) {
+      const citySlugOverrides: Record<string, string> = {
+        'rio de janeiro': 'rio',
+      };
+      const citySlug =
+        citySlugOverrides[city.toLocaleLowerCase()] ??
+        city.toLocaleLowerCase().replace(/\s+/g, '-');
+
+      return `${protocol}majors/${config.folder}/${config.prefix}-${citySlug}.png`;
+    }
+  }
+
   const slug =
     tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS
       ? 'cct-oceania-series-playoffs'
@@ -589,6 +617,105 @@ export function getCompetitionLogo(
   }
 
   return `${protocol}${slug}-${federationSlug}.png`;
+}
+
+export function formatCompetitionHostingLocation(location: Constants.CompetitionHostingLocation) {
+  return `${location.city}, ${location.countryCode}`;
+}
+
+export function getCompetitionHostingLocationCountryCode(location?: string | null) {
+  const countryCode = location?.split(',').pop()?.trim().toLocaleLowerCase();
+  const flagCodeAliases: Record<string, string> = {
+    arg: 'ar',
+    uk: 'gb',
+  };
+
+  return countryCode ? flagCodeAliases[countryCode] ?? countryCode : null;
+}
+
+export function getCompetitionHostingLocationCity(location?: string | null) {
+  return location?.split(',')[0]?.trim() || null;
+}
+
+export function isMajorStageTier(tierSlug?: Constants.TierSlug | string | null) {
+  return (
+    tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE ||
+    tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE ||
+    tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE
+  );
+}
+
+export function getMajorEventDisplayName(location?: string | null, organizer?: string | null) {
+  return [organizer || 'LIGA', 'Major', getCompetitionHostingLocationCity(location)]
+    .filter(Boolean)
+    .join(' ');
+}
+
+export function getMajorMatchDisplayName(
+  tierSlug?: Constants.TierSlug | string | null,
+  location?: string | null,
+  organizer?: string | null,
+  suffix = '',
+) {
+  const city = getCompetitionHostingLocationCity(location);
+  const stageName = tierSlug
+    ? Constants.IdiomaticTier[tierSlug]?.replace(/^Major\s+/i, '')
+    : null;
+
+  return [organizer || 'LIGA', 'Major', city, stageName, suffix.trim()]
+    .filter(Boolean)
+    .join(' ');
+}
+
+export function getLocationEventDisplayName(
+  name: string,
+  location?: string | null,
+  suffix = '',
+) {
+  const city = getCompetitionHostingLocationCity(location);
+
+  return [name, city, suffix.trim()].filter(Boolean).join(' ');
+}
+
+export function getHostedEventDisplayName(
+  tierSlug?: Constants.TierSlug | string | null,
+  location?: string | null,
+  suffix = '',
+) {
+  const eventByTier: Partial<Record<Constants.TierSlug, { name: string; stage?: string }>> = {
+    [Constants.TierSlug.BLAST_FINALS]: { name: 'BLAST Finals' },
+    [Constants.TierSlug.CCT_GLOBAL_FINALS]: { name: 'CCT Global Finals' },
+    [Constants.TierSlug.ESL_CHALLENGER]: { name: 'ESL Challenger', stage: 'Group Stage' },
+    [Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS]: { name: 'ESL Challenger', stage: 'Playoffs' },
+    [Constants.TierSlug.LEAGUE_PRO]: { name: 'ESL Pro League', stage: 'Group Stage' },
+    [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: { name: 'ESL Pro League', stage: 'Playoffs' },
+  };
+  const event = eventByTier[tierSlug as Constants.TierSlug];
+
+  if (!event) {
+    return null;
+  }
+
+  const city = getCompetitionHostingLocationCity(location);
+
+  return [event.name, city, event.stage, suffix.trim()].filter(Boolean).join(' ');
+}
+
+export function getHostedEventTitleDisplayName(
+  tierSlug?: Constants.TierSlug | string | null,
+  location?: string | null,
+) {
+  const titleByTier: Partial<Record<Constants.TierSlug, string>> = {
+    [Constants.TierSlug.BLAST_FINALS]: 'BLAST Finals',
+    [Constants.TierSlug.CCT_GLOBAL_FINALS]: 'CCT Global Finals',
+    [Constants.TierSlug.ESL_CHALLENGER]: 'ESL Challenger',
+    [Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS]: 'ESL Challenger',
+    [Constants.TierSlug.LEAGUE_PRO]: 'ESL Pro League',
+    [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: 'ESL Pro League',
+  };
+  const title = titleByTier[tierSlug as Constants.TierSlug];
+
+  return title ? getLocationEventDisplayName(title, location) : null;
 }
 
 /**

@@ -71,6 +71,7 @@ export default function () {
   const [showAllPrizePool, setShowAllPrizePool] = React.useState(false);
   const tierSlug = competition.tier.slug as Constants.TierSlug;
   const showWinnerHistory = WINNER_HISTORY_TIER_SLUGS.has(tierSlug);
+  const locationCountryCode = Util.getCompetitionHostingLocationCountryCode(competition.location);
 
   // fetch competition start and end
   // dates when the data comes in
@@ -232,18 +233,21 @@ export default function () {
           <figure className="center w-1/2 place-content-evenly!">
             <Image
               className="size-32"
-              src={Util.getCompetitionLogo(competition.tier.slug, competition.federation.slug)}
+              src={Util.getCompetitionLogo(competition.tier.slug, competition.federation.slug, {
+                location: competition.location,
+                organizer: competition.organizer,
+              })}
             />
           </figure>
           <table className="table table-fixed">
             <thead>
               <tr>
-                <th colSpan={2}>{t('shared.name')}</th>
+                <th colSpan={3}>{t('shared.name')}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colSpan={2}>
+                <td colSpan={3}>
                   {`${Constants.IdiomaticTier[competition.tier.slug]} · ${competition.federation.name}`}
                 </td>
               </tr>
@@ -252,12 +256,23 @@ export default function () {
               <tr>
                 <th>{t('main.competitions.startDate')}</th>
                 <th>{t('main.competitions.endDate')}</th>
+                <th>Location</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>{competitionDates[0] ? format(competitionDates[0].date, 'PPP') : 'TBD'}</td>
                 <td>{competitionDates[1] ? format(competitionDates[1].date, 'PPP') : '-'}</td>
+                <td>
+                  {competition.location ? (
+                    <span className="inline-flex items-center gap-2">
+                      {locationCountryCode && <span className={cx('fp', locationCountryCode)} />}
+                      <span>{competition.location}</span>
+                    </span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>

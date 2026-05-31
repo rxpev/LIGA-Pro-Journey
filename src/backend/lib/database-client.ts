@@ -43,6 +43,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { glob } from 'glob';
 import { Constants, Eagers, Util, is } from '@liga/shared';
 import { syncLeagueSchedule } from '@liga/backend/prisma/seeds/030-leagues';
+import { backfillCompetitionLocations } from './competition-locations';
 
 /** @interface */
 interface PrismaMigration {
@@ -463,6 +464,7 @@ export default class DatabaseClient {
 
     await DatabaseClient.repairCountryMetadata(pool[id].client);
     await syncLeagueSchedule(pool[id].client as unknown as PrismaClient);
+    await backfillCompetitionLocations(pool[id].client as unknown as PrismaClient);
     await DatabaseClient.syncTeamCompetitionFederations(pool[id].client, id);
     await DatabaseClient.recalculateAllTeamCountryIdentities(pool[id].client);
     await DatabaseClient.normalizeCareerStintStarterValues(pool[id].client);

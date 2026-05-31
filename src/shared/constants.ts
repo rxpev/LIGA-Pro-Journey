@@ -499,6 +499,161 @@ export enum TierSlug {
   MAJOR_CHAMPIONS_STAGE = 'major:champions-stage',
 }
 
+export type CompetitionHostingLocation = {
+  city: string;
+  countryCode: string;
+};
+
+export type CompetitionOrganizer = {
+  name: string;
+  locations: CompetitionHostingLocation[];
+};
+
+const EuropeRmrHostingLocations: CompetitionHostingLocation[] = [
+  { city: 'Bucharest', countryCode: 'RO' },
+  { city: 'Copenhagen', countryCode: 'DK' },
+  { city: 'Hamburg', countryCode: 'DE' },
+  { city: 'Stockholm', countryCode: 'SE' },
+  { city: 'Madrid', countryCode: 'ES' },
+];
+
+const AsiaRmrHostingLocations: CompetitionHostingLocation[] = [
+  { city: 'Shanghai', countryCode: 'CN' },
+  { city: 'Ulaanbaatar', countryCode: 'MN' },
+  { city: 'Chengdu', countryCode: 'CN' },
+  { city: 'Shenzhen', countryCode: 'CN' },
+  { city: 'Melbourne', countryCode: 'AU' },
+];
+
+const AmericasRmrHostingLocations: CompetitionHostingLocation[] = [
+  { city: 'Monterrey', countryCode: 'MX' },
+  { city: 'Austin', countryCode: 'US' },
+  { city: 'Rio de Janeiro', countryCode: 'BR' },
+  { city: 'Buenos Aires', countryCode: 'ARG' },
+  { city: 'Dallas', countryCode: 'US' },
+];
+
+const MajorHostingLocations: CompetitionHostingLocation[] = [
+  { city: 'Berlin', countryCode: 'DE' },
+  { city: 'Paris', countryCode: 'FR' },
+  { city: 'Sydney', countryCode: 'AU' },
+  { city: 'Rio de Janeiro', countryCode: 'BR' },
+  { city: 'Boston', countryCode: 'US' },
+  { city: 'New York', countryCode: 'US' },
+  { city: 'Shanghai', countryCode: 'CN' },
+  { city: 'Beijing', countryCode: 'CN' },
+  { city: 'Copenhagen', countryCode: 'DK' },
+  { city: 'London', countryCode: 'UK' },
+  { city: 'Antwerp', countryCode: 'NL' },
+];
+
+export const MajorHostingOrganizers: CompetitionOrganizer[] = [
+  {
+    name: 'PGL',
+    locations: [
+      { city: 'Antwerp', countryCode: 'NL' },
+      { city: 'London', countryCode: 'UK' },
+      { city: 'Copenhagen', countryCode: 'DK' },
+      { city: 'New York', countryCode: 'US' },
+      { city: 'Stockholm', countryCode: 'SE' },
+    ],
+  },
+  {
+    name: 'IEM',
+    locations: [
+      { city: 'Sydney', countryCode: 'AU' },
+      { city: 'Boston', countryCode: 'US' },
+      { city: 'New York', countryCode: 'US' },
+      { city: 'Rio', countryCode: 'BR' },
+      { city: 'London', countryCode: 'UK' },
+      { city: 'Katowice', countryCode: 'PL' },
+      { city: 'Madrid', countryCode: 'ES' },
+    ],
+  },
+  {
+    name: 'BLAST',
+    locations: [
+      { city: 'Berlin', countryCode: 'DE' },
+      { city: 'Paris', countryCode: 'FR' },
+      { city: 'Copenhagen', countryCode: 'DK' },
+      { city: 'London', countryCode: 'UK' },
+      { city: 'Lisbon', countryCode: 'PT' },
+    ],
+  },
+  {
+    name: 'Perfect World',
+    locations: [
+      { city: 'Shanghai', countryCode: 'CN' },
+      { city: 'Beijing', countryCode: 'CN' },
+    ],
+  },
+];
+
+export const CompetitionHostingLocations: Partial<Record<TierSlug, CompetitionHostingLocation[]>> = {
+  [TierSlug.MAJOR_EUROPE_RMR_A]: EuropeRmrHostingLocations,
+  [TierSlug.MAJOR_EUROPE_RMR_B]: EuropeRmrHostingLocations,
+  [TierSlug.MAJOR_ASIA_RMR]: AsiaRmrHostingLocations,
+  [TierSlug.MAJOR_AMERICAS_RMR]: AmericasRmrHostingLocations,
+  [TierSlug.BLAST_FINALS]: [
+    { city: 'Copenhagen', countryCode: 'DK' },
+    { city: 'Malta', countryCode: 'MT' },
+  ],
+  [TierSlug.CCT_GLOBAL_FINALS]: [
+    { city: 'Bucharest', countryCode: 'RO' },
+    { city: 'Jonkoping', countryCode: 'SE' },
+    { city: 'Barcelona', countryCode: 'ES' },
+    { city: 'Budapest', countryCode: 'HU' },
+    { city: 'Belgrade', countryCode: 'RS' },
+    { city: 'Riga', countryCode: 'LV' },
+    { city: 'Istanbul', countryCode: 'TR' },
+  ],
+  [TierSlug.ESL_CHALLENGER]: [
+    { city: 'Atlanta', countryCode: 'US' },
+    { city: 'Valencia', countryCode: 'ES' },
+    { city: 'Jonkoping', countryCode: 'SE' },
+    { city: 'Rotterdam', countryCode: 'NL' },
+    { city: 'Prague', countryCode: 'CZ' },
+    { city: 'Gdansk', countryCode: 'PL' },
+    { city: 'Munich', countryCode: 'DE' },
+  ],
+  [TierSlug.ESL_CHALLENGER_PLAYOFFS]: [
+    { city: 'Atlanta', countryCode: 'US' },
+    { city: 'Valencia', countryCode: 'ES' },
+    { city: 'Jonkoping', countryCode: 'SE' },
+    { city: 'Rotterdam', countryCode: 'NL' },
+    { city: 'Prague', countryCode: 'CZ' },
+    { city: 'Gdansk', countryCode: 'PL' },
+    { city: 'Munich', countryCode: 'DE' },
+  ],
+  [TierSlug.MAJOR_CHALLENGERS_STAGE]: MajorHostingLocations,
+  [TierSlug.MAJOR_LEGENDS_STAGE]: MajorHostingLocations,
+  [TierSlug.MAJOR_CHAMPIONS_STAGE]: MajorHostingLocations,
+  [TierSlug.LEAGUE_PRO]: [
+    { city: 'Malta', countryCode: 'MT' },
+    { city: 'Dusseldorf', countryCode: 'DE' },
+    { city: 'Odense', countryCode: 'DK' },
+    { city: 'Montpellier', countryCode: 'FR' },
+    { city: 'Dallas', countryCode: 'US' },
+    { city: 'Sao Paulo', countryCode: 'BR' },
+    { city: 'London', countryCode: 'UK' },
+  ],
+  [TierSlug.LEAGUE_PRO_PLAYOFFS]: [
+    { city: 'Malta', countryCode: 'MT' },
+    { city: 'Dusseldorf', countryCode: 'DE' },
+    { city: 'Odense', countryCode: 'DK' },
+    { city: 'Montpellier', countryCode: 'FR' },
+    { city: 'Dallas', countryCode: 'US' },
+    { city: 'Sao Paulo', countryCode: 'BR' },
+    { city: 'London', countryCode: 'UK' },
+  ],
+  [TierSlug.IEM_COLOGNE_GROUP_A]: [{ city: 'Cologne', countryCode: 'DE' }],
+  [TierSlug.IEM_COLOGNE_GROUP_B]: [{ city: 'Cologne', countryCode: 'DE' }],
+  [TierSlug.IEM_COLOGNE_PLAYOFFS]: [{ city: 'Cologne', countryCode: 'DE' }],
+  [TierSlug.IEM_KRAKOW_GROUP_A]: [{ city: 'Krakow', countryCode: 'PL' }],
+  [TierSlug.IEM_KRAKOW_GROUP_B]: [{ city: 'Krakow', countryCode: 'PL' }],
+  [TierSlug.IEM_KRAKOW_PLAYOFFS]: [{ city: 'Krakow', countryCode: 'PL' }],
+};
+
 /**
  * Theme settings.
  *

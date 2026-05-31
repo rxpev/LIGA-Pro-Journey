@@ -38,6 +38,25 @@ function getCompetitionLabel(
 
   const tierLabel = getTeamsTierLabel(tier.slug, league?.name);
   const suffix = tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
+
+  if (Util.isMajorStageTier(tier.slug)) {
+    return Util.getMajorMatchDisplayName(
+      tier.slug,
+      match.competition?.location,
+      match.competition?.organizer,
+      suffix,
+    );
+  }
+
+  const hostedEventLabel = Util.getHostedEventDisplayName(
+    tier.slug,
+    match.competition?.location,
+    suffix,
+  );
+  if (hostedEventLabel) {
+    return hostedEventLabel;
+  }
+
   if (league?.slug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
     return `${tierLabel}${suffix}`;
   }

@@ -366,6 +366,10 @@ export default function () {
                           src={Util.getCompetitionLogo(
                             spotlight.competition.tier.slug,
                             spotlight.competition.federation.slug,
+                            {
+                              location: spotlight.competition.location,
+                              organizer: spotlight.competition.organizer,
+                            },
                           )}
                         />
                         <header>
@@ -422,6 +426,10 @@ export default function () {
                         src={Util.getCompetitionLogo(
                           spotlight.competition.tier.slug,
                           spotlight.competition.federation.slug,
+                          {
+                            location: spotlight.competition.location,
+                            organizer: spotlight.competition.organizer,
+                          },
                         )}
                       />
                       <header>
@@ -734,6 +742,10 @@ export default function () {
                             src={Util.getCompetitionLogo(
                               spotlight.competition.tier.slug,
                               spotlight.competition.federation.slug,
+                              {
+                                location: spotlight.competition.location,
+                                organizer: spotlight.competition.organizer,
+                              },
                             )}
                           />
                           <p>

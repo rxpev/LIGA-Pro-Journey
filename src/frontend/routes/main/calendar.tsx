@@ -203,6 +203,10 @@ function getTournamentGroups(matches: CalendarMatch[]) {
         logo: Util.getCompetitionLogo(
           match.competition.tier.slug,
           match.competition.federation.slug,
+          {
+            location: match.competition.location,
+            organizer: match.competition.organizer,
+          },
         ),
         matches: [],
         stage: getStageLabel(match, 'Matchday'),

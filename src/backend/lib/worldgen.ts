@@ -38,6 +38,7 @@ import {
 import { computeLifetimeStats } from './faceitstats';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
+import { backfillCompetitionLocations } from './competition-locations';
 
 /**
  * Bumps the current season number by one.
@@ -295,6 +296,8 @@ export async function createCompetitions() {
 
     competitions.push(created);
   }
+
+  await backfillCompetitionLocations(DatabaseClient.prisma as unknown as PrismaClient);
 
   return competitions;
 }

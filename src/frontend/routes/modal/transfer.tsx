@@ -49,6 +49,8 @@ type HonorOccurrence = {
   date: Date;
   tierSlug: string;
   federationSlug: string;
+  location: string | null;
+  organizer: string | null;
 };
 
 type HonorGroup = {
@@ -57,6 +59,8 @@ type HonorGroup = {
   seasons: number[];
   tierSlug: string;
   federationSlug: string;
+  location: string | null;
+  organizer: string | null;
 };
 
 const FACEIT_LEVEL_IMAGES: Record<number, string> = {
@@ -206,13 +210,25 @@ export default function TransferModal() {
 
           if (!wonTitle) return acc;
 
+          const isMajor = Util.isMajorStageTier(competition.tier.slug);
+          const key = isMajor
+            ? [
+                competition.tier.slug,
+                competition.federation.slug,
+                competition.organizer,
+                competition.location,
+              ].join('__')
+            : `${competition.tier.slug}__${competition.federation.slug}`;
+
           acc.push({
-            key: `${competition.tier.slug}__${competition.federation.slug}`,
+            key,
             teamId: winnerTeamId,
             season: competition.season,
             date: championshipDate,
             tierSlug: competition.tier.slug,
             federationSlug: competition.federation.slug,
+            location: competition.location,
+            organizer: competition.organizer,
           });
 
           return acc;
@@ -231,6 +247,8 @@ export default function TransferModal() {
           seasons: [],
           tierSlug: honor.tierSlug,
           federationSlug: honor.federationSlug,
+          location: honor.location,
+          organizer: honor.organizer,
         };
       }
 
@@ -361,7 +379,10 @@ export default function TransferModal() {
             <div key={honor.key} className="tooltip flex items-center gap-2" data-tip={seasonsList}>
               <Image
                 className="h-12 w-12 object-contain"
-                src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug)}
+                src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                  location: honor.location,
+                  organizer: honor.organizer,
+                })}
               />
               <span className="text-base font-bold">x{honor.count}</span>
             </div>
@@ -432,7 +453,10 @@ export default function TransferModal() {
                           >
                             <Image
                               className="h-9 w-9 object-contain"
-                              src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug)}
+                              src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                location: honor.location,
+                                organizer: honor.organizer,
+                              })}
                             />
                           </div>
                         ))}

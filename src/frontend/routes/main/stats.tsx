@@ -200,21 +200,20 @@ function stintsOverlap(
 
 function getCompetitionLabel(match: MatchRecord) {
   const tierSlug = match.competition?.tier?.slug;
+  const hostedEventLabel = Util.getHostedEventDisplayName(tierSlug, match.competition?.location);
 
-  if (tierSlug === Constants.TierSlug.LEAGUE_PRO) {
-    return 'ESL Pro League';
-  }
-
-  if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
-    return 'ESL Pro League Playoffs';
+  if (hostedEventLabel) {
+    return hostedEventLabel;
   }
 
   if (
-    tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE ||
-    tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE ||
-    tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE
+    Util.isMajorStageTier(tierSlug)
   ) {
-    return Constants.IdiomaticTier[tierSlug];
+    return Util.getMajorMatchDisplayName(
+      tierSlug,
+      match.competition?.location,
+      match.competition?.organizer,
+    );
   }
 
   const federation = match.competition?.federation?.name || 'Unknown';

@@ -57,6 +57,8 @@ model Competition {
   id         Int     @id @default(autoincrement())
   season     Int?    @default(1)
   status     Int?    @default(0)
+  location   String?
+  organizer  String?
   tournament String?
 
   // has many
