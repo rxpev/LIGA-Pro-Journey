@@ -10,7 +10,7 @@ import { Link, useOutletContext } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 
@@ -57,6 +57,7 @@ function hasOpponent(
  */
 export default function () {
   const t = useTranslation('windows');
+  const fmtShortDate = useFormatAppShortDate();
   const { state } = React.useContext(AppStateContext);
   const { competition } = useOutletContext<RouteContextCompetitions>();
   const [competitionDates, setCompetitionDates] = React.useState<
@@ -411,7 +412,7 @@ export default function () {
                       <FaChartBar className="mx-auto" />
                     </td>
                     <td title={format(match.date, 'PPPP')} className="text-center">
-                      {format(match.date, 'MM/dd')}
+                      {fmtShortDate(match.date)}
                     </td>
                     <td className="truncate text-right" title={home.team.name}>
                       <Link

@@ -10,7 +10,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play } from '@liga/frontend/redux/actions';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
 import {
   FaCalendarDay,
@@ -100,6 +100,7 @@ export function StatusBanner(props: StatusBannerProps) {
  */
 export default function () {
   const t = useTranslation('windows');
+  const fmtShortDate = useFormatAppShortDate();
   const { state, dispatch } = React.useContext(AppStateContext);
   const isIgl = React.useMemo(
     () => state.profile?.player?.role === Constants.UserRole.IGL,
@@ -301,8 +302,8 @@ export default function () {
                   );
                   return (
                     <tr key={`${match.id}__match_upcoming`}>
-                      <td className="w-1/6" title={format(match.date, 'PPPP')}>
-                        {format(match.date, 'MM/dd')}
+                      <td className="w-1/5" title={format(match.date, 'PPPP')}>
+                        {fmtShortDate(match.date)}
                       </td>
                       <td className="w-3/6 truncate" title={opponent?.team?.name || '-'}>
                         <img
@@ -325,14 +326,13 @@ export default function () {
                 })}
                 {upcomingFiller.map((_, idx) => (
                   <tr key={`${idx}__filler_match_upcoming`} className="text-muted">
-                    <td className="w-1/6">
+                    <td className="w-1/5">
                       {state.profile
-                        ? format(
+                        ? fmtShortDate(
                             addDays(
                               !upcoming.length ? state.profile.date : upcoming.slice(-1)[0].date,
                               idx + 1,
                             ),
-                            'MM/dd',
                           )
                         : '-'}
                     </td>
@@ -984,7 +984,7 @@ export default function () {
                                   <FaChartBar />
                                 </td>
                                 <td className="w-1/12" title={format(match.date, 'PPPP')}>
-                                  {format(match.date, 'MM/dd')}
+                                  {fmtShortDate(match.date)}
                                 </td>
                                 <td
                                   className={cx(
@@ -1023,14 +1023,13 @@ export default function () {
                           <tr key={`${idx}__filler_match_previous`} className="text-muted">
                             <td className="w-1/12">
                               {state.profile
-                                ? format(
+                                ? fmtShortDate(
                                     addDays(
                                       !matches.length
                                         ? state.profile.date
                                         : matches.slice(-1)[0].date,
                                       idx - 1,
                                     ),
-                                    'MM/dd',
                                   )
                                 : '-'}
                             </td>

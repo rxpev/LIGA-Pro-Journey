@@ -8,7 +8,7 @@ import { Link, useOutletContext } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Historial, PlayerCard, Standings } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 import { addDays, format, subMonths } from 'date-fns';
@@ -27,6 +27,7 @@ const NUM_FORM_LOOKBACK = NUM_PREVIOUS * 2;
  */
 export default function () {
   const t = useTranslation('windows');
+  const fmtShortDate = useFormatAppShortDate();
   const { state } = React.useContext(AppStateContext);
   const { team } = useOutletContext<RouteContextTeams>();
   const [competition, setCompetition] =
@@ -388,7 +389,7 @@ export default function () {
                         <FaChartBar />
                       </td>
                       <td className="w-1/12" title={format(match.date, 'PPPP')}>
-                        {format(match.date, 'MM/dd')}
+                        {fmtShortDate(match.date)}
                       </td>
                       <td className={cx('w-3/12 text-center', Util.getResultTextColor(result))}>
                         {match.competitors.map((competitor) => competitor.score).join(' : ') || '-'}
@@ -427,14 +428,13 @@ export default function () {
                 <tr key={`${idx}__filler_match_previous`} className="text-muted">
                   <td className="w-1/12">
                     {state.profile
-                      ? format(
+                      ? fmtShortDate(
                           addDays(
                             !playedMatches.length
                               ? state.profile.date
                               : playedMatches.slice(-1)[0].date,
                             idx - 1,
                           ),
-                          'MM/dd',
                         )
                       : '-'}
                   </td>

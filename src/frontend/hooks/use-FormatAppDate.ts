@@ -21,7 +21,10 @@ export function useDateFormat() {
   const { state } = React.useContext(AppStateContext);
 
   return React.useMemo(() => {
-    const settings = Util.loadSettings(state.profile?.settings);
+    const settings = state.profile?.settings
+      ? Util.loadSettings(state.profile.settings)
+      : Constants.Settings;
+
     return (
       settings.calendar.calendarDateFormat ??
       Constants.Settings.calendar.calendarDateFormat
@@ -39,5 +42,19 @@ export function useFormatAppDate() {
       return dfFormat(d, fmt);
     },
     [fmt],
+  );
+}
+
+export function useFormatAppShortDate() {
+  const fmt = useDateFormat();
+  const shortFmt = React.useMemo(() => fmt.replace('yyyy', 'yy'), [fmt]);
+
+  return React.useCallback(
+    (value: Dateish, fallback = '-') => {
+      const d = toDate(value);
+      if (!d) return fallback;
+      return dfFormat(d, shortFmt);
+    },
+    [shortFmt],
   );
 }
