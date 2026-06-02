@@ -36,6 +36,16 @@ const NUM_UPCOMING = 5 + 1; // adds an extra for "next match"
 /** @constant */
 const NUM_PREVIOUS = 5;
 
+const ARENA_MODE_TIER_SLUGS = new Set<string>([
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+]);
+
 /**
  * Application status error banner.
  *
@@ -123,6 +133,7 @@ export default function () {
   >([]);
 
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
+  const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
 
   const toDashboardTeamTierLabel = (tierSlug: Constants.TierSlug | string): string =>
     tierSlug === Constants.TierSlug.LEAGUE_PRO
@@ -135,6 +146,42 @@ export default function () {
       payload: playerId,
     });
   }, []);
+
+  const isArenaModeMatch = React.useCallback(
+    (match?: (typeof upcoming)[number]) => {
+      const tierSlug = match?.competition?.tier?.slug;
+      return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+    },
+    [],
+  );
+
+  const dispatchPlayWithArenaModeGuard = React.useCallback(
+    async (match: (typeof upcoming)[number] | undefined) => {
+      if (!match) {
+        return;
+      }
+
+      if (!isArenaModeMatch(match)) {
+        dispatch(play(match.id));
+        return;
+      }
+
+      const arenaModeStatus = await api.app.arenaModeStatus(settings).catch((): null => null);
+      const arenaModeReady =
+        settings.arenaMode.enabled &&
+        arenaModeStatus?.installed &&
+        arenaModeStatus?.equalizerApoInstalled &&
+        arenaModeStatus?.valhallaSupermassiveInstalled;
+
+      if (arenaModeReady) {
+        dispatch(play(match.id));
+        return;
+      }
+
+      setArenaModePromptMatchId(match.id);
+    },
+    [dispatch, isArenaModeMatch, settings],
+  );
 
   // load settings
   React.useEffect(() => {
@@ -825,7 +872,7 @@ export default function () {
                             // only jump directly into game when a map is already live,
                             // or when no veto flow is required.
                             if (!shouldOpenVeto || hasMapInProgress) {
-                              return dispatch(play(spotlight.id));
+                              return dispatchPlayWithArenaModeGuard(spotlight);
                             }
 
                             api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
@@ -1047,6 +1094,46 @@ export default function () {
           </section>
         </div>
       </main>
+      {!!arenaModePromptMatchId && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <p className="text-lg font-bold">Arena Mode is turned off</p>
+              <p>
+                This playoff match supports Arena Mode. It adds arena reverb and crowd noise for
+                maximum immersion, and it is strongly recommended to be turned on before playing.
+              </p>
+              <p>Enable Arena Mode by installing it in the Game Settings tab.</p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const matchId = arenaModePromptMatchId;
+                  setArenaModePromptMatchId(null);
+                  dispatch(play(matchId));
+                }}
+              >
+                Continue without Arena Mode
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setArenaModePromptMatchId(null);
+                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                    target: '/settings',
+                    payload: { tab: 'game-settings' },
+                  });
+                }}
+              >
+                Go to settings
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
     </div>
   );
 }

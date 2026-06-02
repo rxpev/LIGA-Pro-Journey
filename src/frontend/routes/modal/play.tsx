@@ -5,7 +5,7 @@
  * @module
  */
 import React from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { differenceBy, random, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -55,6 +55,21 @@ const MAP_WINRATE_PRIOR_GAMES = 4;
 
 /** @constant */
 const MAP_RANDOMNESS = 0.35;
+
+const ARENA_MODE_TIER_SLUGS = new Set<string>([
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+]);
+
+function isArenaModeMatch(match?: Matches[number]) {
+  const tierSlug = match?.competition?.tier?.slug;
+  return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+}
 
 /** @constants */
 const VETO_STYLES = {
@@ -154,6 +169,7 @@ function weightedMapSample(
  */
 export default function () {
   const location = useLocation();
+  const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
   const [activeTab, setActiveTab] = React.useState<Tab>(Tab.MAPS);
@@ -166,6 +182,7 @@ export default function () {
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
   const [historicalMatches, setHistoricalMatches] = React.useState<Array<HistoricalMatch>>([]);
   const [historicalMatchesLoaded, setHistoricalMatchesLoaded] = React.useState(false);
+  const [arenaModePromptVisible, setArenaModePromptVisible] = React.useState(false);
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -247,6 +264,26 @@ export default function () {
   }, [match, state.profile?.teamId]);
 
   // load map veto info
+  React.useEffect(() => {
+    if (!match?.id) {
+      return;
+    }
+
+    api.match.findVetoList(match.id).then((vetoes) => {
+      if (!vetoes.length) {
+        return;
+      }
+
+      setVetoHistory(
+        vetoes.map((veto) => ({
+          type: veto.type as Constants.MapVetoAction,
+          map: veto.map,
+          teamId: veto.teamId,
+        })),
+      );
+    });
+  }, [match?.id]);
+
   const vetoMapList = React.useMemo(
     () =>
       vetoHistory.filter((item) =>
@@ -380,6 +417,66 @@ export default function () {
     },
     [cpuPool, mapPerformance, match, userCompetitorIdx],
   );
+
+  const startMatch = React.useCallback(() => {
+    if (!match) {
+      return;
+    }
+
+    setWorking(true);
+
+    Promise.all([
+      api.match.updateMapList(
+        match.id,
+        vetoMapList.map((item) => item.map),
+      ),
+      api.match.updateVetoList(match.id, vetoMapList),
+    ]).then(() => {
+      setWorking(false);
+      api.window.send(Constants.WindowIdentifier.Main, match.id, null);
+      api.window.close(Constants.WindowIdentifier.Modal);
+    });
+  }, [match, vetoMapList]);
+
+  const savePregameState = React.useCallback(async () => {
+    if (!match) {
+      return;
+    }
+
+    await Promise.all([
+      api.match.updateMapList(
+        match.id,
+        vetoMapList.map((item) => item.map),
+      ),
+      api.match.updateVetoList(match.id, vetoHistory),
+    ]);
+  }, [match, vetoHistory, vetoMapList]);
+
+  const onPlay = React.useCallback(async () => {
+    if (!match) {
+      return;
+    }
+
+    if (!isArenaModeMatch(match)) {
+      startMatch();
+      return;
+    }
+
+    const settings = Util.loadSettings(state.profile.settings);
+    const arenaModeStatus = await api.app.arenaModeStatus(settings);
+    const arenaModeReady =
+      settings.arenaMode.enabled &&
+      arenaModeStatus.installed &&
+      arenaModeStatus.equalizerApoInstalled &&
+      arenaModeStatus.valhallaSupermassiveInstalled;
+
+    if (arenaModeReady) {
+      startMatch();
+      return;
+    }
+
+    setArenaModePromptVisible(true);
+  }, [match, startMatch, state.profile.settings]);
 
   React.useEffect(() => {
     const isCpuTurn = !!vetoSequenceStep && vetoSequenceStep.team === cpuIdx;
@@ -682,25 +779,51 @@ export default function () {
           })}
         </section>
       )}
+      {arenaModePromptVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <p className="text-lg font-bold">Arena Mode is turned off</p>
+              <p>
+                This playoff match supports Arena Mode. It adds arena reverb and crowd noise for
+                maximum immersion, and it is strongly recommended to be turned on before playing.
+              </p>
+              <p>
+                Enable Arena Mode by installing it in the Game Settings tab.
+              </p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setArenaModePromptVisible(false);
+                  startMatch();
+                }}
+              >
+                Continue without Arena Mode
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={async () => {
+                  await savePregameState();
+                  navigate('/settings', {
+                    state: { tab: 'game-settings', returnToPlayMatchId: match.id },
+                  });
+                }}
+              >
+                Go to settings
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
 
       <button
         className="btn btn-xl btn-block btn-secondary rounded-none active:translate-0!"
         disabled={!vetoSequenceComplete}
-        onClick={() => {
-          setWorking(true);
-
-          Promise.all([
-            api.match.updateMapList(
-              match.id,
-              vetoMapList.map((item) => item.map),
-            ),
-            api.match.updateVetoList(match.id, vetoMapList),
-          ]).then(() => {
-            setWorking(false);
-            api.window.send(Constants.WindowIdentifier.Main, match.id, null);
-            api.window.close(Constants.WindowIdentifier.Modal);
-          });
-        }}
+        onClick={onPlay}
       >
         {t('main.dashboard.play')}
       </button>

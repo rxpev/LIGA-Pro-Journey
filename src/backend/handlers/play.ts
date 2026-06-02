@@ -14,6 +14,7 @@ import { saveFaceitResult } from '@liga/backend/lib/save-result';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import {
   DatabaseClient,
+  ArenaMode,
   Game,
   Scorebot,
   Simulator,
@@ -360,7 +361,11 @@ export default function () {
 
     // start the server and play the match
     const gameServer = new Game.Server(profile, match, null, spectating);
-    await gameServer.start();
+    gameServer.onCleanup(() => ArenaMode.disable(settings));
+    gameServer.onClientConnected(async () => {
+      await ArenaMode.startCrowdLoop(settings);
+    });
+    await ArenaMode.runForMatch(settings, match, () => gameServer.start());
     const [home, away] = match.competitors;
     const sideTeamIds = gameServer.getSideTeamIds();
     const [tScore, ctScore] = gameServer.result.score;

@@ -10,6 +10,7 @@ import { app, dialog, ipcMain, shell } from 'electron';
 import { Constants, Util, is } from '@liga/shared';
 import {
   DatabaseClient,
+  ArenaMode,
   FileManager,
   Game,
   Plugins,
@@ -93,6 +94,25 @@ export function IPCGenericHandler() {
     return getLocale(profile);
   });
   ipcMain.handle(Constants.IPCRoute.APP_QUIT, () => app.quit());
+  ipcMain.handle(
+    Constants.IPCRoute.APP_ARENA_MODE_STATUS,
+    async (_, settings: typeof Constants.Settings) => {
+      if (!settings) {
+        const profile = await DatabaseClient.prisma.profile.findFirst();
+        settings = Util.loadSettings(profile.settings);
+      }
+
+      return ArenaMode.getStatus(settings);
+    },
+  );
+  ipcMain.handle(
+    Constants.IPCRoute.APP_ARENA_MODE_INSTALL,
+    async (_, settings: typeof Constants.Settings) => ArenaMode.install(settings),
+  );
+  ipcMain.handle(
+    Constants.IPCRoute.APP_ARENA_MODE_UNINSTALL,
+    async (_, settings: typeof Constants.Settings) => ArenaMode.uninstall(settings),
+  );
   ipcMain.handle(Constants.IPCRoute.APP_STATUS, async (_, settings: typeof Constants.Settings) => {
     if (!settings) {
       const profile = await DatabaseClient.prisma.profile.findFirst();

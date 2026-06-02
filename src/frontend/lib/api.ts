@@ -56,6 +56,33 @@ export default {
       ) as Promise<Electron.MessageBoxReturnValue>,
     info: () => ipcRenderer.invoke(Constants.IPCRoute.APP_INFO) as Promise<typeof AppInfo>,
     quit: () => ipcRenderer.invoke(Constants.IPCRoute.APP_QUIT) as Promise<unknown>,
+    arenaModeStatus: (settings?: typeof Constants.Settings) =>
+      ipcRenderer.invoke(Constants.IPCRoute.APP_ARENA_MODE_STATUS, settings) as Promise<{
+        installed: boolean;
+        equalizerApoConfigPath: string;
+        managedConfigFile: string;
+        equalizerApoInstalled: boolean;
+        valhallaSupermassiveInstalled: boolean;
+        detectedVstPluginPath: string;
+      }>,
+    installArenaMode: (settings: typeof Constants.Settings) =>
+      ipcRenderer.invoke(Constants.IPCRoute.APP_ARENA_MODE_INSTALL, settings) as Promise<{
+        installed: boolean;
+        equalizerApoConfigPath: string;
+        managedConfigFile: string;
+        equalizerApoInstalled: boolean;
+        valhallaSupermassiveInstalled: boolean;
+        detectedVstPluginPath: string;
+      }>,
+    uninstallArenaMode: (settings: typeof Constants.Settings) =>
+      ipcRenderer.invoke(Constants.IPCRoute.APP_ARENA_MODE_UNINSTALL, settings) as Promise<{
+        installed: boolean;
+        equalizerApoConfigPath: string;
+        managedConfigFile: string;
+        equalizerApoInstalled: boolean;
+        valhallaSupermassiveInstalled: boolean;
+        detectedVstPluginPath: string;
+      }>,
     status: (settings?: typeof Constants.Settings) =>
       ipcRenderer.invoke(Constants.IPCRoute.APP_STATUS, settings),
     upload: (file: string) =>

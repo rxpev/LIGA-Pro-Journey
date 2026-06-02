@@ -274,6 +274,9 @@ export enum IPCRoute {
   APP_MESSAGE_BOX = '/app/messageBox',
   APP_INFO = '/app/info',
   APP_QUIT = '/app/quit',
+  APP_ARENA_MODE_INSTALL = '/app/arena-mode/install',
+  APP_ARENA_MODE_STATUS = '/app/arena-mode/status',
+  APP_ARENA_MODE_UNINSTALL = '/app/arena-mode/uninstall',
   APP_STATUS = '/app/status',
   APP_UPLOAD = '/app/upload',
   APP_WHATS_NEW = '/app/whatsNew',
@@ -1199,6 +1202,11 @@ export const Settings = {
     isM4A1: false,
     isUSP: false,
     isCZ: false,
+  },
+  arenaMode: {
+    enabled: false,
+    equalizerApoConfigPath: 'C:\\Program Files\\EqualizerAPO\\config',
+    vstPluginPath: '',
   },
 };
 

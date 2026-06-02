@@ -4,12 +4,19 @@
  * @module
  */
 import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cloneDeep, isNull, set } from 'lodash';
 import { Constants, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
-import { FaExclamationTriangle, FaFolderOpen } from 'react-icons/fa';
+import {
+  FaDownload,
+  FaExclamationTriangle,
+  FaFolderOpen,
+  FaInfoCircle,
+  FaTrashAlt,
+} from 'react-icons/fa';
 import { ReduxActions } from '@liga/frontend/redux/actions';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
 import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
@@ -49,11 +56,24 @@ const weaponSettings = [
  * @exports
  */
 export default function () {
+  const location = useLocation();
+  const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state, dispatch } = React.useContext(AppStateContext);
-  const [activeTab, setActiveTab] = React.useState(Tab.GENERAL);
+  const [activeTab, setActiveTab] = React.useState(
+    (location.state as { tab?: string } | null)?.tab === 'game-settings'
+      ? Tab.GAME_SETTINGS
+      : Tab.GENERAL,
+  );
+  const returnToPlayMatchId = (location.state as { returnToPlayMatchId?: number } | null)
+    ?.returnToPlayMatchId;
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
+  const [arenaModeStatus, setArenaModeStatus] = React.useState<Awaited<
+    ReturnType<typeof api.app.arenaModeStatus>
+  > | null>(null);
+  const [arenaModeBusy, setArenaModeBusy] = React.useState(false);
+  const [arenaModeError, setArenaModeError] = React.useState<string | null>(null);
   const hasAttemptedDedicatedDetection = React.useRef(false);
   const GAME_SLUG = Constants.Game.CSGO;
 
@@ -100,6 +120,10 @@ export default function () {
     api.app.status(settings).then((status) => setAppStatus(status ? JSON.parse(status) : null));
   }, [settings]);
 
+  React.useEffect(() => {
+    api.app.arenaModeStatus(settings).then(setArenaModeStatus).catch(() => setArenaModeStatus(null));
+  }, [settings.arenaMode.equalizerApoConfigPath]);
+
   // handle settings updates
   const onSettingsUpdate = (path: string, value: unknown) => {
     const modified = cloneDeep(settings);
@@ -124,6 +148,38 @@ export default function () {
       where: { id: state.profile.id },
       data: { settings: json },
     });
+  };
+
+  const onArenaModeInstall = async () => {
+    setArenaModeBusy(true);
+    setArenaModeError(null);
+
+    try {
+      const status = await api.app.installArenaMode(settings);
+      setArenaModeStatus(status);
+
+      if (status.detectedVstPluginPath && !settings.arenaMode.vstPluginPath) {
+        onSettingsUpdate('arenaMode.vstPluginPath', status.detectedVstPluginPath);
+      }
+    } catch (error) {
+      setArenaModeError((error as Error)?.message || 'Could not install Arena Mode.');
+    } finally {
+      setArenaModeBusy(false);
+    }
+  };
+
+  const onArenaModeUninstall = async () => {
+    setArenaModeBusy(true);
+    setArenaModeError(null);
+
+    try {
+      const status = await api.app.uninstallArenaMode(settings);
+      setArenaModeStatus(status);
+    } catch (error) {
+      setArenaModeError((error as Error)?.message || 'Could not delete Arena Mode.');
+    } finally {
+      setArenaModeBusy(false);
+    }
   };
 
   React.useEffect(() => {
@@ -401,6 +457,12 @@ export default function () {
         )}
         {activeTab === Tab.GAME_SETTINGS && (
           <fieldset>
+            <section>
+              <header>
+                <p>Equipment</p>
+                <p>Choose the weapons your player equips in CS:GO.</p>
+              </header>
+            </section>
             {weaponSettings.map((weapon) => (
               <section key={weapon.path}>
                 <header>
@@ -427,6 +489,157 @@ export default function () {
                 </article>
               </section>
             ))}
+            <section className="mt-8 border-t border-base-content/10 pt-6">
+              <header>
+                <p>Arena Mode</p>
+                <p>Recommended! Add reverb & crowd noise to your playoff matches for maximum immersion.</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  className="toggle"
+                  onChange={(event) => onSettingsUpdate('arenaMode.enabled', event.target.checked)}
+                  checked={settings.arenaMode.enabled}
+                  value={String(settings.arenaMode.enabled)}
+                />
+              </article>
+            </section>
+            {!!returnToPlayMatchId && (
+              <section>
+                <header>
+                  <p>Pending match</p>
+                  <p>Your map veto has been saved. Return to the match when Arena Mode is ready.</p>
+                </header>
+                <article>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => navigate('/play', { state: returnToPlayMatchId })}
+                  >
+                    Return to match
+                  </button>
+                </article>
+              </section>
+            )}
+            <section>
+              <header>
+                <p>Equalizer APO Config</p>
+                <p>Folder containing Equalizer APO config.txt.</p>
+              </header>
+              <article className="join">
+                <input
+                  type="text"
+                  className="input join-item bg-base-200 text-sm"
+                  value={settings.arenaMode.equalizerApoConfigPath || ''}
+                  onChange={(event) =>
+                    onSettingsUpdate('arenaMode.equalizerApoConfigPath', event.target.value)
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Modal, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate(
+                            'arenaMode.equalizerApoConfigPath',
+                            dialogData.filePaths[0],
+                          ),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>Valhalla Supermassive DLL</p>
+                <p>VST2 plugin path.</p>
+              </header>
+              <article className="join">
+                <input
+                  type="text"
+                  className="input join-item bg-base-200 text-sm"
+                  value={settings.arenaMode.vstPluginPath || ''}
+                  onChange={(event) =>
+                    onSettingsUpdate('arenaMode.vstPluginPath', event.target.value)
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn join-item"
+                  onClick={() =>
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Modal, {
+                        properties: ['openFile'],
+                        filters: [{ name: 'VST plugins', extensions: ['dll'] }],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('arenaMode.vstPluginPath', dialogData.filePaths[0]),
+                      )
+                  }
+                >
+                  <FaFolderOpen />
+                </button>
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>Install State</p>
+                <p className={arenaModeStatus?.installed ? 'text-success' : 'text-error'}>
+                  {arenaModeStatus?.installed ? 'Arena Mode installed' : 'Arena Mode not installed'}
+                </p>
+                <p
+                  className={arenaModeStatus?.equalizerApoInstalled ? 'text-success' : 'text-error'}
+                >
+                  Equalizer APO:{' '}
+                  {arenaModeStatus?.equalizerApoInstalled ? 'installed' : 'not detected'}
+                </p>
+                <p
+                  className={
+                    arenaModeStatus?.valhallaSupermassiveInstalled ? 'text-success' : 'text-error'
+                  }
+                >
+                  Valhalla Supermassive:{' '}
+                  {arenaModeStatus?.valhallaSupermassiveInstalled ? 'installed' : 'not detected'}
+                </p>
+                {!!arenaModeError && <p className="text-error">{arenaModeError}</p>}
+              </header>
+              <article className="join">
+                <span
+                  className="tooltip tooltip-left flex items-center px-3"
+                  data-tip="Install downloads Equalizer APO for Windows audio processing and Valhalla Supermassive for the arena reverb effect. During setup, choose the playback device used by CS:GO. A PC restart may be required before Equalizer APO affects sound. Changing paths is not recommended; default paths are easiest for LIGA to detect and manage."
+                >
+                  <FaInfoCircle className="text-info" />
+                </span>
+                <button
+                  type="button"
+                  title="Install Arena Mode"
+                  className="btn btn-primary btn-sm join-item"
+                  disabled={arenaModeBusy}
+                  onClick={onArenaModeInstall}
+                >
+                  <FaDownload />
+                </button>
+                <button
+                  type="button"
+                  title="Delete Arena Mode"
+                  className="btn btn-error btn-sm join-item"
+                  disabled={arenaModeBusy || !arenaModeStatus?.installed}
+                  onClick={onArenaModeUninstall}
+                >
+                  <FaTrashAlt />
+                </button>
+              </article>
+            </section>
           </fieldset>
         )}
         {activeTab === Tab.CALENDAR && (

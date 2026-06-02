@@ -1,4 +1,5 @@
 export * as Autofill from './autofill';
+export * as ArenaMode from './arena-mode';
 export * as CachedFetch from './cached-fetch';
 export * as Engine from './engine';
 export * as FileManager from './file-manager';

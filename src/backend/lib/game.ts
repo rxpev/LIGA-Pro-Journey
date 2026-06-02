@@ -370,6 +370,12 @@ export class Server {
   private serverConfigFile: string;
   private settings: typeof Constants.Settings;
   private spectating?: boolean;
+  private cleanupCallbacks: Array<() => Promise<void> | void>;
+  private cleanupStarted: boolean;
+  private clientConnectedCallbacks: Array<() => Promise<void> | void>;
+  private clientConnected: boolean;
+  private clientProcessMonitor?: NodeJS.Timeout;
+  private clientProcessSeen: boolean;
 
   // FACEIT fields
   private isFaceit: boolean;
@@ -442,6 +448,11 @@ export class Server {
     this.scorebotEvents = [];
     this.spectating = Boolean(spectating);
     this.clientLaunchedViaSteam = false;
+    this.cleanupCallbacks = [];
+    this.cleanupStarted = false;
+    this.clientConnectedCallbacks = [];
+    this.clientConnected = false;
+    this.clientProcessSeen = false;
 
     // handle game override
     if (gameOverride) {
@@ -630,10 +641,30 @@ export class Server {
    * @function
    */
   private async cleanup() {
+    if (this.cleanupStarted) {
+      return;
+    }
+
+    this.cleanupStarted = true;
     this.log.info('Cleaning up...');
+
+    await Promise.all(
+      this.cleanupCallbacks.map(async (callback) => {
+        try {
+          await callback();
+        } catch (error) {
+          this.log.warn(error);
+        }
+      }),
+    );
 
     // clean up connections to processes and/or files
     try {
+      if (this.clientProcessMonitor) {
+        clearInterval(this.clientProcessMonitor);
+        this.clientProcessMonitor = undefined;
+      }
+
       if (this.scorebot) {
         await this.scorebot.quit();
       }
@@ -1462,6 +1493,35 @@ End\n
     return Promise.resolve();
   }
 
+  private scheduleClientProcessMonitorCSGO() {
+    const clientExecutable = Constants.GameSettings.CSGO_EXE;
+
+    const isClientRunning = async () => {
+      try {
+        const { stdout } = await exec(`tasklist /FI "IMAGENAME eq ${clientExecutable}"`);
+        return stdout.includes(clientExecutable);
+      } catch (error) {
+        this.log.warn('Unable to inspect CS:GO process state: %s', error);
+        return false;
+      }
+    };
+
+    this.clientProcessMonitor = setInterval(async () => {
+      const running = await isClientRunning();
+
+      if (running) {
+        this.clientProcessSeen = true;
+        return;
+      }
+
+      if (this.clientProcessSeen) {
+        this.log.info('Detected CS:GO client exit.');
+        await this.cleanup();
+      }
+    }, 2_000);
+    this.clientProcessMonitor.unref?.();
+  }
+
 
 
   /**
@@ -1737,6 +1797,7 @@ End\n
 
     // 5) now launch the client (after server log is ready)
     await this.launchClientCSGO();
+    this.scheduleClientProcessMonitorCSGO();
 
     // 5b) Perform one delayed steam://connect handoff after client launch.
     // We intentionally avoid startup +connect to prevent overlapping connect
@@ -1760,6 +1821,13 @@ End\n
     this.log.info(`Scorebot watching log file: ${logFile}`);
 
     this.scorebot = new Scorebot.Watcher(logFile);
+
+    const handleClientConnected = () => {
+      this.notifyClientConnected().catch((error) => this.log.warn(error));
+    };
+
+    this.scorebot.once(Scorebot.EventIdentifier.PLAYER_CONNECTED, handleClientConnected);
+    this.scorebot.once(Scorebot.EventIdentifier.PLAYER_ENTERED, handleClientConnected);
 
     try {
       await this.scorebot.start();
@@ -1811,5 +1879,32 @@ End\n
         resolve();
       });
     });
+  }
+
+  private async notifyClientConnected() {
+    if (this.clientConnected) {
+      return;
+    }
+
+    this.clientConnected = true;
+    this.log.info('Client connected to server.');
+
+    await Promise.all(
+      this.clientConnectedCallbacks.map(async (callback) => {
+        try {
+          await callback();
+        } catch (error) {
+          this.log.warn(error);
+        }
+      }),
+    );
+  }
+
+  public onCleanup(callback: () => Promise<void> | void) {
+    this.cleanupCallbacks.push(callback);
+  }
+
+  public onClientConnected(callback: () => Promise<void> | void) {
+    this.clientConnectedCallbacks.push(callback);
   }
 }
