@@ -18,6 +18,7 @@ type DailyState = {
   playedToday: number;
   maxToday: number;
   hasPendingUserMatchday: boolean;
+  hasLiveUserMatchday: boolean;
   date: string;
 };
 

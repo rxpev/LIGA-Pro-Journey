@@ -84,6 +84,14 @@ async function getFaceitDailyState(prisma: any, profile: any) {
         status: { not: Constants.MatchStatus.COMPLETED },
       },
     })) > 0;
+  const hasLiveUserMatchday =
+    matchIds.length > 0 &&
+    (await prisma.match.count({
+      where: {
+        id: { in: matchIds },
+        status: Constants.MatchStatus.PLAYING,
+      },
+    })) > 0;
   const playedToday = await prisma.match.count({
     where: {
       profileId: profile.id,
@@ -96,6 +104,7 @@ async function getFaceitDailyState(prisma: any, profile: any) {
   return {
     inGameDateIso: start.toISOString(),
     hasPendingUserMatchday,
+    hasLiveUserMatchday,
     playedToday,
     maxToday,
   };
@@ -468,6 +477,7 @@ export default function registerFaceitHandlers() {
           playedToday: daily.playedToday,
           maxToday: daily.maxToday,
           hasPendingUserMatchday: daily.hasPendingUserMatchday,
+          hasLiveUserMatchday: daily.hasLiveUserMatchday,
           date: daily.inGameDateIso,
         },
       };
@@ -613,6 +623,10 @@ export default function registerFaceitHandlers() {
         if (!profile) throw new Error('No active profile found');
 
         const daily = await getFaceitDailyState(prisma, profile);
+        if (daily.hasLiveUserMatchday) {
+          throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
+        }
+
         if (daily.playedToday >= daily.maxToday) {
           throw new Error(
             daily.hasPendingUserMatchday
@@ -666,6 +680,10 @@ export default function registerFaceitHandlers() {
       const settings = profile.settings ? JSON.parse(profile.settings) : Constants.Settings;
 
       const daily = await getFaceitDailyState(prisma, profile);
+      if (daily.hasLiveUserMatchday) {
+        throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
+      }
+
       if (daily.playedToday >= daily.maxToday) {
         throw new Error(
           daily.hasPendingUserMatchday

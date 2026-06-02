@@ -114,6 +114,7 @@ type DailyState = {
   playedToday: number;
   maxToday: number;
   hasPendingUserMatchday: boolean;
+  hasLiveUserMatchday: boolean;
   date: string;
 };
 
@@ -206,12 +207,17 @@ export default function Faceit(): JSX.Element {
   const canQueue = React.useMemo(() => {
     if (activeMatch) return false;
     if (queueing) return false;
+    if (daily?.hasLiveUserMatchday) return false;
     if (!daily) return true;
     return daily.playedToday < daily.maxToday;
   }, [activeMatch, queueing, daily]);
 
   const queueBlockMessage = React.useMemo(() => {
     if (!daily) return null;
+    if (daily.hasLiveUserMatchday) {
+      return "League match is live. Finish your match before queueing FACEIT.";
+    }
+
     if (daily.playedToday < daily.maxToday) return null;
 
     if (daily.hasPendingUserMatchday) {
@@ -520,7 +526,9 @@ export default function Faceit(): JSX.Element {
         });
       } catch (e: any) {
         const msg = String(e?.message ?? e);
-        if (msg.includes("FACEIT_BLOCKED_MATCHDAY_USER_TODAY")) {
+        if (msg.includes("FACEIT_BLOCKED_LIVE_MATCHDAY_USER")) {
+          setQueueError("League match is live. Finish your match before queueing FACEIT.");
+        } else if (msg.includes("FACEIT_BLOCKED_MATCHDAY_USER_TODAY")) {
           setQueueError(
             "Matchday scheduled today. You can only play 2 FACEIT matches to warm up."
           );
@@ -2093,7 +2101,9 @@ function NormalFaceitBody({
                   {queueing
                     ? `SEARCHING... ${queueTimer}s`
                     : !canQueue
-                      ? "LIMIT REACHED"
+                      ? daily?.hasLiveUserMatchday
+                        ? "MATCH LIVE"
+                        : "LIMIT REACHED"
                       : "FIND MATCH"}
                 </button>
                 {queueing && (
