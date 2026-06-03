@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppStateContext } from '@liga/frontend/redux';
 import { profilesDelete } from '@liga/frontend/redux/actions';
@@ -28,11 +29,16 @@ export default function () {
   // refresh profile when attempting delete
   const profile = React.useMemo(
     () => state.profiles.find((item) => item.id === parseInt(id)),
-    [id],
+    [id, state.profiles],
   );
 
   // delete profile event handler
   const handleDeleteProfile = async () => {
+    if (!profile) {
+      navigate(-1);
+      return;
+    }
+
     setDeleting(true);
     await api.saves.delete(profile.id);
     dispatch(profilesDelete([profile]));
@@ -40,8 +46,12 @@ export default function () {
     navigate(-1);
   };
 
-  return (
-    <dialog className="modal modal-open absolute w-screen">
+  if (!profile) {
+    return null;
+  }
+
+  return createPortal(
+    <dialog className="modal modal-open fixed inset-0 z-50 h-screen w-screen">
       <section className="modal-box">
         <h3 className="text-lg">{t('landing.delete.title')}</h3>
         <p className="py-4">{t('landing.delete.subtitle')}</p>
@@ -55,6 +65,7 @@ export default function () {
           </button>
         </article>
       </section>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
