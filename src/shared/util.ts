@@ -633,6 +633,68 @@ export function getCompetitionHostingLocationCountryCode(location?: string | nul
   return countryCode ? flagCodeAliases[countryCode] ?? countryCode : null;
 }
 
+export function getCompetitionOnlineLocationCountryCode(
+  federationSlug?: Constants.FederationSlug | string | null,
+) {
+  const flagCodeByFederation: Partial<Record<Constants.FederationSlug, string>> = {
+    [Constants.FederationSlug.ESPORTS_AMERICAS]: 'americas',
+    [Constants.FederationSlug.ESPORTS_ASIA]: 'as',
+    [Constants.FederationSlug.ESPORTS_EUROPA]: 'eu',
+    [Constants.FederationSlug.ESPORTS_OCE]: 'au',
+  };
+
+  return flagCodeByFederation[federationSlug as Constants.FederationSlug] ?? null;
+}
+
+export function getCompetitionOnlineLocationName(
+  federationSlug?: Constants.FederationSlug | string | null,
+  federationName?: string | null,
+) {
+  const labelByFederation: Partial<Record<Constants.FederationSlug, string>> = {
+    [Constants.FederationSlug.ESPORTS_AMERICAS]: 'Americas',
+    [Constants.FederationSlug.ESPORTS_ASIA]: 'Asia',
+    [Constants.FederationSlug.ESPORTS_EUROPA]: 'Europe',
+    [Constants.FederationSlug.ESPORTS_OCE]: 'Oceania',
+    [Constants.FederationSlug.ESPORTS_WORLD]: 'World',
+  };
+
+  return labelByFederation[federationSlug as Constants.FederationSlug] || federationName || null;
+}
+
+export function getCompetitionDisplayLocation(options: {
+  federationName?: string | null;
+  federationSlug?: Constants.FederationSlug | string | null;
+  lan?: boolean | null;
+  location?: string | null;
+}) {
+  if (options.location) {
+    return options.location;
+  }
+
+  if (options.lan === false) {
+    const onlineLocationName = getCompetitionOnlineLocationName(
+      options.federationSlug,
+      options.federationName,
+    );
+
+    return onlineLocationName ? `${onlineLocationName} (Online)` : 'Online';
+  }
+
+  return null;
+}
+
+export function getCompetitionDisplayLocationCountryCode(options: {
+  federationSlug?: Constants.FederationSlug | string | null;
+  lan?: boolean | null;
+  location?: string | null;
+}) {
+  return options.location
+    ? getCompetitionHostingLocationCountryCode(options.location)
+    : options.lan === false
+      ? getCompetitionOnlineLocationCountryCode(options.federationSlug)
+      : null;
+}
+
 export function getCompetitionHostingLocationCity(location?: string | null) {
   return location?.split(',')[0]?.trim() || null;
 }

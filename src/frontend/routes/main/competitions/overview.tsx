@@ -72,7 +72,17 @@ export default function () {
   const [showAllPrizePool, setShowAllPrizePool] = React.useState(false);
   const tierSlug = competition.tier.slug as Constants.TierSlug;
   const showWinnerHistory = WINNER_HISTORY_TIER_SLUGS.has(tierSlug);
-  const locationCountryCode = Util.getCompetitionHostingLocationCountryCode(competition.location);
+  const locationDisplay = Util.getCompetitionDisplayLocation({
+    federationName: competition.federation.name,
+    federationSlug: competition.federation.slug,
+    lan: competition.tier.lan,
+    location: competition.location,
+  });
+  const locationCountryCode = Util.getCompetitionDisplayLocationCountryCode({
+    federationSlug: competition.federation.slug,
+    lan: competition.tier.lan,
+    location: competition.location,
+  });
 
   // fetch competition start and end
   // dates when the data comes in
@@ -265,10 +275,10 @@ export default function () {
                 <td>{competitionDates[0] ? format(competitionDates[0].date, 'PPP') : 'TBD'}</td>
                 <td>{competitionDates[1] ? format(competitionDates[1].date, 'PPP') : '-'}</td>
                 <td>
-                  {competition.location ? (
+                  {locationDisplay ? (
                     <span className="inline-flex items-center gap-2">
                       {locationCountryCode && <span className={cx('fp', locationCountryCode)} />}
-                      <span>{competition.location}</span>
+                      <span>{locationDisplay}</span>
                     </span>
                   ) : (
                     '-'

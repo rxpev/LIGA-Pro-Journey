@@ -103,6 +103,7 @@ meter::-webkit-meter-bar {
 }
 
 .fp.eu,
+.fp.americas,
 .fp.na,
 .fp.xsa,
 .fp.as {
@@ -113,6 +114,10 @@ meter::-webkit-meter-bar {
 
 .fp.eu {
   background-image: url('./flags/eu.png');
+}
+
+.fp.americas {
+  background-image: url('./flags/americas.png');
 }
 
 .fp.na {
