@@ -50,6 +50,15 @@ function hasOpponent(
   return match.competitors.filter((competitor) => competitor.teamId != null).length > 1;
 }
 
+function getDateTime(value: Date | string | number | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return date.getTime();
+}
+
 /**
  * Exports this module.
  *
@@ -66,6 +75,7 @@ export default function () {
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
+  const [latestScheduledMatchDate, setLatestScheduledMatchDate] = React.useState<Date | null>(null);
   const [winners, setWinners] = React.useState<
     Awaited<ReturnType<typeof api.competitions.winners>>
   >([]);
@@ -101,6 +111,27 @@ export default function () {
         },
       }),
     ]).then(setCompetitionDates);
+  }, [competition]);
+
+  React.useEffect(() => {
+    setLatestScheduledMatchDate(null);
+
+    api.matches
+      .all<{ select: { date: true } }>({
+        select: {
+          date: true,
+        },
+        take: 1,
+        orderBy: {
+          date: 'desc',
+        },
+        where: {
+          competition: {
+            id: competition.id,
+          },
+        },
+      })
+      .then(([match]) => setLatestScheduledMatchDate(match?.date ?? null));
   }, [competition]);
 
   // fetch recent match results
@@ -207,6 +238,21 @@ export default function () {
   const visiblePrizePoolRows = showAllPrizePool
     ? prizePoolRows
     : prizePoolRows.slice(0, NUM_PRIZE_POOL_VISIBLE);
+  const displayedEndDate = React.useMemo(() => {
+    const calendarEndDate = competitionDates[1]?.date;
+
+    if (!latestScheduledMatchDate) {
+      return calendarEndDate;
+    }
+
+    if (!calendarEndDate) {
+      return latestScheduledMatchDate;
+    }
+
+    return getDateTime(latestScheduledMatchDate) > getDateTime(calendarEndDate)
+      ? latestScheduledMatchDate
+      : calendarEndDate;
+  }, [competitionDates, latestScheduledMatchDate]);
   const showPrizePool =
     competition.status === Constants.CompetitionStatus.COMPLETED &&
     Boolean(prizePool?.total) &&
@@ -273,7 +319,7 @@ export default function () {
             <tbody>
               <tr>
                 <td>{competitionDates[0] ? format(competitionDates[0].date, 'PPP') : 'TBD'}</td>
-                <td>{competitionDates[1] ? format(competitionDates[1].date, 'PPP') : '-'}</td>
+                <td>{displayedEndDate ? format(displayedEndDate, 'PPP') : '-'}</td>
                 <td>
                   {locationDisplay ? (
                     <span className="inline-flex items-center gap-2">

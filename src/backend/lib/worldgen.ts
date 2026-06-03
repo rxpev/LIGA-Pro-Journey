@@ -976,6 +976,62 @@ async function createMatchdays(
   );
 }
 
+async function syncCompetitionEndDate(competitionId: number) {
+  const lastMatchDay = await DatabaseClient.prisma.match.findFirst({
+    where: {
+      competitionId,
+    },
+    orderBy: {
+      date: 'desc',
+    },
+  });
+
+  if (!lastMatchDay) {
+    return;
+  }
+
+  const existingEntries = await DatabaseClient.prisma.calendar.findMany({
+    where: {
+      type: Constants.CalendarEntry.COMPETITION_END,
+      payload: String(competitionId),
+    },
+  });
+  const existingEntry =
+    existingEntries.find((entry) => entry.date.getTime() === lastMatchDay.date.getTime()) ||
+    existingEntries[0];
+
+  if (existingEntry) {
+    const duplicateEntries = existingEntries.filter((entry) => entry.id !== existingEntry.id);
+
+    if (duplicateEntries.length > 0) {
+      await DatabaseClient.prisma.calendar.deleteMany({
+        where: {
+          id: {
+            in: duplicateEntries.map((entry) => entry.id),
+          },
+        },
+      });
+    }
+
+    return DatabaseClient.prisma.calendar.update({
+      where: {
+        id: existingEntry.id,
+      },
+      data: {
+        date: lastMatchDay.date.toISOString(),
+      },
+    });
+  }
+
+  return DatabaseClient.prisma.calendar.create({
+    data: {
+      date: lastMatchDay.date.toISOString(),
+      type: Constants.CalendarEntry.COMPETITION_END,
+      payload: String(competitionId),
+    },
+  });
+}
+
 /**
  * Sends a welcome e-mail to the user upon creating a new career.
  *
@@ -3634,14 +3690,18 @@ export async function recordMatchResults() {
       const lowerRoundReady =
         Array.isArray(lowerMatches) && lowerMatches.every((match) => !match.m);
 
+      let generatedNewMatches = false;
+
       if (tournament.brackets && !tournament.iemGroup && upperRoundReady) {
         Engine.Runtime.Instance.log.info('Generating next round of upper bracket matches...');
         await createMatchdays(upperMatches, tournament, competition);
+        generatedNewMatches = true;
       }
 
       if (tournament.brackets && !tournament.iemGroup && lowerRoundReady) {
         Engine.Runtime.Instance.log.info('Generating next round of lower bracket matches...');
         await createMatchdays(lowerMatches, tournament, competition);
+        generatedNewMatches = true;
       }
 
       if (tournament.iemGroup) {
@@ -3650,6 +3710,7 @@ export async function recordMatchResults() {
         if (groupMatches.length > 0) {
           Engine.Runtime.Instance.log.info('Generating next IEM group bracket matches...');
           await createMatchdays(groupMatches, tournament, competition);
+          generatedNewMatches = true;
         }
       }
 
@@ -3659,6 +3720,7 @@ export async function recordMatchResults() {
         if (groupSwissMatches.length > 0) {
           Engine.Runtime.Instance.log.info('Generating next group swiss round matches...');
           await createMatchdays(groupSwissMatches, tournament, competition);
+          generatedNewMatches = true;
         }
       }
 
@@ -3668,7 +3730,12 @@ export async function recordMatchResults() {
         if (swissMatches.length > 0) {
           Engine.Runtime.Instance.log.info('Generating next swiss round matches...');
           await createMatchdays(swissMatches, tournament, competition);
+          generatedNewMatches = true;
         }
+      }
+
+      if (generatedNewMatches || tournament.$base.isDone()) {
+        await syncCompetitionEndDate(Number(competitionId));
       }
 
       // check if competition is done and a start date must
@@ -6845,23 +6912,7 @@ export async function onCompetitionStart(entry: Calendar) {
     }),
   );
 
-  // grab last match day to record competition end day
-  const lastMatchDay = await DatabaseClient.prisma.match.findFirst({
-    where: {
-      competitionId: competition.id,
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
-
-  await DatabaseClient.prisma.calendar.create({
-    data: {
-      date: lastMatchDay.date,
-      type: Constants.CalendarEntry.COMPETITION_END,
-      payload: competition.id.toString(),
-    },
-  });
+  await syncCompetitionEndDate(competition.id);
 
   // update the competition database record
   return DatabaseClient.prisma.competition.update({
