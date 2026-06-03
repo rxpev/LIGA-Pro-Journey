@@ -7,7 +7,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
 import { Toast, Toaster, toast } from 'react-hot-toast';
-import { FaBars, FaCaretDown, FaEnvelopeOpen } from 'react-icons/fa';
+import { FaBars, FaCaretDown, FaEnvelopeOpen, FaHome } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
@@ -406,6 +406,14 @@ function Root() {
                   className="text-sm font-semibold text-warning"
                   onClick={() => navigate('/squad')}
                 >
+                  <Image
+                    src={
+                      state.profile?.team?.blazon
+                        ? state.profile.team.blazon
+                        : 'resources://blazonry/noteam.svg'
+                    }
+                    className="h-5 w-5 object-contain"
+                  />
                   {state.profile?.team?.name ?? 'You are currently teamless'}
                 </a>
               </li>
@@ -426,6 +434,18 @@ function Root() {
                   }
                 >
                   {t('shared.settings')}
+                </a>
+              </li>
+              <div className="divider mt-2 mb-0 before:h-px after:h-px" />
+              <li>
+                <a
+                  onClick={() => {
+                    api.window.open(Constants.WindowIdentifier.Landing);
+                    api.window.close(Constants.WindowIdentifier.Main);
+                  }}
+                >
+                  <FaHome />
+                  Main Menu
                 </a>
               </li>
             </>

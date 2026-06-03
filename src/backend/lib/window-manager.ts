@@ -52,6 +52,10 @@ const baseWindowConfig: Electron.BrowserWindowConstructorOptions = {
  * @constant
  */
 const sharedWindowConfigs: Record<string, Electron.BrowserWindowConstructorOptions> = {
+  fullscreen: {
+    ...baseWindowConfig,
+    fullscreen: true,
+  },
   frameless: {
     ...baseWindowConfig,
     frame: false,
@@ -73,6 +77,24 @@ const sharedWindowConfigs: Record<string, Electron.BrowserWindowConstructorOptio
 const windows: Record<string, Electron.BrowserWindow> = {};
 
 /**
+ * Builds the view menu shared by fullscreen-capable app windows.
+ *
+ * @function
+ */
+function buildViewMenu(): Electron.MenuItemConstructorOptions {
+  return is.dev()
+    ? { role: 'viewMenu' }
+    : {
+        label: 'View',
+        submenu: [
+          {
+            role: 'togglefullscreen',
+          },
+        ],
+      };
+}
+
+/**
  * Holds application window configs.
  *
  * @constant
@@ -82,15 +104,19 @@ export const WINDOW_CONFIGS: Record<string, WindowConfig> = {
     id: Constants.WindowIdentifier.Landing,
     url: is.main() && LANDING_WINDOW_WEBPACK_ENTRY,
     options: {
-      ...baseWindowConfig,
+      ...sharedWindowConfigs.fullscreen,
     },
-    buildMenu: () => (is.dev() ? Menu.buildFromTemplate([{ role: 'viewMenu' }]) : null),
+    buildMenu: () =>
+      Menu.buildFromTemplate([
+        ...((is.osx() ? [{ role: 'appMenu' }] : []) as Array<Electron.MenuItemConstructorOptions>),
+        buildViewMenu(),
+      ]),
   },
   [Constants.WindowIdentifier.Main]: {
     id: Constants.WindowIdentifier.Main,
     url: is.main() && MAIN_WINDOW_WEBPACK_ENTRY,
     options: {
-      ...baseWindowConfig,
+      ...sharedWindowConfigs.fullscreen,
     },
     buildMenu: () =>
       Menu.buildFromTemplate([
@@ -121,18 +147,7 @@ export const WINDOW_CONFIGS: Record<string, WindowConfig> = {
             { role: 'quit' },
           ],
         },
-        ...((is.dev()
-          ? [{ role: 'viewMenu' }]
-          : [
-              {
-                label: 'View',
-                submenu: [
-                  {
-                    role: 'toggleFullScreen',
-                  },
-                ],
-              },
-            ]) as Array<Electron.MenuItem>),
+        buildViewMenu(),
         {
           label: 'Help',
           submenu: [
