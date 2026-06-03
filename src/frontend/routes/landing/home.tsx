@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Logo from '@liga/frontend/assets/icon.png';
 import { formatRelative } from 'date-fns';
 import { upperFirst } from 'lodash';
@@ -12,7 +13,7 @@ import { Constants, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import type { AppState } from '@liga/frontend/redux/state';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
-import { FaClock } from 'react-icons/fa';
+import { FaClock, FaExclamationTriangle } from 'react-icons/fa';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import iglIcon from '@liga/frontend/assets/igl.png';
 import riflerIcon from '@liga/frontend/assets/rifler.png';
@@ -54,6 +55,7 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
+  const [quitPromptVisible, setQuitPromptVisible] = React.useState(false);
   const [profile] = state.profiles as Array<ContinueProfile>;
   const role = profile?.player?.role || 'RIFLER';
   const roleIcon = ROLE_ICONS[role] || riflerIcon;
@@ -93,14 +95,7 @@ export default function () {
     },
     {
       label: t('shared.quit'),
-      onClick: () =>
-        api.app
-          .messageBox(Constants.WindowIdentifier.Landing, {
-            type: 'question',
-            message: 'Are you sure you want to quit the application?',
-            buttons: ['Quit', 'Cancel'],
-          })
-          .then((data) => data.response === 0 && api.app.quit()),
+      onClick: () => setQuitPromptVisible(true),
     },
     {
       type: 'divider',
@@ -182,6 +177,30 @@ export default function () {
           <small>{state.appInfo?.version}</small>
         </p>
       </footer>
+      {quitPromptVisible &&
+        createPortal(
+          <section className="bg-base-300/80 fixed inset-0 z-50 flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">
+            <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+              <header className="stack-y mb-6">
+                <div className="flex items-center gap-3">
+                  <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                  <p className="text-lg font-bold">
+                    Are you sure you want to quit the application?
+                  </p>
+                </div>
+              </header>
+              <footer className="flex justify-end gap-2">
+                <button type="button" className="btn" onClick={() => setQuitPromptVisible(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-error" onClick={() => api.app.quit()}>
+                  Quit
+                </button>
+              </footer>
+            </article>
+          </section>,
+          document.body,
+        )}
     </main>
   );
 }

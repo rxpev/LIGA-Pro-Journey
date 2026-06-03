@@ -133,6 +133,7 @@ export default function () {
   >([]);
 
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
+  const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
   const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
 
   const toDashboardTeamTierLabel = (tierSlug: Constants.TierSlug | string): string =>
@@ -566,14 +567,7 @@ export default function () {
                     const profileData = await api.faceit.profile();
 
                     if (profileData.lifetime.matchesPlayed < 10) {
-                      await api.app.messageBox(Constants.WindowIdentifier.Main, {
-                        type: 'warning',
-                        message: 'Are you sure you want to advance the calendar?',
-                        detail:
-                          "You have not found a team to compete with yet!\n\nPlay FACEIT to get a team's attention.",
-                        buttons: ['OK'],
-                      });
-                      setDismissedNoTeamAdvanceWarning(true);
+                      setNoTeamAdvanceWarningVisible(true);
                       return;
                     }
                   }
@@ -1094,6 +1088,32 @@ export default function () {
           </section>
         </div>
       </main>
+      {noTeamAdvanceWarningVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">Are you sure you want to advance the calendar?</p>
+              </div>
+              <p>You have not found a team to compete with yet!</p>
+              <p>Play FACEIT to get a team's attention.</p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setDismissedNoTeamAdvanceWarning(true);
+                  setNoTeamAdvanceWarningVisible(false);
+                }}
+              >
+                OK
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
       {!!arenaModePromptMatchId && (
         <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
           <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
