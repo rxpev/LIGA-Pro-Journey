@@ -206,9 +206,7 @@ function getCompetitionLabel(match: MatchRecord) {
     return hostedEventLabel;
   }
 
-  if (
-    Util.isMajorStageTier(tierSlug)
-  ) {
+  if (Util.isMajorStageTier(tierSlug)) {
     return Util.getMajorMatchDisplayName(
       tierSlug,
       match.competition?.location,
@@ -1186,11 +1184,11 @@ export default function LeagueStatsConcept(): JSX.Element {
   };
 
   const renderWeaponTable = (rows: WeaponPerformance[]) => (
-    <article className="border-base-content/10 rounded-none border">
+    <article className="border-base-content/10 flex min-h-0 flex-col rounded-none border">
       <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
         Weapons
       </header>
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         <table className="table-zebra table-sm table">
           <thead>
             <tr>
@@ -1245,7 +1243,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   );
 
   return (
-    <section className="bg-base-300/40 h-full overflow-hidden">
+    <section className="bg-base-300/40 fixed inset-0 box-border min-h-0 overflow-hidden">
       <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
         {Object.values(StatsTab).map((tab) => (
           <button
@@ -1268,7 +1266,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       </header>
 
       <div
-        className={`grid h-[calc(100%-48px)] grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS ? '' : 'xl:grid-cols-[310px_1fr]'}`}
+        className={`grid h-[calc(100%-48px)] min-h-0 grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS ? '' : 'xl:grid-cols-[310px_1fr]'}`}
       >
         {activeTab !== StatsTab.TOURNAMENTS && (
           <aside className="border-base-content/10 bg-base-100 border-r p-4">
@@ -1411,7 +1409,12 @@ export default function LeagueStatsConcept(): JSX.Element {
           </aside>
         )}
 
-        <main className="overflow-y-auto p-3">
+        <main
+          className={cx(
+            'min-h-0 p-3',
+            activeTab === StatsTab.WEAPONS ? 'overflow-hidden' : 'overflow-y-auto',
+          )}
+        >
           {loading && (
             <div className="flex h-full items-center justify-center">
               <span className="loading loading-bars loading-md" />
@@ -1419,7 +1422,12 @@ export default function LeagueStatsConcept(): JSX.Element {
           )}
 
           {!loading && activeTab !== StatsTab.TOURNAMENTS && (
-            <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]">
+            <div
+              className={cx(
+                'grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]',
+                activeTab === StatsTab.WEAPONS && 'h-full min-h-0',
+              )}
+            >
               <article className="border-base-content/10 relative border">
                 {hasMapSelected ? (
                   <img
