@@ -2298,6 +2298,17 @@ async function getRegionalLeaguePlacements(
   ];
 }
 
+function shouldFilterCompetitionEntryByTeamFederation(
+  entry: Entry,
+  targetFederationSlug: Constants.FederationSlug,
+) {
+  return !(
+    entry.from === Constants.LeagueSlug.ESPORTS_MAJOR &&
+    entry.target === Constants.TierSlug.MAJOR_ASIA_RMR &&
+    targetFederationSlug === Constants.FederationSlug.ESPORTS_ASIA
+  );
+}
+
 async function getTeamsFromCompetitionEntry(
   entry: Entry,
   federation: Prisma.FederationGetPayload<unknown>,
@@ -2388,19 +2399,28 @@ async function getTeamsFromCompetitionEntry(
   }
 
   let competitors = competition.competitors;
-  const federationFilteredTeams = await DatabaseClient.prisma.team.findMany({
-    where: {
-      id: {
-        in: competitors.map((competitor) => competitor.teamId),
+  const shouldFilterByTeamFederation = shouldFilterCompetitionEntryByTeamFederation(
+    entry,
+    targetFederationSlug,
+  );
+
+  if (shouldFilterByTeamFederation || countryFilter) {
+    const federationFilteredTeams = await DatabaseClient.prisma.team.findMany({
+      where: {
+        id: {
+          in: competitors.map((competitor) => competitor.teamId),
+        },
+        ...(shouldFilterByTeamFederation
+          ? buildCompetitionFederationWhere(targetFederationSlug, countryFilter)
+          : { country: countryFilter ?? undefined }),
       },
-      ...buildCompetitionFederationWhere(targetFederationSlug, countryFilter),
-    },
-    select: {
-      id: true,
-    },
-  });
-  const federationIncludedIds = new Set(federationFilteredTeams.map((team) => team.id));
-  competitors = competitors.filter((competitor) => federationIncludedIds.has(competitor.teamId));
+      select: {
+        id: true,
+      },
+    });
+    const federationIncludedIds = new Set(federationFilteredTeams.map((team) => team.id));
+    competitors = competitors.filter((competitor) => federationIncludedIds.has(competitor.teamId));
+  }
 
   competitors = competitors.slice(
     entry.start < 0 ? entry.start : Math.max(0, entry.start - 1),
