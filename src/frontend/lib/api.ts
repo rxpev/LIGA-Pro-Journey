@@ -101,12 +101,14 @@ export default {
     buy: (id: number) => ipcRenderer.invoke(Constants.IPCRoute.BONUS_BUY, id) as Promise<unknown>,
   },
   calendar: {
+    confirmClose: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE),
     create: (data: Prisma.CalendarCreateInput) =>
       ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_CREATE, data) as Promise<Calendar>,
     find: (query: Prisma.CalendarFindFirstArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_FIND, query) as Promise<
         Prisma.CalendarGetPayload<unknown>
       >,
+    requestMainMenu: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_REQUEST_MAIN_MENU),
     sim: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_SIM),
     start: (max?: number) => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_START, max),
     stop: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_STOP),

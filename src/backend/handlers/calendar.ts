@@ -2,7 +2,7 @@
  * Calendar IPC handlers.
  */
 
-import { dialog, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay } from 'date-fns';
 import { Prisma, Calendar } from '@prisma/client';
 import { DatabaseClient, Engine, WindowManager, Worldgen } from '@liga/backend/lib';
@@ -11,16 +11,10 @@ import { Bot, Eagers, Constants, Util } from '@liga/shared';
 /**
  * Prevents the main window from closing immediately while the calendar advances.
  */
-async function disableClose(event: Electron.Event) {
+function disableClose(event: Electron.Event) {
   event.preventDefault();
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
-  const data = await dialog.showMessageBox(mainWindow, {
-    type: 'warning',
-    message: 'The calendar is still advancing. Exiting now may cause database corruption.',
-    detail: 'Are you sure you want to continue and risk potential data loss?',
-    buttons: ['Continue', 'Cancel'],
-  });
-  if (data.response === 0) mainWindow.destroy();
+  mainWindow.webContents.send(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE);
 }
 
 /**
@@ -556,6 +550,26 @@ export default function () {
     DatabaseClient.prisma.calendar.create({ data }),
   );
 
+  // IPC: confirm closing the main window while the calendar is advancing.
+  ipcMain.handle(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, () => {
+    WindowManager.get(Constants.WindowIdentifier.Landing);
+    WindowManager.get(Constants.WindowIdentifier.Main, false)?.destroy();
+  });
+
+  // IPC: return to the main menu unless the calendar is still advancing.
+  ipcMain.handle(Constants.IPCRoute.CALENDAR_REQUEST_MAIN_MENU, () => {
+    const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false);
+    if (!mainWindow) return;
+
+    if (mainWindow.listeners('close').includes(disableClose)) {
+      mainWindow.webContents.send(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE);
+      return;
+    }
+
+    WindowManager.get(Constants.WindowIdentifier.Landing);
+    mainWindow.close();
+  });
+
   // IPC: find calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_FIND, (_, query: Prisma.CalendarFindFirstArgs) =>
     DatabaseClient.prisma.calendar.findFirst(query),
@@ -563,48 +577,51 @@ export default function () {
 
   // IPC: start calendar simulation.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_START, async (_, max?: number) => {
-    const profile = await DatabaseClient.prisma.profile.findFirst();
-    const settings = Util.loadSettings(profile.settings);
-
-    await cleanupOrphanedFaceitReadyMatches(profile.id);
-
-    const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
-      where: {
-        profileId: profile.id,
-        matchType: 'FACEIT_PUG',
-        status: {
-          in: [Constants.MatchStatus.WAITING, Constants.MatchStatus.PLAYING],
-        },
-      },
-      select: { id: true },
-    });
-
-    if (activeFaceitMatch) {
-      throw new Error('CALENDAR_BLOCKED_FACEIT_MATCHROOM');
-    }
-
-    // First-run logic for competitions remains unchanged.
-    if (!(await DatabaseClient.prisma.competition.count())) {
-      Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');
-
-      return Engine.Runtime.Instance.start(1, true);
-    }
-
-    // Disable window actions during calendar advance.
-    WindowManager.get(Constants.WindowIdentifier.Main).on('close', disableClose);
+    const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
+    mainWindow.on('close', disableClose);
     WindowManager.disableMenu(Constants.WindowIdentifier.Main);
 
-    let days = max;
-    if (!max) {
-      const from = profile.date;
-      const to = add(from, { [settings.calendar.unit]: settings.calendar.maxIterations });
-      days = differenceInDays(to, from);
+    try {
+      const profile = await DatabaseClient.prisma.profile.findFirst();
+      const settings = Util.loadSettings(profile.settings);
+
+      await cleanupOrphanedFaceitReadyMatches(profile.id);
+
+      const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
+        where: {
+          profileId: profile.id,
+          matchType: 'FACEIT_PUG',
+          status: {
+            in: [Constants.MatchStatus.WAITING, Constants.MatchStatus.PLAYING],
+          },
+        },
+        select: { id: true },
+      });
+
+      if (activeFaceitMatch) {
+        throw new Error('CALENDAR_BLOCKED_FACEIT_MATCHROOM');
+      }
+
+      // First-run logic for competitions remains unchanged.
+      if (!(await DatabaseClient.prisma.competition.count())) {
+        Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');
+
+        await Engine.Runtime.Instance.start(1, true);
+        return Promise.resolve();
+      }
+
+      let days = max;
+      if (!max) {
+        const from = profile.date;
+        const to = add(from, { [settings.calendar.unit]: settings.calendar.maxIterations });
+        days = differenceInDays(to, from);
+      }
+
+      await Engine.Runtime.Instance.start(days);
+    } finally {
+      mainWindow.off('close', disableClose);
+      WindowManager.enableMenu(Constants.WindowIdentifier.Main);
     }
-
-    await Engine.Runtime.Instance.start(days);
-
-    WindowManager.get(Constants.WindowIdentifier.Main).off('close', disableClose);
-    WindowManager.enableMenu(Constants.WindowIdentifier.Main);
     return Promise.resolve();
   });
 

@@ -7,7 +7,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
 import { Toast, Toaster, toast } from 'react-hot-toast';
-import { FaBars, FaCaretDown, FaEnvelopeOpen, FaHome } from 'react-icons/fa';
+import { FaBars, FaCaretDown, FaEnvelopeOpen, FaExclamationTriangle, FaHome } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
@@ -70,6 +70,9 @@ const SETTINGS_VALIDATE_FREQUENCY = 5000;
 
 /** @constant */
 const MAIN_MENU_RELEASE_DELAY = 700;
+
+/** @constant */
+const CALENDAR_CLOSE_CLICK_DELAY = 700;
 
 /**
  * Configure routes.
@@ -200,9 +203,25 @@ function Root() {
   const navigate = useNavigate();
   const location = useLocation();
   const t = useTranslation('components');
+  const [calendarClosePromptVisible, setCalendarClosePromptVisible] = React.useState(false);
   const audioHover = useAudio('button-hover.wav');
   const audioClick = useAudio('button-click-inapp.wav');
   const audioRelease = useAudio('button-release.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
+
+  React.useEffect(() => {
+    const removeClosePromptListener = api.ipc.on(
+      Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE,
+      () => {
+        audioNegativeAlert();
+        setCalendarClosePromptVisible(true);
+      },
+    );
+
+    return () => {
+      removeClosePromptListener();
+    };
+  }, []);
 
   React.useEffect(() => {
     const interactiveSelector = [
@@ -497,9 +516,8 @@ function Root() {
                 <a
                   data-interaction-sound="back"
                   onClick={async () => {
-                    api.window.open(Constants.WindowIdentifier.Landing);
                     await Util.sleep(MAIN_MENU_RELEASE_DELAY);
-                    api.window.close(Constants.WindowIdentifier.Main);
+                    api.calendar.requestMainMenu();
                   }}
                 >
                   <FaHome />
@@ -512,6 +530,40 @@ function Root() {
       </header>
       <Outlet />
       <InAppModal />
+      {calendarClosePromptVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-[200] flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">The calendar is still advancing.</p>
+              </div>
+              <p>Returning to the main menu now may cause database corruption.</p>
+              <p>Are you sure you want to continue and risk potential data loss?</p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn"
+                onClick={() => setCalendarClosePromptVisible(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-error"
+                onClick={async () => {
+                  await Util.sleep(CALENDAR_CLOSE_CLICK_DELAY);
+                  api.calendar.confirmClose();
+                }}
+              >
+                Continue
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
     </React.StrictMode>
   );
 }

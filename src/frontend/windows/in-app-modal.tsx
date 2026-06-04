@@ -73,6 +73,7 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
   const audioClick = useAudio('button-click-inapp.wav');
   const audioRelease = useAudio('button-release.wav');
   const overflowClass = props.request.target === '/settings' ? 'overflow-hidden' : 'overflow-auto';
+  const hasHeader = props.request.target === '/postgame';
 
   React.useEffect(() => {
     const interactiveSelector = [
@@ -137,15 +138,33 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
   return (
     <dialog className="modal modal-open fixed inset-0 z-[100] h-screen w-screen">
       <section
-        className={`modal-box bg-base-100 relative h-[75vh] max-h-none w-1/2 max-w-none ${overflowClass} rounded-lg p-0 shadow-2xl`}
+        className={`modal-box bg-base-100 relative h-[75vh] max-h-none w-1/2 max-w-none ${
+          hasHeader ? 'flex flex-col overflow-hidden' : overflowClass
+        } rounded-lg p-0 shadow-2xl`}
       >
-        <FaArrowLeft
-          aria-label="Close"
-          data-interaction-sound="back"
-          className="absolute top-5 right-5 z-[110] size-5 cursor-pointer"
-          onClick={props.onClose}
-        />
-        <div className="h-full w-full [&>main]:!h-full [&>main]:!w-full">
+        {hasHeader ? (
+          <header className="border-base-content/10 bg-base-200 flex h-12 shrink-0 items-center justify-end border-b px-4">
+            <button
+              type="button"
+              aria-label="Back"
+              data-interaction-sound="back"
+              className="btn btn-ghost btn-sm"
+              onClick={props.onClose}
+            >
+              <FaArrowLeft className="size-5" />
+            </button>
+          </header>
+        ) : (
+          <FaArrowLeft
+            aria-label="Close"
+            data-interaction-sound="back"
+            className="absolute top-5 right-5 z-[110] size-5 cursor-pointer"
+            onClick={props.onClose}
+          />
+        )}
+        <div
+          className={`w-full ${hasHeader ? 'min-h-0 flex-1 overflow-auto' : 'h-full'} [&>main]:!h-full [&>main]:!w-full`}
+        >
           <MemoryRouter
             initialEntries={[{ pathname: props.request.target, state: props.request.payload }]}
           >
