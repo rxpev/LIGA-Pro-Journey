@@ -5,12 +5,16 @@
  */
 import React from 'react';
 import { upperFirst } from 'lodash';
-import { formatRelative } from 'date-fns';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import type { AppState } from '@liga/frontend/redux/state';
-import { useAudio, useTranslation } from '@liga/frontend/hooks';
+import {
+  formatAppRelativeDate,
+  getCalendarDateFormat,
+  useAudio,
+  useTranslation,
+} from '@liga/frontend/hooks';
 import { FaArrowLeft, FaTrash } from 'react-icons/fa';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import iglIcon from '@liga/frontend/assets/igl.png';
@@ -53,10 +57,12 @@ export default function () {
   const navigate = useNavigate();
   const { state } = React.useContext(AppStateContext);
   const t = useTranslation('windows');
+  const dateFormat = getCalendarDateFormat(state.profile?.settings);
 
   // load audio files
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   return (
     <main className="frosted center h-full w-3/5 overflow-y-auto p-5 xl:w-1/2">
@@ -91,7 +97,6 @@ export default function () {
             const team = save.team || save.player?.team;
             const teamBlazon = team?.blazon || NO_TEAM_ICON;
             const teamName = team?.name || 'No Team';
-
             return (
               <tr
                 key={profile.id}
@@ -124,11 +129,15 @@ export default function () {
                     <span className="truncate">{team?.name || 'No Team'}</span>
                   </div>
                 </td>
-                <td>{upperFirst(formatRelative(profile.updatedAt, new Date()))}</td>
+                <td>{upperFirst(formatAppRelativeDate(profile.updatedAt, dateFormat))}</td>
                 <td className="text-center" onClick={(event) => event.stopPropagation()}>
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => navigate('/load/delete/' + profile.id)}
+                    onMouseDown={(event) => {
+                      event.stopPropagation();
+                      audioNegativeAlert();
+                    }}
                   >
                     <FaTrash />
                   </button>

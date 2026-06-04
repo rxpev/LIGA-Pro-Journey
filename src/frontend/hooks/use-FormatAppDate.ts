@@ -1,5 +1,6 @@
 import React from 'react';
-import { format as dfFormat } from 'date-fns';
+import { format as dfFormat, formatRelative as dfFormatRelative } from 'date-fns';
+import { enUS } from 'date-fns/locale';
 import { Constants, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 
@@ -15,6 +16,49 @@ function toDate(value: Dateish) {
   if (d.getTime() === 0) return null;
 
   return d;
+}
+
+export function formatAppRelativeDate(
+  value: Dateish,
+  dateFormat: Constants.CalendarDateFormat,
+  baseDate = new Date(),
+  fallback = '-',
+) {
+  const d = toDate(value);
+  if (!d) return fallback;
+
+  const timeFormat = dateFormat === Constants.CalendarDateFormat.US ? 'h:mm a' : 'HH:mm';
+  const locale = {
+    ...enUS,
+    formatRelative: (token: string) => {
+      switch (token) {
+        case 'lastWeek':
+          return `'last' eeee 'at' ${timeFormat}`;
+        case 'yesterday':
+          return `'yesterday at' ${timeFormat}`;
+        case 'today':
+          return `'today at' ${timeFormat}`;
+        case 'tomorrow':
+          return `'tomorrow at' ${timeFormat}`;
+        case 'nextWeek':
+          return `eeee 'at' ${timeFormat}`;
+        default:
+          return dateFormat;
+      }
+    },
+  };
+
+  return dfFormatRelative(d, baseDate, { locale });
+}
+
+export function getCalendarDateFormat(settings?: string | null) {
+  if (!settings) return Constants.Settings.calendar.calendarDateFormat;
+
+  try {
+    return Util.loadSettings(settings).calendar.calendarDateFormat;
+  } catch {
+    return Constants.Settings.calendar.calendarDateFormat;
+  }
 }
 
 export function useDateFormat() {

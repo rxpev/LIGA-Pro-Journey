@@ -62,6 +62,7 @@ export default function () {
   const { state, dispatch } = React.useContext(AppStateContext);
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
   const [activeTab, setActiveTab] = React.useState(
     (location.state as { tab?: string } | null)?.tab === 'game-settings'
       ? Tab.GAME_SETTINGS
@@ -645,9 +646,11 @@ export default function () {
                 <button
                   type="button"
                   title="Delete Arena Mode"
+                  data-interaction-sound="none"
                   className="btn btn-error btn-sm join-item"
                   disabled={arenaModeBusy || !arenaModeStatus?.installed}
                   onClick={onArenaModeUninstall}
+                  onMouseDown={audioNegativeAlert}
                 >
                   <FaTrashAlt />
                 </button>

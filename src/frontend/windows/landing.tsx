@@ -132,10 +132,14 @@ function Root() {
     api.app.locale().then((locale) => dispatch(localeUpdate(locale)));
 
     // handle incoming profile updates
-    api.ipc.on(
+    const removeProfileListener = api.ipc.on(
       Constants.IPCRoute.PROFILES_CURRENT,
       (profile: Parameters<typeof profileUpdate>[0]) => dispatch(profileUpdate(profile)),
     );
+
+    return () => {
+      removeProfileListener();
+    };
   }, []);
 
   return (
