@@ -60,8 +60,8 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state, dispatch } = React.useContext(AppStateContext);
+  const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
-  const audioNegativeAlert = useAudio('negative-alert.wav');
   const [activeTab, setActiveTab] = React.useState(
     (location.state as { tab?: string } | null)?.tab === 'game-settings'
       ? Tab.GAME_SETTINGS
@@ -153,7 +153,7 @@ export default function () {
   };
 
   const onToggleSettingsUpdate = (path: string, checked: boolean) => {
-    (checked ? audioClick : audioNegativeAlert)();
+    (checked ? audioClick : audioRelease)();
     onSettingsUpdate(path, checked);
   };
 

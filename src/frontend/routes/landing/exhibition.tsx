@@ -402,7 +402,6 @@ export default function () {
   // load audio files
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
-  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   React.useEffect(() => {
     api.play.exhibitionFederations().then(setReplacementFederations);
@@ -484,7 +483,7 @@ export default function () {
   };
 
   const onToggleSettingsUpdate = (path: string, checked: boolean) => {
-    (checked ? audioClick : audioNegativeAlert)();
+    (checked ? audioClick : audioRelease)();
     onSettingsUpdate(path, checked);
   };
 
@@ -1133,7 +1132,7 @@ export default function () {
                   className="toggle"
                   checked={spectating}
                   onChange={(event) => {
-                    (event.target.checked ? audioClick : audioNegativeAlert)();
+                    (event.target.checked ? audioClick : audioRelease)();
                     onSpectatingToggle(event.target.checked);
                   }}
                 />
