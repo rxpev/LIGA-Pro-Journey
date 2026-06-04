@@ -405,7 +405,10 @@ export function isArenaMatch(
 ) {
   const tierSlug = match?.competition?.tier?.slug;
 
-  return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+  return Boolean(
+    tierSlug &&
+      (tierSlug === Constants.TierSlug.EXHIBITION_FRIENDLY || ARENA_MODE_TIER_SLUGS.has(tierSlug)),
+  );
 }
 
 export async function install(settings: typeof Constants.Settings) {

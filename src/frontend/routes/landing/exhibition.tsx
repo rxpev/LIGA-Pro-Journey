@@ -11,6 +11,7 @@ import { cx } from '@liga/frontend/lib';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
+import arenaModeIcon from '@liga/frontend/assets/arenamode.png';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
 import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
 import spectatingIcon from '@liga/frontend/assets/spectating.png';
@@ -394,14 +395,24 @@ export default function () {
   >({});
   const [isUserCT, setIsUserCT] = React.useState(false);
   const [spectating, setSpectating] = React.useState(false);
+  const [arenaModeStatus, setArenaModeStatus] = React.useState<Awaited<
+    ReturnType<typeof api.app.arenaModeStatus>
+  > | null>(null);
+  const [arenaModeInstallPromptVisible, setArenaModeInstallPromptVisible] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
+  const arenaModeInstalled = Boolean(
+    arenaModeStatus?.installed &&
+      arenaModeStatus.equalizerApoInstalled &&
+      arenaModeStatus.valhallaSupermassiveInstalled,
+  );
 
   // load audio files
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   React.useEffect(() => {
     api.play.exhibitionFederations().then(setReplacementFederations);
@@ -443,6 +454,10 @@ export default function () {
       modified.general.dedicatedServerPath = dedicatedServerPath || null;
 
       setSettings(modified);
+      api.app
+        .arenaModeStatus(modified)
+        .then(setArenaModeStatus)
+        .catch(() => setArenaModeStatus(null));
     });
 
     // fetch map pool
@@ -485,6 +500,16 @@ export default function () {
   const onToggleSettingsUpdate = (path: string, checked: boolean) => {
     (checked ? audioClick : audioRelease)();
     onSettingsUpdate(path, checked);
+  };
+
+  const onArenaModeToggle = (checked: boolean) => {
+    if (checked && !arenaModeInstalled) {
+      audioNegativeAlert();
+      setArenaModeInstallPromptVisible(true);
+      return;
+    }
+
+    onToggleSettingsUpdate('arenaMode.enabled', checked);
   };
 
   // validate settings
@@ -1110,6 +1135,37 @@ export default function () {
                 </aside>
               </article>
             ))}
+            <article className={cx(!arenaModeInstalled && 'opacity-50')}>
+              <header>
+                <p className="flex items-center gap-4 not-italic">
+                  <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                    <img
+                      alt=""
+                      className="h-14 w-14 object-contain"
+                      draggable={false}
+                      src={arenaModeIcon}
+                    />
+                  </span>
+                  <span>Arena Mode</span>
+                </p>
+                <p>Adds crowd noise and arena bass to your custom match.</p>
+                {!arenaModeInstalled && (
+                  <p className="text-error">
+                    Arena Mode isn't installed. Install it from Game Settings.
+                  </p>
+                )}
+              </header>
+              <aside>
+                <input
+                  type="checkbox"
+                  aria-disabled={!arenaModeInstalled}
+                  data-interaction-sound="none"
+                  className="toggle"
+                  checked={arenaModeInstalled && settings.arenaMode.enabled}
+                  onChange={(event) => onArenaModeToggle(event.target.checked)}
+                />
+              </aside>
+            </article>
             <article>
               <header>
                 <p className="flex items-center gap-4 not-italic">
@@ -1147,7 +1203,13 @@ export default function () {
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
             return api.play.exhibition(
-              settings,
+              {
+                ...settings,
+                arenaMode: {
+                  ...settings.arenaMode,
+                  enabled: arenaModeInstalled && settings.arenaMode.enabled,
+                },
+              },
               orderedTeamIds,
               homeTeamId,
               [
@@ -1286,6 +1348,25 @@ export default function () {
             </section>
           </section>
         </aside>
+      )}
+      {arenaModeInstallPromptVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <p className="text-lg font-bold">Arena Mode isn't installed</p>
+              <p>Install Arena Mode from the Game Settings tab before enabling it.</p>
+            </header>
+            <footer className="flex justify-end">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setArenaModeInstallPromptVisible(false)}
+              >
+                Okay
+              </button>
+            </footer>
+          </article>
+        </section>
       )}
       {!!rosterContextMenu && (
         <button

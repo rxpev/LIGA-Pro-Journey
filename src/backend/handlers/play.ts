@@ -271,7 +271,11 @@ export default function () {
 
         // start the server and play the match
         const gameServer = new Game.Server(profile, match, null, spectating);
-        await gameServer.start();
+        gameServer.onCleanup(() => ArenaMode.disable(settings));
+        gameServer.onClientConnected(async () => {
+          await ArenaMode.startCrowdLoop(settings);
+        });
+        await ArenaMode.runForMatch(settings, match, () => gameServer.start());
 
         const sideTeamIds = gameServer.getSideTeamIds();
         const [tScore, ctScore] = gameServer.result.score;
