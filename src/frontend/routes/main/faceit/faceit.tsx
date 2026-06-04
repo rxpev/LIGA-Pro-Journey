@@ -707,6 +707,7 @@ export default function Faceit(): JSX.Element {
               <h2 className="text-xl font-bold">Match #{viewMatchId}</h2>
 
               <button
+                data-interaction-sound="back"
                 className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600"
                 onClick={() => setViewMatchId(null)}
               >
@@ -2108,6 +2109,7 @@ function NormalFaceitBody({
                 </button>
                 {queueing && (
                   <button
+                    data-interaction-sound="back"
                     onClick={cancelQueue}
                     className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center
           rounded-full bg-red-600 hover:bg-red-700 text-white text-sm shadow-md"

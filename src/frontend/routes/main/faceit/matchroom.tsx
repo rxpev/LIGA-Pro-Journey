@@ -606,6 +606,7 @@ export default function MatchRoom({
           </h1>
 
           <button
+            data-interaction-sound="back"
             onClick={() => {
               if (state.faceitMatchCompleted) {
                 dispatch(faceitVetoClear());

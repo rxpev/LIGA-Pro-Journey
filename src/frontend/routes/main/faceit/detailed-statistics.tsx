@@ -361,6 +361,7 @@ export default function FaceitDetailedStatistics(): JSX.Element {
     <div className="flex h-full w-full flex-col bg-[#0b0b0b] text-white">
       <div className="flex w-full items-center justify-between border-b border-[#ff7300]/60 bg-[#0f0f0f] px-4 py-4 shadow-lg">
         <button
+          data-interaction-sound="back"
           onClick={() => navigate('/faceit')}
           className="rounded bg-neutral-700 px-3 py-1 text-sm font-semibold hover:bg-neutral-600"
         >
