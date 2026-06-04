@@ -491,7 +491,7 @@ export default function () {
             ))}
             <section className="mt-8 border-t border-base-content/10 pt-6">
               <header>
-                <p>Arena Mode</p>
+                <p>Arena Mode (BETA)</p>
                 <p>Recommended! Add reverb & crowd noise to your playoff matches for maximum immersion.</p>
               </header>
               <article>
