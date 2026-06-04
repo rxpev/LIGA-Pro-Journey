@@ -2298,17 +2298,6 @@ async function getRegionalLeaguePlacements(
   ];
 }
 
-function shouldFilterCompetitionEntryByTeamFederation(
-  entry: Entry,
-  targetFederationSlug: Constants.FederationSlug,
-) {
-  return !(
-    entry.from === Constants.LeagueSlug.ESPORTS_MAJOR &&
-    entry.target === Constants.TierSlug.MAJOR_ASIA_RMR &&
-    targetFederationSlug === Constants.FederationSlug.ESPORTS_ASIA
-  );
-}
-
 async function getTeamsFromCompetitionEntry(
   entry: Entry,
   federation: Prisma.FederationGetPayload<unknown>,
@@ -2399,18 +2388,16 @@ async function getTeamsFromCompetitionEntry(
   }
 
   let competitors = competition.competitors;
-  const shouldFilterByTeamFederation = shouldFilterCompetitionEntryByTeamFederation(
-    entry,
-    targetFederationSlug,
-  );
 
-  if (shouldFilterByTeamFederation || countryFilter) {
-    const federationFilteredTeams = await DatabaseClient.prisma.team.findMany({
+  // The selected regional competition is authoritative for federation eligibility.
+  // Only world competitions need teams split by their competition federation.
+  if (isWorldLeagueEntry || countryFilter) {
+    const eligibleTeams = await DatabaseClient.prisma.team.findMany({
       where: {
         id: {
           in: competitors.map((competitor) => competitor.teamId),
         },
-        ...(shouldFilterByTeamFederation
+        ...(isWorldLeagueEntry
           ? buildCompetitionFederationWhere(targetFederationSlug, countryFilter)
           : { country: countryFilter ?? undefined }),
       },
@@ -2418,8 +2405,8 @@ async function getTeamsFromCompetitionEntry(
         id: true,
       },
     });
-    const federationIncludedIds = new Set(federationFilteredTeams.map((team) => team.id));
-    competitors = competitors.filter((competitor) => federationIncludedIds.has(competitor.teamId));
+    const eligibleTeamIds = new Set(eligibleTeams.map((team) => team.id));
+    competitors = competitors.filter((competitor) => eligibleTeamIds.has(competitor.teamId));
   }
 
   competitors = competitors.slice(
