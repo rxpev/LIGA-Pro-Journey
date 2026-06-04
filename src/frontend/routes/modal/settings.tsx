@@ -9,7 +9,7 @@ import { cloneDeep, isNull, set } from 'lodash';
 import { Constants, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import {
   FaDownload,
   FaExclamationTriangle,
@@ -60,6 +60,8 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state, dispatch } = React.useContext(AppStateContext);
+  const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
   const [activeTab, setActiveTab] = React.useState(
     (location.state as { tab?: string } | null)?.tab === 'game-settings'
       ? Tab.GAME_SETTINGS
@@ -148,6 +150,11 @@ export default function () {
       where: { id: state.profile.id },
       data: { settings: json },
     });
+  };
+
+  const onToggleSettingsUpdate = (path: string, checked: boolean) => {
+    (checked ? audioClick : audioNegativeAlert)();
+    onSettingsUpdate(path, checked);
   };
 
   const onArenaModeInstall = async () => {
@@ -481,8 +488,11 @@ export default function () {
                 <article>
                   <input
                     type="checkbox"
+                    data-interaction-sound="none"
                     className="toggle"
-                    onChange={(event) => onSettingsUpdate(weapon.path, event.target.checked)}
+                    onChange={(event) =>
+                      onToggleSettingsUpdate(weapon.path, event.target.checked)
+                    }
                     checked={settings.gameSettings[weapon.setting]}
                     value={String(settings.gameSettings[weapon.setting])}
                   />
@@ -497,8 +507,11 @@ export default function () {
               <article>
                 <input
                   type="checkbox"
+                  data-interaction-sound="none"
                   className="toggle"
-                  onChange={(event) => onSettingsUpdate('arenaMode.enabled', event.target.checked)}
+                  onChange={(event) =>
+                    onToggleSettingsUpdate('arenaMode.enabled', event.target.checked)
+                  }
                   checked={settings.arenaMode.enabled}
                   value={String(settings.arenaMode.enabled)}
                 />

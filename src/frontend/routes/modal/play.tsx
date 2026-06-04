@@ -10,7 +10,7 @@ import { differenceBy, random, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
 
 /** @enum */
@@ -172,6 +172,8 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
+  const audioNegativeAlert = useAudio('negative-alert.wav');
+  const audioClick = useAudio('button-click-inapp.wav');
   const [activeTab, setActiveTab] = React.useState<Tab>(Tab.MAPS);
   const [match, setMatch] = React.useState<Matches[number]>();
   const [userSquad, setUserSquad] = React.useState<
@@ -183,6 +185,12 @@ export default function () {
   const [historicalMatches, setHistoricalMatches] = React.useState<Array<HistoricalMatch>>([]);
   const [historicalMatchesLoaded, setHistoricalMatchesLoaded] = React.useState(false);
   const [arenaModePromptVisible, setArenaModePromptVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    if (arenaModePromptVisible) {
+      audioNegativeAlert();
+    }
+  }, [arenaModePromptVisible]);
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -458,6 +466,7 @@ export default function () {
     }
 
     if (!isArenaModeMatch(match)) {
+      audioClick();
       startMatch();
       return;
     }
@@ -471,12 +480,13 @@ export default function () {
       arenaModeStatus.valhallaSupermassiveInstalled;
 
     if (arenaModeReady) {
+      audioClick();
       startMatch();
       return;
     }
 
     setArenaModePromptVisible(true);
-  }, [match, startMatch, state.profile.settings]);
+  }, [audioClick, match, startMatch, state.profile.settings]);
 
   React.useEffect(() => {
     const isCpuTurn = !!vetoSequenceStep && vetoSequenceStep.team === cpuIdx;
@@ -805,6 +815,7 @@ export default function () {
               </button>
               <button
                 type="button"
+                data-interaction-sound="back"
                 className="btn btn-primary"
                 onClick={async () => {
                   await savePregameState();
@@ -821,6 +832,7 @@ export default function () {
       )}
 
       <button
+        data-interaction-sound="none"
         className="btn btn-xl btn-block btn-secondary rounded-none active:translate-0!"
         disabled={!vetoSequenceComplete}
         onClick={onPlay}

@@ -388,6 +388,20 @@ export function get(id: string, doCreate = true) {
 }
 
 /**
+ * Gets the active fullscreen application window.
+ *
+ * @function
+ */
+export function getAppWindow() {
+  const appWindows = [
+    get(Constants.WindowIdentifier.Main, false),
+    get(Constants.WindowIdentifier.Landing, false),
+  ].filter((window): window is Electron.BrowserWindow => !!window && !window.isDestroyed());
+
+  return appWindows.find((window) => window.isFocused()) || appWindows[0] || null;
+}
+
+/**
  * Sends the content to the specified window.
  *
  * Waits a few seconds before sending the data to account
@@ -400,6 +414,19 @@ export function get(id: string, doCreate = true) {
  * @function
  */
 export function send(id: Constants.WindowIdentifier, data: unknown, delay = 500) {
+  if (id === Constants.WindowIdentifier.Modal) {
+    const host = getAppWindow();
+
+    if (host) {
+      const payload =
+        typeof data === 'object' && data !== null ? { ...data, inAppModal: true } : data;
+
+      return Util.sleep(delay || 0).then(() =>
+        host.webContents.send(Constants.IPCRoute.WINDOW_SEND, payload),
+      );
+    }
+  }
+
   const win = get(id);
 
   // if there's a delay we wait for

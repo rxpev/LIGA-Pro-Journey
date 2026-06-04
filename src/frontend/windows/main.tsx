@@ -11,7 +11,7 @@ import { FaBars, FaCaretDown, FaEnvelopeOpen, FaHome } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
-import { useTheme, useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTheme, useTranslation } from '@liga/frontend/hooks';
 import { Confetti, Image } from '@liga/frontend/components';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import riflerIcon from '@liga/frontend/assets/rifler.png';
@@ -35,6 +35,7 @@ import {
   PathMatch,
   Link,
 } from 'react-router-dom';
+import InAppModal from './in-app-modal';
 import '@liga/frontend/assets/styles.css';
 
 
@@ -66,6 +67,9 @@ const ROLE_BADGE_CLASSES: Record<string, string> = {
 
 /** @constant */
 const SETTINGS_VALIDATE_FREQUENCY = 5000;
+
+/** @constant */
+const MAIN_MENU_RELEASE_DELAY = 700;
 
 /**
  * Configure routes.
@@ -196,11 +200,59 @@ function Root() {
   const navigate = useNavigate();
   const location = useLocation();
   const t = useTranslation('components');
+  const audioHover = useAudio('button-hover.wav');
+  const audioClick = useAudio('button-click-inapp.wav');
+  const audioRelease = useAudio('button-release.wav');
 
   React.useEffect(() => {
+    const interactiveSelector = [
+      'button',
+      'a',
+      '[role="button"]',
+      'input[type="button"]',
+      'input[type="submit"]',
+      'input[type="checkbox"]',
+      'input[type="radio"]',
+      'select',
+      '.cursor-pointer',
+    ].join(',');
+    const getInteractiveElement = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>(interactiveSelector) : null;
+    const canPlayInteractionSound = (element: HTMLElement | null) =>
+      !!element &&
+      !element.closest('#in-app-modal') &&
+      element.dataset.interactionSound !== 'none' &&
+      !element.matches(':disabled, [aria-disabled="true"], .menu-disabled');
+    const onInteractionHover = (event: MouseEvent) => {
+      const element = getInteractiveElement(event.target);
+
+      if (
+        !canPlayInteractionSound(element) ||
+        (event.relatedTarget instanceof Node && element.contains(event.relatedTarget))
+      ) {
+        return;
+      }
+
+      audioHover();
+    };
+    const onInteractionDown = (event: MouseEvent) => {
+      const element = getInteractiveElement(event.target);
+
+      if (event.button !== 0 || !canPlayInteractionSound(element)) {
+        return;
+      }
+
+      if (element.dataset.interactionSound === 'back') {
+        audioRelease();
+        return;
+      }
+
+      audioClick();
+    };
     const onMouseNavigate = (event: MouseEvent) => {
       if (event.button === 3) {
         event.preventDefault();
+        audioRelease();
         navigate(-1);
       } else if (event.button === 4) {
         event.preventDefault();
@@ -208,6 +260,8 @@ function Root() {
       }
     };
 
+    document.addEventListener('mouseover', onInteractionHover);
+    document.addEventListener('mousedown', onInteractionDown);
     window.addEventListener('mousedown', onMouseNavigate);
 
     // what's new modal check
@@ -250,12 +304,12 @@ function Root() {
     // handle play events / external navigation requests
     api.ipc.on(
       Constants.IPCRoute.WINDOW_SEND,
-      (payload: number | { target?: string }) => {
+      (payload: number | { target?: string; inAppModal?: boolean }) => {
         if (typeof payload === 'number') {
           return dispatch(play(payload));
         }
 
-        if (payload?.target) {
+        if (payload?.target && !payload.inAppModal) {
           navigate(payload.target);
         }
       },
@@ -267,6 +321,8 @@ function Root() {
       SETTINGS_VALIDATE_FREQUENCY,
     );
     return () => {
+      document.removeEventListener('mouseover', onInteractionHover);
+      document.removeEventListener('mousedown', onInteractionDown);
       window.removeEventListener('mousedown', onMouseNavigate);
       clearInterval(heartbeat);
     };
@@ -439,8 +495,10 @@ function Root() {
               <div className="divider mt-2 mb-0 before:h-px after:h-px" />
               <li>
                 <a
-                  onClick={() => {
+                  data-interaction-sound="back"
+                  onClick={async () => {
                     api.window.open(Constants.WindowIdentifier.Landing);
+                    await Util.sleep(MAIN_MENU_RELEASE_DELAY);
                     api.window.close(Constants.WindowIdentifier.Main);
                   }}
                 >
@@ -453,6 +511,7 @@ function Root() {
         </section>
       </header>
       <Outlet />
+      <InAppModal />
     </React.StrictMode>
   );
 }

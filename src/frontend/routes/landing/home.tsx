@@ -32,6 +32,8 @@ const ROLE_BADGE_STYLES: Record<string, string> = {
 
 const NO_TEAM_ICON = 'resources://blazonry/noteam.svg';
 
+const QUIT_ALERT_DELAY = 700;
+
 type ContinueProfile = AppState['profiles'][number] & {
   player?: {
     role?: string | null;
@@ -67,6 +69,8 @@ export default function () {
   // load audio files
   const audioHover = useAudio('button-hover.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioRelease = useAudio('button-release.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   // build the action menu
   const actions = [
@@ -95,7 +99,11 @@ export default function () {
     },
     {
       label: t('shared.quit'),
-      onClick: () => setQuitPromptVisible(true),
+      onClick: () => {
+        audioNegativeAlert();
+        setQuitPromptVisible(true);
+      },
+      noClickSound: true,
     },
     {
       type: 'divider',
@@ -164,7 +172,7 @@ export default function () {
                   onClick={item.onClick ? item.onClick : () => navigate(item.path)}
                   className="btn btn-ghost btn-md btn-block"
                   onMouseEnter={audioHover}
-                  onMouseDown={audioClick}
+                  onMouseDown={item.noClickSound ? undefined : audioClick}
                 >
                   {item.label}
                 </button>
@@ -190,10 +198,23 @@ export default function () {
                 </div>
               </header>
               <footer className="flex justify-end gap-2">
-                <button type="button" className="btn" onClick={() => setQuitPromptVisible(false)}>
+                <button
+                  type="button"
+                  className="btn"
+                  onMouseDown={audioRelease}
+                  onClick={() => setQuitPromptVisible(false)}
+                >
                   Cancel
                 </button>
-                <button type="button" className="btn btn-error" onClick={() => api.app.quit()}>
+                <button
+                  type="button"
+                  className="btn btn-error"
+                  onClick={async () => {
+                    audioNegativeAlert();
+                    await Util.sleep(QUIT_ALERT_DELAY);
+                    api.app.quit();
+                  }}
+                >
                   Quit
                 </button>
               </footer>

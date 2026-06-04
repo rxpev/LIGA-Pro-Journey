@@ -402,6 +402,7 @@ export default function () {
   // load audio files
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   React.useEffect(() => {
     api.play.exhibitionFederations().then(setReplacementFederations);
@@ -480,6 +481,11 @@ export default function () {
       })
       .then(setMapPool)
       .catch((): void => undefined);
+  };
+
+  const onToggleSettingsUpdate = (path: string, checked: boolean) => {
+    (checked ? audioClick : audioNegativeAlert)();
+    onSettingsUpdate(path, checked);
   };
 
   // validate settings
@@ -1095,9 +1101,12 @@ export default function () {
                 <aside>
                   <input
                     type="checkbox"
+                    data-interaction-sound="none"
                     className="toggle"
                     checked={settings.gameSettings[weapon.setting]}
-                    onChange={(event) => onSettingsUpdate(weapon.path, event.target.checked)}
+                    onChange={(event) =>
+                      onToggleSettingsUpdate(weapon.path, event.target.checked)
+                    }
                   />
                 </aside>
               </article>
@@ -1120,9 +1129,13 @@ export default function () {
               <aside>
                 <input
                   type="checkbox"
+                  data-interaction-sound="none"
                   className="toggle"
                   checked={spectating}
-                  onChange={(event) => onSpectatingToggle(event.target.checked)}
+                  onChange={(event) => {
+                    (event.target.checked ? audioClick : audioNegativeAlert)();
+                    onSpectatingToggle(event.target.checked);
+                  }}
                 />
               </aside>
             </article>

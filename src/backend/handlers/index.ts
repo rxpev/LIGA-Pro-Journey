@@ -80,12 +80,22 @@ export function IPCGenericHandler() {
   ipcMain.handle(
     Constants.IPCRoute.APP_DIALOG,
     (_, parentId: string, options: Electron.OpenDialogOptions) =>
-      dialog.showOpenDialog(WindowManager.get(parentId), options),
+      dialog.showOpenDialog(
+        parentId === Constants.WindowIdentifier.Modal
+          ? WindowManager.getAppWindow()
+          : WindowManager.get(parentId),
+        options,
+      ),
   );
   ipcMain.handle(
     Constants.IPCRoute.APP_MESSAGE_BOX,
     (_, parentId: string, options: Electron.MessageBoxOptions) =>
-      dialog.showMessageBox(WindowManager.get(parentId), options),
+      dialog.showMessageBox(
+        parentId === Constants.WindowIdentifier.Modal
+          ? WindowManager.getAppWindow()
+          : WindowManager.get(parentId),
+        options,
+      ),
   );
   ipcMain.handle(Constants.IPCRoute.APP_EXTERNAL, (_, url: string) => shell.openExternal(url));
   ipcMain.handle(Constants.IPCRoute.APP_INFO, () => Promise.resolve(getApplicationInfo()));

@@ -299,7 +299,11 @@ export default {
   ipc: {
     invoke: (route: string, payload: unknown) =>
       ipcRenderer.invoke(route, payload) as Promise<unknown>,
-    on: (route: string, cb: IPCRendererCallback) => ipcRenderer.on(route, (_, args) => cb(args)),
+    on: (route: string, cb: IPCRendererCallback) => {
+      const listener = (_: Electron.IpcRendererEvent, args: unknown) => cb(args);
+      ipcRenderer.on(route, listener);
+      return () => ipcRenderer.removeListener(route, listener);
+    },
   },
   issues: {
     all: () =>

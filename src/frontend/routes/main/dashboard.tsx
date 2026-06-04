@@ -10,7 +10,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play } from '@liga/frontend/redux/actions';
-import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
 import {
   FaCalendarDay,
@@ -112,6 +112,8 @@ export default function () {
   const t = useTranslation('windows');
   const fmtShortDate = useFormatAppShortDate();
   const { state, dispatch } = React.useContext(AppStateContext);
+  const audioNegativeAlert = useAudio('negative-alert.wav');
+  const audioClick = useAudio('button-click-inapp.wav');
   const isIgl = React.useMemo(
     () => state.profile?.player?.role === Constants.UserRole.IGL,
     [state.profile],
@@ -163,6 +165,7 @@ export default function () {
       }
 
       if (!isArenaModeMatch(match)) {
+        audioClick();
         dispatch(play(match.id));
         return;
       }
@@ -175,13 +178,14 @@ export default function () {
         arenaModeStatus?.valhallaSupermassiveInstalled;
 
       if (arenaModeReady) {
+        audioClick();
         dispatch(play(match.id));
         return;
       }
 
       setArenaModePromptMatchId(match.id);
     },
-    [dispatch, isArenaModeMatch, settings],
+    [audioClick, dispatch, isArenaModeMatch, settings],
   );
 
   // load settings
@@ -197,6 +201,12 @@ export default function () {
   React.useEffect(() => {
     setDismissedNoTeamAdvanceWarning(false);
   }, [state.profile?.id]);
+
+  React.useEffect(() => {
+    if (noTeamAdvanceWarningVisible || arenaModePromptMatchId) {
+      audioNegativeAlert();
+    }
+  }, [noTeamAdvanceWarningVisible, arenaModePromptMatchId]);
 
   // fetch upcoming list of matches
   React.useEffect(() => {
@@ -551,6 +561,7 @@ export default function () {
             {!state.working && (
               <button
                 title={t('main.dashboard.advanceCalendar')}
+                data-interaction-sound="none"
                 className="day day-btn border-t-0"
                 disabled={
                   !state.profile ||
@@ -573,11 +584,13 @@ export default function () {
                   }
 
                   if (isMatchday && isBenched) {
+                    audioClick();
                     api.calendar.sim().then(() => dispatch(calendarAdvance(1)));
                     return;
                   }
 
                   if (!isMatchday) {
+                    audioClick();
                     dispatch(calendarAdvance());
                   }
                 }}
@@ -852,6 +865,7 @@ export default function () {
                           <FaCog />
                         </button>
                         <button
+                          data-interaction-sound="none"
                           className="btn btn-primary join-item btn-wide"
                           disabled={disabled}
                           onClick={() => {
@@ -869,6 +883,7 @@ export default function () {
                               return dispatchPlayWithArenaModeGuard(spotlight);
                             }
 
+                            audioClick();
                             api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                               target:
                                 spotlight.status === Constants.MatchStatus.PLAYING
@@ -1102,6 +1117,7 @@ export default function () {
             <footer className="flex justify-end gap-2">
               <button
                 type="button"
+                data-interaction-sound="back"
                 className="btn btn-primary"
                 onClick={() => {
                   setDismissedNoTeamAdvanceWarning(true);
@@ -1139,6 +1155,7 @@ export default function () {
               </button>
               <button
                 type="button"
+                data-interaction-sound="back"
                 className="btn btn-primary"
                 onClick={() => {
                   setArenaModePromptMatchId(null);

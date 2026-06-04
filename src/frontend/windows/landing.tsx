@@ -19,6 +19,7 @@ import {
   profileUpdate,
 } from '@liga/frontend/redux/actions';
 import { VideoBackground } from '@liga/frontend/components';
+import InAppModal from './in-app-modal';
 import '@liga/frontend/assets/styles.css';
 
 const LANDING_ROUTE_STORAGE_KEY = 'landingRoute';
@@ -146,6 +147,7 @@ function Root() {
       <div className="relative z-10 h-screen">
         <Outlet />
       </div>
+      <InAppModal />
     </React.Fragment>
   );
 }
