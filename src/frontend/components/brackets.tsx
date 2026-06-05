@@ -51,6 +51,10 @@ function parseMatchId(match: Pick<BracketDisplayMatch, 'payload'>) {
   return JSON.parse(match.payload) as BracketMatchId;
 }
 
+function matchHasTeam(match: BracketDisplayMatch, teamId?: number) {
+  return teamId != null && match.competitors.some((competitor) => competitor.team.id === teamId);
+}
+
 function getIemGroupSlotIds() {
   return [
     ...[1, 2, 3, 4].map((match) => ({
@@ -133,14 +137,22 @@ function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
 }
 
 function BracketCard(props: {
+  highlightedTeamId?: number;
   match: BracketDisplayMatch;
   fmtDate: (value: Date | number | string) => string;
   onPartyClick?: Props['onPartyClick'];
+  onTeamHover: (teamId?: number) => void;
 }) {
   const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
+  const isMatchHighlighted = matchHasTeam(props.match, props.highlightedTeamId);
 
   return (
-    <article className="border-base-content/15 bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm">
+    <article
+      className={cx(
+        'bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm transition-colors duration-150',
+        isMatchHighlighted ? 'border-info/70 shadow-info/20' : 'border-base-content/15',
+      )}
+    >
       <header className="text-info/70 bg-base-100 border-base-content/10 border-b px-3 py-1 font-semibold">
         {props.match.isPlaceholder ? 'TBD' : props.fmtDate(props.match.date)}
       </header>
@@ -159,15 +171,20 @@ function BracketCard(props: {
       {competitors.map((competitor) => {
         const won = competitor.result === Constants.MatchResult.WIN;
         const lost = competitor.result === Constants.MatchResult.LOSS;
+        const isHighlighted = competitor.team.id === props.highlightedTeamId;
 
         return (
           <button
             key={competitor.id}
             type="button"
             className={cx(
-              'hover:bg-base-300 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left',
-              won ? 'bg-base-200 text-base-content' : 'bg-base-100/65',
-              lost && 'text-base-content/50',
+              'hover:bg-base-300 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left transition-colors duration-150',
+              isHighlighted
+                ? 'bg-info/15 text-base-content'
+                : won
+                  ? 'bg-base-200 text-base-content'
+                  : 'bg-base-100/65',
+              lost && !isHighlighted && 'text-base-content/50',
             )}
             onClick={() =>
               props.onPartyClick?.(
@@ -179,6 +196,8 @@ function BracketCard(props: {
                 won,
               )
             }
+            onMouseEnter={() => props.onTeamHover(competitor.team.id)}
+            onMouseLeave={() => props.onTeamHover(undefined)}
           >
             <span className="flex min-w-0 items-center gap-1.5">
               {competitor.team.blazon && (
@@ -193,7 +212,13 @@ function BracketCard(props: {
             <span
               className={cx(
                 'bg-base-300 flex h-full w-12 shrink-0 items-center justify-center tabular-nums',
-                won ? 'text-success' : lost ? 'text-error' : 'text-base-content',
+                isHighlighted
+                  ? 'text-info'
+                  : won
+                    ? 'text-success'
+                    : lost
+                      ? 'text-error'
+                      : 'text-base-content',
               )}
             >
               {competitor.score ?? '-'}
@@ -213,6 +238,7 @@ function ManualBracket(props: {
   const fmtDate = useFormatAppDate();
   const [zoom, setZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
+  const [highlightedTeamId, setHighlightedTeamId] = React.useState<number>();
   const [dragStart, setDragStart] = React.useState<{
     mouseX: number;
     mouseY: number;
@@ -257,6 +283,10 @@ function ManualBracket(props: {
     [dragStart],
   );
   const stopDragging = React.useCallback(() => setDragStart(undefined), []);
+  const handleMouseLeave = React.useCallback(() => {
+    setHighlightedTeamId(undefined);
+    stopDragging();
+  }, [stopDragging]);
   const layout = React.useMemo(() => {
     const sections = props.matches.reduce(
       (acc, match) => {
@@ -429,7 +459,14 @@ function ManualBracket(props: {
       const endY = to.y + MATCH_HEIGHT / 2;
       const midX = startX + (endX - startX) / 2;
 
-      return [`M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`];
+      return [
+        {
+          highlighted:
+            matchHasTeam(from.match, highlightedTeamId) &&
+            matchHasTeam(to.match, highlightedTeamId),
+          path: `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`,
+        },
+      ];
     }),
   );
 
@@ -498,7 +535,7 @@ function ManualBracket(props: {
         dragStart ? 'cursor-grabbing' : 'cursor-grab',
       )}
       onMouseDown={handleMouseDown}
-      onMouseLeave={stopDragging}
+      onMouseLeave={handleMouseLeave}
       onMouseMove={handleMouseMove}
       onMouseUp={stopDragging}
       onWheel={handleWheel}
@@ -515,13 +552,13 @@ function ManualBracket(props: {
           }}
         >
           <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
-            {connectors.map((path, index) => (
+            {connectors.map(({ highlighted, path }, index) => (
               <path
                 key={`${path}-${index}`}
                 d={path}
                 fill="none"
-                stroke="rgba(148, 163, 184, 0.24)"
-                strokeWidth={1}
+                stroke={highlighted ? 'var(--color-info)' : 'rgba(148, 163, 184, 0.24)'}
+                strokeWidth={highlighted ? 2 : 1}
                 shapeRendering="crispEdges"
               />
             ))}
@@ -553,9 +590,11 @@ function ManualBracket(props: {
                 hidden ? null : (
                   <div key={match.id} className="absolute" style={{ left: x, top: y }}>
                     <BracketCard
+                      highlightedTeamId={highlightedTeamId}
                       match={match}
                       fmtDate={fmtDate}
                       onPartyClick={props.onPartyClick}
+                      onTeamHover={setHighlightedTeamId}
                     />
                   </div>
                 ),
