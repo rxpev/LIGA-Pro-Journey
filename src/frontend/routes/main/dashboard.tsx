@@ -12,6 +12,7 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play } from '@liga/frontend/redux/actions';
 import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
+import { getTeamsRoundLabel, getTeamsTierLabel } from './teams/labels';
 import {
   FaCalendarDay,
   FaChartBar,
@@ -138,10 +139,23 @@ export default function () {
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
   const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
 
-  const toDashboardTeamTierLabel = (tierSlug: Constants.TierSlug | string): string =>
-    tierSlug === Constants.TierSlug.LEAGUE_PRO
-      ? 'ESL Pro League'
-      : Constants.IdiomaticTier[tierSlug];
+  const toDashboardTeamTierLabel = (
+    tierSlug: Constants.TierSlug | string,
+    leagueName?: string | null,
+  ): string => getTeamsTierLabel(tierSlug, leagueName ?? undefined);
+
+  const toDashboardMatchCompetitionLabel = (match: (typeof upcoming)[number]): string => {
+    const tier = match.competition.tier;
+    const tierLabel = toDashboardTeamTierLabel(tier.slug, tier.league.name);
+    const suffix = tier.groupSize === null ? ` ${getTeamsRoundLabel(match)}` : '';
+
+    return `${tierLabel}${suffix}`;
+  };
+
+  const toDashboardRoundLabel = (match: (typeof upcoming)[number]): string =>
+    match.competition.tier.groupSize
+      ? `${t('shared.matchday')} ${match.round}`
+      : getTeamsRoundLabel(match);
 
   const openPlayerTransferModal = React.useCallback((playerId: number) => {
     api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
@@ -150,13 +164,10 @@ export default function () {
     });
   }, []);
 
-  const isArenaModeMatch = React.useCallback(
-    (match?: (typeof upcoming)[number]) => {
-      const tierSlug = match?.competition?.tier?.slug;
-      return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
-    },
-    [],
-  );
+  const isArenaModeMatch = React.useCallback((match?: (typeof upcoming)[number]) => {
+    const tierSlug = match?.competition?.tier?.slug;
+    return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+  }, []);
 
   const dispatchPlayWithArenaModeGuard = React.useCallback(
     async (match: (typeof upcoming)[number] | undefined) => {
@@ -372,12 +383,9 @@ export default function () {
                       </td>
                       <td
                         className="w-2/5 truncate"
-                        title={Util.getCompetitionDisplayName(
-                          match.competition.tier.league.name,
-                          match.competition.tier.slug,
-                        )}
+                        title={toDashboardMatchCompetitionLabel(match)}
                       >
-                        {toDashboardTeamTierLabel(match.competition.tier.slug)}
+                        {toDashboardMatchCompetitionLabel(match)}
                       </td>
                     </tr>
                   );
@@ -432,7 +440,12 @@ export default function () {
                         />
                         <header>
                           <h3>{spotlight.competition.tier.league.name}</h3>
-                          <h4>{Constants.IdiomaticTier[spotlight.competition.tier.slug]}</h4>
+                          <h4>
+                            {toDashboardTeamTierLabel(
+                              spotlight.competition.tier.slug,
+                              spotlight.competition.tier.league.name,
+                            )}
+                          </h4>
                           <h5>
                             {t('shared.matchday')} {spotlight.round}
                           </h5>
@@ -492,16 +505,13 @@ export default function () {
                       />
                       <header>
                         <h3>{spotlight.competition.tier.league.name}</h3>
-                        <h4>{Constants.IdiomaticTier[spotlight.competition.tier.slug]}</h4>
-                        <h5>
-                          {spotlight.competition.tier.groupSize
-                            ? `${t('shared.matchday')} ${spotlight.round}`
-                            : Constants.TierSwissConfig[
-                                  spotlight.competition.tier.slug as Constants.TierSlug
-                                ]
-                              ? Util.parseSwissRound(spotlight.round)
-                              : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
-                        </h5>
+                        <h4>
+                          {toDashboardTeamTierLabel(
+                            spotlight.competition.tier.slug,
+                            spotlight.competition.tier.league.name,
+                          )}
+                        </h4>
+                        <h5>{toDashboardRoundLabel(spotlight)}</h5>
                       </header>
                     </aside>
                     <aside className="grid grid-cols-2 place-items-center">
@@ -817,15 +827,7 @@ export default function () {
                             </li>
                             <li className="stack-x items-center">
                               <FaCalendarDay />
-                              <span>
-                                {spotlight.competition.tier.groupSize
-                                  ? `${t('shared.matchday')} ${spotlight.round}`
-                                  : Constants.TierSwissConfig[
-                                        spotlight.competition.tier.slug as Constants.TierSlug
-                                      ]
-                                    ? Util.parseSwissRound(spotlight.round)
-                                    : Util.parseCupRounds(spotlight.round, spotlight.totalRounds)}
-                              </span>
+                              <span>{toDashboardRoundLabel(spotlight)}</span>
                             </li>
                             <li className="stack-x items-center">
                               <FaStream />
@@ -1065,12 +1067,9 @@ export default function () {
                                 </td>
                                 <td
                                   className="w-3/12 truncate"
-                                  title={Util.getCompetitionDisplayName(
-                                    match.competition.tier.league.name,
-                                    match.competition.tier.slug,
-                                  )}
+                                  title={toDashboardMatchCompetitionLabel(match)}
                                 >
-                                  {toDashboardTeamTierLabel(match.competition.tier.slug)}
+                                  {toDashboardMatchCompetitionLabel(match)}
                                 </td>
                               </tr>
                             );

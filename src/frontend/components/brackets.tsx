@@ -32,21 +32,60 @@ const SECTION_GAP = 52;
  * @function
  */
 type BracketMatchId = { s: number; r: number; m: number };
+type BracketDisplayMatch = Props['matches'][number] & { isPlaceholder?: boolean };
 type BracketSection = {
   height: number;
-  nodes: Array<{ hidden: boolean; match: Props['matches'][number]; x: number; y: number }>;
-  positions: Map<
-    string,
-    { hidden: boolean; match: Props['matches'][number]; x: number; y: number }
-  >;
+  nodes: Array<{ hidden: boolean; match: BracketDisplayMatch; x: number; y: number }>;
+  positions: Map<string, { hidden: boolean; match: BracketDisplayMatch; x: number; y: number }>;
   roundNumbers: number[];
   title: string;
   top: number;
   width: number;
 };
 
-function makeMatchKey(matchId: BracketMatchId) {
-  return JSON.stringify(matchId);
+function getMatchKey(matchId: BracketMatchId) {
+  return `${matchId.s}:${matchId.r}:${matchId.m}`;
+}
+
+function parseMatchId(match: Pick<BracketDisplayMatch, 'payload'>) {
+  return JSON.parse(match.payload) as BracketMatchId;
+}
+
+function getIemGroupSlotIds() {
+  return [
+    ...[1, 2, 3, 4].map((match) => ({
+      s: Constants.BracketIdentifier.UPPER,
+      r: 1,
+      m: match,
+    })),
+    ...[1, 2].map((match) => ({
+      s: Constants.BracketIdentifier.UPPER,
+      r: 2,
+      m: match,
+    })),
+    { s: Constants.BracketIdentifier.UPPER, r: 3, m: 1 },
+    ...[1, 2].map((match) => ({
+      s: Constants.BracketIdentifier.LOWER,
+      r: 1,
+      m: match,
+    })),
+    ...[1, 2].map((match) => ({
+      s: Constants.BracketIdentifier.LOWER,
+      r: 2,
+      m: match,
+    })),
+    { s: Constants.BracketIdentifier.LOWER, r: 3, m: 1 },
+  ];
+}
+
+function createPlaceholderMatch(matchId: BracketMatchId): BracketDisplayMatch {
+  return {
+    id: -Number(`${matchId.s}${matchId.r}${matchId.m}`),
+    payload: JSON.stringify(matchId),
+    date: new Date(0),
+    competitors: [],
+    isPlaceholder: true,
+  } as unknown as BracketDisplayMatch;
 }
 
 function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
@@ -94,7 +133,7 @@ function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
 }
 
 function BracketCard(props: {
-  match: Props['matches'][number];
+  match: BracketDisplayMatch;
   fmtDate: (value: Date | number | string) => string;
   onPartyClick?: Props['onPartyClick'];
 }) {
@@ -103,8 +142,20 @@ function BracketCard(props: {
   return (
     <article className="border-base-content/15 bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm">
       <header className="text-info/70 bg-base-100 border-base-content/10 border-b px-3 py-1 font-semibold">
-        {props.fmtDate(props.match.date)}
+        {props.match.isPlaceholder ? 'TBD' : props.fmtDate(props.match.date)}
       </header>
+      {props.match.isPlaceholder &&
+        [0, 1].map((idx) => (
+          <div
+            key={`${props.match.payload}-${idx}`}
+            className="text-base-content/35 bg-base-100/65 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left"
+          >
+            <span>TBD</span>
+            <span className="bg-base-300 flex h-full w-12 shrink-0 items-center justify-center">
+              -
+            </span>
+          </div>
+        ))}
       {competitors.map((competitor) => {
         const won = competitor.result === Constants.MatchResult.WIN;
         const lost = competitor.result === Constants.MatchResult.LOSS;
@@ -209,7 +260,7 @@ function ManualBracket(props: {
   const layout = React.useMemo(() => {
     const sections = props.matches.reduce(
       (acc, match) => {
-        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const matchId = parseMatchId(match);
         const section = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
         acc[section][matchId.r] ||= [];
         acc[section][matchId.r].push(match);
@@ -218,11 +269,27 @@ function ManualBracket(props: {
       { lower: {}, upper: {} } as Record<'lower' | 'upper', Record<number, Props['matches']>>,
     );
 
+    if (props.tourney.iemGroup) {
+      const existingKeys = new Set(props.matches.map((match) => getMatchKey(parseMatchId(match))));
+
+      getIemGroupSlotIds().forEach((matchId) => {
+        const key = getMatchKey(matchId);
+
+        if (existingKeys.has(key)) {
+          return;
+        }
+
+        const section = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
+        sections[section][matchId.r] ||= [];
+        sections[section][matchId.r].push(createPlaceholderMatch(matchId));
+      });
+    }
+
     Object.values(sections).forEach((rounds) => {
       Object.values(rounds).forEach((round) =>
         round.sort((a, b) => {
-          const aId = JSON.parse(a.payload) as BracketMatchId;
-          const bId = JSON.parse(b.payload) as BracketMatchId;
+          const aId = parseMatchId(a);
+          const bId = parseMatchId(b);
           return aId.m - bId.m;
         }),
       );
@@ -251,13 +318,13 @@ function ManualBracket(props: {
       HEADER_HEIGHT + 58 + maxMatches * MATCH_HEIGHT + (maxMatches - 1) * MATCH_GAP;
     const positions = new Map<
       string,
-      { hidden: boolean; match: Props['matches'][number]; x: number; y: number }
+      { hidden: boolean; match: BracketDisplayMatch; x: number; y: number }
     >();
     const incoming = new Map<string, string[]>();
 
     Object.values(rounds).forEach((matches) => {
       matches.forEach((match) => {
-        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const matchId = parseMatchId(match);
         const nextMatchId =
           getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
           props.tourney.brackets.right(matchId)?.[0];
@@ -265,17 +332,19 @@ function ManualBracket(props: {
           return;
         }
 
-        const nextKey = makeMatchKey(nextMatchId as BracketMatchId);
-        incoming.set(nextKey, [...(incoming.get(nextKey) || []), match.payload]);
+        const matchKey = getMatchKey(matchId);
+        const nextKey = getMatchKey(nextMatchId as BracketMatchId);
+        incoming.set(nextKey, [...(incoming.get(nextKey) || []), matchKey]);
       });
     });
 
     roundNumbers.forEach((round, roundIndex) => {
       const matches = rounds[round] ?? [];
       matches.forEach((match, matchIndex) => {
-        const matchId = JSON.parse(match.payload) as BracketMatchId;
+        const matchId = parseMatchId(match);
+        const matchKey = getMatchKey(matchId);
         const x = roundIndex * (MATCH_WIDTH + ROUND_GAP);
-        const childCenters = (incoming.get(match.payload) || [])
+        const childCenters = (incoming.get(matchKey) || [])
           .map((key) => positions.get(key))
           .filter(Boolean)
           .map((position) => position!.y + MATCH_HEIGHT / 2);
@@ -290,7 +359,7 @@ function ManualBracket(props: {
           ? childCenters.reduce((sum, center) => sum + center, 0) / childCenters.length -
             MATCH_HEIGHT / 2
           : fallbackY;
-        positions.set(match.payload, { hidden: isHiddenBye, x, y, match });
+        positions.set(matchKey, { hidden: isHiddenBye, x, y, match });
       });
     });
 
@@ -314,7 +383,8 @@ function ManualBracket(props: {
 
   const connectors = sections.flatMap((section) =>
     section.nodes.flatMap(({ match }) => {
-      const matchId = JSON.parse(match.payload) as BracketMatchId;
+      const matchId = parseMatchId(match);
+      const matchKey = getMatchKey(matchId);
       const nextMatchId =
         getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
         props.tourney.brackets.right(matchId)?.[0];
@@ -322,8 +392,8 @@ function ManualBracket(props: {
         return [];
       }
 
-      const from = section.positions.get(match.payload);
-      const to = section.positions.get(makeMatchKey(nextMatchId as BracketMatchId));
+      const from = section.positions.get(matchKey);
+      const to = section.positions.get(getMatchKey(nextMatchId as BracketMatchId));
       if (!from || !to || from.hidden || to.hidden) {
         return [];
       }
@@ -343,9 +413,13 @@ function ManualBracket(props: {
     const total = section.roundNumbers.length;
 
     if (section.title === 'Lower Bracket') {
-      if (props.tourney.iemGroup && total === 3) {
+      if (props.tourney.iemGroup) {
         return (
-          ['Lower round 1', 'Lower semi-finals', 'Lower final'][roundIndex] || `Round ${round}`
+          {
+            1: 'Lower round 1',
+            2: 'Lower semi-finals',
+            3: 'Lower final',
+          }[round] || `Lower round ${round}`
         );
       }
 
@@ -368,8 +442,14 @@ function ManualBracket(props: {
       return Util.parseCupRounds(roundIndex + 1, total);
     }
 
-    if (props.tourney.iemGroup && total === 3) {
-      return ['Opening round', 'Upper semi-finals', 'Upper final'][roundIndex] || `Round ${round}`;
+    if (props.tourney.iemGroup) {
+      return (
+        {
+          1: 'Opening round',
+          2: 'Upper semi-finals',
+          3: 'Upper final',
+        }[round] || `Upper round ${round}`
+      );
     }
 
     if (total === 3 && sections.some((section) => section.title === 'Lower Bracket')) {
