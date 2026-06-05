@@ -368,6 +368,7 @@ const IEM_GROUP_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_COLOGNE_GROUP_B,
   Constants.TierSlug.IEM_KRAKOW_GROUP_A,
   Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.MAJOR_ASIA_RMR,
 ]);
 
 const GROUP_SWISS_TIERS = new Set<Constants.TierSlug>([
@@ -6821,6 +6822,7 @@ export async function onCompetitionStart(entry: Calendar) {
         iemGroup: true;
         last: Constants.BracketIdentifier.LOWER;
         short: true;
+        skipUpperFinal?: boolean;
       }
     | {
         groupSize: number;
@@ -6862,6 +6864,9 @@ export async function onCompetitionStart(entry: Calendar) {
               iemGroup: true,
               last: Constants.BracketIdentifier.LOWER,
               short: true,
+              ...(competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+                ? { skipUpperFinal: true }
+                : {}),
             }
           : DOUBLE_ELIMINATION_TIERS.has(competition.tier.slug as Constants.TierSlug)
             ? {

@@ -23,6 +23,7 @@ interface IemGroupOptions {
   iemGroup: true;
   last: BracketIdentifier.LOWER;
   short: true;
+  skipUpperFinal?: boolean;
 }
 
 interface IemGroupMatch extends Clux.Match {
@@ -31,6 +32,7 @@ interface IemGroupMatch extends Clux.Match {
 
 interface IemGroupTournamentState {
   matches: IemGroupMatch[];
+  options?: Partial<IemGroupOptions>;
   records: Record<number, { losses: number; wins: number }>;
   size: number;
 }
@@ -598,16 +600,22 @@ class GroupSwissTournament {
 }
 
 class IemGroupTournament {
-  public readonly options: IemGroupOptions = {
-    iemGroup: true,
-    last: BracketIdentifier.LOWER,
-    short: true,
-  };
+  public readonly options: IemGroupOptions;
 
   private matches: IemGroupMatch[];
   private readonly records: Record<number, { losses: number; wins: number }>;
 
-  constructor(private readonly size: number) {
+  constructor(
+    private readonly size: number,
+    options: Partial<IemGroupOptions> = {},
+  ) {
+    this.options = {
+      iemGroup: true,
+      last: BracketIdentifier.LOWER,
+      short: true,
+      skipUpperFinal: false,
+      ...options,
+    };
     this.matches = [];
     this.records = {};
 
@@ -617,7 +625,7 @@ class IemGroupTournament {
   }
 
   public static restore(data: IemGroupTournamentState) {
-    const instance = new IemGroupTournament(data.size);
+    const instance = new IemGroupTournament(data.size, data.options);
     instance.matches = data.matches;
     Object.keys(data.records).forEach((seed) => {
       instance.records[Number(seed)] = data.records[Number(seed)];
@@ -684,6 +692,25 @@ class IemGroupTournament {
     if (
       this.allScored(BracketIdentifier.UPPER, 2) &&
       this.allScored(BracketIdentifier.LOWER, 1) &&
+      this.options.skipUpperFinal &&
+      !this.findByRound(BracketIdentifier.LOWER, 2).length
+    ) {
+      additions.push(
+        this.createMatch(BracketIdentifier.LOWER, 2, 1, [
+          this.winner({ s: BracketIdentifier.LOWER, r: 1, m: 1 }),
+          this.loser({ s: BracketIdentifier.UPPER, r: 2, m: 2 }),
+        ]),
+        this.createMatch(BracketIdentifier.LOWER, 2, 2, [
+          this.winner({ s: BracketIdentifier.LOWER, r: 1, m: 2 }),
+          this.loser({ s: BracketIdentifier.UPPER, r: 2, m: 1 }),
+        ]),
+      );
+    }
+
+    if (
+      this.allScored(BracketIdentifier.UPPER, 2) &&
+      this.allScored(BracketIdentifier.LOWER, 1) &&
+      !this.options.skipUpperFinal &&
       !this.findByRound(BracketIdentifier.UPPER, 3).length
     ) {
       additions.push(
@@ -719,6 +746,12 @@ class IemGroupTournament {
   }
 
   public isDone() {
+    if (this.options.skipUpperFinal) {
+      return (
+        this.allScored(BracketIdentifier.UPPER, 2) && this.allScored(BracketIdentifier.LOWER, 3)
+      );
+    }
+
     return this.allScored(BracketIdentifier.UPPER, 3) && this.allScored(BracketIdentifier.LOWER, 3);
   }
 
@@ -749,6 +782,14 @@ class IemGroupTournament {
         if (match.id.s === BracketIdentifier.UPPER && match.id.r === 3) {
           placed.set(this.winner(match.id), 1);
           placed.set(loser, 2);
+        }
+
+        if (
+          this.options.skipUpperFinal &&
+          match.id.s === BracketIdentifier.UPPER &&
+          match.id.r === 2
+        ) {
+          placed.set(this.winner(match.id), match.id.m === 1 ? 1 : 2);
         }
       });
 
@@ -800,6 +841,7 @@ class IemGroupTournament {
       matches: this.matches,
       records: this.records,
       size: this.size,
+      options: this.options,
     };
   }
 
@@ -922,6 +964,10 @@ class IemGroupTournament {
       }
 
       if (id.r === 2) {
+        if (this.options.skipUpperFinal) {
+          return null;
+        }
+
         return {
           s: BracketIdentifier.UPPER,
           r: 3,
@@ -995,6 +1041,7 @@ export default class Tournament {
         iemGroup: true,
         last: BracketIdentifier.LOWER,
         short: true,
+        ...data.iemGroup.options,
       });
       instance.iemGroup = IemGroupTournament.restore(data.iemGroup);
       instance.brackets = instance.iemGroup as unknown as Duel;
@@ -1123,7 +1170,7 @@ export default class Tournament {
     }
 
     if (this.options && 'iemGroup' in this.options) {
-      this.iemGroup = new IemGroupTournament(this.size);
+      this.iemGroup = new IemGroupTournament(this.size, this.options);
       this.iemGroup.start();
       this.brackets = this.iemGroup as unknown as Duel;
       return;

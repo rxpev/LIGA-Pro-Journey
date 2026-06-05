@@ -55,7 +55,7 @@ function matchHasTeam(match: BracketDisplayMatch, teamId?: number) {
   return teamId != null && match.competitors.some((competitor) => competitor.team.id === teamId);
 }
 
-function getIemGroupSlotIds() {
+function getIemGroupSlotIds(skipUpperFinal: boolean) {
   return [
     ...[1, 2, 3, 4].map((match) => ({
       s: Constants.BracketIdentifier.UPPER,
@@ -67,7 +67,7 @@ function getIemGroupSlotIds() {
       r: 2,
       m: match,
     })),
-    { s: Constants.BracketIdentifier.UPPER, r: 3, m: 1 },
+    ...(skipUpperFinal ? [] : [{ s: Constants.BracketIdentifier.UPPER, r: 3, m: 1 }]),
     ...[1, 2].map((match) => ({
       s: Constants.BracketIdentifier.LOWER,
       r: 1,
@@ -92,7 +92,11 @@ function createPlaceholderMatch(matchId: BracketMatchId): BracketDisplayMatch {
   } as unknown as BracketDisplayMatch;
 }
 
-function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
+function getVisualWinnerTarget(
+  matchId: BracketMatchId,
+  isIemGroup: boolean,
+  skipUpperFinal: boolean,
+) {
   if (!isIemGroup) {
     return null;
   }
@@ -107,6 +111,10 @@ function getVisualWinnerTarget(matchId: BracketMatchId, isIemGroup: boolean) {
     }
 
     if (matchId.r === 2) {
+      if (skipUpperFinal) {
+        return null;
+      }
+
       return {
         s: Constants.BracketIdentifier.UPPER,
         r: 3,
@@ -239,6 +247,7 @@ function ManualBracket(props: {
   const [zoom, setZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const [highlightedTeamId, setHighlightedTeamId] = React.useState<number>();
+  const skipUpperFinal = Boolean(props.tourney.iemGroup?.metadata().options.skipUpperFinal);
   const [dragStart, setDragStart] = React.useState<{
     mouseX: number;
     mouseY: number;
@@ -302,7 +311,7 @@ function ManualBracket(props: {
     if (props.tourney.iemGroup) {
       const existingKeys = new Set(props.matches.map((match) => getMatchKey(parseMatchId(match))));
 
-      getIemGroupSlotIds().forEach((matchId) => {
+      getIemGroupSlotIds(skipUpperFinal).forEach((matchId) => {
         const key = getMatchKey(matchId);
 
         if (existingKeys.has(key)) {
@@ -326,7 +335,7 @@ function ManualBracket(props: {
     });
 
     return sections;
-  }, [props.matches]);
+  }, [props.matches, skipUpperFinal]);
 
   const buildSection = (
     sectionKey: 'upper' | 'lower',
@@ -356,7 +365,7 @@ function ManualBracket(props: {
       matches.forEach((match) => {
         const matchId = parseMatchId(match);
         const nextMatchId =
-          getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
+          getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup), skipUpperFinal) ||
           props.tourney.brackets.right(matchId)?.[0];
         if (!nextMatchId) {
           return;
@@ -441,7 +450,7 @@ function ManualBracket(props: {
       const matchId = parseMatchId(match);
       const matchKey = getMatchKey(matchId);
       const nextMatchId =
-        getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup)) ||
+        getVisualWinnerTarget(matchId, Boolean(props.tourney.iemGroup), skipUpperFinal) ||
         props.tourney.brackets.right(matchId)?.[0];
       if (!nextMatchId) {
         return [];
