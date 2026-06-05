@@ -377,9 +377,34 @@ function ManualBracket(props: {
   const upper = buildSection('upper', 'Upper Bracket', 0);
   const lowerTop = upper.height + SECTION_GAP;
   const lower = buildSection('lower', 'Lower Bracket', lowerTop);
+  const hasStandardDoubleElimFinals =
+    !props.tourney.iemGroup &&
+    upper.roundNumbers.length === 3 &&
+    lower.roundNumbers.length === 5 &&
+    Boolean(lower.positions.size);
+
+  if (hasStandardDoubleElimFinals) {
+    const upperFinal = upper.positions.get(
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 3, m: 1 }),
+    );
+    const lowerFinal = lower.positions.get(
+      getMatchKey({ s: Constants.BracketIdentifier.LOWER, r: 4, m: 1 }),
+    );
+    const grandFinal = lower.positions.get(
+      getMatchKey({ s: Constants.BracketIdentifier.LOWER, r: 5, m: 1 }),
+    );
+
+    if (upperFinal && lowerFinal && grandFinal) {
+      upperFinal.x = lowerFinal.x;
+      grandFinal.y =
+        (upperFinal.y + MATCH_HEIGHT / 2 + lowerFinal.y + MATCH_HEIGHT / 2) / 2 - MATCH_HEIGHT / 2;
+    }
+  }
+
   const sections = lower.nodes.length ? [upper, lower] : [upper];
   const width = Math.max(...sections.map((section) => section.width));
   const height = sections.reduce((max, section) => Math.max(max, section.top + section.height), 0);
+  const allPositions = new Map(sections.flatMap((section) => [...section.positions.entries()]));
 
   const connectors = sections.flatMap((section) =>
     section.nodes.flatMap(({ match }) => {
@@ -393,7 +418,7 @@ function ManualBracket(props: {
       }
 
       const from = section.positions.get(matchKey);
-      const to = section.positions.get(getMatchKey(nextMatchId as BracketMatchId));
+      const to = allPositions.get(getMatchKey(nextMatchId as BracketMatchId));
       if (!from || !to || from.hidden || to.hidden) {
         return [];
       }
@@ -453,14 +478,18 @@ function ManualBracket(props: {
     }
 
     if (total === 3 && sections.some((section) => section.title === 'Lower Bracket')) {
-      return (
-        ['Opening round', 'Upper semi-finals', 'Upper final (qualification)'][roundIndex] ||
-        `Round ${round}`
-      );
+      return ['Opening round', 'Upper semi-finals', 'Upper final'][roundIndex] || `Round ${round}`;
     }
 
     return Util.parseCupRounds(roundIndex + 1, total);
   };
+  const roundLeft = (section: BracketSection, round: number, roundIndex: number) =>
+    section.nodes.find(({ match }) => parseMatchId(match).r === round)?.x ??
+    roundIndex * (MATCH_WIDTH + ROUND_GAP);
+  const roundTop = (section: BracketSection, round: number) =>
+    hasStandardDoubleElimFinals && section.title === 'Lower Bracket' && round === 5
+      ? upper.top
+      : section.top;
 
   return (
     <div
@@ -512,8 +541,8 @@ function ManualBracket(props: {
                   key={`${section.title}-${round}`}
                   className="text-info bg-base-200 border-base-content/10 absolute h-9 border text-center text-sm leading-9 font-bold"
                   style={{
-                    top: section.top,
-                    left: roundIndex * (MATCH_WIDTH + ROUND_GAP),
+                    top: roundTop(section, round),
+                    left: roundLeft(section, round, roundIndex),
                     width: MATCH_WIDTH,
                   }}
                 >
