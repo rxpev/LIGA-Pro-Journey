@@ -210,7 +210,7 @@
     "settings": {
       "botChatterTitle": "Frequência dos rádios (dos bots)",
       "botDifficultyTitle": "Dificuldade  dos bots",
-      "gamePathSubtitle": "Importante se o seu jogo tá instalado em um endereço diferente.",
+      "gamePathSubtitle": "Game Library path that points to your CS:GO install. e.g. D:\\SteamLibrary",
       "gamePathTitle": "Endereço da pasta do jogo",
       "gameSubtitle": "Escolha a versão do CS que vai ser usada nas partidas.",
       "gameSubtitleCS2": "Aviso: o uso do CS2 ainda está em fase de testes.",
@@ -225,7 +225,10 @@
       "steamTitle": "Endereço da steam",
       "themeTitle": "Tema do aplicativo",
       "volumeTitle": "Volume Level",
-      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune"
+      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune",
+      "fullscreenTitle": "Full Screen",
+      "generalTitle": "General",
+      "pathsTitle": "Paths"
     }
   },
   "components": {

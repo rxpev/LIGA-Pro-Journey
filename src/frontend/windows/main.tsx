@@ -350,6 +350,14 @@ function Root() {
   // setup the theme
   useTheme();
 
+  React.useEffect(() => {
+    if (!state.profile) {
+      return;
+    }
+
+    api.window.setFullscreen(Util.loadSettings(state.profile.settings).general.fullscreen);
+  }, [state.profile?.settings]);
+
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],

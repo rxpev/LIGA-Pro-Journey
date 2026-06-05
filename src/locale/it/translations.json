@@ -210,7 +210,7 @@
     "settings": {
       "botChatterTitle": "Bot Chatter",
       "botDifficultyTitle": "Difficoltà Bot",
-      "gamePathSubtitle": "Utile se i tuoi giochi sono scaricati in un drive diverso.",
+      "gamePathSubtitle": "Game Library path that points to your CS:GO install. e.g. D:\\SteamLibrary",
       "gamePathTitle": "Percorso della Libreria del Gioco",
       "gameSubtitle": "Questo avvierà il gioco selezionato quando giocherai le partite.",
       "gameSubtitleCS2": "Attenzione! Il supporto per CS2 è sperimentale.",
@@ -225,7 +225,10 @@
       "steamTitle": "Percorso Steam",
       "themeTitle": "Tema",
       "volumeTitle": "Volume Level",
-      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune"
+      "faceitMatchFoundTuneTitle": "FACEIT Found Match Tune",
+      "fullscreenTitle": "Full Screen",
+      "generalTitle": "General",
+      "pathsTitle": "Paths"
     }
   },
   "components": {

@@ -24,4 +24,7 @@ export default function () {
   ipcMain.on(Constants.IPCRoute.WINDOW_SEND, (_, id: Constants.WindowIdentifier, data, delay) =>
     WindowManager.send(id, data, delay),
   );
+  ipcMain.on(Constants.IPCRoute.WINDOW_SET_FULLSCREEN, (_, enabled: boolean) => {
+    WindowManager.getAppWindow()?.setFullScreen(enabled);
+  });
 }

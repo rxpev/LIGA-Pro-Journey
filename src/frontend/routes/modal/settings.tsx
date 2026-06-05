@@ -124,7 +124,10 @@ export default function () {
   }, [settings]);
 
   React.useEffect(() => {
-    api.app.arenaModeStatus(settings).then(setArenaModeStatus).catch(() => setArenaModeStatus(null));
+    api.app
+      .arenaModeStatus(settings)
+      .then(setArenaModeStatus)
+      .catch(() => setArenaModeStatus(null));
   }, [settings.arenaMode.equalizerApoConfigPath]);
 
   // handle settings updates
@@ -156,6 +159,11 @@ export default function () {
   const onToggleSettingsUpdate = (path: string, checked: boolean) => {
     (checked ? audioClick : audioRelease)();
     onSettingsUpdate(path, checked);
+  };
+
+  const onFullscreenSettingsUpdate = (checked: boolean) => {
+    onToggleSettingsUpdate('general.fullscreen', checked);
+    api.window.setFullscreen(checked);
   };
 
   const onArenaModeInstall = async () => {
@@ -247,17 +255,68 @@ export default function () {
           <fieldset>
             <section>
               <header>
-                <p>{t('settings.logLevelTitle')}</p>
+                <p>{t('settings.themeTitle')}</p>
               </header>
               <article>
                 <select
                   className="select"
-                  onChange={(event) => onSettingsUpdate('general.logLevel', event.target.value)}
-                  value={settings.general.logLevel}
+                  onChange={(event) => onSettingsUpdate('general.theme', event.target.value)}
+                  value={settings.general.theme || Constants.ThemeType.SYSTEM}
                 >
-                  {Object.values(Constants.LogLevel).map((level) => (
-                    <option key={level} value={level}>
-                      {level}
+                  {Object.values(Constants.ThemeType).map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>{t('settings.fullscreenTitle')}</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  data-interaction-sound="none"
+                  className="toggle"
+                  onChange={(event) => onFullscreenSettingsUpdate(event.target.checked)}
+                  checked={settings.general.fullscreen}
+                  value={String(settings.general.fullscreen)}
+                />
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>{t('settings.volumeTitle')}</p>
+              </header>
+              <article>
+                <input
+                  type="range"
+                  className="range range-sm"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={settings.general.volume}
+                  onChange={(event) => onSettingsUpdate('general.volume', event.target.value)}
+                />
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>{t('settings.faceitMatchFoundTuneTitle')}</p>
+              </header>
+              <article>
+                <select
+                  className="select"
+                  onChange={(event) =>
+                    onSettingsUpdate('general.faceitMatchFoundTune', event.target.value || null)
+                  }
+                  value={settings.general.faceitMatchFoundTune || ''}
+                >
+                  {Constants.FaceitMatchFoundTunes.map((tune) => (
+                    <option key={tune.value || 'off'} value={tune.value || ''}>
+                      {tune.label}
                     </option>
                   ))}
                 </select>
@@ -409,53 +468,17 @@ export default function () {
             </section>
             <section>
               <header>
-                <p>{t('settings.themeTitle')}</p>
+                <p>{t('settings.logLevelTitle')}</p>
               </header>
               <article>
                 <select
                   className="select"
-                  onChange={(event) => onSettingsUpdate('general.theme', event.target.value)}
-                  value={settings.general.theme || Constants.ThemeType.SYSTEM}
+                  onChange={(event) => onSettingsUpdate('general.logLevel', event.target.value)}
+                  value={settings.general.logLevel}
                 >
-                  {Object.values(Constants.ThemeType).map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('settings.volumeTitle')}</p>
-              </header>
-              <article>
-                <input
-                  type="range"
-                  className="range range-sm"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={settings.general.volume}
-                  onChange={(event) => onSettingsUpdate('general.volume', event.target.value)}
-                />
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('settings.faceitMatchFoundTuneTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) =>
-                    onSettingsUpdate('general.faceitMatchFoundTune', event.target.value || null)
-                  }
-                  value={settings.general.faceitMatchFoundTune || ''}
-                >
-                  {Constants.FaceitMatchFoundTunes.map((tune) => (
-                    <option key={tune.value || 'off'} value={tune.value || ''}>
-                      {tune.label}
+                  {Object.values(Constants.LogLevel).map((level) => (
+                    <option key={level} value={level}>
+                      {level}
                     </option>
                   ))}
                 </select>
@@ -491,19 +514,20 @@ export default function () {
                     type="checkbox"
                     data-interaction-sound="none"
                     className="toggle"
-                    onChange={(event) =>
-                      onToggleSettingsUpdate(weapon.path, event.target.checked)
-                    }
+                    onChange={(event) => onToggleSettingsUpdate(weapon.path, event.target.checked)}
                     checked={settings.gameSettings[weapon.setting]}
                     value={String(settings.gameSettings[weapon.setting])}
                   />
                 </article>
               </section>
             ))}
-            <section className="mt-8 border-t border-base-content/10 pt-6">
+            <section className="border-base-content/10 mt-8 border-t pt-6">
               <header>
                 <p>Arena Mode (BETA)</p>
-                <p>Recommended! Add reverb & crowd noise to your playoff matches for maximum immersion.</p>
+                <p>
+                  Recommended! Add reverb & crowd noise to your playoff matches for maximum
+                  immersion.
+                </p>
               </header>
               <article>
                 <input

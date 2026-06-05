@@ -379,6 +379,7 @@ export enum IPCRoute {
   WINDOW_CLOSE = '/window/close',
   WINDOW_SEND = '/window/send',
   WINDOW_OPEN = '/window/open',
+  WINDOW_SET_FULLSCREEN = '/window/set-fullscreen',
 }
 
 /** @enum */
@@ -1185,6 +1186,7 @@ export const Settings = {
     gameLaunchTimeout: 10,
     gameLaunchOptions: null as string,
     theme: ThemeType.SYSTEM,
+    fullscreen: true,
     locale: null as LocaleIdentifier,
     volume: 0.05,
     faceitMatchFoundTune: 'whoosh_whip.wav' as string | null,

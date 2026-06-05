@@ -531,5 +531,7 @@ export default {
     open: (id: string) => ipcRenderer.send(Constants.IPCRoute.WINDOW_OPEN, id),
     send: <T = unknown>(id: string, data: T, delay = 500) =>
       ipcRenderer.send(Constants.IPCRoute.WINDOW_SEND, id, data, delay),
+    setFullscreen: (enabled: boolean) =>
+      ipcRenderer.send(Constants.IPCRoute.WINDOW_SET_FULLSCREEN, enabled),
   },
 };
