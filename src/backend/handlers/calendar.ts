@@ -17,6 +17,11 @@ function disableClose(event: Electron.Event) {
   mainWindow.webContents.send(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE);
 }
 
+async function resetDatabaseForMainMenu() {
+  await DatabaseClient.disconnect();
+  await DatabaseClient.connect(0);
+}
+
 /**
  * Recreate missing due competition-start entries.
  *
@@ -551,13 +556,14 @@ export default function () {
   );
 
   // IPC: confirm closing the main window while the calendar is advancing.
-  ipcMain.handle(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, () => {
+  ipcMain.handle(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, async () => {
+    await resetDatabaseForMainMenu();
     WindowManager.get(Constants.WindowIdentifier.Landing);
     WindowManager.get(Constants.WindowIdentifier.Main, false)?.destroy();
   });
 
   // IPC: return to the main menu unless the calendar is still advancing.
-  ipcMain.handle(Constants.IPCRoute.CALENDAR_REQUEST_MAIN_MENU, () => {
+  ipcMain.handle(Constants.IPCRoute.CALENDAR_REQUEST_MAIN_MENU, async () => {
     const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false);
     if (!mainWindow) return;
 
@@ -566,6 +572,7 @@ export default function () {
       return;
     }
 
+    await resetDatabaseForMainMenu();
     WindowManager.get(Constants.WindowIdentifier.Landing);
     mainWindow.close();
   });
