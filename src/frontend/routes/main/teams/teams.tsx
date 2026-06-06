@@ -18,6 +18,40 @@ enum TabIdentifier {
   RESULTS = '/teams/results',
 }
 
+type RankingDivisionOption = {
+  label: string;
+  tierSlug?: Constants.TierSlug;
+};
+
+const RankingDivisionOptions: RankingDivisionOption[] = [
+  { label: 'All Divisions' },
+  { label: 'ESL Pro League', tierSlug: Constants.TierSlug.LEAGUE_PRO },
+  { label: 'ESEA Advanced', tierSlug: Constants.TierSlug.LEAGUE_ADVANCED },
+  { label: 'ESEA Main', tierSlug: Constants.TierSlug.LEAGUE_MAIN },
+  { label: 'ESEA Intermediate', tierSlug: Constants.TierSlug.LEAGUE_INTERMEDIATE },
+  { label: 'ESEA Open', tierSlug: Constants.TierSlug.LEAGUE_OPEN },
+];
+
+const UnsupportedAsiaOceDivisionSlugs = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+]);
+
+function isUnsupportedRankingDivision(
+  federation: { slug: string } | undefined,
+  tierSlug: Constants.TierSlug | undefined,
+) {
+  if (!tierSlug) {
+    return false;
+  }
+
+  return (
+    (federation?.slug === Constants.FederationSlug.ESPORTS_ASIA ||
+      federation?.slug === Constants.FederationSlug.ESPORTS_OCE) &&
+    UnsupportedAsiaOceDivisionSlugs.has(tierSlug)
+  );
+}
+
 /**
  * Exports this module.
  *
@@ -38,6 +72,8 @@ export default function () {
   const [team, setTeam] = React.useState<(typeof teams)[number]>();
   const [rankings, setRankings] = React.useState<typeof teams>([]);
   const [selectedRankingFederationId, setSelectedRankingFederationId] = React.useState<number>();
+  const [selectedRankingTierSlug, setSelectedRankingTierSlug] =
+    React.useState<Constants.TierSlug>();
   const [teamSearch, setTeamSearch] = React.useState('');
   const requestedTeamId = React.useMemo(() => {
     const teamId = Number(searchParams.get('teamId'));
@@ -47,6 +83,41 @@ export default function () {
   const rankingFederations = React.useMemo(
     () => [...federations].sort((a, b) => a.id - b.id),
     [federations],
+  );
+
+  const selectedRankingFederation = React.useMemo(
+    () => federations.find((federation) => federation.id === selectedRankingFederationId),
+    [federations, selectedRankingFederationId],
+  );
+
+  const selectedRankingTier = React.useMemo(() => {
+    if (!selectedRankingTierSlug) {
+      return undefined;
+    }
+
+    const tier = Constants.Prestige.findIndex((tierSlug) => tierSlug === selectedRankingTierSlug);
+    return tier >= 0 ? tier : undefined;
+  }, [selectedRankingTierSlug]);
+
+  const rankingDivisionOptions = React.useMemo(() => {
+    if (!isUnsupportedRankingDivision(selectedRankingFederation, Constants.TierSlug.LEAGUE_MAIN)) {
+      return RankingDivisionOptions;
+    }
+
+    return RankingDivisionOptions.filter(
+      (option) => !option.tierSlug || !UnsupportedAsiaOceDivisionSlugs.has(option.tierSlug),
+    );
+  }, [selectedRankingFederation]);
+
+  const selectRankingFederation = React.useCallback(
+    (federation?: (typeof federations)[number]) => {
+      setSelectedRankingFederationId(federation?.id);
+
+      if (isUnsupportedRankingDivision(federation, selectedRankingTierSlug)) {
+        setSelectedRankingTierSlug(undefined);
+      }
+    },
+    [selectedRankingTierSlug],
   );
 
   const searchedTeams = React.useMemo(() => {
@@ -81,10 +152,20 @@ export default function () {
           ...(Number.isInteger(selectedRankingFederationId)
             ? { competitionFederationId: selectedRankingFederationId }
             : {}),
+          ...(Number.isInteger(selectedRankingTier) ? { tier: selectedRankingTier } : {}),
         },
       })
       .then(setRankings);
-  }, [selectedRankingFederationId]);
+  }, [selectedRankingFederationId, selectedRankingTier]);
+
+  React.useEffect(() => {
+    if (
+      selectedRankingTierSlug &&
+      !rankingDivisionOptions.some((option) => option.tierSlug === selectedRankingTierSlug)
+    ) {
+      setSelectedRankingTierSlug(undefined);
+    }
+  }, [rankingDivisionOptions, selectedRankingTierSlug]);
 
   // preload the user's team
   React.useEffect(() => {
@@ -201,7 +282,7 @@ export default function () {
                     ? 'btn-primary'
                     : 'btn-ghost bg-base-200 hover:bg-base-300',
                 )}
-                onClick={() => setSelectedRankingFederationId(undefined)}
+                onClick={() => selectRankingFederation(undefined)}
               >
                 World
               </button>
@@ -223,13 +304,34 @@ export default function () {
                           ? 'btn-primary'
                           : 'btn-ghost bg-base-200 hover:bg-base-300',
                       )}
-                      onClick={() => setSelectedRankingFederationId(federation.id)}
+                      onClick={() => selectRankingFederation(federation)}
                     >
                       {federation.name}
                     </button>
                   );
                 })}
             </nav>
+            <div className="p-2 pt-0">
+              <select
+                aria-label="Ranking division"
+                className="select select-bordered bg-base-200 border-base-content/10 h-10 w-full rounded font-semibold shadow-none"
+                value={selectedRankingTierSlug ?? ''}
+                onChange={(event) =>
+                  setSelectedRankingTierSlug(
+                    (event.target.value || undefined) as Constants.TierSlug | undefined,
+                  )
+                }
+              >
+                {rankingDivisionOptions.map((option) => (
+                  <option
+                    key={`${option.tierSlug ?? 'all'}__ranking_division_filter`}
+                    value={option.tierSlug ?? ''}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <footer>
               <table className="table table-fixed">
                 <thead>
