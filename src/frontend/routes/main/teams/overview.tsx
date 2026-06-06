@@ -260,7 +260,7 @@ export default function () {
         </header>
         <aside>
           <section className="border-base-content/10 flex items-center gap-3 border-b p-4">
-            <TeamBlazon alt={team.name} src={team.blazon} className="size-14" />
+            <TeamBlazon alt={team.name} src={team.blazon} className="size-20" />
             <article className="min-w-0">
               <h3 className="truncate text-xl leading-tight font-bold" title={team.name}>
                 {team.name}
