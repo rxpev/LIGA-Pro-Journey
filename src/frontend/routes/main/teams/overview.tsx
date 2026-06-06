@@ -9,7 +9,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
-import { Historial, PlayerCard, Standings } from '@liga/frontend/components';
+import { Historial, PlayerCard, Standings, TeamBlazon } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 import { addDays, format, subMonths } from 'date-fns';
 import { getTeamsDivisionLabel, getTeamsTierLabel } from './labels';
@@ -260,7 +260,7 @@ export default function () {
         </header>
         <aside>
           <section className="border-base-content/10 flex items-center gap-3 border-b p-4">
-            <img alt={team.name} src={team.blazon} className="size-14 shrink-0 object-contain" />
+            <TeamBlazon alt={team.name} src={team.blazon} className="size-14" />
             <article className="min-w-0">
               <h3 className="truncate text-xl leading-tight font-bold" title={team.name}>
                 {team.name}

@@ -1,5 +1,6 @@
-<?xml version='1.0' encoding='UTF-8'?>
-               <svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'>
-                   <path xmlns='http://www.w3.org/2000/svg' class='fallback-shield' fill-rule='evenodd' clip-rule='evenodd' d='M52.4682 1.14524C60.5852 5.89864 69.5628 11.1553 93.7789 11.1553C94.1861 12.1748 95 17.7612 95 31.9515C95 49.6893 93.2042 75.6699 50.5 99C7.79581 75.6699 6 49.6893 6 31.9515C6 17.7612 6.81386 12.1748 7.22115 11.1553C31.4372 11.1553 40.4148 5.89806 48.5318 1.14524C49.1912 0.759029 49.8442 0.376311 50.5 0C51.1558 0.376311 51.8088 0.759029 52.4682 1.14524Z' fill='#4F657D'/>
-                   <text id='letter' xmlns='http://www.w3.org/2000/svg' class='fallback-text' fill='#D9E1E9' text-anchor='middle' font-size='50' y='48' x='50' dominant-baseline='central' font-family='Arial, sans-serif' font-weight='bold'>E</text>
-               </svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generator: https://ezgif.com/png-to-svg -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-6.195 -6.205 111.16 111.16" preserveAspectRatio="xMidYMid meet">
+<path d="M0 0 C1.57 0.74 3.11 1.54 4.62 2.38 C14.01 7.14 23.34 8.44 33.71 9.35 C39.91 9.91 39.91 9.91 41 11 C41.14 13.43 41.21 15.83 41.24 18.26 C41.25 19 41.25 19.75 41.26 20.51 C41.28 22.09 41.29 23.68 41.3 25.26 C41.31 26.86 41.33 28.45 41.36 30.05 C41.72 49.56 37.04 65.09 23.4 79.7 C16.5 86.78 7.47 94.84 -2 98 C-14.28 96.89 -27.32 83.92 -35 75 C-48.98 56.41 -50.95 33.48 -48 11 C-46.12 9.12 -43.34 9.62 -40.82 9.41 C-28.64 8.37 -17.89 6.09 -7.22 -0.14 C-4.35 -1.25 -2.91 -0.91 0 0 Z " fill="#4F657D" transform="translate(54,1)"/>
+<path d="M0 0 C8.91 0 17.82 0 27 0 C27 1.98 27 3.96 27 6 C20.73 6 14.46 6 8 6 C8 8.64 8 11.28 8 14 C13.94 14 19.88 14 26 14 C26 15.98 26 17.96 26 20 C20.06 20 14.12 20 8 20 C8 23.3 8 26.6 8 30 C14.6 30 21.2 30 28 30 C28 31.98 28 33.96 28 36 C18.76 36 9.52 36 0 36 C0 24.12 0 12.24 0 0 Z " fill="#D4DDE5" transform="translate(37,29)"/>
+</svg>

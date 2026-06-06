@@ -9,7 +9,7 @@ import { Constants, Eagers } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
-import { Image } from '@liga/frontend/components';
+import { TeamBlazon } from '@liga/frontend/components';
 
 /** @enum */
 enum TabIdentifier {
@@ -174,10 +174,10 @@ export default function () {
                       onClick={() => setTeam(teamSearchResult)}
                     >
                       <td className="w-10 px-0">
-                        <Image
+                        <TeamBlazon
                           src={teamSearchResult.blazon}
                           title={teamSearchResult.name}
-                          className="mx-auto size-8 object-cover"
+                          className="mx-auto size-8"
                           blur="blur-xs"
                         />
                       </td>
@@ -252,10 +252,10 @@ export default function () {
                     >
                       <td className="px-0 text-center">#{rank + 1}</td>
                       <td className="px-0">
-                        <Image
+                        <TeamBlazon
                           src={teamRank.blazon}
                           title={teamRank.name}
-                          className="mx-auto size-8 object-cover"
+                          className="mx-auto size-8"
                           blur="blur-xs"
                         />
                       </td>
