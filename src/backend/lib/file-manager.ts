@@ -41,10 +41,11 @@ export async function compress(source: string, remove = false) {
  * @param cwd     The current working directory in which to search
  * @param to      The directory to copy files into.
  * @param backup  Create a backup before overwriting a file.
+ * @param ignore  Glob patterns to ignore while copying.
  * @function
  */
-export async function copy(pattern: string, cwd: string, to: string, backup = true) {
-  const files = await glob(pattern, { cwd, withFileTypes: true });
+export async function copy(pattern: string, cwd: string, to: string, backup = true, ignore: string[] = []) {
+  const files = await glob(pattern, { cwd, ignore, withFileTypes: true });
   return Promise.all(
     files.map(async (file) => {
       const source = path.join(cwd, file.relative());

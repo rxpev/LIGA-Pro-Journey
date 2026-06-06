@@ -60,6 +60,8 @@ const LAN_TIER_SLUGS = new Set<string>([
   Constants.TierSlug.MAJOR_LEGENDS_STAGE,
 ]);
 
+const CSGO_TEAM_LOGOS_DIR = 'materials/panorama/images/tournaments/teams';
+
 /**
  * Custom error to throw when a process
  * has been detected as running.
@@ -1103,7 +1105,10 @@ End\n
       ];
     }
 
-    const resolveTeamBlazonName = (team: { blazon?: string | null; slug?: string | null }, fallback: string) => {
+    const resolveTeamBlazonName = async (
+      team: { blazon?: string | null; slug?: string | null },
+      fallback: string,
+    ) => {
       const blazon = team.blazon?.trim();
 
       if (!blazon) {
@@ -1114,8 +1119,19 @@ End\n
       const filePath = match?.groups?.filePath || blazon;
       const blazonName = path.parse(filePath).name;
 
-      return blazonName || fallback;
+      if (!blazonName) {
+        return fallback;
+      }
+
+      if (this.settings.general.game !== Constants.Game.CSGO) {
+        return blazonName;
+      }
+
+      return this.resolveCSGOTeamLogoName(blazonName);
     };
+
+    const shortnameT = await resolveTeamBlazonName(tTeam.team, tTeam.team.slug);
+    const shortnameCT = await resolveTeamBlazonName(ctTeam.team, ctTeam.team.slug);
 
     const serverCfgData = this.isFaceit
       ? {
@@ -1141,8 +1157,8 @@ End\n
         match_stat: 'FACEIT PUG',
         teamflag_t: tTeam.team.country?.code || 'EU',
         teamflag_ct: ctTeam.team.country?.code || 'EU',
-        shortname_t: tTeam.team.slug || 'FACEITA',
-        shortname_ct: ctTeam.team.slug || 'FACEITB',
+        shortname_t: shortnameT || 'FACEITA',
+        shortname_ct: shortnameCT || 'FACEITB',
         stat_t: '',
         stat_ct: '',
         humanteam:
@@ -1176,8 +1192,8 @@ End\n
         match_stat: this.match.competition.tier.name,
         teamflag_t: tTeam.team.country.code,
         teamflag_ct: ctTeam.team.country.code,
-        shortname_t: resolveTeamBlazonName(tTeam.team, tTeam.team.slug),
-        shortname_ct: resolveTeamBlazonName(ctTeam.team, ctTeam.team.slug),
+        shortname_t: shortnameT,
+        shortname_ct: shortnameCT,
         stat_t: tStats?.position ? Util.toOrdinalSuffix(tStats.position) : '',
         stat_ct: ctStats?.position ? Util.toOrdinalSuffix(ctStats.position) : '',
       };
@@ -1258,6 +1274,52 @@ End\n
     }
 
     return LAN_TIER_SLUGS.has(tierSlug) || Boolean(this.match?.competition?.tier?.lan);
+  }
+
+  private async resolveCSGOTeamLogoName(blazonName: string) {
+    const normalized = blazonName.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const words = blazonName.toLowerCase().split(/[^a-z0-9]+/g).filter(Boolean);
+    const candidates = compact([blazonName.toLowerCase(), normalized.slice(0, 7)]);
+    const academyIndex = words.indexOf('academy');
+
+    if (academyIndex > 0) {
+      const academyBase = words.slice(0, academyIndex).join('');
+      candidates.push(
+        `${academyBase.slice(0, 3)}acad`,
+        `${academyBase.slice(0, 4)}aca`,
+        `${academyBase.slice(0, 6)}a`,
+      );
+    }
+
+    const logosDir = path.join(PluginManager.getPath(), this.gameDir, CSGO_TEAM_LOGOS_DIR);
+
+    try {
+      const logoNames = await fs.promises.readdir(logosDir);
+      const logoStems = logoNames
+        .filter((file) => path.extname(file).toLowerCase() === '.svg')
+        .map((file) => path.parse(file).name.toLowerCase());
+
+      const directMatch = candidates.find((candidate) => logoStems.includes(candidate));
+      if (directMatch) {
+        return directMatch;
+      }
+
+      const prefixMatches = logoStems.filter(
+        (stem) => stem.length <= 7 && normalized.startsWith(stem),
+      );
+      const prefixMatch = prefixMatches.sort((a, b) => b.length - a.length)[0];
+      if (prefixMatch) {
+        return prefixMatch;
+      }
+    } catch (error) {
+      this.log.warn(
+        `Unable to inspect CS:GO team logo assets at ${logosDir}; using generated logo name: ${
+          (error as Error)?.message || error
+        }`,
+      );
+    }
+
+    return normalized.slice(0, 7) || blazonName;
   }
 
   private async applyLanConVar() {
@@ -1669,10 +1731,19 @@ End\n
     );
 
     // copy plain files
-    await FileManager.copy('**/!(*.zip)', from, to);
+    await FileManager.copy(
+      '**/!(*.zip)',
+      from,
+      to,
+      true,
+      this.settings.general.game === Constants.Game.CSGO
+        ? [`${CSGO_TEAM_LOGOS_DIR}/**`]
+        : [],
+    );
 
     // CS:GO client + server both require steam.inf from plugin package.
     if (this.settings.general.game === Constants.Game.CSGO) {
+      await this.copyCSGOTeamLogosToClient(from);
       await this.copySteamInfForCSGO(from);
     }
 
@@ -1686,6 +1757,38 @@ End\n
     this.log.info('Server preparation complete.');
   }
 
+
+  /**
+   * Copies CS:GO team logo SVGs into the client install so
+   * `mp_teamlogo_*` can resolve custom tournament team logos.
+   *
+   * @param from Source plugins/csgo directory.
+   * @function
+   */
+  private async copyCSGOTeamLogosToClient(from: string) {
+    if (!this.settings.general.gamePath) {
+      this.log.warn('No gamePath set; skipping CS:GO client team logo copy.');
+      return;
+    }
+
+    const source = path.join(from, CSGO_TEAM_LOGOS_DIR);
+
+    try {
+      await fs.promises.access(source, fs.constants.F_OK);
+    } catch (_) {
+      this.log.warn(`CS:GO team logos not found in plugin source: ${source}`);
+      return;
+    }
+
+    const target = path.join(
+      this.settings.general.gamePath,
+      Constants.GameSettings.CSGO_BASEDIR,
+      Constants.GameSettings.CSGO_GAMEDIR,
+    );
+
+    await FileManager.copy(`${CSGO_TEAM_LOGOS_DIR}/**/*.svg`, from, target, false);
+    this.log.info(`Copied CS:GO team logos to client: ${path.join(target, CSGO_TEAM_LOGOS_DIR)}`);
+  }
 
   /**
    * Copies CS:GO `steam.inf` from the plugin package into both
