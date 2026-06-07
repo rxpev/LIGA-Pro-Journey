@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='UTF-8'?>
+               <svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'>
+                   <path xmlns='http://www.w3.org/2000/svg' class='fallback-shield' fill-rule='evenodd' clip-rule='evenodd' d='M52.4682 1.14524C60.5852 5.89864 69.5628 11.1553 93.7789 11.1553C94.1861 12.1748 95 17.7612 95 31.9515C95 49.6893 93.2042 75.6699 50.5 99C7.79581 75.6699 6 49.6893 6 31.9515C6 17.7612 6.81386 12.1748 7.22115 11.1553C31.4372 11.1553 40.4148 5.89806 48.5318 1.14524C49.1912 0.759029 49.8442 0.376311 50.5 0C51.1558 0.376311 51.8088 0.759029 52.4682 1.14524Z' fill='#4F657D'/>
+                   <text id='letter' xmlns='http://www.w3.org/2000/svg' class='fallback-text' fill='#D9E1E9' text-anchor='middle' font-size='50' y='48' x='50' dominant-baseline='central' font-family='Arial, sans-serif' font-weight='bold'>?</text>
+               </svg>
