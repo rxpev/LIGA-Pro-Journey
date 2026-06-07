@@ -75,6 +75,9 @@ export default function () {
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
+  const [standingMatches, setStandingMatches] = React.useState<
+    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
+  >([]);
   const [latestScheduledMatchDate, setLatestScheduledMatchDate] = React.useState<Date | null>(null);
   const [winners, setWinners] = React.useState<
     Awaited<ReturnType<typeof api.competitions.winners>>
@@ -159,6 +162,25 @@ export default function () {
       })
       .then((result) => setMatches(result.filter(hasOpponent).slice(0, NUM_PREVIOUS)));
   }, [competition, state.profile]);
+
+  // fetch stage matches for expandable standings rows
+  React.useEffect(() => {
+    setStandingMatches([]);
+
+    if (!competition.tier.groupSize && !Constants.TierSwissConfig[tierSlug]) {
+      return;
+    }
+
+    api.matches
+      .all({
+        include: Eagers.match.include,
+        orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        where: {
+          competitionId: competition.id,
+        },
+      })
+      .then(setStandingMatches);
+  }, [competition, tierSlug]);
 
   // fetch previous winners
   React.useEffect(() => {
@@ -568,6 +590,7 @@ export default function () {
               highlight={state.profile.teamId}
               hidePoints={hideSmallGroupPoints}
               competitors={groups[groupKey]}
+              matches={standingMatches}
               teamLink={(team) => `/teams?teamId=${team.id}`}
               title={
                 competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
@@ -581,6 +604,7 @@ export default function () {
           <Standings
             highlight={state.profile.teamId}
             competitors={competition.competitors}
+            matches={isSwiss ? standingMatches : undefined}
             mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
             teamLink={(team) => `/teams?teamId=${team.id}`}
             zones={isBracketStandings || isSwiss ? advancementZones : undefined}

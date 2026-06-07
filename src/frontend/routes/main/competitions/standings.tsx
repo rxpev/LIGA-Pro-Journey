@@ -33,6 +33,17 @@ type SwissMatchView = {
   record: SwissRecord;
   teams: SwissMatchTeamView[];
 };
+type SwissArrowPath = { d: string; single?: boolean; tone: 'loss' | 'win' };
+type SwissLayout = {
+  advancedBuckets: SwissRecord[];
+  advancedClassName: string;
+  arrowFrameClassName: string;
+  arrowPaths: SwissArrowPath[];
+  bucketLayouts: Array<{ record: SwissRecord; x: number; y: number }>;
+  eliminatedBuckets: SwissRecord[];
+  eliminatedClassName: string;
+  frameClassName: string;
+};
 
 const SwissBucketLayouts = [
   { record: { wins: 0, losses: 0 }, x: 0, y: 92 },
@@ -73,7 +84,26 @@ const SwissArrowPaths = [
 
   { d: 'M610 238 L610 208', tone: 'win' }, // top 2:2 -> between 3:1 and 3:2
   { d: 'M610 384 L610 414', tone: 'loss' }, // bottom 2:2 -> between 1:3 and 2:3
-] satisfies Array<{ d: string; single?: boolean; tone: 'loss' | 'win' }>;
+] satisfies SwissArrowPath[];
+
+const AmericasRmrSwissBucketLayouts = SwissBucketLayouts.filter(
+  (layout) => layout.record.losses < 2,
+);
+
+const AmericasRmrSwissArrowPaths = [
+  { d: 'M108 122 L136 98', tone: 'win' },                // top 0:0 -> top 1:0       ← ORIGINAL
+  { d: 'M108 482 L136 506', tone: 'loss' },              // bottom 0:0 -> bottom 0:1 ← ORIGINAL
+  { d: 'M246 76 L274 52', tone: 'win' },                 // top 1:0 -> top 2:0       ← ORIGINAL
+  { d: 'M246 254 L274 278', tone: 'loss' },              // bottom 1:0 -> 1:1        ← ORIGINAL
+  { d: 'M246 350 L274 326', tone: 'win' },               // top 0:1 -> 1:1           ← ORIGINAL
+  { d: 'M245 528 L273 552', tone: 'loss' },              // bottom 0:1 -> 0:2        ← ORIGINAL
+  { d: 'M384 50 L412 26', tone: 'win' },                 // top 2:0 -> 3:0           ← ORIGINAL
+  { d: 'M384 114 L412 138', tone: 'loss' },              // bottom 2:0 -> 2:1        ← ORIGINAL
+  { d: 'M384 213 L412 189', tone: 'win' },               // top 1:1 -> 2:1           ← ORIGINAL
+  { d: 'M383 396 L411 420', tone: 'loss' },              // bottom 1:1 -> 1:2        ← ORIGINAL
+  { d: 'M506 127 L534 103', single: true, tone: 'win' }, // top 2:1 -> 3:1           ← ORIGINAL
+  { d: 'M518 256 L546 280', tone: 'loss' },              // bottom 2:1 -> 2:2        ← CHANGED
+] satisfies SwissArrowPath[];
 
 const SwissArrowImages = {
   loss: {
@@ -98,6 +128,17 @@ const SwissEliminatedBuckets = [
   { wins: 2, losses: 3 },
 ];
 
+const AmericasRmrSwissAdvancedBuckets = [
+  { wins: 3, losses: 0 },
+  { wins: 3, losses: 1 },
+];
+
+const AmericasRmrSwissEliminatedBuckets = [
+  { wins: 0, losses: 2 },
+  { wins: 1, losses: 2 },
+  { wins: 2, losses: 2 },
+];
+
 const SwissMatchBucketCapacities: Record<string, number> = {
   '0:0': 8,
   '0:1': 4,
@@ -112,12 +153,37 @@ const SwissMatchBucketCapacities: Record<string, number> = {
 
 const SwissTerminalBucketCapacities: Record<string, number> = {
   '0:3': 2,
+  '0:2': 4,
   '1:3': 3,
+  '1:2': 4,
   '2:3': 3,
+  '2:2': 3,
   '3:0': 2,
   '3:1': 3,
   '3:2': 3,
 };
+
+const DefaultSwissLayout = {
+  advancedBuckets: SwissAdvancedBuckets,
+  advancedClassName: 'top-0 left-[414px] h-[196px] w-[272px]',
+  arrowFrameClassName: 'h-[620px] w-[700px]',
+  arrowPaths: SwissArrowPaths,
+  bucketLayouts: SwissBucketLayouts,
+  eliminatedBuckets: SwissEliminatedBuckets,
+  eliminatedClassName: 'bottom-0 left-[414px] h-[196px] w-[272px]',
+  frameClassName: 'min-h-[620px] min-w-[700px]',
+} satisfies SwissLayout;
+
+const AmericasRmrSwissLayout = {
+  advancedBuckets: AmericasRmrSwissAdvancedBuckets,
+  advancedClassName: 'top-0 left-[414px] h-[196px] w-[212px]',
+  arrowFrameClassName: 'h-[620px] w-[760px]',
+  arrowPaths: AmericasRmrSwissArrowPaths,
+  bucketLayouts: AmericasRmrSwissBucketLayouts,
+  eliminatedBuckets: AmericasRmrSwissEliminatedBuckets,
+  eliminatedClassName: 'top-[284px] left-[280px] h-[340px] w-[352px]',
+  frameClassName: 'min-h-[620px] min-w-[760px]',
+} satisfies SwissLayout;
 
 function getRecordKey(record: SwissRecord) {
   return `${record.wins}:${record.losses}`;
@@ -335,13 +401,16 @@ function getSwissArrowPlacement(path: string) {
   };
 }
 
-function SwissArrows() {
+function SwissArrows(props: { className: string; paths: SwissArrowPath[] }) {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute top-0 left-0 z-0 h-[620px] w-[700px] overflow-visible"
+      className={cx(
+        'pointer-events-none absolute top-0 left-0 z-0 overflow-visible',
+        props.className,
+      )}
     >
-      {SwissArrowPaths.map((arrow) => {
+      {props.paths.map((arrow) => {
         const placement = getSwissArrowPlacement(arrow.d);
 
         if (!placement) {
@@ -473,6 +542,8 @@ function SwissTerminalColumn(props: {
 }
 
 function SwissAdvancedBox(props: {
+  buckets: SwissRecord[];
+  className: string;
   highlightedTeamId?: number;
   records: Map<number, SwissRecord>;
   showPlaceholders: boolean;
@@ -480,23 +551,25 @@ function SwissAdvancedBox(props: {
   onTeamClick: (team: CompetitionTeam) => void;
 }) {
   return (
-    <aside
-      aria-label="Advanced"
-      className="absolute top-0 left-[414px] z-10 h-[196px] w-[272px] text-white"
-    >
+    <aside aria-label="Advanced" className={cx('absolute z-10 text-white', props.className)}>
       <div className="absolute top-0 left-0 h-[72px] w-[120px] rounded-tl-sm bg-green-700 p-2">
         <SwissTerminalColumn
           compact
           highlightedTeamId={props.highlightedTeamId}
-          record={SwissAdvancedBuckets[0]}
+          record={props.buckets[0]}
           records={props.records}
           showPlaceholders={props.showPlaceholders}
           teams={props.teams}
           onTeamClick={props.onTeamClick}
         />
       </div>
-      <div className="absolute top-0 left-[120px] grid h-full w-[152px] grid-cols-2 gap-2 rounded-r-sm rounded-bl-sm bg-green-700 p-2">
-        {SwissAdvancedBuckets.slice(1).map((record) => (
+      <div
+        className={cx(
+          'absolute top-0 left-[120px] grid h-full gap-2 rounded-r-sm rounded-bl-sm bg-green-700 p-2',
+          props.buckets.length > 2 ? 'w-[152px] grid-cols-2' : 'w-[92px] grid-cols-1',
+        )}
+      >
+        {props.buckets.slice(1).map((record) => (
           <SwissTerminalColumn
             key={getRecordKey(record)}
             highlightedTeamId={props.highlightedTeamId}
@@ -513,30 +586,111 @@ function SwissAdvancedBox(props: {
 }
 
 function SwissEliminatedBox(props: {
+  buckets: SwissRecord[];
+  className: string;
   highlightedTeamId?: number;
   records: Map<number, SwissRecord>;
   showPlaceholders: boolean;
   teams: Competition['competitors'];
   onTeamClick: (team: CompetitionTeam) => void;
 }) {
+  if (props.buckets[0]?.losses === 2) {
+    const [zeroTwo, oneTwo, twoTwo] = props.buckets;
+
+    const renderBucket = (
+      record: SwissRecord,
+      className: string,
+      layout: 'column' | 'grid' = 'grid',
+    ) => {
+      const teams = props.teams
+        .filter(
+          (competitor) =>
+            getRecordKey(props.records.get(competitor.team.id) || { wins: 0, losses: 0 }) ===
+            getRecordKey(record),
+        )
+        .sort((a, b) => a.position - b.position);
+      const placeholderCount = props.showPlaceholders
+        ? Math.max(0, (SwissTerminalBucketCapacities[getRecordKey(record)] || 0) - teams.length)
+        : 0;
+      const teamSlots: Array<{ key: number | string; team: CompetitionTeam | null }> = teams.map(
+        (competitor) => ({
+          key: competitor.team.id,
+          team: competitor.team,
+        }),
+      );
+      const placeholderSlots = Array.from({ length: placeholderCount }).map<{
+        key: number | string;
+        team: CompetitionTeam | null;
+      }>((_, index) => ({
+        key: `placeholder:${getRecordKey(record)}:${index}`,
+        team: null,
+      }));
+      const slots = [...teamSlots, ...placeholderSlots];
+
+      return (
+        <div className={cx('absolute z-10 flex flex-col items-center', className)}>
+          <h3 className="mb-2 text-lg leading-none font-bold">{getRecordKey(record)}</h3>
+          <div
+            className={cx(
+              'grid justify-center gap-1',
+              layout === 'column' ? 'grid-cols-1' : 'grid-cols-2',
+            )}
+          >
+            {slots.map((slot) => (
+              <button
+                type="button"
+                key={slot.key}
+                title={slot.team?.name}
+                disabled={!slot.team}
+                className={cx(
+                  'center size-8 rounded-full bg-black/15 p-1 transition-colors',
+                  slot.team && 'hover:bg-black/25',
+                  slot.team?.id === props.highlightedTeamId &&
+                    'ring-info ring-2 ring-offset-1 ring-offset-transparent',
+                )}
+                onClick={() => slot.team && props.onTeamClick(slot.team)}
+              >
+                <SwissLogo team={slot.team} />
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
+        <div className="absolute top-[310px] left-0 h-[30px] w-[346px] rounded-br-sm bg-red-900" />
+        <div className="absolute top-[214px] left-0 h-[96px] w-[139px] rounded-tl-sm bg-red-900" />
+        <div className="absolute top-[120px] left-[139px] h-[190px] w-[115px] bg-red-900" />
+        <div className="absolute top-0 left-[254px] h-[328px] w-[92px] rounded-t-sm rounded-r-sm bg-red-900" />
+        {renderBucket(zeroTwo, 'top-[226px] left-[23px] w-[92px]')}
+        {renderBucket(oneTwo, 'top-[122px] left-[146px] w-[92px]')}
+        {renderBucket(twoTwo, 'top-[10px] left-[254px] w-[92px]', 'column')}
+      </aside>
+    );
+  }
+
   return (
-    <aside
-      aria-label="Eliminated"
-      className="absolute bottom-0 left-[414px] z-10 h-[196px] w-[272px] text-white"
-    >
+    <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
       <div className="absolute bottom-0 left-0 h-[72px] w-[120px] rounded-bl-sm bg-red-900 p-2">
         <SwissTerminalColumn
           compact
           highlightedTeamId={props.highlightedTeamId}
-          record={SwissEliminatedBuckets[0]}
+          record={props.buckets[0]}
           records={props.records}
           showPlaceholders={props.showPlaceholders}
           teams={props.teams}
           onTeamClick={props.onTeamClick}
         />
       </div>
-      <div className="absolute bottom-0 left-[120px] grid h-full w-[152px] grid-cols-2 gap-2 rounded-tl-sm rounded-r-sm bg-red-900 p-2">
-        {SwissEliminatedBuckets.slice(1).map((record) => (
+      <div
+        className={cx(
+          'absolute bottom-0 left-[120px] grid h-full gap-2 rounded-tl-sm rounded-r-sm bg-red-900 p-2',
+          props.buckets.length > 3 ? 'w-[212px] grid-cols-3' : 'w-[152px] grid-cols-2',
+        )}
+      >
+        {props.buckets.slice(1).map((record) => (
           <SwissTerminalColumn
             key={getRecordKey(record)}
             highlightedTeamId={props.highlightedTeamId}
@@ -558,6 +712,10 @@ function SwissDetailedStandings(props: {
   matches?: Match[];
   onTeamClick: (team: CompetitionTeam) => void;
 }) {
+  const layout =
+    props.competition.tier.slug === Constants.TierSlug.MAJOR_AMERICAS_RMR
+      ? AmericasRmrSwissLayout
+      : DefaultSwissLayout;
   const { records, views } = React.useMemo(
     () => getSwissMatchViews(props.matches || [], props.competition),
     [props.competition, props.matches],
@@ -582,21 +740,23 @@ function SwissDetailedStandings(props: {
 
   return (
     <section className="bg-base-300 h-full w-full overflow-auto p-4">
-      <div className="relative min-h-[620px] min-w-[700px]">
-        <SwissArrows />
-        {SwissBucketLayouts.map((layout) => (
+      <div className={cx('relative', layout.frameClassName)}>
+        <SwissArrows className={layout.arrowFrameClassName} paths={layout.arrowPaths} />
+        {layout.bucketLayouts.map((bucketLayout) => (
           <SwissRecordColumn
-            key={getRecordKey(layout.record)}
+            key={getRecordKey(bucketLayout.record)}
             highlightedTeamId={props.highlight}
-            record={layout.record}
+            record={bucketLayout.record}
             showPlaceholders={showPlaceholders}
             views={views}
-            x={layout.x}
-            y={layout.y}
+            x={bucketLayout.x}
+            y={bucketLayout.y}
             onTeamClick={props.onTeamClick}
           />
         ))}
         <SwissAdvancedBox
+          buckets={layout.advancedBuckets}
+          className={layout.advancedClassName}
           highlightedTeamId={props.highlight}
           records={records}
           showPlaceholders={showPlaceholders}
@@ -604,6 +764,8 @@ function SwissDetailedStandings(props: {
           onTeamClick={props.onTeamClick}
         />
         <SwissEliminatedBox
+          buckets={layout.eliminatedBuckets}
+          className={layout.eliminatedClassName}
           highlightedTeamId={props.highlight}
           records={records}
           showPlaceholders={showPlaceholders}
@@ -640,6 +802,8 @@ export default function () {
   const { competition } = useOutletContext<RouteContextCompetitions>();
   const [bracket, setBracket] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
+  const [groupMatches, setGroupMatches] =
+    React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const [swissMatches, setSwissMatches] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const groups = React.useMemo(
@@ -665,6 +829,7 @@ export default function () {
   // fetch matches when viewing bracket
   React.useEffect(() => {
     setBracket(undefined);
+    setGroupMatches(undefined);
     setSwissMatches(undefined);
 
     if (isSwiss) {
@@ -681,6 +846,15 @@ export default function () {
     }
 
     if (competition.tier.groupSize) {
+      api.matches
+        .all({
+          where: {
+            competitionId: competition.id,
+          },
+          include: Eagers.match.include,
+          orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        })
+        .then(setGroupMatches);
       return;
     }
 
@@ -703,6 +877,7 @@ export default function () {
             highlight={state.profile.teamId}
             hidePoints={hideSmallGroupPoints}
             competitors={groups[group]}
+            matches={groupMatches || []}
             teamLink={(team) => `/teams?teamId=${team.id}`}
             title={
               competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE

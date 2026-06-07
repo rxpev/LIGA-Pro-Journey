@@ -35,6 +35,9 @@ export default function () {
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.upcoming<typeof Eagers.match>>>
   >([]);
+  const [standingMatches, setStandingMatches] = React.useState<
+    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
+  >([]);
   const [recentMapWinRate, setRecentMapWinRate] = React.useState<{
     maps: number;
     percentage: number;
@@ -87,6 +90,28 @@ export default function () {
       .then(setSquad);
     api.team.transfers(team.id).then(setTransfers);
   }, [team]);
+
+  React.useEffect(() => {
+    setStandingMatches([]);
+
+    if (
+      !competition ||
+      (!competition.tier.groupSize &&
+        !Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug])
+    ) {
+      return;
+    }
+
+    api.matches
+      .all({
+        include: Eagers.match.include,
+        orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        where: {
+          competitionId: competition.id,
+        },
+      })
+      .then(setStandingMatches);
+  }, [competition]);
 
   React.useEffect(() => {
     if (!state.profile) {
@@ -565,6 +590,12 @@ export default function () {
         <Standings
           competitors={group}
           highlight={team.id}
+          matches={standingMatches.length ? standingMatches : undefined}
+          mode={
+            Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug]
+              ? 'swiss'
+              : undefined
+          }
           teamLink={(memberTeam) => `/teams?teamId=${memberTeam.id}`}
           zones={
             Util.shouldShowStandingsZones(competition.status) &&
