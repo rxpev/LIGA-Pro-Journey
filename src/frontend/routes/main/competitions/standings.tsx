@@ -91,18 +91,18 @@ const AmericasRmrSwissBucketLayouts = SwissBucketLayouts.filter(
 );
 
 const AmericasRmrSwissArrowPaths = [
-  { d: 'M108 122 L136 98', tone: 'win' },                // top 0:0 -> top 1:0       ← ORIGINAL
-  { d: 'M108 482 L136 506', tone: 'loss' },              // bottom 0:0 -> bottom 0:1 ← ORIGINAL
-  { d: 'M246 76 L274 52', tone: 'win' },                 // top 1:0 -> top 2:0       ← ORIGINAL
-  { d: 'M246 254 L274 278', tone: 'loss' },              // bottom 1:0 -> 1:1        ← ORIGINAL
-  { d: 'M246 350 L274 326', tone: 'win' },               // top 0:1 -> 1:1           ← ORIGINAL
-  { d: 'M245 528 L273 552', tone: 'loss' },              // bottom 0:1 -> 0:2        ← ORIGINAL
-  { d: 'M384 50 L412 26', tone: 'win' },                 // top 2:0 -> 3:0           ← ORIGINAL
-  { d: 'M384 114 L412 138', tone: 'loss' },              // bottom 2:0 -> 2:1        ← ORIGINAL
-  { d: 'M384 213 L412 189', tone: 'win' },               // top 1:1 -> 2:1           ← ORIGINAL
-  { d: 'M383 396 L411 420', tone: 'loss' },              // bottom 1:1 -> 1:2        ← ORIGINAL
-  { d: 'M506 127 L534 103', single: true, tone: 'win' }, // top 2:1 -> 3:1           ← ORIGINAL
-  { d: 'M518 256 L546 280', tone: 'loss' },              // bottom 2:1 -> 2:2        ← CHANGED
+  { d: 'M108 122 L136 98', tone: 'win' },                // top 0:0 -> top 1:0
+  { d: 'M108 482 L136 506', tone: 'loss' },              // bottom 0:0 -> bottom 0:1
+  { d: 'M246 76 L274 52', tone: 'win' },                 // top 1:0 -> top 2:0
+  { d: 'M246 254 L274 278', tone: 'loss' },              // bottom 1:0 -> 1:1
+  { d: 'M246 350 L274 326', tone: 'win' },               // top 0:1 -> 1:1
+  { d: 'M245 528 L273 552', tone: 'loss' },              // bottom 0:1 -> 0:2
+  { d: 'M384 50 L412 26', tone: 'win' },                 // top 2:0 -> 3:0
+  { d: 'M384 114 L412 138', tone: 'loss' },              // bottom 2:0 -> 2:1
+  { d: 'M384 213 L412 189', tone: 'win' },               // top 1:1 -> 2:1
+  { d: 'M383 396 L411 420', tone: 'loss' },              // bottom 1:1 -> 1:2
+  { d: 'M506 127 L534 103', single: true, tone: 'win' }, // top 2:1 -> 3:1
+  { d: 'M518 256 L546 280', tone: 'loss' },              // bottom 2:1 -> 2:2
 ] satisfies SwissArrowPath[];
 
 const SwissArrowImages = {

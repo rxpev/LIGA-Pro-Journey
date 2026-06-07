@@ -65,9 +65,9 @@ export default function () {
   const audioNegativeAlert = useAudio('negative-alert.wav');
 
   return (
-    <main className="frosted center h-full w-3/5 overflow-y-auto p-5 xl:w-1/2">
+    <main className="frosted relative flex h-full w-3/5 flex-col overflow-hidden p-5 xl:w-1/2">
       <FaArrowLeft
-        className="absolute top-5 left-5 size-5 cursor-pointer"
+        className="absolute top-5 left-5 z-20 size-5 cursor-pointer"
         onClick={() => navigate(-1)}
         onMouseDown={audioRelease}
       />
@@ -79,15 +79,25 @@ export default function () {
           <col className="w-1/5" />
           <col className="w-1/5" />
         </colgroup>
-        <thead className="bg-base-300 sticky top-0 z-10">
+        <thead className="bg-base-300">
           <tr>
-            <th>{t('shared.name')}</th>
+            <th className="pl-14">{t('shared.name')}</th>
             <th className="text-center">Role</th>
             <th>{t('shared.team')}</th>
             <th>{t('landing.load.lastUpdated')}</th>
             <th className="text-center">{t('shared.delete')}</th>
           </tr>
         </thead>
+      </table>
+      <section className="min-h-0 flex-1 overflow-y-auto">
+        <table className="table table-fixed">
+          <colgroup>
+            <col className="w-1/5" />
+            <col className="w-1/5" />
+            <col className="w-1/5" />
+            <col className="w-1/5" />
+            <col className="w-1/5" />
+          </colgroup>
         <tbody>
           {state.profiles.map((profile) => {
             const save = profile as SaveListProfile;
@@ -104,7 +114,7 @@ export default function () {
                 onClick={() => navigate('/connect/' + profile.id)}
                 onMouseDown={audioClick}
               >
-                <td>
+                <td className="pl-14">
                   <p>{profile.name}</p>
                   <p className="text-muted">
                     <em>{Util.getSaveFileName(profile.id)}</em>
@@ -147,6 +157,7 @@ export default function () {
           })}
         </tbody>
       </table>
+      </section>
       <Outlet />
     </main>
   );
