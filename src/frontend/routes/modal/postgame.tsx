@@ -12,6 +12,10 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import { FaBomb, FaSkull, FaTools } from 'react-icons/fa';
+import asiaFlag from '@liga/frontend/assets/flags/as.svg';
+import euFlag from '@liga/frontend/assets/flags/eu.svg';
+import northAmericaFlag from '@liga/frontend/assets/flags/na.svg';
+import southAmericaFlag from '@liga/frontend/assets/flags/sa.svg';
 
 /** @type {Matches} */
 type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.all<T>>>;
@@ -66,6 +70,12 @@ enum Rating {
   LOW = 0.95,
   HIGH = 1.1,
 }
+
+const VETO_BADGE_STYLES = {
+  [Constants.MapVetoAction.BAN]: 'badge-error',
+  [Constants.MapVetoAction.DECIDER]: 'badge-warning',
+  [Constants.MapVetoAction.PICK]: 'badge-success',
+};
 
 function getExhibitionEventPlayerId(
   playerName: string | undefined,
@@ -127,6 +137,59 @@ function getExhibitionPlayerPerformance(
   return { assists, kills, deaths, hsp, kd, rating };
 }
 
+function getOrdinalDay(day: number) {
+  if (day >= 11 && day <= 13) {
+    return `${day}th`;
+  }
+
+  switch (day % 10) {
+    case 1:
+      return `${day}st`;
+    case 2:
+      return `${day}nd`;
+    case 3:
+      return `${day}rd`;
+    default:
+      return `${day}th`;
+  }
+}
+function formatMatchDate(date: Date | string) {
+  const matchDate = new Date(date);
+
+  const day = getOrdinalDay(matchDate.getDate());
+  const month = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+  }).format(matchDate);
+  const year = matchDate.getFullYear();
+
+  return `${day} of ${month} ${year}`;
+}
+function getCustomCountryBackground(code?: string | null) {
+  switch (code?.toLowerCase()) {
+    case 'eu':
+      return euFlag;
+
+    case 'as':
+    case 'asia':
+      return asiaFlag;
+
+    case 'na':
+    case 'north-america':
+    case 'northamerica':
+    case 'north_america':
+      return northAmericaFlag;
+
+    case 'sa':
+    case 'south-america':
+    case 'southamerica':
+    case 'south_america':
+      return southAmericaFlag;
+
+    default:
+      return null;
+  }
+}
+
 /**
  * Generates a player's match performance from the
  * provided player killed or assists events array.
@@ -181,6 +244,277 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   if (end) end.setHours(23, 59, 59, 999);
 
   return start <= date && (!end || end >= date);
+}
+
+function getMatchFormatNotes(match: Matches<typeof Eagers.matchEvents>[number]) {
+  const tierSlug = match.competition.tier.slug as Constants.TierSlug;
+  const swissConfig = Constants.TierSwissConfig[tierSlug];
+
+  if (swissConfig) {
+    const records = match.competitors
+      .map((competitor) => {
+        const competitionEntry = match.competition.competitors.find(
+          (entry) => entry.teamId === competitor.teamId,
+        );
+        const wins = Math.max(
+          0,
+          (competitionEntry?.win || 0) - (competitor.result === Constants.MatchResult.WIN ? 1 : 0),
+        );
+        const losses = Math.max(
+          0,
+          (competitionEntry?.loss || 0) -
+            (competitor.result === Constants.MatchResult.LOSS ? 1 : 0),
+        );
+
+        return `${wins}-${losses}`;
+      })
+      .filter((record, index, list) => list.indexOf(record) === index);
+    const recordLabel = records.length === 1 ? ` (teams with a ${records[0]} record)` : '';
+    const consequences = [
+      records.some((record) => Number(record.split('-')[0]) + 1 >= swissConfig.maxWins) &&
+        'Winning team advances',
+      records.some((record) => Number(record.split('-')[1]) + 1 >= swissConfig.maxLosses) &&
+        'Losing team is eliminated',
+    ].filter(Boolean);
+
+    return `* ${Util.parseSwissRound(match.round)}${recordLabel}. ${
+      consequences.length ? consequences.join('; ') + '.' : 'Result updates Swiss standings.'
+    }`;
+  }
+
+  if (match.competition.tier.groupSize) {
+    if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
+      return `* Matchday ${match.round}`;
+    }
+
+    return `* ${Util.parseCupRounds(match.round, match.totalRounds)}`;
+  }
+
+  return `* ${Util.parseCupRounds(match.round, match.totalRounds)}`;
+}
+
+function MatchInfo(props: { match: Matches<typeof Eagers.matchEvents>[number] }) {
+  return (
+    <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
+      <header className="border-base-content/10 border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
+        Match
+      </header>
+      <section className="space-y-5 px-3 py-3 text-xs leading-5 opacity-70">
+        <p>
+          Best of {props.match.games.length} ({props.match.competition.tier.lan ? 'LAN' : 'Online'})
+        </p>
+        <p>{getMatchFormatNotes(props.match)}</p>
+      </section>
+    </article>
+  );
+}
+function PostgameTeamHeader(props: {
+  competitor: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
+  side: 'left' | 'right';
+}) {
+  return (
+    <article
+      className={cx(
+        'relative z-10 flex h-full min-w-0 items-center',
+        props.side === 'left' ? 'justify-start pl-16' : 'justify-end pr-16',
+      )}
+    >
+      <div className="grid w-28 place-items-center gap-1">
+        <img src={props.competitor.team.blazon} className="size-16 object-contain" />
+        <p className="max-w-full truncate px-1 text-sm font-black">
+          {props.competitor.team.name}
+        </p>
+      </div>
+    </article>
+  );
+}
+
+function PostgameScoreHeader(props: {
+  away: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
+  awayScore: number | null;
+  home: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
+  homeScore: number | null;
+  match: Matches<typeof Eagers.matchEvents>[number];
+}) {
+  const competitionLogo = Util.getCompetitionLogo(
+    props.match.competition.tier.slug,
+    props.match.competition.federation.slug,
+    {
+      location: props.match.competition.location,
+      organizer: props.match.competition.organizer,
+    },
+  );
+  const homeCountryCode = props.home.team.country?.code?.toLowerCase();
+  const awayCountryCode = props.away.team.country?.code?.toLowerCase();
+  const homeCountryBackground = getCustomCountryBackground(homeCountryCode);
+  const awayCountryBackground = getCustomCountryBackground(awayCountryCode);
+  const matchDateLabel = formatMatchDate(props.match.date);
+
+  return (
+    <section className="border-base-content/10 bg-base-200 relative isolate grid h-32 grid-cols-[minmax(0,1fr)_7rem_15rem_7rem_minmax(0,1fr)] items-center overflow-hidden border-b">
+      {!!homeCountryCode && (
+        <div
+          className={cx(
+            'pointer-events-none absolute inset-y-0 left-0 z-0 w-[15rem] bg-left bg-no-repeat saturate-75',
+            !homeCountryBackground && homeCountryCode,
+          )}
+          style={{
+            backgroundImage: homeCountryBackground ? `url(${homeCountryBackground})` : undefined,
+            backgroundPosition: 'left center',
+            backgroundSize: homeCountryBackground ? 'cover' : '100% 100%',
+            backgroundRepeat: 'no-repeat',
+            maskImage: 'linear-gradient(to right, #000 0%, rgba(0,0,0,.9) 46%, transparent 100%)',
+            opacity: 0.22,
+            WebkitMaskImage:
+              'linear-gradient(to right, #000 0%, rgba(0,0,0,.9) 46%, transparent 100%)',
+          }}
+        />
+      )}
+
+      {!!awayCountryCode && (
+        <div
+          className={cx(
+            'pointer-events-none absolute inset-y-0 right-0 z-0 w-[15rem] bg-right bg-no-repeat saturate-75',
+            !awayCountryBackground && awayCountryCode,
+          )}
+          style={{
+            backgroundImage: awayCountryBackground ? `url(${awayCountryBackground})` : undefined,
+            backgroundPosition: 'right center',
+            backgroundSize: awayCountryBackground ? 'cover' : '100% 100%',
+            backgroundRepeat: 'no-repeat',
+            maskImage: 'linear-gradient(to left, #000 0%, rgba(0,0,0,.9) 46%, transparent 100%)',
+            opacity: 0.22,
+            WebkitMaskImage:
+              'linear-gradient(to left, #000 0%, rgba(0,0,0,.9) 46%, transparent 100%)',
+          }}
+        />
+      )}
+
+      <PostgameTeamHeader competitor={props.home} side="left" />
+
+      <p
+        className={cx(
+          'relative z-10 text-center text-6xl font-black leading-none',
+          props.homeScore > props.awayScore && 'text-success',
+          props.homeScore < props.awayScore && 'text-error',
+        )}
+      >
+        {props.homeScore}
+      </p>
+
+      <article className="relative z-10 grid place-items-center gap-1">
+        <Image src={competitionLogo} className="size-24 object-contain" />
+        <p className="text-base-content/60 text-xs font-bold uppercase leading-none tracking-wide">
+          {matchDateLabel}
+        </p>
+      </article>
+
+      <p
+        className={cx(
+          'relative z-10 text-center text-6xl font-black leading-none',
+          props.awayScore > props.homeScore && 'text-success',
+          props.awayScore < props.homeScore && 'text-error',
+        )}
+      >
+        {props.awayScore}
+      </p>
+
+      <PostgameTeamHeader competitor={props.away} side="right" />
+    </section>
+  );
+}
+
+function VetoSummary(props: {
+  match: Matches<typeof Eagers.matchEvents>[number];
+  matchGame?: MatchGame;
+  settings: typeof Constants.Settings;
+  vetoes: Array<MatchVetoEntry>;
+}) {
+  const playedMaps = React.useMemo(
+    () =>
+      props.match.games.map((game) => ({
+        game,
+        veto: props.vetoes.find((entry) => entry.map === game.map),
+      })),
+    [props.match.games, props.vetoes],
+  );
+
+  return (
+    <section className="border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-t p-2">
+      <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
+        <header className="border-base-content/10 flex items-center justify-between border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
+          <span>Maps</span>
+          {!!props.matchGame && (
+            <span>{Util.convertMapPool(props.matchGame.map, props.settings.general.game)}</span>
+          )}
+        </header>
+        <section
+          className="grid h-[118px] gap-2 p-2"
+          style={{ gridTemplateColumns: `repeat(${playedMaps.length}, minmax(0, 1fr))` }}
+        >
+          {playedMaps.map(({ game, veto }) => {
+            const selected = !props.matchGame || props.matchGame.id === game.id;
+            const competitor =
+              veto && props.match.competitors.find((entry) => entry.teamId === veto.teamId);
+            const [homeGame, awayGame] = game.teams;
+            const hasScore = homeGame.score !== null && awayGame.score !== null;
+            const unusedDecider = veto?.type === Constants.MapVetoAction.DECIDER && !hasScore;
+
+            return (
+              <figure
+                key={game.id + '__veto_map'}
+                className={cx(
+                  'relative overflow-hidden rounded-sm border',
+                  selected
+                    ? 'border-base-content/30 opacity-100'
+                    : 'border-base-content/10 opacity-50',
+                  unusedDecider && 'opacity-40 grayscale',
+                )}
+              >
+                <Image
+                  className="h-full w-full object-cover"
+                  src={Util.convertMapPool(game.map, props.settings.general.game, true)}
+                  title={Util.convertMapPool(game.map, props.settings.general.game)}
+                />
+                <figcaption className="bg-base-300/85 absolute inset-x-0 bottom-0 px-2 py-1 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-bold">
+                      {Util.convertMapPool(game.map, props.settings.general.game)}
+                    </span>
+                    {!!veto && (
+                      <span
+                        className={cx(
+                          'badge badge-xs uppercase',
+                          VETO_BADGE_STYLES[veto.type as Constants.MapVetoAction],
+                        )}
+                      >
+                        {veto.type}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="flex min-w-0 items-center gap-1">
+                      {!!competitor && <img src={competitor.team.blazon} className="size-4" />}
+                      <span className="truncate opacity-70">
+                        {competitor ? competitor.team.name : '\u00a0'}
+                      </span>
+                    </span>
+                    {hasScore && (
+                      <span className="font-bold">
+                        {homeGame.score}:{awayGame.score}
+                      </span>
+                    )}
+                    {!hasScore && <span>&nbsp;</span>}
+                  </div>
+                </figcaption>
+              </figure>
+            );
+          })}
+        </section>
+      </article>
+      <MatchInfo match={props.match} />
+    </section>
+  );
 }
 
 /**
@@ -592,53 +926,13 @@ export default function () {
           </li>
         </ul>
       </header>
-      <section className="card image-full h-16 rounded-none before:rounded-none!">
-        <figure>
-          <Image
-            className="h-full w-full"
-            src={Util.convertMapPool(
-              matchGame?.map || match.games[0].map,
-              settings.general.game,
-              true,
-            )}
-          />
-        </figure>
-        <header className="card-body grid grid-cols-3 place-items-center p-0">
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
-            <img src={home.team.blazon} className="size-8" />
-            <p>{home.team.name}</p>
-          </article>
-          <article className="grid grid-cols-3 place-items-center text-4xl font-bold">
-            <p
-              className={
-                matchGameHome.score > matchGameAway.score
-                  ? 'text-success'
-                  : matchGameHome.score < matchGameAway.score
-                    ? 'text-error'
-                    : 'text-inherit'
-              }
-            >
-              {matchGameHome.score}
-            </p>
-            <p>:</p>
-            <p
-              className={
-                matchGameAway.score > matchGameHome.score
-                  ? 'text-success'
-                  : matchGameAway.score < matchGameHome.score
-                    ? 'text-error'
-                    : 'text-inherit'
-              }
-            >
-              {matchGameAway.score}
-            </p>
-          </article>
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
-            <p>{away.team.name}</p>
-            <img src={away.team.blazon} className="size-8" />
-          </article>
-        </header>
-      </section>
+      <PostgameScoreHeader
+        away={away}
+        awayScore={matchGameAway.score}
+        home={home}
+        homeScore={matchGameHome.score}
+        match={match}
+      />
       {match.games.length > 1 && (
         <section
           role="tablist"
@@ -667,6 +961,7 @@ export default function () {
           ))}
         </section>
       )}
+      <VetoSummary match={match} matchGame={matchGame} settings={settings} vetoes={vetoes} />
       <Scoreboard competitor={home} match={match} matchGame={matchGame} vetoes={vetoes} />
       {(match.games.length === 1 || !!matchGame) && (
         <table className="table-xs table">
@@ -714,61 +1009,7 @@ export default function () {
         </table>
       )}
       <Scoreboard competitor={away} match={match} matchGame={matchGame} vetoes={vetoes} />
-      <section className="h-0 flex-grow overflow-x-auto">
-        {(match.games.length === 1 || !!matchGame) && (
-          <table className="table-pin-rows table-xs table">
-            {[...Array(totalHalves)].map((_, half) => (
-              <React.Fragment key={half + '__match_log'}>
-                <thead>
-                  <tr className="border-t-base-content/10 border-t">
-                    <th>
-                      {t('postgame.matchLog')} - {Util.toOrdinalSuffix(half + 1)}{' '}
-                      {t('postgame.half')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matchEvents
-                    .filter((event) => event.half === half || (half === 0 && event.half === -1))
-                    .map((event) => {
-                      const payload = JSON.parse(event.payload);
-                      const action = event?.attacker
-                        ? t('postgame.killed')
-                        : t('postgame.assisted');
-                      return (
-                        <tr
-                          key={event.id + '__match_log'}
-                          className={cx(event.winnerId && 'font-bold')}
-                        >
-                          <td>
-                            {event.winnerId ? (
-                              <span>
-                                {event.winner.team.name} {t('postgame.wonRound')}&nbsp;
-                                {JSON.stringify(payload.payload.score)}
-                              </span>
-                            ) : (
-                              <span>
-                                {event.attacker?.name || event.assist?.name}&nbsp;
-                                {action}&nbsp;
-                                {event.victim.name}&nbsp;
-                                {!!event.weapon && (
-                                  <span>
-                                    {t('postgame.with')} {event.weapon}&nbsp;
-                                  </span>
-                                )}
-                                {!!event.headshot && <span>({t('postgame.headshot')})</span>}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </React.Fragment>
-            ))}
-          </table>
-        )}
-      </section>
+      <section className="h-0 flex-grow" />
       {match.status !== Constants.MatchStatus.COMPLETED && (
         <button
           className="btn btn-xl btn-block btn-secondary rounded-none active:translate-0!"
