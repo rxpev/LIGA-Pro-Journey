@@ -675,7 +675,7 @@ async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants
  * @param tournament  The tournament object the matches belong to.
  * @param competition The competition the matches belong to.
  * @param mapName     The round's map name.
- * @param vetoMapName Placeholder map for IGL user matches that should always use veto.
+ * @param vetoMapName Placeholder map for user matches that should always use veto.
  * @function
  */
 async function createMatchdays(
@@ -732,9 +732,6 @@ async function createMatchdays(
       ? competition.competitors.find((competitor) => competitor.teamId === profile.teamId)
       : undefined;
   const userSeed = tournament.getSeedByCompetitorId(userCompetitorId?.id);
-  const userIsIgl =
-    !!profile?.teamId && resolveUserRole(profile, profile?.player) === Constants.UserRole.IGL;
-
   // create the matchdays
   const totalRounds = tournament.$base.rounds().length;
 
@@ -899,10 +896,8 @@ async function createMatchdays(
         );
       }
 
-      const isUserIglMatch = !!userSeed && match.p.includes(userSeed) && userIsIgl;
-      const roundMapName = isUserIglMatch
-        ? resolvedVetoMapName || resolvedMapName
-        : resolvedMapName;
+      const isUserMatch = !!userSeed && match.p.includes(userSeed);
+      const roundMapName = isUserMatch ? resolvedVetoMapName || resolvedMapName : resolvedMapName;
 
       // assign map to match
       if (!match.data) {

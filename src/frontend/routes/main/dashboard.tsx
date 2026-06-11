@@ -115,10 +115,6 @@ export default function () {
   const { state, dispatch } = React.useContext(AppStateContext);
   const audioNegativeAlert = useAudio('negative-alert.wav');
   const audioClick = useAudio('button-click-inapp.wav');
-  const isIgl = React.useMemo(
-    () => state.profile?.player?.role === Constants.UserRole.IGL,
-    [state.profile],
-  );
   const isBenched = React.useMemo(
     () => state.profile?.player?.transferListed === true,
     [state.profile],
@@ -167,6 +163,14 @@ export default function () {
   const isArenaModeMatch = React.useCallback((match?: (typeof upcoming)[number]) => {
     const tierSlug = match?.competition?.tier?.slug;
     return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+  }, []);
+
+  const shouldUseVetoFlow = React.useCallback((match?: (typeof upcoming)[number]) => {
+    return (
+      !!match &&
+      match.status !== Constants.MatchStatus.PLAYING &&
+      match.status !== Constants.MatchStatus.COMPLETED
+    );
   }, []);
 
   const dispatchPlayWithArenaModeGuard = React.useCallback(
@@ -730,6 +734,7 @@ export default function () {
                 }
 
                 const spotlightGames = spotlight.games || [];
+                const spotlightUsesVetoFlow = shouldUseVetoFlow(spotlight);
                 const [homeHistorial, awayHistorial] = matchHistorial;
                 const [homeWorldRanking, awayWorldRanking] = worldRankings;
                 const [homeSuffix, awaySuffix] = [home, away].map((competitor) => {
@@ -769,7 +774,7 @@ export default function () {
                       <Image
                         className="h-full w-full"
                         src={
-                          isIgl && isMatchday
+                          spotlightUsesVetoFlow
                             ? 'resources://maps/allmaps.png'
                             : Util.convertMapPool(
                                 spotlightGames[0]?.map || 'de_dust2',
@@ -819,10 +824,12 @@ export default function () {
                             <li className="stack-x items-center">
                               <FaMapSigns />
                               <span>
-                                {Util.convertMapPool(
-                                  spotlightGames[0]?.map || 'de_dust2',
-                                  settings.general.game,
-                                )}
+                                {spotlightUsesVetoFlow
+                                  ? 'Map veto'
+                                  : Util.convertMapPool(
+                                      spotlightGames[0]?.map || 'de_dust2',
+                                      settings.general.game,
+                                    )}
                               </span>
                             </li>
                             <li className="stack-x items-center">
@@ -874,10 +881,7 @@ export default function () {
                             const hasMapInProgress = spotlightGames.some(
                               (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
                             );
-                            const shouldOpenVeto =
-                              spotlight.status !== Constants.MatchStatus.PLAYING &&
-                              spotlight.status !== Constants.MatchStatus.COMPLETED &&
-                              (spotlightGames.length > 1 || isIgl);
+                            const shouldOpenVeto = spotlightUsesVetoFlow;
 
                             // only jump directly into game when a map is already live,
                             // or when no veto flow is required.

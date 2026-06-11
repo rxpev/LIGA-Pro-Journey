@@ -92,7 +92,7 @@ function PregameTeamHeader(props: {
   );
 }
 
-function PregameMatchHeader(props: {
+export function PregameMatchHeader(props: {
   away: Matches[number]['competitors'][number];
   home: Matches[number]['competitors'][number];
   match: Matches[number];

@@ -12,6 +12,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
+import { PregameMatchHeader } from './pregame';
 
 /** @enum */
 enum Tab {
@@ -185,6 +186,7 @@ export default function () {
   const [historicalMatches, setHistoricalMatches] = React.useState<Array<HistoricalMatch>>([]);
   const [historicalMatchesLoaded, setHistoricalMatchesLoaded] = React.useState(false);
   const [arenaModePromptVisible, setArenaModePromptVisible] = React.useState(false);
+  const savedVetoSignature = React.useRef<string>();
 
   React.useEffect(() => {
     if (arenaModePromptVisible) {
@@ -228,7 +230,6 @@ export default function () {
   }, []);
 
   // grab basic match info
-  const game = React.useMemo(() => match && match.games[0], [match]);
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
   const isIgl = React.useMemo(
     () => state.profile?.player?.role === Constants.UserRole.IGL,
@@ -367,19 +368,6 @@ export default function () {
         .map((map) => map.gameMap.name),
     [mapPool, vetoHistory],
   );
-  const previewMap = React.useMemo(() => {
-    if (vetoMapList.length > 0) {
-      return vetoMapList[0].map;
-    }
-
-    // In BO1, don't reveal a league-preselected map in pregame.
-    // Show the last unvetoed map (if available) while veto is in progress.
-    if (match?.games.length === 1 && cpuPool.length === 1) {
-      return cpuPool[0];
-    }
-
-    return mapPool[0]?.gameMap.name || game?.map;
-  }, [cpuPool, game?.map, mapPool, match?.games.length, vetoMapList]);
   const selectAutomatedVetoMap = React.useCallback(
     (teamIdx?: number | false, type?: Constants.MapVetoAction) => {
       if (!match) {
@@ -438,27 +426,21 @@ export default function () {
         match.id,
         vetoMapList.map((item) => item.map),
       ),
-      api.match.updateVetoList(match.id, vetoMapList),
+      api.match.updateVetoList(match.id, vetoHistory),
     ]).then(() => {
       setWorking(false);
       api.window.send(Constants.WindowIdentifier.Main, match.id, null);
       api.window.close(Constants.WindowIdentifier.Modal);
     });
-  }, [match, vetoMapList]);
+  }, [match, vetoHistory, vetoMapList]);
 
   const savePregameState = React.useCallback(async () => {
     if (!match) {
       return;
     }
 
-    await Promise.all([
-      api.match.updateMapList(
-        match.id,
-        vetoMapList.map((item) => item.map),
-      ),
-      api.match.updateVetoList(match.id, vetoHistory),
-    ]);
-  }, [match, vetoHistory, vetoMapList]);
+    await api.match.updateVetoList(match.id, vetoHistory);
+  }, [match, vetoHistory]);
 
   const onPlay = React.useCallback(async () => {
     if (!match) {
@@ -542,6 +524,22 @@ export default function () {
     vetoSequenceStep,
   ]);
 
+  React.useEffect(() => {
+    if (!match || !vetoHistory.length) {
+      return;
+    }
+
+    const signature = JSON.stringify(vetoHistory);
+
+    if (savedVetoSignature.current === signature) {
+      return;
+    }
+
+    savedVetoSignature.current = signature;
+
+    api.match.updateVetoList(match.id, vetoHistory);
+  }, [match, vetoHistory]);
+
   if (!state.profile || !match) {
     return (
       <main className="h-screen w-screen">
@@ -577,27 +575,7 @@ export default function () {
           </li>
         </ul>
       </header>
-      <section className="card image-full h-16 rounded-none drop-shadow-md before:rounded-none!">
-        <figure>
-          <Image
-            className="h-full w-full"
-            src={Util.convertMapPool(previewMap || game.map, settingsAll.general.game, true)}
-          />
-        </figure>
-        <header className="card-body grid grid-cols-3 place-items-center p-0">
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
-            <img src={home.team.blazon} className="size-8" />
-            <p>{home.team.name}</p>
-          </article>
-          <article className="center text-2xl font-bold">
-            <p>vs</p>
-          </article>
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
-            <p>{away.team.name}</p>
-            <img src={away.team.blazon} className="size-8" />
-          </article>
-        </header>
-      </section>
+      <PregameMatchHeader home={home} away={away} match={match} />
       <section
         role="tablist"
         className="tabs-box tabs border-base-content/10 tabs-xs rounded-none border-y"
