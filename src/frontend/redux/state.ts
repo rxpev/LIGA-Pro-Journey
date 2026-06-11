@@ -10,9 +10,11 @@ import { Constants, Eagers } from "@liga/shared";
 /** Lightweight user struct for Landing window */
 export interface PlayerCareerUser {
   name: string;
-  countryId: number;
+  countryId?: number;
   avatar?: string;
 }
+
+export type PlayerCareerRole = "RIFLER" | "AWPER" | "IGL";
 
 /** Fully flexible Redux action */
 export interface AppAction {
@@ -64,7 +66,7 @@ export interface AppState {
   windowData: Partial<{
     [Constants.WindowIdentifier.Landing]: {
       user?: PlayerCareerUser;
-      role?: { selectedRole: string };
+      role?: { selectedRole?: PlayerCareerRole };
       today: Date;
     };
     [Constants.WindowIdentifier.Modal]: {

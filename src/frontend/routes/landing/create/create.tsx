@@ -19,6 +19,7 @@ export default function () {
   const navigate = useNavigate();
   const location = useLocation();
   const audioRelease = useAudio('button-release.wav');
+  const audioClick = useAudio('button-click.wav');
 
   // infer the currently loaded step
   const currentStep = React.useMemo(() => {
@@ -58,7 +59,10 @@ export default function () {
               idx < currentStep && 'step-primary',
               idx <= 1 && 'cursor-pointer',
             )}
-            onClick={() => navigate(idx === 0 ? '/create' : '/create/2')}
+            onClick={() => {
+              audioClick();
+              navigate(idx === 0 ? '/create' : '/create/2');
+            }}
           >
             <span className="text-sm italic">{step.title}</span>
           </li>

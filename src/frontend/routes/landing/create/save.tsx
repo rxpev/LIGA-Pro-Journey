@@ -6,11 +6,12 @@
 import React from 'react';
 import { Constants } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTranslation } from '@liga/frontend/hooks';
+import type { PlayerCareerRole } from '@liga/frontend/redux/state';
 import { useLocation } from 'react-router-dom';
 
 interface RoleLocationState {
-  role?: 'RIFLER' | 'AWPER' | 'IGL';
+  role?: PlayerCareerRole;
 }
 
 /**
@@ -23,13 +24,13 @@ export default function Save() {
   const { state } = React.useContext(AppStateContext);
   const [status, setStatus] = React.useState('');
   const location = useLocation() as unknown as { state?: RoleLocationState };
-
-  const selectedRole = location.state?.role || 'RIFLER';
+  const audioNegativeAlert = useAudio('negative-alert.wav');
 
   // extract user + role data
   const windowData = state.windowData[Constants.WindowIdentifier.Landing];
   const playerName = windowData?.user?.name;
   const countryId = windowData?.user?.countryId;
+  const selectedRole = location.state?.role || windowData?.role?.selectedRole;
 
   // compute new save ID
   const latestProfile = Math.max(...state.profiles.map((profile) => profile.id));
@@ -39,6 +40,12 @@ export default function Save() {
 
   React.useEffect(() => {
     const createPlayerCareer = async () => {
+      if (!playerName?.trim() || !countryId || !selectedRole) {
+        audioNegativeAlert();
+        setStatus('Choose an alias, country, and role before creating a save.');
+        return;
+      }
+
       try {
         setStatus(t('shared.connectingToDatabase'));
         await api.database.connect(String(newSaveId));
@@ -46,9 +53,9 @@ export default function Save() {
         // Create PLAYER profile instead of manager
         setStatus(t('landing.create.statusSaving'));
         await api.profiles.createPlayerCareer({
-          playerName: windowData?.user?.name!,
-          countryId: windowData?.user?.countryId!,
-          role: selectedRole || 'RIFLER', // fallback
+          playerName,
+          countryId,
+          role: selectedRole,
         });
 
         // Skip team-based season init (since teamless)
