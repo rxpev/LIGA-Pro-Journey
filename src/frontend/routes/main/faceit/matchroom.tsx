@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getFaceitRankBadge, LEVEL_IMAGES } from "./faceit";
-import { Image } from "@liga/frontend/components";
+import { Image, MatchAbandonedPrompt } from "@liga/frontend/components";
 import { FaceitHeader } from "./faceit";
 import Scoreboard from "./scoreboard";
 import { levelFromElo } from "@liga/backend/lib/levels";
@@ -238,6 +238,7 @@ export default function MatchRoom({
   });
   const connectCooldownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isConnectCooldown, setIsConnectCooldown] = useState(false);
+  const [matchAbandonedPromptVisible, setMatchAbandonedPromptVisible] = useState(false);
 
   // ------------------------------
   // SETTINGS / MAP POOL FOR VETO
@@ -470,21 +471,32 @@ export default function MatchRoom({
       connectCooldownTimeoutRef.current = null;
     }, 45_000);
 
-    const result: { matchId: number } = await api.faceit.startMatch({
-      ...room,
-      selectedMap: deciderMap,
-      // Make sure to send *shuffled* teams to backend so they match what we display.
-      teamA: shuffledTeamA,
-      teamB: shuffledTeamB,
-    } as any);
+    try {
+      const result: { matchId: number } = await api.faceit.startMatch({
+        ...room,
+        selectedMap: deciderMap,
+        // Make sure to send *shuffled* teams to backend so they match what we display.
+        teamA: shuffledTeamA,
+        teamB: shuffledTeamB,
+      } as any);
 
-    dispatch(faceitRoomSet({ ...room, matchId: room.matchId }, result.matchId));
+      dispatch(faceitRoomSet({ ...room, matchId: room.matchId }, result.matchId));
 
-    if (onEloUpdate) {
-      await onEloUpdate();
+      if (onEloUpdate) {
+        await onEloUpdate();
+      }
+
+      setTab("scoreboard");
+    } catch (_) {
+      setIsConnectCooldown(false);
+
+      if (connectCooldownTimeoutRef.current) {
+        clearTimeout(connectCooldownTimeoutRef.current);
+        connectCooldownTimeoutRef.current = null;
+      }
+
+      setMatchAbandonedPromptVisible(true);
     }
-
-    setTab("scoreboard");
   };
 
   useEffect(() => {
@@ -567,6 +579,9 @@ export default function MatchRoom({
 
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-white flex flex-col">
+      {matchAbandonedPromptVisible && (
+        <MatchAbandonedPrompt onClose={() => setMatchAbandonedPromptVisible(false)} />
+      )}
       <FaceitHeader
         elo={elo}
         level={level}

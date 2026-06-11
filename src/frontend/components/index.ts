@@ -6,6 +6,7 @@ export { default as PlayerCard } from './player-card';
 export { default as Standings } from './standings';
 export { default as Brackets } from './brackets';
 export { default as Image } from './image';
+export { default as MatchAbandonedPrompt } from './match-abandoned-prompt';
 export { default as TeamBlazon } from './team-blazon';
 export { default as Historial } from './historial';
 export { default as Pagination } from './pagination';

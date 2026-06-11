@@ -9,7 +9,7 @@ import { cloneDeep, sample, set } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
-import { Image } from '@liga/frontend/components';
+import { Image, MatchAbandonedPrompt } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import arenaModeIcon from '@liga/frontend/assets/arenamode.png';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
@@ -399,6 +399,7 @@ export default function () {
     ReturnType<typeof api.app.arenaModeStatus>
   > | null>(null);
   const [arenaModeInstallPromptVisible, setArenaModeInstallPromptVisible] = React.useState(false);
+  const [matchAbandonedPromptVisible, setMatchAbandonedPromptVisible] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
   const navigate = useNavigate();
   const t = useTranslation('windows');
@@ -1227,7 +1228,7 @@ export default function () {
                 },
               ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
               spectating,
-            );
+            ).catch(() => setMatchAbandonedPromptVisible(true));
           }}
         >
           {spectating ? 'Spectate' : t('main.dashboard.play')}
@@ -1367,6 +1368,9 @@ export default function () {
             </footer>
           </article>
         </section>
+      )}
+      {matchAbandonedPromptVisible && (
+        <MatchAbandonedPrompt onClose={() => setMatchAbandonedPromptVisible(false)} />
       )}
       {!!rosterContextMenu && (
         <button
