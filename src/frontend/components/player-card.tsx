@@ -33,6 +33,7 @@ interface PlayerCardProps extends React.ComponentProps<'article'> {
   compact?: boolean;
   noStats?: boolean;
   showStatusBadge?: boolean;
+  compactAvatarClassName?: string;
   wideCompactIdentity?: boolean;
 
   // Kept for type-compatibility, but no longer rendered as buttons
@@ -123,7 +124,7 @@ export default function (props: PlayerCardProps) {
         <figure className="center">
           <img
             src={props.player.avatar || 'resources://avatars/empty.png'}
-            className="h-12 w-auto"
+            className={cx('h-12 w-auto', props.compactAvatarClassName)}
           />
         </figure>
         <aside className="px-4">

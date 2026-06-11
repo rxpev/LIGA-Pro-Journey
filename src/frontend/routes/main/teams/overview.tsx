@@ -353,6 +353,7 @@ export default function () {
                       compact
                       key={player.id + '__squad'}
                       className="border-transparent bg-transparent"
+                      compactAvatarClassName="h-17"
                       game={settings.general.game}
                       player={player}
                       noStats={player.id === state.profile.playerId}
