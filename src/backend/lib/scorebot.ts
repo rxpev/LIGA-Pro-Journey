@@ -75,11 +75,18 @@ export interface EventPayloadRoundOver extends EventPayload {
 }
 
 /** @interface */
+export interface EventPayloadPlayerEntered extends EventPayload {
+  name: string;
+  serverId: string;
+  steamId: string;
+}
+
+/** @interface */
 export interface ScorebotEvents {
   [EventIdentifier.GAME_OVER]: (payload: EventPayloadGameOver) => void;
   [EventIdentifier.PLAYER_ASSISTED]: (payload: EventPayloadPlayerAssisted) => void;
   [EventIdentifier.PLAYER_CONNECTED]: () => void;
-  [EventIdentifier.PLAYER_ENTERED]: (payload: string) => void;
+  [EventIdentifier.PLAYER_ENTERED]: (payload: EventPayloadPlayerEntered) => void;
   [EventIdentifier.PLAYER_KILLED]: (payload: EventPayloadPlayerKilled) => void;
   [EventIdentifier.ROUND_OVER]: (payload: EventPayloadRoundOver) => void;
   [EventIdentifier.SAY]: (payload: string) => void;
@@ -260,10 +267,17 @@ export class Watcher extends events.EventEmitter {
 
     if (regexmatch) {
       const [, playerSignature] = regexmatch;
-      const [, playerName] = playerSignature.match(RegexTypes.PLAYER_REGEX_NO_TEAM);
+      const [, playerName, serverId, steamId] = playerSignature.match(
+        RegexTypes.PLAYER_REGEX_NO_TEAM,
+      );
 
       if (playerName) {
-        this.emit(EventIdentifier.PLAYER_ENTERED, playerName);
+        this.emit(EventIdentifier.PLAYER_ENTERED, {
+          name: playerName,
+          serverId,
+          steamId,
+          timestamp,
+        });
       }
     }
   }

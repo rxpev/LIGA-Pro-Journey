@@ -104,7 +104,7 @@ export async function saveFaceitResult(
     id: profile.player.id,
     name: profile.player.name,
     steamId: profile.player.steamId ?? null,
-    serverId: null,
+    serverId: gameServer?.faceitUserServerId ?? null,
   };
 
   if (!teamA.find((p) => p.id === userPlayer.id)) teamA.push(userPlayer);

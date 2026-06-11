@@ -386,6 +386,7 @@ export class Server {
   private faceitUserSide?: "t" | "ct";
   private sideTeamIds?: { t: number; ct: number };
   private clientLaunchedViaSteam: boolean;
+  public faceitUserServerId: string | null;
 
   public getFaceitSides() {
     return this.faceitSides;
@@ -455,6 +456,7 @@ export class Server {
     this.clientConnectedCallbacks = [];
     this.clientConnected = false;
     this.clientProcessSeen = false;
+    this.faceitUserServerId = null;
 
     // handle game override
     if (gameOverride) {
@@ -1931,6 +1933,13 @@ End\n
 
     this.scorebot.once(Scorebot.EventIdentifier.PLAYER_CONNECTED, handleClientConnected);
     this.scorebot.once(Scorebot.EventIdentifier.PLAYER_ENTERED, handleClientConnected);
+    this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ENTERED, (payload) => {
+      if (!this.isFaceit || payload.steamId === 'BOT' || payload.steamId === 'Console') {
+        return;
+      }
+
+      this.faceitUserServerId = payload.serverId;
+    });
 
     try {
       await this.scorebot.start();
