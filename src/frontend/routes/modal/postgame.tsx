@@ -64,6 +64,9 @@ interface ScoreboardProps {
 }
 
 type MatchVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number];
+type MatchInfoMatch = Matches<typeof Eagers.matchEvents>[number];
+type SwissSiblingMatch = Matches<typeof Eagers.match>[number];
+type SwissRecord = { losses: number; wins: number };
 
 /** @enum */
 enum Rating {
@@ -246,39 +249,64 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   return start <= date && (!end || end >= date);
 }
 
-function getMatchFormatNotes(match: Matches<typeof Eagers.matchEvents>[number]) {
+function getSwissRecordBeforeMatch(
+  match: MatchInfoMatch,
+  competitionMatches: SwissSiblingMatch[],
+  teamId: number,
+): SwissRecord {
+  return competitionMatches
+    .filter(
+      (sibling) =>
+        sibling.id !== match.id &&
+        sibling.status === Constants.MatchStatus.COMPLETED &&
+        (sibling.round || 0) < (match.round || 0) &&
+        sibling.competitors.some((competitor) => competitor.teamId === teamId),
+    )
+    .reduce<SwissRecord>(
+      (record, sibling) => {
+        const competitor = sibling.competitors.find((entry) => entry.teamId === teamId);
+
+        if (competitor?.result === Constants.MatchResult.WIN) {
+          return { ...record, wins: record.wins + 1 };
+        }
+
+        if (competitor?.result === Constants.MatchResult.LOSS) {
+          return { ...record, losses: record.losses + 1 };
+        }
+
+        return record;
+      },
+      { losses: 0, wins: 0 },
+    );
+}
+
+function getMatchFormatNotes(match: MatchInfoMatch, competitionMatches: SwissSiblingMatch[] = []) {
   const tierSlug = match.competition.tier.slug as Constants.TierSlug;
   const swissConfig = Constants.TierSwissConfig[tierSlug];
 
   if (swissConfig) {
-    const records = match.competitors
-      .map((competitor) => {
-        const competitionEntry = match.competition.competitors.find(
-          (entry) => entry.teamId === competitor.teamId,
-        );
-        const wins = Math.max(
-          0,
-          (competitionEntry?.win || 0) - (competitor.result === Constants.MatchResult.WIN ? 1 : 0),
-        );
-        const losses = Math.max(
-          0,
-          (competitionEntry?.loss || 0) -
-            (competitor.result === Constants.MatchResult.LOSS ? 1 : 0),
-        );
-
-        return `${wins}-${losses}`;
-      })
+    const competitorRecords = match.competitors.map((competitor) => ({
+      competitor,
+      record: getSwissRecordBeforeMatch(match, competitionMatches, competitor.teamId),
+    }));
+    const records = competitorRecords
+      .map(({ record }) => `${record.wins}-${record.losses}`)
       .filter((record, index, list) => list.indexOf(record) === index);
-    const recordLabel = records.length === 1 ? ` (teams with a ${records[0]} record)` : '';
+    const winner = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.WIN,
+    );
+    const loser = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.LOSS,
+    );
     const consequences = [
-      records.some((record) => Number(record.split('-')[0]) + 1 >= swissConfig.maxWins) &&
-        'Winning team advances',
-      records.some((record) => Number(record.split('-')[1]) + 1 >= swissConfig.maxLosses) &&
-        'Losing team is eliminated',
+      winner && winner.record.wins + 1 >= swissConfig.maxWins && 'Winning team advances',
+      loser && loser.record.losses + 1 >= swissConfig.maxLosses && 'Losing team is eliminated',
     ].filter(Boolean);
+    const recordLabel =
+      match.round > 1 && records.length === 1 ? ` (teams with a ${records[0]} record)` : '';
 
-    return `* ${Util.parseSwissRound(match.round)}${recordLabel}. ${
-      consequences.length ? consequences.join('; ') + '.' : 'Result updates Swiss standings.'
+    return `* ${Util.parseSwissRound(match.round)}${recordLabel}${
+      consequences.length ? `. ${consequences.join('; ')}.` : ''
     }`;
   }
 
@@ -293,7 +321,7 @@ function getMatchFormatNotes(match: Matches<typeof Eagers.matchEvents>[number]) 
   return `* ${Util.parseCupRounds(match.round, match.totalRounds)}`;
 }
 
-function MatchInfo(props: { match: Matches<typeof Eagers.matchEvents>[number] }) {
+function MatchInfo(props: { competitionMatches: SwissSiblingMatch[]; match: MatchInfoMatch }) {
   return (
     <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
       <header className="border-base-content/10 border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
@@ -303,7 +331,7 @@ function MatchInfo(props: { match: Matches<typeof Eagers.matchEvents>[number] })
         <p>
           Best of {props.match.games.length} ({props.match.competition.tier.lan ? 'LAN' : 'Online'})
         </p>
-        <p>{getMatchFormatNotes(props.match)}</p>
+        <p>{getMatchFormatNotes(props.match, props.competitionMatches)}</p>
       </section>
     </article>
   );
@@ -321,9 +349,7 @@ function PostgameTeamHeader(props: {
     >
       <div className="grid w-28 place-items-center gap-1">
         <img src={props.competitor.team.blazon} className="size-16 object-contain" />
-        <p className="max-w-full truncate px-1 text-sm font-black">
-          {props.competitor.team.name}
-        </p>
+        <p className="max-w-full truncate px-1 text-sm font-black">{props.competitor.team.name}</p>
       </div>
     </article>
   );
@@ -394,7 +420,7 @@ function PostgameScoreHeader(props: {
 
       <p
         className={cx(
-          'relative z-10 text-center text-6xl font-black leading-none',
+          'relative z-10 text-center text-6xl leading-none font-black',
           props.homeScore > props.awayScore && 'text-success',
           props.homeScore < props.awayScore && 'text-error',
         )}
@@ -404,14 +430,14 @@ function PostgameScoreHeader(props: {
 
       <article className="relative z-10 grid place-items-center gap-1">
         <Image src={competitionLogo} className="size-24 object-contain" />
-        <p className="text-base-content/60 text-xs font-bold uppercase leading-none tracking-wide">
+        <p className="text-base-content/60 text-xs leading-none font-bold tracking-wide uppercase">
           {matchDateLabel}
         </p>
       </article>
 
       <p
         className={cx(
-          'relative z-10 text-center text-6xl font-black leading-none',
+          'relative z-10 text-center text-6xl leading-none font-black',
           props.awayScore > props.homeScore && 'text-success',
           props.awayScore < props.homeScore && 'text-error',
         )}
@@ -425,6 +451,7 @@ function PostgameScoreHeader(props: {
 }
 
 function VetoSummary(props: {
+  competitionMatches: SwissSiblingMatch[];
   match: Matches<typeof Eagers.matchEvents>[number];
   matchGame?: MatchGame;
   settings: typeof Constants.Settings;
@@ -512,7 +539,7 @@ function VetoSummary(props: {
           })}
         </section>
       </article>
-      <MatchInfo match={props.match} />
+      <MatchInfo competitionMatches={props.competitionMatches} match={props.match} />
     </section>
   );
 }
@@ -829,6 +856,7 @@ export default function () {
     [location.state],
   );
   const [match, setMatch] = React.useState<Matches<typeof Eagers.matchEvents>[number]>();
+  const [competitionMatches, setCompetitionMatches] = React.useState<SwissSiblingMatch[]>([]);
   const [matchGame, setMatchGame] = React.useState<MatchGame>();
   const [vetoes, setVetoes] = React.useState<Array<MatchVetoEntry>>([]);
   const [settings, setSettings] = React.useState(Constants.Settings);
@@ -855,6 +883,21 @@ export default function () {
     }
 
     api.match.findVetoList(match.id).then(setVetoes);
+
+    if (Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]) {
+      api.matches
+        .all<typeof Eagers.match>({
+          where: {
+            competitionId: match.competitionId,
+          },
+          include: Eagers.match.include,
+          orderBy: [{ round: 'asc' }, { id: 'asc' }],
+        })
+        .then(setCompetitionMatches);
+      return;
+    }
+
+    setCompetitionMatches([]);
   }, [match]);
 
   // load settings
@@ -961,7 +1004,13 @@ export default function () {
           ))}
         </section>
       )}
-      <VetoSummary match={match} matchGame={matchGame} settings={settings} vetoes={vetoes} />
+      <VetoSummary
+        competitionMatches={competitionMatches}
+        match={match}
+        matchGame={matchGame}
+        settings={settings}
+        vetoes={vetoes}
+      />
       <Scoreboard competitor={home} match={match} matchGame={matchGame} vetoes={vetoes} />
       {(match.games.length === 1 || !!matchGame) && (
         <table className="table-xs table">
