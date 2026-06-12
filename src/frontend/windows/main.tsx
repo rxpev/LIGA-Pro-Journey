@@ -208,6 +208,7 @@ function Root() {
   const audioClick = useAudio('button-click-inapp.wav');
   const audioRelease = useAudio('button-release.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
+  const audioNotification = useAudio('notification.wav');
 
   React.useEffect(() => {
     const removeClosePromptListener = api.ipc.on(
@@ -299,6 +300,7 @@ function Root() {
     // handle incoming e-mail notifications
     api.ipc.on(Constants.IPCRoute.EMAILS_NEW, (email: (typeof state.emails)[number]) => {
       dispatch(emailsUpdate([email]));
+      audioNotification();
 
       const [dialogue] = email.dialogues.slice(-1);
 

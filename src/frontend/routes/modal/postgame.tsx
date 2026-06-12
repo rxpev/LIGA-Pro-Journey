@@ -71,7 +71,7 @@ type SwissRecord = { losses: number; wins: number };
 /** @enum */
 enum Rating {
   LOW = 0.95,
-  HIGH = 1.1,
+  HIGH = 1.05,
 }
 
 const VETO_BADGE_STYLES = {

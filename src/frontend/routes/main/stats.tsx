@@ -129,6 +129,11 @@ const CompetitionStageLabels: Record<CompetitionStageOption, string> = {
 
 const CompetitionStageOptions: CompetitionStageOption[] = ['', 'GROUP_STAGE', 'PLAYOFFS'];
 
+enum Rating {
+  LOW = 0.95,
+  HIGH = 1.05,
+}
+
 const PlayoffStageTierSlugs = new Set<string>([
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
   Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
@@ -167,6 +172,18 @@ enum StatsTab {
   TOURNAMENTS = 'TOURNAMENTS',
   TEAMMATES = 'TEAMMATES',
   WEAPONS = 'WEAPONS',
+}
+
+function getRatingColorClass(rating: number) {
+  if (rating <= Rating.LOW) {
+    return 'text-error';
+  }
+
+  if (rating >= Rating.HIGH) {
+    return 'text-success';
+  }
+
+  return 'text-inherit';
 }
 
 function isLeagueMatch(match: MatchRecord) {
@@ -1135,15 +1152,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                       row.plusMinus,
                     )}
                   </td>
-                  <td
-                    className={`text-center font-semibold ${
-                      row.rating > 1
-                        ? 'text-success'
-                        : row.rating < 1
-                          ? 'text-error'
-                          : 'text-inherit'
-                    }`}
-                  >
+                  <td className={cx('text-center font-semibold', getRatingColorClass(row.rating))}>
                     {row.rating.toFixed(2)}
                   </td>
                 </tr>
@@ -1563,7 +1572,10 @@ export default function LeagueStatsConcept(): JSX.Element {
                             )}
                           </td>
                           <td
-                            className={`font-semibold ${Number(row.rating) > 1 ? 'text-success' : Number(row.rating) < 1 ? 'text-error' : 'text-inherit'}`}
+                            className={cx(
+                              'font-semibold',
+                              getRatingColorClass(Number(row.rating)),
+                            )}
                           >
                             {row.rating}
                           </td>
