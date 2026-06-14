@@ -13,8 +13,8 @@ import * as Constants from './constants';
 /**
  * Computes a compact HLTV-style player rating from scoreboard stats.
  *
- * Assists count as partial kill impact, strong positive games are compressed
- * logarithmically, and poor games lose rating a little more gently.
+ * Assists count as a small kill impact, strong positive games are compressed
+ * logarithmically, and a neutral K/D sits slightly below 1.00.
  *
  * @param kills    Number of kills.
  * @param deaths   Number of deaths.
@@ -22,12 +22,14 @@ import * as Constants from './constants';
  * @function
  */
 export function getPlayerRating(kills: number, deaths: number, assists = 0) {
-  const effectiveKills = kills + assists * 0.4;
+  const baseline = 0.97;
+  const effectiveKills = kills + assists * 0.2;
   const ratio = (effectiveKills + 1) / (deaths + 1);
   const plusMinus = effectiveKills - deaths;
 
-  const ratioScore = ratio >= 1 ? 1 + Math.log(ratio) * 0.7 : 1 + (ratio - 1) * 0.8;
-  const impactScore = Math.sign(plusMinus) * Math.sqrt(Math.abs(plusMinus)) * 0.05;
+  const ratioScore =
+    ratio >= 1 ? baseline + Math.log(ratio) * 0.65 : baseline + (ratio - 1) * 0.75;
+  const impactScore = Math.sign(plusMinus) * Math.sqrt(Math.abs(plusMinus)) * 0.045;
 
   return ratioScore + impactScore;
 }
