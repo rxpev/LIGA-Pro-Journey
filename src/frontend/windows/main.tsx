@@ -363,14 +363,14 @@ function Root() {
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],
-    ['/inbox', t('navigation.inbox')],
-    ['/squad', t('navigation.squadHub')],
-    ['/stats', 'Stats'],
     ['/faceit', 'FACEIT'],
+    ['/squad', t('navigation.squadHub')],
+    ['/stats', 'Statistics'],
     ['/teams', t('navigation.teams'), useMatch('/teams/*')],
-    ['/players', t('navigation.players')],
     ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
     ['/calendar', t('navigation.calendar')],
+    ['/inbox', t('navigation.inbox')],
+    ['/players', t('navigation.players')],
   ];
 
   return (
