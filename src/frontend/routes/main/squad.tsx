@@ -9,6 +9,18 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
+import { groupBy } from 'lodash';
+
+function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
+  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
+  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
+  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
+  const deaths = killOrAssistEvents.filter(
+    (event) => event.victimId === playerId && !event.assistId,
+  ).length;
+
+  return Util.getPlayerRating(kills, deaths, assists);
+}
 
 /**
  * Exports this module.
@@ -22,6 +34,7 @@ export default function () {
   const [squad, setSquad] = React.useState<
     Awaited<ReturnType<typeof api.squad.all<typeof Eagers.player>>>
     >([]);
+  const [squadRatings, setSquadRatings] = React.useState<Record<number, { maps: number; rating: number }>>({});
   const fmtDate = useFormatAppDate();
 
   // fetch data on first load
@@ -31,6 +44,77 @@ export default function () {
 
     api.squad.all().then(setSquad);
   }, [state.profile?.team]);
+
+  React.useEffect(() => {
+    setSquadRatings({});
+
+    if (!state.profile?.teamId || !squad.length) {
+      return;
+    }
+
+    api.matches
+      .all<typeof Eagers.matchEvents>({
+        ...Eagers.matchEvents,
+        where: {
+          status: Constants.MatchStatus.COMPLETED,
+          competitionId: { not: null as null },
+          matchType: { not: 'FACEIT_PUG' },
+          competitors: {
+            some: {
+              teamId: state.profile.teamId,
+            },
+          },
+          events: {
+            some: {},
+          },
+        },
+      })
+      .then((matches) => {
+        const rows: Record<number, { maps: number; ratingSum: number }> = {};
+
+        squad.forEach((player: any) => {
+          matches.forEach((match) => {
+            Object.values(groupBy(match.events, 'gameId')).forEach((gameEvents) => {
+              const hasPlayerEvent = gameEvents.some(
+                (event) =>
+                  event.attackerId === player.id ||
+                  event.assistId === player.id ||
+                  event.victimId === player.id,
+              );
+
+              if (!hasPlayerEvent) {
+                return;
+              }
+
+              const rating = getPlayerRatingFromEvents(player.id, gameEvents);
+
+              if (!Number.isFinite(rating)) {
+                return;
+              }
+
+              if (!rows[player.id]) {
+                rows[player.id] = { maps: 0, ratingSum: 0 };
+              }
+
+              rows[player.id].maps += 1;
+              rows[player.id].ratingSum += rating;
+            });
+          });
+        });
+
+        setSquadRatings(
+          Object.fromEntries(
+            Object.entries(rows).map(([playerId, row]) => [
+              Number(playerId),
+              {
+                maps: row.maps,
+                rating: row.maps ? row.ratingSum / row.maps : 0,
+              },
+            ]),
+          ),
+        );
+      });
+  }, [squad, state.profile?.teamId]);
 
   // load settings
   React.useEffect(() => {
@@ -187,6 +271,12 @@ export default function () {
                     key={player.id + '__squad'}
                     game={settings.general.game}
                     player={player}
+                    statMetric={{
+                      className: squadRatings[player.id] ? 'text-inherit' : 'text-muted',
+                      subtitle: squadRatings[player.id] ? `${squadRatings[player.id].maps} maps` : '0 maps',
+                      title: 'Rating',
+                      value: squadRatings[player.id] ? squadRatings[player.id].rating.toFixed(2) : '-',
+                    }}
                     onClickStarter={undefined}
                     onClickTransferListed={undefined}
                     onClickViewOffers={undefined}

@@ -11,7 +11,7 @@ import { ipcMain } from 'electron';
 import { glob } from 'glob';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
-import { DatabaseClient, Game, WindowManager } from '@liga/backend/lib';
+import { DatabaseClient, Game, WindowManager, Worldgen } from '@liga/backend/lib';
 
 export default function registerProfileHandlers() {
   ipcMain.handle(
@@ -108,6 +108,18 @@ export default function registerProfileHandlers() {
 
     WindowManager.sendAll(Constants.IPCRoute.PROFILES_CURRENT, updated);
     return updated;
+  });
+
+  ipcMain.handle(Constants.IPCRoute.PROFILES_NPC_MATCH_STATS_BACKFILL, async (event) => {
+    const result = await Worldgen.legacyBackfillNpcMatchStats((progress) => {
+      event.sender.send(Constants.IPCRoute.PROFILES_NPC_MATCH_STATS_BACKFILL_PROGRESS, progress);
+    });
+    const updated = await DatabaseClient.prisma.profile.findFirst({
+      include: { player: true },
+    });
+
+    WindowManager.sendAll(Constants.IPCRoute.PROFILES_CURRENT, updated);
+    return { ...result, profile: updated };
   });
 
   ipcMain.handle(Constants.IPCRoute.SAVES_ALL, async () => {

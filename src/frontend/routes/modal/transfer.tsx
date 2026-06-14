@@ -12,6 +12,7 @@ import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { Image } from '@liga/frontend/components';
 import { XPBar } from '@liga/frontend/components/player-card';
+import { AppStateContext } from '@liga/frontend/redux';
 import faceitLogo from '../../assets/faceit/icon.png';
 import faceitLevel1 from '../../assets/faceit/1.png';
 import faceitLevel2 from '../../assets/faceit/2.png';
@@ -23,6 +24,7 @@ import faceitLevel7 from '../../assets/faceit/7.png';
 import faceitLevel8 from '../../assets/faceit/8.png';
 import faceitLevel9 from '../../assets/faceit/9.png';
 import faceitLevel10 from '../../assets/faceit/10.png';
+import { groupBy } from 'lodash';
 
 /** @type {Player} */
 type Player =
@@ -66,6 +68,11 @@ type HonorGroup = {
   organizer: string | null;
 };
 
+type RatingSummary = {
+  maps: number;
+  rating: number;
+};
+
 const FACEIT_LEVEL_IMAGES: Record<number, string> = {
   1: faceitLevel1,
   2: faceitLevel2,
@@ -78,6 +85,23 @@ const FACEIT_LEVEL_IMAGES: Record<number, string> = {
   9: faceitLevel9,
   10: faceitLevel10,
 };
+
+enum Rating {
+  LOW = 0.95,
+  HIGH = 1.05,
+}
+
+function getRatingColorClass(rating: number) {
+  if (rating <= Rating.LOW) {
+    return 'text-error';
+  }
+
+  if (rating >= Rating.HIGH) {
+    return 'text-success';
+  }
+
+  return 'text-inherit';
+}
 
 function formatStintDate(input: Date | string) {
   const date = new Date(input);
@@ -97,6 +121,50 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   return start <= date && (!end || end >= date);
 }
 
+function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
+  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
+  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
+  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
+  const deaths = killOrAssistEvents.filter(
+    (event) => event.victimId === playerId && !event.assistId,
+  ).length;
+
+  return Util.getPlayerRating(kills, deaths, assists);
+}
+
+function getRatingSummary(
+  playerId: number,
+  matches: Array<any>,
+  predicate: (match: any) => boolean = () => true,
+): RatingSummary | null {
+  const ratings = matches
+    .filter(predicate)
+    .flatMap((match) =>
+      Object.values(groupBy(match.events, 'gameId')).flatMap((gameEvents) => {
+        const hasPlayerEvent = gameEvents.some(
+          (event) =>
+            event.attackerId === playerId || event.assistId === playerId || event.victimId === playerId,
+        );
+
+        if (!hasPlayerEvent) {
+          return [];
+        }
+
+        const rating = getPlayerRatingFromEvents(playerId, gameEvents);
+        return Number.isFinite(rating) ? [rating] : [];
+      }),
+    );
+
+  if (!ratings.length) {
+    return null;
+  }
+
+  return {
+    maps: ratings.length,
+    rating: ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length,
+  };
+}
+
 function MajorHonorBadge() {
   return (
     <span className="absolute right-0 bottom-0 grid size-5 translate-x-1/4 translate-y-1/4 place-items-center rounded-full border border-yellow-300/70 bg-yellow-600/80 text-[10px] text-yellow-100 shadow-sm">
@@ -107,8 +175,10 @@ function MajorHonorBadge() {
 
 export default function TransferModal() {
   const location = useLocation();
+  const { state } = React.useContext(AppStateContext);
   const [player, setPlayer] = React.useState<Player>();
   const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
+  const [ratingMatches, setRatingMatches] = React.useState<Array<any>>([]);
 
   React.useEffect(() => {
     if (!location.state) return;
@@ -130,6 +200,34 @@ export default function TransferModal() {
       })
       .then((foundPlayer) => setPlayer(foundPlayer ?? undefined));
   }, []);
+
+  React.useEffect(() => {
+    setRatingMatches([]);
+
+    if (!state.profile?.simulateNpcMatchStats || !player) {
+      return;
+    }
+
+    api.matches
+      .all<typeof Eagers.matchEvents>({
+        ...Eagers.matchEvents,
+        where: {
+          status: Constants.MatchStatus.COMPLETED,
+          competitionId: { not: null as null },
+          matchType: { not: 'FACEIT_PUG' },
+          events: {
+            some: {
+              OR: [
+                { attackerId: player.id },
+                { assistId: player.id },
+                { victimId: player.id },
+              ],
+            },
+          },
+        },
+      })
+      .then(setRatingMatches);
+  }, [player, state.profile?.simulateNpcMatchStats]);
 
   const teamHistory = React.useMemo(() => {
     const stints = player?.careerStints ?? [];
@@ -281,6 +379,7 @@ export default function TransferModal() {
   );
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
+  const playerRating = player ? getRatingSummary(player.id, ratingMatches) : null;
 
   if (!player) {
     return (
@@ -359,12 +458,36 @@ export default function TransferModal() {
               <td colSpan={4} className="px-4 py-2">
                 <div className="flex items-end gap-4">
                   <div className="flex-1">
-                    <XPBar
-                      className="w-full"
-                      title="Total XP"
-                      value={Bot.Exp.getTotalXP(player.xp)}
-                      max={100}
-                    />
+                    {state.profile?.simulateNpcMatchStats ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-base-200/40 stack-y gap-2 p-3">
+                          <p className="text-xs">Rating</p>
+                          <p
+                            className={cx(
+                              'text-3xl font-black tabular-nums',
+                              playerRating
+                                ? getRatingColorClass(playerRating.rating)
+                                : 'text-muted',
+                            )}
+                          >
+                            {playerRating ? playerRating.rating.toFixed(2) : '-'}
+                          </p>
+                        </div>
+                        <div className="bg-base-200/40 stack-y gap-2 p-3">
+                          <p className="text-xs">Maps Played</p>
+                          <p className="text-3xl font-black tabular-nums">
+                            {playerRating ? playerRating.maps : 0}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <XPBar
+                        className="w-full"
+                        title="Total XP"
+                        value={Bot.Exp.getTotalXP(player.xp)}
+                        max={100}
+                      />
+                    )}
                   </div>
                   <span className="h-5 w-px bg-white/20" />
                   <div className="mb-0.5 flex items-center gap-2">
@@ -417,8 +540,9 @@ export default function TransferModal() {
         <table className="table-pin-rows table table-fixed">
           <thead>
             <tr>
-              <th className="w-4/12">Time period</th>
-              <th className="w-5/12">Team</th>
+              <th className="w-3/12">Time period</th>
+              <th className="w-4/12">Team</th>
+              {state.profile?.simulateNpcMatchStats && <th className="w-2/12 text-right">Rating</th>}
               <th className="w-3/12">Honors</th>
             </tr>
           </thead>
@@ -426,7 +550,10 @@ export default function TransferModal() {
           <tbody>
             {teamHistory.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-8 text-center opacity-60">
+                <td
+                  colSpan={state.profile?.simulateNpcMatchStats ? 4 : 3}
+                  className="py-8 text-center opacity-60"
+                >
                   No team history available.
                 </td>
               </tr>
@@ -438,6 +565,16 @@ export default function TransferModal() {
                   honor.teamId === stint.teamId &&
                   isWithinStint(honor.date, stint.startedAt, stint.endedAt),
               );
+              const stintRating =
+                state.profile?.simulateNpcMatchStats && stint.teamId
+                  ? getRatingSummary(
+                      player.id,
+                      ratingMatches,
+                      (match) =>
+                        isWithinStint(match.date, stint.startedAt, stint.endedAt) &&
+                        match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
+                    )
+                  : null;
 
               return (
                 <tr key={stint.id}>
@@ -460,6 +597,17 @@ export default function TransferModal() {
                       <span className="opacity-70">Free Agent</span>
                     )}
                   </td>
+
+                  {state.profile?.simulateNpcMatchStats && (
+                    <td
+                      className={cx(
+                        'text-right font-semibold tabular-nums',
+                        stintRating ? getRatingColorClass(stintRating.rating) : 'text-muted',
+                      )}
+                    >
+                      {stintRating ? stintRating.rating.toFixed(2) : '—'}
+                    </td>
+                  )}
 
                   <td>
                     {stintHonors.length === 0 ? (

@@ -348,6 +348,8 @@ export enum IPCRoute {
   PLUGINS_START = '/plugins/start',
   PROFILES_CREATE = '/profiles/create',
   PROFILES_CURRENT = '/profiles/current',
+  PROFILES_NPC_MATCH_STATS_BACKFILL = '/profiles/npc-match-stats/backfill',
+  PROFILES_NPC_MATCH_STATS_BACKFILL_PROGRESS = '/profiles/npc-match-stats/backfill-progress',
   PROFILES_TRAIN = '/profiles/train',
   PROFILES_UPDATE = '/profiles/update',
   SAVES_ALL = '/saves/all',

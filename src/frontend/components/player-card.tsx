@@ -30,6 +30,18 @@ interface PlayerCardProps extends React.ComponentProps<'article'> {
   game: Constants.Game;
   player: Omit<Player, 'team'>;
   className?: string;
+  compactMetric?: {
+    className?: string;
+    subtitle?: React.ReactNode;
+    title: string;
+    value: React.ReactNode;
+  };
+  statMetric?: {
+    className?: string;
+    subtitle?: React.ReactNode;
+    title: string;
+    value: React.ReactNode;
+  };
   compact?: boolean;
   noStats?: boolean;
   showStatusBadge?: boolean;
@@ -147,10 +159,15 @@ export default function (props: PlayerCardProps) {
           </aside>
         )}
         <aside className="stack-y center gap-0 px-2">
-          <p className="text-muted text-xs">{t('playerCard.totalXP')}</p>
-          <p className="text-2xl! font-black">
-            {Math.floor(props.player.xp ?? 0)}
+          <p className="text-muted text-xs">
+            {props.compactMetric?.title ?? t('playerCard.totalXP')}
           </p>
+          <p className={cx('text-2xl! font-black', props.compactMetric?.className)}>
+            {props.compactMetric?.value ?? Math.floor(props.player.xp ?? 0)}
+          </p>
+          {!!props.compactMetric?.subtitle && (
+            <p className="text-muted text-[10px]">{props.compactMetric.subtitle}</p>
+          )}
         </aside>
       </article>
     );
@@ -204,12 +221,24 @@ export default function (props: PlayerCardProps) {
         </label>
       </aside>
       <aside className="px-10 py-4">
-        <XPBar
-          title={t('playerCard.totalXP')}
-          subtitle={`${Math.floor(props.player.xp ?? 0)}/100`}
-          value={props.player.xp ?? 0}
-          max={100}
-        />
+        {props.statMetric ? (
+          <div className="stack-y gap-2">
+            <div className="stack-x justify-between text-xs">
+              <p>{props.statMetric.title}</p>
+              {!!props.statMetric.subtitle && <p>{props.statMetric.subtitle}</p>}
+            </div>
+            <p className={cx('text-3xl font-black', props.statMetric.className)}>
+              {props.statMetric.value}
+            </p>
+          </div>
+        ) : (
+          <XPBar
+            title={t('playerCard.totalXP')}
+            subtitle={`${Math.floor(props.player.xp ?? 0)}/100`}
+            value={props.player.xp ?? 0}
+            max={100}
+          />
+        )}
       </aside>
     </article>
   );

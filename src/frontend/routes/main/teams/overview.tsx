@@ -12,6 +12,7 @@ import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Historial, PlayerCard, Standings, TeamBlazon } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 import { addDays, format, subMonths } from 'date-fns';
+import { groupBy } from 'lodash';
 import { getTeamsDivisionLabel, getTeamsTierLabel } from './labels';
 
 /** @constant */
@@ -19,6 +20,35 @@ const NUM_PREVIOUS = 5;
 
 /** @constant */
 const NUM_FORM_LOOKBACK = NUM_PREVIOUS * 2;
+
+/** @enum */
+enum Rating {
+  LOW = 0.95,
+  HIGH = 1.05,
+}
+
+function getRatingColorClass(rating: number) {
+  if (rating <= Rating.LOW) {
+    return 'text-error';
+  }
+
+  if (rating >= Rating.HIGH) {
+    return 'text-success';
+  }
+
+  return 'text-inherit';
+}
+
+function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
+  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
+  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
+  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
+  const deaths = killOrAssistEvents.filter(
+    (event) => event.victimId === playerId && !event.assistId,
+  ).length;
+
+  return Util.getPlayerRating(kills, deaths, assists);
+}
 
 /**
  * Exports this module.
@@ -46,6 +76,9 @@ export default function () {
   const [squad, setSquad] = React.useState<
     Awaited<ReturnType<typeof api.players.all<typeof Eagers.player>>>
   >([]);
+  const [recentPlayerRatings, setRecentPlayerRatings] = React.useState<
+    Record<number, { maps: number; rating: number }>
+  >({});
   const [worldRanking, setWorldRanking] = React.useState<number>(0);
   const [transfers, setTransfers] = React.useState<
     Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>
@@ -219,6 +252,86 @@ export default function () {
       });
   }, [state.profile, team]);
 
+  React.useEffect(() => {
+    setRecentPlayerRatings({});
+
+    if (!state.profile?.simulateNpcMatchStats) {
+      return;
+    }
+
+    api.matches
+      .all<typeof Eagers.matchEvents>({
+        ...Eagers.matchEvents,
+        where: {
+          status: Constants.MatchStatus.COMPLETED,
+          competitionId: { not: null as null },
+          matchType: { not: 'FACEIT_PUG' },
+          date: {
+            gte: subMonths(state.profile.date, 3),
+            lte: state.profile.date,
+          },
+          competitors: {
+            some: {
+              teamId: team.id,
+            },
+          },
+          events: {
+            some: {},
+          },
+        },
+      })
+      .then((recentMatches) => {
+        const ratingRows: Record<number, { maps: number; ratingSum: number }> = {};
+
+        recentMatches.forEach((match) => {
+          Object.values(groupBy(match.events, 'gameId')).forEach((gameEvents) => {
+            const playerIds = new Set<number>();
+
+            gameEvents.forEach((event) => {
+              if (event.attacker?.teamId === team.id && event.attackerId != null) {
+                playerIds.add(event.attackerId);
+              }
+
+              if (event.assist?.teamId === team.id && event.assistId != null) {
+                playerIds.add(event.assistId);
+              }
+
+              if (event.victim?.teamId === team.id && event.victimId != null) {
+                playerIds.add(event.victimId);
+              }
+            });
+
+            playerIds.forEach((playerId) => {
+              const rating = getPlayerRatingFromEvents(playerId, gameEvents);
+
+              if (!Number.isFinite(rating)) {
+                return;
+              }
+
+              if (!ratingRows[playerId]) {
+                ratingRows[playerId] = { maps: 0, ratingSum: 0 };
+              }
+
+              ratingRows[playerId].maps += 1;
+              ratingRows[playerId].ratingSum += rating;
+            });
+          });
+        });
+
+        setRecentPlayerRatings(
+          Object.fromEntries(
+            Object.entries(ratingRows).map(([playerId, row]) => [
+              Number(playerId),
+              {
+                maps: row.maps,
+                rating: row.maps ? row.ratingSum / row.maps : 0,
+              },
+            ]),
+          ),
+        );
+      });
+  }, [state.profile, team]);
+
   // load settings
   React.useEffect(() => {
     if (!state.profile) {
@@ -356,6 +469,22 @@ export default function () {
                       compactAvatarClassName="h-17"
                       game={settings.general.game}
                       player={player}
+                      compactMetric={
+                        state.profile?.simulateNpcMatchStats
+                          ? {
+                              className: recentPlayerRatings[player.id]
+                                ? getRatingColorClass(recentPlayerRatings[player.id].rating)
+                                : 'text-muted',
+                              subtitle: recentPlayerRatings[player.id]
+                                ? `(Past 3 months • ${recentPlayerRatings[player.id].maps} maps)`
+                                : '(Past 3 months)',
+                              title: 'Rating',
+                              value: recentPlayerRatings[player.id]
+                                ? recentPlayerRatings[player.id].rating.toFixed(2)
+                                : '-',
+                            }
+                          : undefined
+                      }
                       noStats={player.id === state.profile.playerId}
                     />
                   </td>

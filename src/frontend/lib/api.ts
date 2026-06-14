@@ -447,6 +447,12 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CURRENT) as Promise<
         Prisma.ProfileGetPayload<T>
       >,
+    backfillNpcMatchStats: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.PROFILES_NPC_MATCH_STATS_BACKFILL) as Promise<{
+        completed: number;
+        total: number;
+        profile: Prisma.ProfileGetPayload<typeof Eagers.profile>;
+      }>,
     train: (bonusIds: Array<number>) =>
       ipcRenderer.invoke(Constants.IPCRoute.PROFILES_TRAIN, bonusIds) as Promise<unknown>,
     update: <T = unknown>(query: Prisma.ProfileUpdateArgs) =>

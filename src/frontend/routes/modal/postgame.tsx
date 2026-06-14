@@ -227,7 +227,9 @@ function getRoundWinIcon(result: string) {
     case 'Target_Bombed':
       return <FaBomb className="text-error" />;
     case 'SFUI_Notice_CTs_Win':
+    case 'SFUI_Notice_CT_Win':
     case 'CTs_Win':
+    case 'CT_Win':
       return <FaSkull className="text-info" />;
     case 'SFUI_Notice_Bomb_Defused':
     case 'Bomb_Defused':

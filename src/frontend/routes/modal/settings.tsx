@@ -77,6 +77,13 @@ export default function () {
   > | null>(null);
   const [arenaModeBusy, setArenaModeBusy] = React.useState(false);
   const [arenaModeError, setArenaModeError] = React.useState<string | null>(null);
+  const [legacyBackfillBusy, setLegacyBackfillBusy] = React.useState(false);
+  const [legacyBackfillProgress, setLegacyBackfillProgress] = React.useState<{
+    completed: number;
+    total: number;
+    percent: number;
+  } | null>(null);
+  const [legacyBackfillConfirmVisible, setLegacyBackfillConfirmVisible] = React.useState(false);
   const hasAttemptedDedicatedDetection = React.useRef(false);
   const GAME_SLUG = Constants.Game.CSGO;
 
@@ -129,6 +136,19 @@ export default function () {
       .then(setArenaModeStatus)
       .catch(() => setArenaModeStatus(null));
   }, [settings.arenaMode.equalizerApoConfigPath]);
+
+  React.useEffect(() => {
+    const removeListener = api.ipc.on(
+      Constants.IPCRoute.PROFILES_NPC_MATCH_STATS_BACKFILL_PROGRESS,
+      (progress: typeof legacyBackfillProgress) => {
+        setLegacyBackfillProgress(progress);
+      },
+    );
+
+    return () => {
+      removeListener();
+    };
+  }, []);
 
   // handle settings updates
   const onSettingsUpdate = (path: string, value: unknown) => {
@@ -198,6 +218,23 @@ export default function () {
     }
   };
 
+  const onLegacyBackfillNpcMatchStats = async () => {
+    setLegacyBackfillConfirmVisible(false);
+    setLegacyBackfillBusy(true);
+    setLegacyBackfillProgress({ completed: 0, total: 0, percent: 0 });
+
+    try {
+      const result = await api.profiles.backfillNpcMatchStats();
+      dispatch({
+        type: ReduxActions.PROFILE_UPDATE,
+        payload: result.profile,
+      });
+      setLegacyBackfillProgress({ completed: result.completed, total: result.total, percent: 100 });
+    } finally {
+      setLegacyBackfillBusy(false);
+    }
+  };
+
   React.useEffect(() => {
     if (
       !state.profile ||
@@ -233,6 +270,8 @@ export default function () {
     const [, match] = appStatus.path.match(/((?:csgo|hl|hl2)\.exe)/) || [];
     return match ? appStatus.path : '';
   }, [appStatus]);
+  const showLegacyBackfillNpcMatchStats =
+    !!state.profile && (!state.profile.simulateNpcMatchStats || legacyBackfillBusy);
 
   return (
     <main>
@@ -484,6 +523,51 @@ export default function () {
                 </select>
               </article>
             </section>
+            {showLegacyBackfillNpcMatchStats && (
+              <section className="border-warning/40 bg-warning/5 mt-8 border-t pt-6">
+                <header>
+                  <p>Simulate NPC Player Statistics</p>
+                  <p>
+                    Enable statistic simulation for non-user matches to give all players generated
+                    scoreboards, ratings, kills, deaths, assists, and map-level match details. This
+                    can significantly slow down calendar simulation and may be problematic on
+                    low-end PCs.
+                  </p>
+                </header>
+                <article className="flex min-w-64 flex-col items-end gap-3">
+                  {legacyBackfillBusy && (
+                    <div className="w-full">
+                      <progress
+                        className="progress progress-warning w-full"
+                        value={legacyBackfillProgress?.percent ?? 0}
+                        max="100"
+                      />
+                      <p className="text-base-content/70 mt-2 text-right text-xs">
+                        {legacyBackfillProgress?.total
+                          ? `${legacyBackfillProgress.completed} / ${legacyBackfillProgress.total} matches`
+                          : 'Preparing backfill...'}
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    type="checkbox"
+                    data-interaction-sound="none"
+                    className="toggle"
+                    checked={legacyBackfillBusy}
+                    disabled={legacyBackfillBusy}
+                    value={String(legacyBackfillBusy)}
+                    onChange={(event) => {
+                      if (!event.target.checked) {
+                        return;
+                      }
+
+                      audioNegativeAlert();
+                      setLegacyBackfillConfirmVisible(true);
+                    }}
+                  />
+                </article>
+              </section>
+            )}
           </fieldset>
         )}
         {activeTab === Tab.GAME_SETTINGS && (
@@ -736,6 +820,48 @@ export default function () {
           </fieldset>
         )}
       </form>
+      {legacyBackfillConfirmVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">Simulate NPC Player Statistics?</p>
+              </div>
+              <p>
+                This setting will permanently turn on NPC statistic simulation for this save and
+                cannot be turned off again.
+              </p>
+              <p>
+                LIGA will also simulate statistics for eligible past NPC matches. This might take a
+                long while depending on how far advanced the save is.
+              </p>
+              <p>
+                Future calendar simulation can be significantly slower and may be problematic on
+                low-end PCs.
+              </p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn"
+                onClick={() => setLegacyBackfillConfirmVisible(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-interaction-sound="none"
+                className="btn btn-warning"
+                onClick={onLegacyBackfillNpcMatchStats}
+              >
+                Enable permanently
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
     </main>
   );
 }
