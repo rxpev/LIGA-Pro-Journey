@@ -9,6 +9,7 @@ import { format, subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
+import { Pagination } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import CompetitionLocationTag from './competitions/competition-location-tag';
@@ -45,6 +46,27 @@ type MatchPerformance = {
   deaths: number;
   plusMinus: number;
   rating: number;
+};
+
+type StatsPlayerOption = {
+  id: number;
+  name: string;
+  avatar?: string;
+  country?: {
+    code: string;
+    name: string;
+  };
+  team?: {
+    id: number;
+    name: string;
+    blazon?: string;
+    tier?: number | null;
+  } | null;
+  rating?: number;
+  kills?: number;
+  deaths?: number;
+  assists?: number;
+  maps?: number;
 };
 
 type WeaponPerformance = {
@@ -129,6 +151,8 @@ const CompetitionStageLabels: Record<CompetitionStageOption, string> = {
 
 const CompetitionStageOptions: CompetitionStageOption[] = ['', 'GROUP_STAGE', 'PLAYOFFS'];
 
+const GlobalPlayerPageSize = 45;
+
 enum Rating {
   LOW = 0.95,
   HIGH = 1.05,
@@ -171,6 +195,7 @@ enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
   TOURNAMENTS = 'TOURNAMENTS',
   TEAMMATES = 'TEAMMATES',
+  GLOBAL_PLAYERS = 'GLOBAL_PLAYERS',
 }
 
 enum StatsDetailView {
@@ -241,6 +266,18 @@ function getCompetitionLabel(match: MatchRecord) {
   return `${federation} ${tier}`.trim();
 }
 
+function getTierDisplayLabel(tierSlug?: string | null) {
+  if (tierSlug === Constants.TierSlug.LEAGUE_PRO) {
+    return 'ESL Pro League';
+  }
+
+  if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return 'ESL Pro League Playoffs';
+  }
+
+  return tierSlug ? Constants.IdiomaticTier[tierSlug] : 'Competition';
+}
+
 function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
   const tierSlug = String(match.competition?.tier?.slug || '').toLowerCase();
 
@@ -297,6 +334,151 @@ function getCompetitionStage(match: MatchRecord): Exclude<CompetitionStageOption
   }
 
   return null;
+}
+
+function getCompetitionGroupTierWhere(group: string) {
+  const tierSlugs: string[] = [];
+
+  switch (group) {
+    case 'MAJOR':
+      tierSlugs.push(
+        Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+        Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+        Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+      );
+      break;
+    case 'ESL_PRO_LEAGUE':
+      tierSlugs.push(Constants.TierSlug.LEAGUE_PRO, Constants.TierSlug.LEAGUE_PRO_PLAYOFFS);
+      break;
+    case 'ESEA_ADVANCED':
+      tierSlugs.push(
+        Constants.TierSlug.LEAGUE_ADVANCED,
+        Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+      );
+      break;
+    case 'ESEA_MAIN':
+      tierSlugs.push(Constants.TierSlug.LEAGUE_MAIN, Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS);
+      break;
+    case 'ESEA_INTERMEDIATE':
+      tierSlugs.push(
+        Constants.TierSlug.LEAGUE_INTERMEDIATE,
+        Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+      );
+      break;
+    case 'ESEA_OPEN':
+      tierSlugs.push(Constants.TierSlug.LEAGUE_OPEN, Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS);
+      break;
+    default:
+      break;
+  }
+
+  if (tierSlugs.length) {
+    return { slug: { in: tierSlugs } };
+  }
+
+  const containsByGroup: Record<string, string[]> = {
+    RMR_EUROPE: ['major:europe:rmr:a', 'major:europe:rmr:b'],
+    RMR_QUALIFIERS_EUROPE: ['major:europe:open-qualifier'],
+    RMR_QUALIFIERS_AMERICAS: ['major:americas:open-qualifier'],
+    RMR_QUALIFIERS_ASIA: ['major:asia:open-qualifier'],
+    RMR_QUALIFIERS_CHINA: ['major:china:open-qualifier'],
+    RMR_QUALIFIERS_OCEANIA: ['major:oce:open-qualifier'],
+  };
+  const contains = containsByGroup[group];
+
+  return contains?.length ? { OR: contains.map((value) => ({ slug: { contains: value } })) } : {};
+}
+
+function buildOfficialMatchWhere(params: {
+  selectedCareerTeamId?: string;
+  selectedCompetitionGroup?: string;
+  selectedCompetitionStage?: CompetitionStageOption;
+  selectedMap?: string;
+  selectedMatchType?: MatchTypeOption;
+  selectedSeason?: string;
+  selectedTimeframe?: TimeframeOption;
+  selectedYear?: string;
+  currentDate?: Date | string;
+}) {
+  const where: any = {
+    status: Constants.MatchStatus.COMPLETED,
+    competitionId: {
+      not: null as null,
+    },
+    matchType: {
+      not: 'FACEIT_PUG',
+    },
+  };
+
+  if (params.selectedCareerTeamId) {
+    where.competitors = {
+      some: {
+        teamId: Number(params.selectedCareerTeamId),
+      },
+    };
+  }
+
+  if (params.selectedMap) {
+    where.games = {
+      some: {
+        map: params.selectedMap,
+      },
+    };
+  }
+
+  if (params.selectedYear) {
+    const year = Number(params.selectedYear);
+    if (Number.isFinite(year)) {
+      const start = new Date(year, 0, 1, 0, 0, 0, 0);
+      const end = new Date(year, 11, 31, 23, 59, 59, 999);
+      if (params.currentDate) {
+        const current = new Date(params.currentDate);
+        if (current.getFullYear() === year && current < end) {
+          end.setTime(current.getTime());
+          end.setHours(23, 59, 59, 999);
+        }
+      }
+      where.date = { gte: start, lte: end };
+    }
+  } else if (params.selectedTimeframe && params.currentDate) {
+    const end = new Date(params.currentDate);
+    end.setHours(23, 59, 59, 999);
+    const start = subMonths(end, Number(params.selectedTimeframe));
+    start.setHours(0, 0, 0, 0);
+    where.date = { gte: start, lte: end };
+  }
+
+  const competitionWhere: any = {};
+  if (params.selectedSeason) {
+    competitionWhere.season = Number(params.selectedSeason);
+  }
+  if (params.selectedMatchType) {
+    competitionWhere.tier = {
+      ...(competitionWhere.tier || {}),
+      lan: params.selectedMatchType === 'LAN',
+    };
+  }
+  if (params.selectedCompetitionGroup) {
+    competitionWhere.tier = {
+      ...(competitionWhere.tier || {}),
+      ...getCompetitionGroupTierWhere(params.selectedCompetitionGroup),
+    };
+  }
+  if (params.selectedCompetitionStage) {
+    const slugs =
+      params.selectedCompetitionStage === 'PLAYOFFS'
+        ? [...PlayoffStageTierSlugs]
+        : [...GroupStageTierSlugs];
+    competitionWhere.tier = {
+      ...(competitionWhere.tier || {}),
+      slug: { in: slugs },
+    };
+  }
+  if (Object.keys(competitionWhere).length) {
+    where.competition = competitionWhere;
+  }
+
+  return where;
 }
 
 function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
@@ -460,6 +642,37 @@ function getCareerMatchCompetitor(
     .find(Boolean);
 }
 
+function getPlayerMatchCompetitor(match: MatchRecord, playerId: number, selectedCareerTeamId = '') {
+  const player = (match.players || []).find((matchPlayer: any) => matchPlayer.id === playerId);
+  const stints = (player?.careerStints || [])
+    .filter((stint: any) => {
+      if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
+        return false;
+      }
+
+      return isWithinStint(match.date, stint.startedAt, stint.endedAt);
+    })
+    .sort((a: any, b: any) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+  const stintCompetitor = stints
+    .map((stint: any) =>
+      match.competitors.find((competitor: any) => competitor.teamId === stint.teamId),
+    )
+    .find(Boolean);
+
+  if (stintCompetitor) {
+    return stintCompetitor;
+  }
+
+  if (selectedCareerTeamId) {
+    return match.competitors.find(
+      (competitor: any) => String(competitor.teamId) === selectedCareerTeamId,
+    );
+  }
+
+  return match.competitors[0];
+}
+
 export default function LeagueStatsConcept(): JSX.Element {
   const { state } = React.useContext(AppStateContext);
   const [loading, setLoading] = React.useState(true);
@@ -468,6 +681,11 @@ export default function LeagueStatsConcept(): JSX.Element {
     StatsDetailView.MATCH_HISTORY,
   );
   const [matches, setMatches] = React.useState<MatchRecord[]>([]);
+  const [globalPlayerMatches, setGlobalPlayerMatches] = React.useState<MatchRecord[]>([]);
+  const [globalPlayers, setGlobalPlayers] = React.useState<StatsPlayerOption[]>([]);
+  const [globalPlayerTeams, setGlobalPlayerTeams] = React.useState<Array<any>>([]);
+  const [numGlobalPlayers, setNumGlobalPlayers] = React.useState(0);
+  const [globalPlayerPage, setGlobalPlayerPage] = React.useState(1);
   const [careerStints, setCareerStints] = React.useState<CareerStintRecord[]>([]);
   const [selectedCompetitionGroup, setSelectedCompetitionGroup] = React.useState<string>('');
   const [selectedMap, setSelectedMap] = React.useState<string>('');
@@ -478,10 +696,24 @@ export default function LeagueStatsConcept(): JSX.Element {
     React.useState<CompetitionStageOption>('');
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
+  const [selectedGlobalPlayerId, setSelectedGlobalPlayerId] = React.useState<string>('');
+  const [selectedGlobalYear, setSelectedGlobalYear] = React.useState<string>('');
+  const [selectedGlobalPlayerName, setSelectedGlobalPlayerName] = React.useState('');
+  const [selectedGlobalFederationSlug, setSelectedGlobalFederationSlug] =
+    React.useState<string>('');
+  const [selectedGlobalPlayerTierId, setSelectedGlobalPlayerTierId] = React.useState<string>(
+    String(Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO)),
+  );
+  const [selectedGlobalPlayerSort, setSelectedGlobalPlayerSort] = React.useState<
+    'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team'
+  >('rating');
   const [matchPage, setMatchPage] = React.useState(1);
   const [tournamentPage, setTournamentPage] = React.useState(1);
+  const [globalPlayersLoading, setGlobalPlayersLoading] = React.useState(false);
+  const [globalPlayerMatchesLoading, setGlobalPlayerMatchesLoading] = React.useState(false);
   const previousActiveTab = React.useRef<StatsTab>(activeTab);
   const shouldDefaultTeammateTeam = React.useRef(false);
+  const canViewGlobalPlayerStats = Boolean(state.profile?.simulateNpcMatchStats);
 
   const settingsAll = React.useMemo(() => {
     if (!state.profile) {
@@ -490,6 +722,18 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     return Util.loadSettings(state.profile.settings);
   }, [state.profile]);
+
+  const activeCareerYears = React.useMemo(() => {
+    const startYear = new Date(Constants.NewSaveSeasonStartDate).getFullYear();
+    const currentYear = state.profile?.date
+      ? new Date(state.profile.date).getFullYear()
+      : startYear;
+
+    return Array.from(
+      { length: Math.max(1, currentYear - startYear + 1) },
+      (_, idx) => currentYear - idx,
+    );
+  }, [state.profile?.date]);
 
   React.useEffect(() => {
     if (!state.profile?.player?.id) {
@@ -512,6 +756,19 @@ export default function LeagueStatsConcept(): JSX.Element {
       })
       .then((player: any) => setCareerStints((player?.careerStints || []) as CareerStintRecord[]));
   }, [state.profile?.player?.id]);
+
+  React.useEffect(() => {
+    if (!canViewGlobalPlayerStats) {
+      setGlobalPlayerTeams([]);
+      return;
+    }
+
+    api.teams
+      .all({
+        orderBy: { name: 'asc' },
+      })
+      .then((teams: any[]) => setGlobalPlayerTeams(teams));
+  }, [canViewGlobalPlayerStats]);
 
   const careerTeamIds = React.useMemo(
     () => [...new Set(careerStints.map((stint) => stint.teamId))],
@@ -553,9 +810,276 @@ export default function LeagueStatsConcept(): JSX.Element {
       .finally(() => setLoading(false));
   }, [careerTeamIds]);
 
+  React.useEffect(() => {
+    if (!canViewGlobalPlayerStats || activeTab !== StatsTab.GLOBAL_PLAYERS) {
+      setGlobalPlayers([]);
+      setNumGlobalPlayers(0);
+      setGlobalPlayersLoading(false);
+      return;
+    }
+
+    const listMatchWhere = buildOfficialMatchWhere({
+      selectedYear: selectedGlobalYear,
+      currentDate: state.profile?.date,
+    });
+    const displayStatsMatchWhere = buildOfficialMatchWhere({
+      selectedYear: selectedGlobalYear,
+      currentDate: state.profile?.date,
+    });
+    const playerWhere = {
+      matches: {
+        some: listMatchWhere,
+      },
+      ...(selectedCareerTeamId ? { teamId: Number(selectedCareerTeamId) } : {}),
+      ...(selectedGlobalPlayerTierId || selectedGlobalFederationSlug
+        ? {
+            team: {
+              ...(selectedGlobalPlayerTierId ? { tier: Number(selectedGlobalPlayerTierId) } : {}),
+              ...(selectedGlobalFederationSlug
+                ? {
+                    country: {
+                      continent: {
+                        federation: {
+                          slug: selectedGlobalFederationSlug,
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(selectedGlobalPlayerName
+        ? {
+            name: {
+              contains: selectedGlobalPlayerName,
+            },
+          }
+        : {}),
+      OR: [
+        { kills: { some: { match: listMatchWhere } } },
+        { assists: { some: { match: listMatchWhere } } },
+        { deaths: { some: { match: listMatchWhere } } },
+      ],
+    };
+
+    setGlobalPlayersLoading(true);
+    const orderBy: any =
+      selectedGlobalPlayerSort === 'rating'
+        ? { kills: { _count: 'desc' as const } }
+        : selectedGlobalPlayerSort === 'kills'
+          ? { kills: { _count: 'desc' as const } }
+          : selectedGlobalPlayerSort === 'deaths'
+            ? { deaths: { _count: 'desc' as const } }
+            : selectedGlobalPlayerSort === 'maps'
+              ? { matches: { _count: 'desc' as const } }
+              : selectedGlobalPlayerSort === 'team'
+                ? { team: { name: 'asc' as const } }
+                : { name: 'asc' as const };
+
+    Promise.all([
+      api.players.count(playerWhere),
+      api.players.all({
+        where: playerWhere,
+        orderBy,
+        take: GlobalPlayerPageSize,
+        skip: GlobalPlayerPageSize * (Math.max(globalPlayerPage, 1) - 1),
+        include: Eagers.player.include,
+      }),
+    ])
+      .then(async ([count, players]: any) => {
+        setNumGlobalPlayers(count);
+        const playerIds = players.map((player: any) => player.id);
+        const pageMatches = playerIds.length
+          ? await api.matches.all({
+              include: {
+                events: {
+                  select: {
+                    attackerId: true,
+                    assistId: true,
+                    victimId: true,
+                    gameId: true,
+                  },
+                },
+                games: {
+                  include: {
+                    teams: true,
+                  },
+                },
+                players: {
+                  select: {
+                    id: true,
+                  },
+                },
+              },
+              where: {
+                ...displayStatsMatchWhere,
+                players: {
+                  some: {
+                    id: {
+                      in: playerIds,
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                date: 'desc',
+              },
+            })
+          : [];
+
+        const rows = players.map((player: any) => {
+          const totals = pageMatches.reduce(
+            (acc: any, match: any) => {
+              const played = (match.players || []).some(
+                (matchPlayer: any) => matchPlayer.id === player.id,
+              );
+              if (!played) {
+                return acc;
+              }
+
+              const gamesForStats = getPlayedGames(match);
+              if (!gamesForStats.length) {
+                return acc;
+              }
+
+              const allEvents = match.events || [];
+              const eventsForStats =
+                (match.games || []).length > 1
+                  ? allEvents.filter((event: any) =>
+                      gamesForStats.some((game: any) => game.id === event.gameId),
+                    )
+                  : allEvents;
+              const hasRecordedStats = eventsForStats.some(
+                (event: any) =>
+                  event.attackerId === player.id ||
+                  event.assistId === player.id ||
+                  event.victimId === player.id,
+              );
+              if (!hasRecordedStats) {
+                return acc;
+              }
+
+              const performance = getSeriesAwarePerformance(
+                player.id,
+                eventsForStats,
+                (match.games || []).length > 1,
+              );
+
+              acc.matches += 1;
+              acc.maps += gamesForStats.length;
+              acc.kills += performance.kills;
+              acc.deaths += performance.deaths;
+              acc.assists += eventsForStats.filter(
+                (event: any) => event.assistId === player.id,
+              ).length;
+              acc.ratingSum += performance.rating;
+              return acc;
+            },
+            { matches: 0, maps: 0, kills: 0, deaths: 0, assists: 0, ratingSum: 0 },
+          );
+
+          return {
+            id: player.id,
+            name: player.name,
+            avatar: player.avatar,
+            country: player.country,
+            team: player.team,
+            kills: totals.kills,
+            assists: totals.assists,
+            deaths: totals.deaths,
+            maps: totals.maps,
+            rating: totals.matches ? totals.ratingSum / totals.matches : 0,
+          };
+        });
+
+        setGlobalPlayers(
+          ['rating', 'kills', 'deaths', 'maps'].includes(selectedGlobalPlayerSort)
+            ? rows.sort((a: StatsPlayerOption, b: StatsPlayerOption) => {
+                const metric = selectedGlobalPlayerSort as 'rating' | 'kills' | 'deaths' | 'maps';
+                return (b[metric] || 0) - (a[metric] || 0) || a.name.localeCompare(b.name);
+              })
+            : rows,
+        );
+      })
+      .finally(() => setGlobalPlayersLoading(false));
+  }, [
+    activeTab,
+    canViewGlobalPlayerStats,
+    globalPlayerPage,
+    selectedCareerTeamId,
+    selectedGlobalFederationSlug,
+    selectedGlobalPlayerName,
+    selectedGlobalPlayerSort,
+    selectedGlobalPlayerTierId,
+    selectedGlobalYear,
+    state.profile?.date,
+  ]);
+
+  React.useEffect(() => {
+    if (
+      !canViewGlobalPlayerStats ||
+      activeTab !== StatsTab.GLOBAL_PLAYERS ||
+      !selectedGlobalPlayerId
+    ) {
+      setGlobalPlayerMatches([]);
+      setGlobalPlayerMatchesLoading(false);
+      return;
+    }
+
+    setGlobalPlayerMatchesLoading(true);
+    api.matches
+      .all({
+        ...Eagers.matchEvents,
+        where: {
+          ...buildOfficialMatchWhere({
+            selectedCareerTeamId,
+            selectedCompetitionGroup,
+            selectedCompetitionStage,
+            selectedMap,
+            selectedMatchType,
+            selectedSeason,
+            selectedTimeframe,
+            currentDate: state.profile?.date,
+          }),
+          players: {
+            some: {
+              id: Number(selectedGlobalPlayerId),
+            },
+          },
+        },
+        orderBy: {
+          date: 'desc',
+        },
+      })
+      .then((result: any[]) => setGlobalPlayerMatches(result.filter(isLeagueMatch)))
+      .finally(() => setGlobalPlayerMatchesLoading(false));
+  }, [
+    activeTab,
+    canViewGlobalPlayerStats,
+    selectedCareerTeamId,
+    selectedCompetitionGroup,
+    selectedCompetitionStage,
+    selectedGlobalPlayerId,
+    selectedMap,
+    selectedMatchType,
+    selectedSeason,
+    selectedTimeframe,
+    state.profile?.date,
+  ]);
+
+  React.useEffect(() => {
+    if (!canViewGlobalPlayerStats && activeTab === StatsTab.GLOBAL_PLAYERS) {
+      setActiveTab(StatsTab.INDIVIDUAL);
+    }
+  }, [activeTab, canViewGlobalPlayerStats]);
+
+  const matchesForCurrentTab =
+    activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatches : matches;
+
   const mapOptions = React.useMemo(() => {
     const options = new Set<string>();
-    matches.forEach((match: any) =>
+    matchesForCurrentTab.forEach((match: any) =>
       getPlayedGames(match).forEach((game: any) => game.map && options.add(game.map)),
     );
 
@@ -564,22 +1088,22 @@ export default function LeagueStatsConcept(): JSX.Element {
         Util.convertMapPool(b, settingsAll.general.game),
       ),
     );
-  }, [matches, settingsAll.general.game]);
+  }, [matchesForCurrentTab, settingsAll.general.game]);
 
   const seasonOptions = React.useMemo(() => {
     const seasons = new Set<number>();
-    matches.forEach((match: any) => {
+    matchesForCurrentTab.forEach((match: any) => {
       if (match.competition?.season !== undefined && match.competition?.season !== null) {
         seasons.add(match.competition.season);
       }
     });
 
     return [...seasons].sort((a, b) => b - a);
-  }, [matches]);
+  }, [matchesForCurrentTab]);
 
   const competitionOptions = React.useMemo(() => {
     const available = new Set<CompetitionGroupKey>();
-    matches.forEach((match: any) => {
+    matchesForCurrentTab.forEach((match: any) => {
       const group = getCompetitionGroup(match);
       if (group) {
         available.add(group);
@@ -590,26 +1114,37 @@ export default function LeagueStatsConcept(): JSX.Element {
       id: group,
       label: CompetitionGroupLabels[group],
     }));
-  }, [matches]);
+  }, [matchesForCurrentTab]);
 
   const careerTeamOptions = React.useMemo(() => {
     const map = new Map<number, { id: number; name: string; blazon?: string }>();
-    careerStints.forEach((stint: any) =>
-      map.set(stint.team.id, {
-        id: stint.team.id,
-        name: stint.team.name,
-        blazon: stint.team.blazon,
-      }),
-    );
-    return [...map.values()];
-  }, [careerStints]);
+    if (activeTab === StatsTab.GLOBAL_PLAYERS) {
+      globalPlayerTeams.forEach((team: any) =>
+        map.set(team.id, {
+          id: team.id,
+          name: team.name,
+          blazon: team.blazon,
+        }),
+      );
+    } else {
+      careerStints.forEach((stint: any) =>
+        map.set(stint.team.id, {
+          id: stint.team.id,
+          name: stint.team.name,
+          blazon: stint.team.blazon,
+        }),
+      );
+    }
+
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeTab, globalPlayerTeams, careerStints]);
 
   const matchesByFilters = React.useMemo(() => {
     if (activeTab === StatsTab.TOURNAMENTS) {
       return matches;
     }
 
-    return matches.filter((match: any) => {
+    return matchesForCurrentTab.filter((match: any) => {
       const byCompetition = selectedCompetitionGroup
         ? getCompetitionGroup(match) === selectedCompetitionGroup
         : true;
@@ -628,17 +1163,24 @@ export default function LeagueStatsConcept(): JSX.Element {
       const byTimeframe = state.profile?.date
         ? isWithinTimeframe(match.date, state.profile.date, selectedTimeframe)
         : true;
-      const eligibleStints = careerStints.filter((stint: any) => {
-        if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
-          return false;
-        }
+      const byCareerTeam =
+        activeTab === StatsTab.GLOBAL_PLAYERS
+          ? selectedCareerTeamId
+            ? match.competitors.some(
+                (competitor: any) => String(competitor.teamId) === selectedCareerTeamId,
+              )
+            : true
+          : careerStints
+              .filter((stint: any) => {
+                if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
+                  return false;
+                }
 
-        return isWithinStint(match.date, stint.startedAt, stint.endedAt);
-      });
-
-      const byCareerTeam = eligibleStints.some((stint: any) =>
-        match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
-      );
+                return isWithinStint(match.date, stint.startedAt, stint.endedAt);
+              })
+              .some((stint: any) =>
+                match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
+              );
 
       return (
         byCompetition &&
@@ -652,6 +1194,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     });
   }, [
     matches,
+    matchesForCurrentTab,
     selectedCompetitionGroup,
     selectedMap,
     selectedMatchType,
@@ -766,6 +1309,18 @@ export default function LeagueStatsConcept(): JSX.Element {
     selectedCompetitionStage,
     selectedCareerTeamId,
     selectedTeammateId,
+    selectedGlobalPlayerId,
+  ]);
+
+  React.useEffect(() => {
+    setGlobalPlayerPage(1);
+  }, [
+    selectedCareerTeamId,
+    selectedGlobalFederationSlug,
+    selectedGlobalPlayerName,
+    selectedGlobalPlayerSort,
+    selectedGlobalPlayerTierId,
+    selectedGlobalYear,
   ]);
 
   React.useEffect(() => {
@@ -871,6 +1426,50 @@ export default function LeagueStatsConcept(): JSX.Element {
     });
   }, [matchesByFilters, selectedTeammateId, selectedMap, careerStints, selectedCareerTeamId]);
 
+  const globalPlayerPerformances = React.useMemo(() => {
+    if (!selectedGlobalPlayerId) return [] as MatchPerformance[];
+    const playerId = Number(selectedGlobalPlayerId);
+
+    return matchesByFilters.flatMap((match: any) => {
+      const played = (match.players || []).some((player: any) => player.id === playerId);
+      if (!played) {
+        return [];
+      }
+
+      const gamesForStats = selectedMap
+        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+        : getPlayedGames(match);
+      if (!gamesForStats.length) {
+        return [];
+      }
+
+      const allEvents = match.events || [];
+      const eventsForStats =
+        selectedMap || (match.games || []).length > 1
+          ? allEvents.filter((event: any) =>
+              gamesForStats.some((game: any) => game.id === event.gameId),
+            )
+          : allEvents;
+
+      const hasRecordedStats = eventsForStats.some(
+        (event: any) =>
+          event.attackerId === playerId ||
+          event.assistId === playerId ||
+          event.victimId === playerId,
+      );
+      if (!hasRecordedStats) {
+        return [];
+      }
+
+      const performance = getSeriesAwarePerformance(
+        playerId,
+        eventsForStats,
+        !selectedMap && (match.games || []).length > 1,
+      );
+      return [{ match, ...performance }];
+    });
+  }, [matchesByFilters, selectedGlobalPlayerId, selectedMap]);
+
   const tournamentRows = React.useMemo(() => {
     const grouped = new Map<
       number,
@@ -925,7 +1524,11 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [ownPlayerPerformances, careerStints]);
 
   const activeStatsPlayerId =
-    activeTab === StatsTab.TEAMMATES ? Number(selectedTeammateId) : state.profile?.player?.id;
+    activeTab === StatsTab.TEAMMATES
+      ? Number(selectedTeammateId)
+      : activeTab === StatsTab.GLOBAL_PLAYERS
+        ? Number(selectedGlobalPlayerId)
+        : state.profile?.player?.id;
 
   const weaponRows = React.useMemo(() => {
     const playerId = activeStatsPlayerId;
@@ -986,7 +1589,11 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [activeStatsPlayerId, matchesByFilters, selectedMap]);
 
   const activePerformances =
-    activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
+    activeTab === StatsTab.TEAMMATES
+      ? teammatePerformances
+      : activeTab === StatsTab.GLOBAL_PLAYERS
+        ? globalPlayerPerformances
+        : ownPlayerPerformances;
   const summary = React.useMemo(() => {
     const totals = activePerformances.reduce(
       (acc: any, item: any) => {
@@ -1024,19 +1631,33 @@ export default function LeagueStatsConcept(): JSX.Element {
     (team: any) => String(team.id) === selectedCareerTeamId,
   );
   const headerTeamLabel =
-    activeTab !== StatsTab.TEAMMATES
-      ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
-      : selectedFilterTeam?.name || 'Any team';
+    activeTab === StatsTab.GLOBAL_PLAYERS
+      ? selectedFilterTeam?.name || 'Any team'
+      : activeTab !== StatsTab.TEAMMATES
+        ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
+        : selectedFilterTeam?.name || 'Any team';
   const headerTeamLogo =
-    activeTab === StatsTab.TEAMMATES && !selectedCareerTeamId
+    (activeTab === StatsTab.TEAMMATES || activeTab === StatsTab.GLOBAL_PLAYERS) &&
+    !selectedCareerTeamId
       ? null
       : selectedFilterTeam?.blazon ||
         state.profile?.team?.blazon ||
         'resources://blazonry/noteam.svg';
+  const selectedGlobalPlayer = globalPlayers.find(
+    (player) => String(player.id) === selectedGlobalPlayerId,
+  );
+  const currentLoading =
+    activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatchesLoading : loading;
+  const globalPlayerTotalPages = Math.max(1, Math.ceil(numGlobalPlayers / GlobalPlayerPageSize));
+  const isGlobalPlayerListView = activeTab === StatsTab.GLOBAL_PLAYERS && !selectedGlobalPlayerId;
 
   const renderMatchTable = (rows: MatchPerformance[]) => {
     const flattenedRows = rows.flatMap((item: any) => {
-      const ownTeam = getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
+      const playerId = activeStatsPlayerId;
+      const ownTeam =
+        activeTab === StatsTab.GLOBAL_PLAYERS && playerId
+          ? getPlayerMatchCompetitor(item.match, playerId, selectedCareerTeamId)
+          : getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
       const opponent = item.match.competitors.find(
         (competitor: any) => competitor.teamId !== ownTeam?.teamId,
       );
@@ -1050,8 +1671,6 @@ export default function LeagueStatsConcept(): JSX.Element {
           (item.match.games || []).length > 1
             ? allEvents.filter((event: any) => event.gameId === game.id)
             : allEvents.filter((event: any) => !event.gameId || event.gameId === game.id);
-        const playerId =
-          activeTab === StatsTab.TEAMMATES ? Number(selectedTeammateId) : state.profile?.player?.id;
         const { plusMinus, rating } = getPlayerPerformanceFromEvents(playerId, gameEvents);
 
         const ownGameTeam = game.teams?.find(
@@ -1092,15 +1711,17 @@ export default function LeagueStatsConcept(): JSX.Element {
           >
             Match History
           </button>
-          <button
-            className={cx(
-              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
-              activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
-            )}
-            onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
-          >
-            Weapons
-          </button>
+          {activeTab !== StatsTab.GLOBAL_PLAYERS && (
+            <button
+              className={cx(
+                'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+                activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
+              )}
+              onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
+            >
+              Weapons
+            </button>
+          )}
         </header>
         <div className="overflow-x-auto">
           <table className="table-zebra table-sm table">
@@ -1295,31 +1916,200 @@ export default function LeagueStatsConcept(): JSX.Element {
     </article>
   );
 
+  const renderGlobalPlayersList = () => (
+    <article className="border-base-content/10 flex h-full min-h-0 flex-col border">
+      <header className="border-base-content/10 grid grid-cols-1 gap-3 border-b p-3 xl:grid-cols-[1fr_180px_160px_130px_150px_180px]">
+        <input
+          type="text"
+          placeholder="Search players"
+          className="input input-sm input-bordered w-full rounded-none"
+          value={selectedGlobalPlayerName}
+          onChange={(event) => setSelectedGlobalPlayerName(event.target.value)}
+        />
+        <select
+          className="select select-sm select-bordered w-full rounded-none"
+          value={selectedCareerTeamId}
+          onChange={(event) => setSelectedCareerTeamId(event.target.value)}
+        >
+          <option value="">Any team</option>
+          {careerTeamOptions.map((team: any) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="select select-sm select-bordered w-full rounded-none"
+          value={selectedGlobalFederationSlug}
+          onChange={(event) => setSelectedGlobalFederationSlug(event.target.value)}
+        >
+          <option value="">Any federation</option>
+          <option value={Constants.FederationSlug.ESPORTS_EUROPA}>Europe</option>
+          <option value={Constants.FederationSlug.ESPORTS_ASIA}>Asia</option>
+          <option value={Constants.FederationSlug.ESPORTS_AMERICAS}>Americas</option>
+          <option value={Constants.FederationSlug.ESPORTS_OCE}>Oceania</option>
+        </select>
+        <select
+          className="select select-sm select-bordered w-full rounded-none"
+          value={selectedGlobalYear}
+          onChange={(event) => setSelectedGlobalYear(event.target.value)}
+        >
+          <option value="">All years</option>
+          {activeCareerYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+        <select
+          className="select select-sm select-bordered w-full rounded-none"
+          value={selectedGlobalPlayerTierId}
+          onChange={(event) => setSelectedGlobalPlayerTierId(event.target.value)}
+        >
+          <option value="">Any tier</option>
+          {Constants.Prestige.map((tierSlug, tierId) => (
+            <option key={tierSlug} value={tierId}>
+              {getTierDisplayLabel(tierSlug)}
+            </option>
+          ))}
+        </select>
+        <select
+          className="select select-sm select-bordered w-full rounded-none"
+          value={selectedGlobalPlayerSort}
+          onChange={(event) =>
+            setSelectedGlobalPlayerSort(
+              event.target.value as 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team',
+            )
+          }
+        >
+          <option value="rating">Sort by rating</option>
+          <option value="kills">Sort by kills</option>
+          <option value="deaths">Sort by deaths</option>
+          <option value="maps">Sort by maps</option>
+          <option value="name">Sort by name</option>
+          <option value="team">Sort by team</option>
+        </select>
+      </header>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="table-pin-rows table-sm table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Team</th>
+              <th className="text-center">Tier</th>
+              <th className="text-center">Rating</th>
+              <th className="text-center">Maps</th>
+              <th className="text-center">K / D / A</th>
+            </tr>
+          </thead>
+          <tbody>
+            {globalPlayersLoading && (
+              <tr>
+                <td colSpan={6} className="py-12 text-center">
+                  <span className="loading loading-bars loading-md" />
+                </td>
+              </tr>
+            )}
+            {!globalPlayersLoading &&
+              globalPlayers.map((player) => (
+                <tr
+                  key={player.id}
+                  className="hover:bg-base-content/10 cursor-pointer"
+                  onClick={() => {
+                    setSelectedGlobalPlayerId(String(player.id));
+                    setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+                  }}
+                >
+                  <td>
+                    <span className="flex min-w-0 items-center gap-2">
+                      {player.country?.code && (
+                        <span className={cx('fp', player.country.code.toLowerCase())} />
+                      )}
+                      <span className="truncate font-semibold">{player.name}</span>
+                    </span>
+                  </td>
+                  <td>
+                    {player.team ? (
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        {player.team.blazon && (
+                          <img src={player.team.blazon} className="size-5 object-contain" />
+                        )}
+                        <span className="truncate">{player.team.name}</span>
+                      </span>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+                  <td className="text-center">
+                    {player.team?.tier !== undefined && player.team?.tier !== null
+                      ? getTierDisplayLabel(Constants.Prestige[player.team.tier])
+                      : '-'}
+                  </td>
+                  <td
+                    className={cx(
+                      'text-center font-semibold',
+                      getRatingColorClass(player.rating || 0),
+                    )}
+                  >
+                    {(player.rating || 0).toFixed(2)}
+                  </td>
+                  <td className="text-center">{player.maps || 0}</td>
+                  <td className="text-center">
+                    {player.kills || 0} / {player.deaths || 0} / {player.assists || 0}
+                  </td>
+                </tr>
+              ))}
+            {!globalPlayersLoading && !globalPlayers.length && (
+              <tr>
+                <td colSpan={6} className="text-base-content/60 py-12 text-center text-sm">
+                  No players found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <footer className="border-base-content/10 flex items-center justify-between border-t px-3 py-2">
+        <Pagination
+          numPage={globalPlayerPage}
+          totalPages={globalPlayerTotalPages}
+          onChange={setGlobalPlayerPage}
+          onClick={setGlobalPlayerPage}
+        />
+        <span className="font-mono text-xs">{numGlobalPlayers} Results</span>
+      </footer>
+    </article>
+  );
+
   return (
     <section className="bg-base-300/40 fixed inset-0 box-border min-h-0 overflow-hidden">
       <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
-        {Object.values(StatsTab).map((tab) => (
-          <button
-            key={tab}
-            className={cx(
-              'btn btn-wide border-base-content/10 rounded-none border-0 border-r font-normal shadow-none',
-              activeTab === tab && 'btn-active!',
-            )}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === StatsTab.INDIVIDUAL
-              ? 'Individual'
-              : tab === StatsTab.TOURNAMENTS
-                ? 'Tournaments'
-                : 'Teammates'}
-          </button>
-        ))}
+        {Object.values(StatsTab)
+          .filter((tab) => tab !== StatsTab.GLOBAL_PLAYERS || canViewGlobalPlayerStats)
+          .map((tab) => (
+            <button
+              key={tab}
+              className={cx(
+                'btn btn-wide border-base-content/10 rounded-none border-0 border-r font-normal shadow-none',
+                activeTab === tab && 'btn-active!',
+              )}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === StatsTab.INDIVIDUAL
+                ? 'Individual'
+                : tab === StatsTab.TOURNAMENTS
+                  ? 'Tournaments'
+                  : tab === StatsTab.TEAMMATES
+                    ? 'Teammates'
+                    : 'All Players'}
+            </button>
+          ))}
       </header>
 
       <div
-        className={`grid h-[calc(100%-48px)] min-h-0 grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS ? '' : 'xl:grid-cols-[310px_1fr]'}`}
+        className={`grid h-[calc(100%-48px)] min-h-0 grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS || isGlobalPlayerListView ? '' : 'xl:grid-cols-[310px_1fr]'}`}
       >
-        {activeTab !== StatsTab.TOURNAMENTS && (
+        {activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
           <aside className="border-base-content/10 bg-base-100 border-r p-4">
             <h2 className="text-2xl font-bold">Filters</h2>
             <p className="text-base-content/60 mt-1 text-xs">
@@ -1463,94 +2253,121 @@ export default function LeagueStatsConcept(): JSX.Element {
         <main
           className={cx(
             'min-h-0 p-3',
-            activeTab !== StatsTab.TOURNAMENTS && activeDetailView === StatsDetailView.WEAPONS
+            isGlobalPlayerListView
               ? 'overflow-hidden'
-              : 'overflow-y-auto',
+              : activeTab !== StatsTab.TOURNAMENTS && activeDetailView === StatsDetailView.WEAPONS
+                ? 'overflow-hidden'
+                : 'overflow-y-auto',
           )}
         >
-          {loading && (
+          {isGlobalPlayerListView && renderGlobalPlayersList()}
+
+          {currentLoading && (
             <div className="flex h-full items-center justify-center">
               <span className="loading loading-bars loading-md" />
             </div>
           )}
 
-          {!loading && activeTab !== StatsTab.TOURNAMENTS && (
-            <div
-              className={cx(
-                'grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]',
-                activeDetailView === StatsDetailView.WEAPONS && 'h-full min-h-0',
+          {!currentLoading && activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
+            <div className={cx(activeDetailView === StatsDetailView.WEAPONS && 'h-full min-h-0')}>
+              {activeTab === StatsTab.GLOBAL_PLAYERS && (
+                <header className="mb-3 flex items-center justify-between">
+                  <button
+                    className="btn btn-ghost btn-sm rounded-none"
+                    onClick={() => {
+                      setSelectedGlobalPlayerId('');
+                      setGlobalPlayerMatches([]);
+                    }}
+                  >
+                    Back to players
+                  </button>
+                  <span className="text-base-content/60 text-xs">
+                    Viewing individual statistics
+                  </span>
+                </header>
               )}
-            >
-              <article className="border-base-content/10 relative border">
-                {hasMapSelected ? (
-                  <img
-                    src={featuredMapImage}
-                    className="h-full min-h-[520px] w-full object-cover"
-                  />
-                ) : (
-                  <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
+              <div
+                className={cx(
+                  'grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]',
+                  activeDetailView === StatsDetailView.WEAPONS && 'h-[calc(100%-44px)] min-h-0',
                 )}
-                <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
-                  {headerTeamLogo && (
+              >
+                <article className="border-base-content/10 relative border">
+                  {hasMapSelected ? (
                     <img
-                      src={headerTeamLogo}
-                      className="absolute top-4 right-4 h-14 w-14 object-contain"
+                      src={featuredMapImage}
+                      className="h-full min-h-[520px] w-full object-cover"
                     />
+                  ) : (
+                    <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
                   )}
-                  <div className="mb-4 flex items-center gap-3">
-                    <img
-                      src={
-                        (activeTab === StatsTab.TEAMMATES
-                          ? teammates.find((t) => String(t.id) === selectedTeammateId)?.avatar
-                          : state.profile?.player?.avatar) || 'resources://avatars/empty.png'
-                      }
-                      className="border-base-content/20 h-24 w-24 border object-cover"
-                    />
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {activeTab === StatsTab.TEAMMATES
-                          ? teammates.find((t) => String(t.id) === selectedTeammateId)?.name ||
-                            'Teammate'
-                          : state.profile?.player?.name || 'Player'}
-                      </p>
-                      <p className="text-base-content/70 text-xs">{headerTeamLabel}</p>
-                      <p className="text-primary text-xs">
-                        {hasMapSelected ? featuredMapLabel || featuredMapSlug : 'All maps'}
-                      </p>
+                  <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
+                    {headerTeamLogo && (
+                      <img
+                        src={headerTeamLogo}
+                        className="absolute top-4 right-4 h-14 w-14 object-contain"
+                      />
+                    )}
+                    <div className="mb-4 flex items-center gap-3">
+                      <img
+                        src={
+                          (activeTab === StatsTab.TEAMMATES
+                            ? teammates.find((t) => String(t.id) === selectedTeammateId)?.avatar
+                            : activeTab === StatsTab.GLOBAL_PLAYERS
+                              ? selectedGlobalPlayer?.avatar
+                              : state.profile?.player?.avatar) || 'resources://avatars/empty.png'
+                        }
+                        className="border-base-content/20 h-24 w-24 border object-cover"
+                      />
+                      <div>
+                        <p className="text-2xl font-bold">
+                          {activeTab === StatsTab.TEAMMATES
+                            ? teammates.find((t) => String(t.id) === selectedTeammateId)?.name ||
+                              'Teammate'
+                            : activeTab === StatsTab.GLOBAL_PLAYERS
+                              ? selectedGlobalPlayer?.name || 'Player'
+                              : state.profile?.player?.name || 'Player'}
+                        </p>
+                        <p className="text-base-content/70 text-xs">{headerTeamLabel}</p>
+                        <p className="text-primary text-xs">
+                          {hasMapSelected ? featuredMapLabel || featuredMapSlug : 'All maps'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">Rating</p>
+                        <p className="text-3xl font-black">{summary.avgRating.toFixed(2)}</p>
+                      </article>
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">Avg Kills</p>
+                        <p className="text-3xl font-black">{summary.avgKills}</p>
+                      </article>
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">Kills</p>
+                        <p className="text-3xl font-black">{summary.kills}</p>
+                      </article>
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">Deaths</p>
+                        <p className="text-3xl font-black">{summary.deaths}</p>
+                      </article>
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">K/D</p>
+                        <p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p>
+                      </article>
+                      <article className="bg-base-200/55 p-4">
+                        <p className="text-xs uppercase opacity-70">Maps Played</p>
+                        <p className="text-3xl font-black">{summary.mapsPlayed}</p>
+                      </article>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">Rating</p>
-                      <p className="text-3xl font-black">{summary.avgRating.toFixed(2)}</p>
-                    </article>
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">Avg Kills</p>
-                      <p className="text-3xl font-black">{summary.avgKills}</p>
-                    </article>
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">Kills</p>
-                      <p className="text-3xl font-black">{summary.kills}</p>
-                    </article>
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">Deaths</p>
-                      <p className="text-3xl font-black">{summary.deaths}</p>
-                    </article>
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">K/D</p>
-                      <p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p>
-                    </article>
-                    <article className="bg-base-200/55 p-4">
-                      <p className="text-xs uppercase opacity-70">Maps Played</p>
-                      <p className="text-3xl font-black">{summary.mapsPlayed}</p>
-                    </article>
-                  </div>
-                </div>
-              </article>
+                </article>
 
-              {activeDetailView === StatsDetailView.WEAPONS
-                ? renderWeaponTable(weaponRows)
-                : renderMatchTable(activePerformances)}
+                {activeTab !== StatsTab.GLOBAL_PLAYERS &&
+                activeDetailView === StatsDetailView.WEAPONS
+                  ? renderWeaponTable(weaponRows)
+                  : renderMatchTable(activePerformances)}
+              </div>
             </div>
           )}
 
