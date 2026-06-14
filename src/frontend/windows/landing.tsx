@@ -82,6 +82,10 @@ const routes = createMemoryRouter([
           },
           {
             path: '/create/3',
+            element: <Routes.Landing.Create.Statistics />,
+          },
+          {
+            path: '/create/4',
             element: <Routes.Landing.Create.Save />,
           },
         ],

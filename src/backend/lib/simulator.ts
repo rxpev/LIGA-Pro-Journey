@@ -43,6 +43,13 @@ function getSimScaleFactor() {
 /** @type {Team} */
 type Team = Prisma.TeamGetPayload<{ include: { players: true } }>;
 
+export type MapScore = Record<number, number>;
+
+export interface SeriesScore {
+  maps: Array<MapScore>;
+  score: MapScore;
+}
+
 /** @enum */
 enum SimulationResult {
   DRAW = 12,
@@ -58,10 +65,7 @@ enum SimulationResult {
  * @param scores The match scores.
  * @function
  */
-export function getMatchResult(
-  id: number,
-  scores: Record<number, number>,
-) {
+export function getMatchResult(id: number, scores: Record<number, number>) {
   const competitorScore = scores[id];
   const opponentScore = scores[Number(Object.keys(scores).find((key) => Number(key) !== id))];
   return competitorScore > opponentScore
@@ -128,9 +132,7 @@ export class Score {
     }
 
     // generate the win probability per player
-    const totalXp = players
-      .map((player) => Bot.Exp.getTotalXP(player.xp))
-      .reduce((a, b) => a + b);
+    const totalXp = players.map((player) => Bot.Exp.getTotalXP(player.xp)).reduce((a, b) => a + b);
     return totalXp + team.prestige + team.tier;
   }
 
@@ -144,20 +146,34 @@ export class Score {
    * @function
    */
   public generateSeries(teams: Array<Team>, bestOf = 1) {
+    return this.generateSeriesDetailed(teams, bestOf).score;
+  }
+
+  /**
+   * Simulates a best-of series and returns both the aggregate
+   * series score and the individual map scorelines that produced it.
+   *
+   * @param teams The home and away teams.
+   * @param bestOf The series length (1/3/5).
+   * @function
+   */
+  public generateSeriesDetailed(teams: Array<Team>, bestOf = 1): SeriesScore {
     const [home, away] = teams;
     const winsToClinch = Math.floor(bestOf / 2) + 1;
     const score = {
       [home.id]: 0,
       [away.id]: 0,
     };
+    const maps: Array<MapScore> = [];
 
     while (score[home.id] < winsToClinch && score[away.id] < winsToClinch) {
       const mapResult = this.generate(teams);
       const winnerId = mapResult[home.id] > mapResult[away.id] ? home.id : away.id;
       score[winnerId] += 1;
+      maps.push(mapResult);
     }
 
-    return score;
+    return { maps, score };
   }
 
   /**

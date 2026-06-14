@@ -35,8 +35,9 @@ export default function () {
   // the steps for creating a new career.
   const steps = React.useMemo(
     () => [
-      { id: 'player-info', title: 'Player Info' },
-      { id: 'role', title: 'Role' },
+      { id: 'player-info', title: 'Player Info', path: '/create' },
+      { id: 'role', title: 'Role', path: '/create/2' },
+      { id: 'statistics', title: 'Statistics', path: '/create/3' },
     ],
     [t],
   );
@@ -57,11 +58,11 @@ export default function () {
             className={cx(
               'step',
               idx < currentStep && 'step-primary',
-              idx <= 1 && 'cursor-pointer',
+              idx <= 2 && 'cursor-pointer',
             )}
             onClick={() => {
               audioClick();
-              navigate(idx === 0 ? '/create' : '/create/2');
+              navigate(step.path);
             }}
           >
             <span className="text-sm italic">{step.title}</span>

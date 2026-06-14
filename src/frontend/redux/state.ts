@@ -3,9 +3,9 @@
  *
  * @module
  */
-import type AppInfo from "package.json";
-import Locale from "@liga/locale";
-import { Constants, Eagers } from "@liga/shared";
+import type AppInfo from 'package.json';
+import Locale from '@liga/locale';
+import { Constants, Eagers } from '@liga/shared';
 
 /** Lightweight user struct for Landing window */
 export interface PlayerCareerUser {
@@ -14,7 +14,7 @@ export interface PlayerCareerUser {
   avatar?: string;
 }
 
-export type PlayerCareerRole = "RIFLER" | "AWPER" | "IGL";
+export type PlayerCareerRole = 'RIFLER' | 'AWPER' | 'IGL';
 
 /** Fully flexible Redux action */
 export interface AppAction {
@@ -30,36 +30,28 @@ export interface AppState {
   appInfo: typeof AppInfo;
   appStatus: string;
   continents: Array<
-    Awaited<
-      ReturnType<typeof api.continents.all<typeof Eagers.continent>>
-    >[number]
+    Awaited<ReturnType<typeof api.continents.all<typeof Eagers.continent>>>[number]
   >;
-  emails: Awaited<
-    ReturnType<typeof api.emails.all<typeof Eagers.email>>
-  >;
+  emails: Awaited<ReturnType<typeof api.emails.all<typeof Eagers.email>>>;
   locale: Awaited<ReturnType<typeof api.app.locale>>;
   playing: boolean;
-  profile: Awaited<
-    ReturnType<typeof api.profiles.current<typeof Eagers.profile>>
-  >;
-  profiles: Array<AppState["profile"]>;
-  shortlist: Awaited<
-    ReturnType<typeof api.shortlist.all<typeof Eagers.shortlist>>
-  >;
+  profile: Awaited<ReturnType<typeof api.profiles.current<typeof Eagers.profile>>>;
+  profiles: Array<AppState['profile']>;
+  shortlist: Awaited<ReturnType<typeof api.shortlist.all<typeof Eagers.shortlist>>>;
   faceitMatchRoom: any | null;
   faceitMatchId: number | null;
   faceitMatchCompleted: boolean;
   faceitVeto: {
     history: Array<{
       map: string;
-      by: "TEAM_A" | "TEAM_B" | "SYSTEM";
-      kind: "BAN" | "DECIDER";
+      by: 'TEAM_A' | 'TEAM_B' | 'SYSTEM';
+      kind: 'BAN' | 'DECIDER';
     }>;
     completed: boolean;
     deciderMap: string | null;
   };
   faceitQueue: {
-    status: "IDLE" | "QUEUEING" | "RESOLVING";
+    status: 'IDLE' | 'QUEUEING' | 'RESOLVING';
     startedAt: number | null;
     targetSec: number | null;
   };
@@ -67,6 +59,7 @@ export interface AppState {
     [Constants.WindowIdentifier.Landing]: {
       user?: PlayerCareerUser;
       role?: { selectedRole?: PlayerCareerRole };
+      statistics?: { simulateNpcMatchStats?: boolean };
       today: Date;
     };
     [Constants.WindowIdentifier.Modal]: {
@@ -98,7 +91,7 @@ export const InitialState: AppState = {
     deciderMap: null,
   },
   faceitQueue: {
-    status: "IDLE",
+    status: 'IDLE',
     startedAt: null,
     targetSec: null,
   },
@@ -107,7 +100,7 @@ export const InitialState: AppState = {
       today: new Date(
         new Date().getFullYear(),
         Constants.Application.SEASON_START_MONTH,
-        Constants.Application.SEASON_START_DAY
+        Constants.Application.SEASON_START_DAY,
       ),
     },
     modal: {},

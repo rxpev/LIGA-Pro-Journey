@@ -354,15 +354,16 @@ model Player {
 }
 
 model Profile {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  date      DateTime
-  issues    String?
-  season    Int?      @default(0)
-  settings  String?
-  trainedAt DateTime?
-  updatedAt DateTime? @default(now())
-  faceitElo Int       @default(1200)
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique
+  date                  DateTime
+  issues                String?
+  season                Int?      @default(0)
+  settings              String?
+  trainedAt             DateTime?
+  updatedAt             DateTime? @default(now())
+  faceitElo             Int       @default(1200)
+  simulateNpcMatchStats Boolean   @default(false)
 
   // has many
   bonuses Bonus[]
@@ -389,7 +390,6 @@ model UserTeammateSeasonXp {
 }
 
 model Shortlist {
-
   // belongs to
   team     Team   @relation(fields: [teamId], references: [id])
   teamId   Int

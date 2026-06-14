@@ -16,8 +16,16 @@ import { DatabaseClient, Game, WindowManager } from '@liga/backend/lib';
 export default function registerProfileHandlers() {
   ipcMain.handle(
     'profiles:createPlayerCareer',
-    async (_, data: { playerName: string; countryId: number; role: string }) => {
-      const { playerName, countryId, role } = data;
+    async (
+      _,
+      data: {
+        playerName: string;
+        countryId: number;
+        role: string;
+        simulateNpcMatchStats?: boolean;
+      },
+    ) => {
+      const { playerName, countryId, role, simulateNpcMatchStats } = data;
 
       // Always use the single root profile
       const existing = await DatabaseClient.prisma.profile.findFirst();
@@ -30,6 +38,7 @@ export default function registerProfileHandlers() {
           date: Constants.NewSaveSeasonStartDate,
           season: 0,
           faceitElo: 1200,
+          simulateNpcMatchStats: Boolean(simulateNpcMatchStats),
 
           player: {
             create: {

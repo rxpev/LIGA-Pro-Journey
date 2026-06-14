@@ -40,6 +40,228 @@ import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { backfillCompetitionLocations } from './competition-locations';
 
+type SimulatedTeam = Prisma.TeamGetPayload<{ include: { players: true } }>;
+type SimulatedCompetitor = Prisma.MatchToTeamGetPayload<{
+  include: { team: { include: { players: true } } };
+}>;
+type SimulatedGame = Prisma.GameGetPayload<{ include: { teams: true } }>;
+
+type SimulatedMapInput = {
+  game: SimulatedGame;
+  score: Simulator.MapScore;
+};
+
+type SimulatedParticipant = SimulatedTeam['players'][number] & {
+  performanceWeight: number;
+};
+
+const SIMULATED_WEAPONS = [
+  'ak47',
+  'm4a1',
+  'm4a1_silencer',
+  'galilar',
+  'famas',
+  'mp9',
+  'mac10',
+  'usp_silencer',
+  'glock',
+];
+
+function getSimulatedLineup(team: SimulatedTeam): Array<SimulatedParticipant> {
+  const sortedPlayers = [...team.players].sort((a, b) => {
+    if (Number(b.starter) !== Number(a.starter)) {
+      return Number(b.starter) - Number(a.starter);
+    }
+
+    return (b.xp ?? 0) - (a.xp ?? 0);
+  });
+
+  return sortedPlayers.slice(0, Constants.Application.SQUAD_MIN_LENGTH).map((player) => {
+    const roleBoost = player.role === Constants.PlayerRole.SNIPER ? 1.08 : 1;
+    return {
+      ...player,
+      performanceWeight: Math.max(1, 25 + (player.xp ?? 0) * 1.8) * roleBoost,
+    };
+  });
+}
+
+function rollWeighted<T extends { performanceWeight: number }>(items: Array<T>) {
+  const total = items.reduce((sum, item) => sum + item.performanceWeight, 0);
+  let roll = random(0, Math.max(1, Math.round(total * 1000))) / 1000;
+
+  for (const item of items) {
+    roll -= item.performanceWeight;
+    if (roll <= 0) {
+      return item;
+    }
+  }
+
+  return items[items.length - 1];
+}
+
+function getRoundWinnerIds(homeId: number, awayId: number, homeScore: number, awayScore: number) {
+  const winners = [...Array(homeScore).fill(homeId), ...Array(awayScore).fill(awayId)];
+
+  return shuffle(winners);
+}
+
+function getRoundDeaths(isRoundWinner: boolean, lineupLength: number) {
+  if (lineupLength <= 0) {
+    return 0;
+  }
+
+  if (isRoundWinner) {
+    const deaths = Chance.roll({
+      0: 24,
+      1: 28,
+      2: 24,
+      3: 16,
+      4: 8,
+    });
+
+    return Math.min(Number(deaths), Math.max(0, lineupLength - 1));
+  }
+
+  if (random(0, 100) < 74) {
+    return lineupLength;
+  }
+
+  return random(Math.max(1, lineupLength - 3), Math.max(1, lineupLength - 1));
+}
+
+function buildSimulatedMatchEvents({
+  away,
+  home,
+  maps,
+  matchDate,
+  matchId,
+}: {
+  away: SimulatedCompetitor;
+  home: SimulatedCompetitor;
+  maps: Array<SimulatedMapInput>;
+  matchDate: Date;
+  matchId: number;
+}) {
+  const lineups = {
+    [home.team.id]: getSimulatedLineup(home.team),
+    [away.team.id]: getSimulatedLineup(away.team),
+  };
+  const events: Array<Prisma.MatchEventUncheckedCreateInput> = [];
+
+  if (!lineups[home.team.id].length || !lineups[away.team.id].length) {
+    return { events, playerIds: [] };
+  }
+
+  for (const map of maps) {
+    const homeScore = map.score[home.team.id] ?? 0;
+    const awayScore = map.score[away.team.id] ?? 0;
+    const roundWinnerIds = getRoundWinnerIds(home.id, away.id, homeScore, awayScore);
+    const mapStart = new Date(matchDate.getTime() + map.game.num * 2 * 60 * 60 * 1000);
+
+    roundWinnerIds.forEach((winnerId, roundIdx) => {
+      events.push({
+        half: Math.floor(roundIdx / 12),
+        matchId,
+        gameId: map.game.id,
+        payload: JSON.stringify({
+          type: 'simulated_round',
+          score: map.score,
+        }),
+        result: winnerId === home.id ? 'SFUI_Notice_CT_Win' : 'SFUI_Notice_Terrorists_Win',
+        timestamp: new Date(mapStart.getTime() + roundIdx * 90 * 1000),
+        winnerId,
+      });
+    });
+
+    roundWinnerIds.forEach((winnerId, roundIdx) => {
+      const winnerTeamId = winnerId === home.id ? home.team.id : away.team.id;
+      const loserTeamId = winnerTeamId === home.team.id ? away.team.id : home.team.id;
+      const roundTeams = [
+        {
+          attackers: lineups[winnerTeamId].map((player) => ({
+            ...player,
+            performanceWeight: player.performanceWeight * 1.08,
+          })),
+          victims: shuffle(lineups[loserTeamId]).slice(
+            0,
+            getRoundDeaths(false, lineups[loserTeamId].length),
+          ),
+        },
+        {
+          attackers: lineups[loserTeamId].map((player) => ({
+            ...player,
+            performanceWeight: player.performanceWeight * 0.96,
+          })),
+          victims: shuffle(lineups[winnerTeamId]).slice(
+            0,
+            getRoundDeaths(true, lineups[winnerTeamId].length),
+          ),
+        },
+      ];
+
+      let killIdx = 0;
+
+      for (const pair of roundTeams) {
+        for (const victim of pair.victims) {
+          const attacker = rollWeighted(pair.attackers);
+          const timestamp = new Date(
+            mapStart.getTime() + roundIdx * 90 * 1000 + (killIdx + 1) * 9000,
+          );
+          const weapon =
+            attacker.role === Constants.PlayerRole.SNIPER && random(0, 100) < 55
+              ? 'awp'
+              : (sample(SIMULATED_WEAPONS) ?? 'ak47');
+          const headshot = weapon === 'awp' ? random(0, 100) < 18 : random(0, 100) < 43;
+
+          events.push({
+            attackerId: attacker.id,
+            half: Math.floor(roundIdx / 12),
+            headshot,
+            matchId,
+            gameId: map.game.id,
+            payload: JSON.stringify({
+              type: 'playerkilled',
+              simulated: true,
+            }),
+            timestamp,
+            victimId: victim.id,
+            weapon,
+          });
+
+          if (random(0, 100) < 27) {
+            const assistPool = pair.attackers.filter((player) => player.id !== attacker.id);
+            const assist = assistPool.length ? rollWeighted(assistPool) : null;
+
+            if (assist) {
+              events.push({
+                assistId: assist.id,
+                half: Math.floor(roundIdx / 12),
+                matchId,
+                gameId: map.game.id,
+                payload: JSON.stringify({
+                  type: 'playerassisted',
+                  simulated: true,
+                }),
+                timestamp: new Date(timestamp.getTime() + 1000),
+                victimId: victim.id,
+              });
+            }
+          }
+
+          killIdx += 1;
+        }
+      }
+    });
+  }
+
+  return {
+    events,
+    playerIds: Array.from(
+      new Set([...lineups[home.team.id], ...lineups[away.team.id]].map((player) => player.id)),
+    ),
+  };
+}
+
 /**
  * Bumps the current season number by one.
  *
@@ -691,37 +913,35 @@ async function createMatchdays(
   const profile = await DatabaseClient.prisma.profile.findFirst({
     include: { player: true },
   });
+  const configuredGame = profile ? Util.loadSettings(profile.settings).general.game : undefined;
+  const activeMapPool = await DatabaseClient.prisma.mapPool.findMany({
+    where: {
+      gameVersion: configuredGame
+        ? {
+            slug: configuredGame,
+          }
+        : undefined,
+      position: {
+        not: null,
+      },
+    },
+    orderBy: {
+      position: 'asc',
+    },
+    include: {
+      gameMap: true,
+    },
+  });
+  const activeMapNames = activeMapPool.map((poolEntry) => poolEntry.gameMap.name);
 
   let resolvedMapName = mapName;
   let resolvedVetoMapName = vetoMapName;
 
   if (!resolvedMapName || !resolvedVetoMapName) {
-    const configuredGame = profile ? Util.loadSettings(profile.settings).general.game : undefined;
-    const fallbackMapPool = await DatabaseClient.prisma.mapPool.findMany({
-      where: {
-        gameVersion: configuredGame
-          ? {
-              slug: configuredGame,
-            }
-          : undefined,
-        position: {
-          not: null,
-        },
-      },
-      orderBy: {
-        position: 'asc',
-      },
-      include: {
-        gameMap: true,
-      },
-    });
-
-    const fallbackMapName =
-      sample(fallbackMapPool)?.gameMap.name || fallbackMapPool[0]?.gameMap.name || 'de_dust2';
+    const fallbackMapName = sample(activeMapNames) || activeMapPool[0]?.gameMap.name || 'de_dust2';
 
     resolvedMapName = resolvedMapName || fallbackMapName;
-    resolvedVetoMapName =
-      resolvedVetoMapName || fallbackMapPool[0]?.gameMap.name || fallbackMapName;
+    resolvedVetoMapName = resolvedVetoMapName || activeMapPool[0]?.gameMap.name || fallbackMapName;
   }
 
   const today = profile?.date || new Date();
@@ -899,13 +1119,6 @@ async function createMatchdays(
       const isUserMatch = !!userSeed && match.p.includes(userSeed);
       const roundMapName = isUserMatch ? resolvedVetoMapName || resolvedMapName : resolvedMapName;
 
-      // assign map to match
-      if (!match.data) {
-        match.data = { map: roundMapName };
-      } else {
-        match.data['map'] = roundMapName;
-      }
-
       // how many games in this series?
       let num = tournament.swiss ? getSwissMatchSeriesLength(match, tournament) : 1;
 
@@ -920,6 +1133,18 @@ async function createMatchdays(
         } else {
           num = seriesByRound[0] ?? num;
         }
+      }
+
+      const seriesMapNames =
+        !isUserMatch && num > 1
+          ? shuffle(activeMapNames.length ? activeMapNames : [roundMapName]).slice(0, num)
+          : Array.from({ length: num }).map(() => roundMapName);
+
+      // assign map to match
+      if (!match.data) {
+        match.data = { map: seriesMapNames[0] || roundMapName };
+      } else {
+        match.data['map'] = seriesMapNames[0] || roundMapName;
       }
 
       // create match record
@@ -941,7 +1166,7 @@ async function createMatchdays(
           games: {
             create: Array.from({ length: num }).map((_, idx) => ({
               status,
-              map: roundMapName,
+              map: seriesMapNames[idx] || roundMapName,
               num: idx,
               teams: {
                 create: competitors,
@@ -6995,7 +7220,14 @@ export async function onMatchdayNPC(entry: Calendar) {
           },
         },
       },
-      games: true,
+      games: {
+        include: {
+          teams: true,
+        },
+        orderBy: {
+          num: 'asc',
+        },
+      },
     },
   });
 
@@ -7013,15 +7245,18 @@ export async function onMatchdayNPC(entry: Calendar) {
 
   // load sim settings if this is a user matchday
   const simulator = new Simulator.Score();
+  const careerProfile = await DatabaseClient.prisma.profile.findFirst();
+  const simulateNpcMatchStats =
+    entry.type === Constants.CalendarEntry.MATCHDAY_NPC &&
+    Boolean(careerProfile?.simulateNpcMatchStats);
   let userMatchdayProfile: Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>;
 
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {
-    const profile = await DatabaseClient.prisma.profile.findFirst();
-    userMatchdayProfile = profile;
-    const settings = Util.loadSettings(profile.settings);
+    userMatchdayProfile = careerProfile;
+    const settings = Util.loadSettings(careerProfile.settings);
     simulator.mode = settings.general.simulationMode;
-    simulator.userPlayerId = profile.playerId;
-    simulator.userTeamId = profile.teamId;
+    simulator.userPlayerId = careerProfile.playerId;
+    simulator.userTeamId = careerProfile.teamId;
   }
 
   // are draws allowed?
@@ -7031,10 +7266,19 @@ export async function onMatchdayNPC(entry: Calendar) {
 
   // sim the game
   const [home, away] = match.competitors;
-  const simulationResult =
+  const simulation =
     match.games.length === 1
-      ? simulator.generate([home.team, away.team])
-      : simulator.generateSeries([home.team, away.team], match.games.length);
+      ? {
+          maps: [simulator.generate([home.team, away.team])],
+          score: null as Simulator.MapScore | null,
+        }
+      : simulator.generateSeriesDetailed([home.team, away.team], match.games.length);
+  const simulationResult =
+    simulation.score ??
+    ({
+      [home.team.id]: simulation.maps[0][home.team.id],
+      [away.team.id]: simulation.maps[0][away.team.id],
+    } as Simulator.MapScore);
 
   // Defensive guard: cup matches cannot end in a draw. In edge cases where
   // sim inputs produce an equal scoreline (e.g. malformed probability table),
@@ -7046,7 +7290,27 @@ export async function onMatchdayNPC(entry: Calendar) {
     } else {
       simulationResult[away.team.id] += 1;
     }
+
+    if (match.games.length === 1) {
+      simulation.maps[0] = { ...simulationResult };
+    }
   }
+
+  const simulatedMaps = simulation.maps
+    .map((score, idx) => ({
+      game: match.games[idx],
+      score,
+    }))
+    .filter((map) => !!map.game);
+  const simulatedStats = simulateNpcMatchStats
+    ? buildSimulatedMatchEvents({
+        away,
+        home,
+        maps: simulatedMaps,
+        matchDate: match.date,
+        matchId: match.id,
+      })
+    : { events: [], playerIds: [] };
 
   // check if we need to award earnings to user for a win (only if user has a team)
   if (
@@ -7111,7 +7375,7 @@ export async function onMatchdayNPC(entry: Calendar) {
         : undefined,
   });
 
-  return Promise.all([
+  const transaction: Prisma.PrismaPromise<unknown>[] = [
     ...deltas.map((delta, teamIdx) =>
       DatabaseClient.prisma.team.update({
         where: {
@@ -7128,6 +7392,31 @@ export async function onMatchdayNPC(entry: Calendar) {
       },
       data: {
         status: Constants.MatchStatus.COMPLETED,
+        players:
+          simulateNpcMatchStats && simulatedStats.playerIds.length
+            ? {
+                connect: simulatedStats.playerIds.map((id) => ({ id })),
+              }
+            : undefined,
+        games: simulateNpcMatchStats
+          ? {
+              update: simulatedMaps.map(({ game, score }) => ({
+                where: { id: game.id },
+                data: {
+                  status: Constants.MatchStatus.COMPLETED,
+                  teams: {
+                    update: game.teams.map((team) => ({
+                      where: { id: team.id },
+                      data: {
+                        score: score[team.teamId ?? 0],
+                        result: Simulator.getMatchResult(team.teamId ?? 0, score),
+                      },
+                    })),
+                  },
+                },
+              })),
+            }
+          : undefined,
         competitors: {
           update: match.competitors.map((competitor) => ({
             where: { id: competitor.id },
@@ -7139,7 +7428,19 @@ export async function onMatchdayNPC(entry: Calendar) {
         },
       },
     }),
-  ]);
+  ];
+
+  if (simulatedStats.events.length) {
+    transaction.push(
+      ...simulatedStats.events.map((event) =>
+        DatabaseClient.prisma.matchEvent.create({
+          data: event,
+        }),
+      ),
+    );
+  }
+
+  return DatabaseClient.prisma.$transaction(transaction);
 }
 
 export async function onPlayerContractExpire(entry: Calendar) {

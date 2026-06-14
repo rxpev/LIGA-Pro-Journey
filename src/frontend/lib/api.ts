@@ -436,8 +436,12 @@ export default {
       settings?: string,
     ) => ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CREATE, data, settings) as Promise<Profile>,
 
-    createPlayerCareer: (data: { playerName: string; countryId: number; role: string }) =>
-      ipcRenderer.invoke('profiles:createPlayerCareer', data) as Promise<Profile>,
+    createPlayerCareer: (data: {
+      playerName: string;
+      countryId: number;
+      role: string;
+      simulateNpcMatchStats?: boolean;
+    }) => ipcRenderer.invoke('profiles:createPlayerCareer', data) as Promise<Profile>,
 
     current: <T = typeof Eagers.profile>() =>
       ipcRenderer.invoke(Constants.IPCRoute.PROFILES_CURRENT) as Promise<

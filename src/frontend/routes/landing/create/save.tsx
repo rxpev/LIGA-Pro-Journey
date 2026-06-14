@@ -31,12 +31,11 @@ export default function Save() {
   const playerName = windowData?.user?.name;
   const countryId = windowData?.user?.countryId;
   const selectedRole = location.state?.role || windowData?.role?.selectedRole;
+  const simulateNpcMatchStats = windowData?.statistics?.simulateNpcMatchStats ?? false;
 
   // compute new save ID
   const latestProfile = Math.max(...state.profiles.map((profile) => profile.id));
   const newSaveId = (isFinite(latestProfile) ? latestProfile : 0) + 1;
-
-
 
   React.useEffect(() => {
     const createPlayerCareer = async () => {
@@ -56,6 +55,7 @@ export default function Save() {
           playerName,
           countryId,
           role: selectedRole,
+          simulateNpcMatchStats,
         });
 
         // Skip team-based season init (since teamless)
