@@ -6,7 +6,8 @@
  */
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { differenceBy } from 'lodash';
+import { differenceBy, groupBy } from 'lodash';
+import { subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
@@ -47,6 +48,34 @@ function formatMatchDate(date: Date | string) {
   const year = matchDate.getFullYear();
 
   return `${day} of ${month} ${year}`;
+}
+
+enum Rating {
+  LOW = 0.95,
+  HIGH = 1.05,
+}
+
+function getRatingColorClass(rating: number) {
+  if (rating <= Rating.LOW) {
+    return 'text-error';
+  }
+
+  if (rating >= Rating.HIGH) {
+    return 'text-success';
+  }
+
+  return 'text-inherit';
+}
+
+function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
+  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
+  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
+  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
+  const deaths = killOrAssistEvents.filter(
+    (event) => event.victimId === playerId && !event.assistId,
+  ).length;
+
+  return Util.getPlayerRating(kills, deaths, assists);
 }
 
 function getCustomCountryBackground(code?: string | null) {
@@ -179,6 +208,9 @@ export default function () {
   const [userSquad, setUserSquad] = React.useState<
     Awaited<ReturnType<typeof api.squad.all<typeof Eagers.player>>>
   >([]);
+  const [recentPlayerRatings, setRecentPlayerRatings] = React.useState<
+    Record<number, { maps: number; rating: number }>
+  >({});
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -206,6 +238,97 @@ export default function () {
   // grab basic match info
   const game = React.useMemo(() => match && match.games[0], [match]);
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
+
+  React.useEffect(() => {
+    setRecentPlayerRatings({});
+
+    if (!state.profile?.simulateNpcMatchStats || !match) {
+      return;
+    }
+
+    const teamIds = match.competitors
+      .map((competitor) => competitor.teamId)
+      .filter((teamId): teamId is number => teamId != null);
+    const teamIdSet = new Set(teamIds);
+
+    if (!teamIds.length) {
+      return;
+    }
+
+    api.matches
+      .all<typeof Eagers.matchEvents>({
+        ...Eagers.matchEvents,
+        where: {
+          status: Constants.MatchStatus.COMPLETED,
+          competitionId: { not: null as null },
+          matchType: { not: 'FACEIT_PUG' },
+          date: {
+            gte: subMonths(state.profile.date, 3),
+            lte: state.profile.date,
+          },
+          competitors: {
+            some: {
+              teamId: {
+                in: teamIds,
+              },
+            },
+          },
+          events: {
+            some: {},
+          },
+        },
+      })
+      .then((recentMatches) => {
+        const ratingRows: Record<number, { maps: number; ratingSum: number }> = {};
+
+        recentMatches.forEach((recentMatch) => {
+          Object.values(groupBy(recentMatch.events, 'gameId')).forEach((gameEvents) => {
+            const playerIds = new Set<number>();
+
+            gameEvents.forEach((event) => {
+              if (event.attacker?.teamId != null && teamIdSet.has(event.attacker.teamId)) {
+                playerIds.add(event.attackerId);
+              }
+
+              if (event.assist?.teamId != null && teamIdSet.has(event.assist.teamId)) {
+                playerIds.add(event.assistId);
+              }
+
+              if (event.victim?.teamId != null && teamIdSet.has(event.victim.teamId)) {
+                playerIds.add(event.victimId);
+              }
+            });
+
+            playerIds.forEach((playerId) => {
+              const rating = getPlayerRatingFromEvents(playerId, gameEvents);
+
+              if (!Number.isFinite(rating)) {
+                return;
+              }
+
+              if (!ratingRows[playerId]) {
+                ratingRows[playerId] = { maps: 0, ratingSum: 0 };
+              }
+
+              ratingRows[playerId].maps += 1;
+              ratingRows[playerId].ratingSum += rating;
+            });
+          });
+        });
+
+        setRecentPlayerRatings(
+          Object.fromEntries(
+            Object.entries(ratingRows).map(([playerId, row]) => [
+              Number(playerId),
+              {
+                maps: row.maps,
+                rating: row.maps ? row.ratingSum / row.maps : 0,
+              },
+            ]),
+          ),
+        );
+      });
+  }, [match, state.profile]);
 
   if (!state.profile || !match) {
     return (
@@ -291,6 +414,22 @@ export default function () {
                             className="border-transparent bg-transparent"
                             game={settingsAll.general.game}
                             player={player}
+                            compactMetric={
+                              state.profile?.simulateNpcMatchStats
+                                ? {
+                                    className: recentPlayerRatings[player.id]
+                                      ? getRatingColorClass(recentPlayerRatings[player.id].rating)
+                                      : 'text-muted',
+                                    subtitle: recentPlayerRatings[player.id]
+                                      ? `(Past 3 months - ${recentPlayerRatings[player.id].maps} maps)`
+                                      : '(Past 3 months)',
+                                    title: 'Rating',
+                                    value: recentPlayerRatings[player.id]
+                                      ? recentPlayerRatings[player.id].rating.toFixed(2)
+                                      : '-',
+                                  }
+                                : undefined
+                            }
                             noStats={player.id === state.profile.playerId}
                             showStatusBadge={false}
                             wideCompactIdentity
