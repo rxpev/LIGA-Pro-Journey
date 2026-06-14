@@ -171,6 +171,10 @@ enum StatsTab {
   INDIVIDUAL = 'INDIVIDUAL',
   TOURNAMENTS = 'TOURNAMENTS',
   TEAMMATES = 'TEAMMATES',
+}
+
+enum StatsDetailView {
+  MATCH_HISTORY = 'MATCH_HISTORY',
   WEAPONS = 'WEAPONS',
 }
 
@@ -460,6 +464,9 @@ export default function LeagueStatsConcept(): JSX.Element {
   const { state } = React.useContext(AppStateContext);
   const [loading, setLoading] = React.useState(true);
   const [activeTab, setActiveTab] = React.useState<StatsTab>(StatsTab.INDIVIDUAL);
+  const [activeDetailView, setActiveDetailView] = React.useState<StatsDetailView>(
+    StatsDetailView.MATCH_HISTORY,
+  );
   const [matches, setMatches] = React.useState<MatchRecord[]>([]);
   const [careerStints, setCareerStints] = React.useState<CareerStintRecord[]>([]);
   const [selectedCompetitionGroup, setSelectedCompetitionGroup] = React.useState<string>('');
@@ -917,8 +924,11 @@ export default function LeagueStatsConcept(): JSX.Element {
     }));
   }, [ownPlayerPerformances, careerStints]);
 
+  const activeStatsPlayerId =
+    activeTab === StatsTab.TEAMMATES ? Number(selectedTeammateId) : state.profile?.player?.id;
+
   const weaponRows = React.useMemo(() => {
-    const playerId = state.profile?.player?.id;
+    const playerId = activeStatsPlayerId;
     if (!playerId) return [] as WeaponPerformance[];
 
     const grouped = new Map<string, { kills: number; headshots: number }>();
@@ -973,7 +983,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       .sort(
         (a, b) => b.kills - a.kills || b.hsPercent - a.hsPercent || a.label.localeCompare(b.label),
       );
-  }, [matchesByFilters, selectedMap, state.profile?.player?.id]);
+  }, [activeStatsPlayerId, matchesByFilters, selectedMap]);
 
   const activePerformances =
     activeTab === StatsTab.TEAMMATES ? teammatePerformances : ownPlayerPerformances;
@@ -1072,8 +1082,25 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     return (
       <article className="border-base-content/10 rounded-none border">
-        <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
-          Match History
+        <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.MATCH_HISTORY && 'btn-active!',
+            )}
+            onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
+          >
+            Match History
+          </button>
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
+            )}
+            onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
+          >
+            Weapons
+          </button>
         </header>
         <div className="overflow-x-auto">
           <table className="table-zebra table-sm table">
@@ -1194,8 +1221,25 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   const renderWeaponTable = (rows: WeaponPerformance[]) => (
     <article className="border-base-content/10 flex min-h-0 flex-col rounded-none border">
-      <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
-        Weapons
+      <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
+        <button
+          className={cx(
+            'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+            activeDetailView === StatsDetailView.MATCH_HISTORY && 'btn-active!',
+          )}
+          onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
+        >
+          Match History
+        </button>
+        <button
+          className={cx(
+            'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+            activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
+          )}
+          onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
+        >
+          Weapons
+        </button>
       </header>
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         <table className="table-zebra table-sm table">
@@ -1267,9 +1311,7 @@ export default function LeagueStatsConcept(): JSX.Element {
               ? 'Individual'
               : tab === StatsTab.TOURNAMENTS
                 ? 'Tournaments'
-                : tab === StatsTab.TEAMMATES
-                  ? 'Teammates'
-                  : 'Weapons'}
+                : 'Teammates'}
           </button>
         ))}
       </header>
@@ -1421,7 +1463,9 @@ export default function LeagueStatsConcept(): JSX.Element {
         <main
           className={cx(
             'min-h-0 p-3',
-            activeTab === StatsTab.WEAPONS ? 'overflow-hidden' : 'overflow-y-auto',
+            activeTab !== StatsTab.TOURNAMENTS && activeDetailView === StatsDetailView.WEAPONS
+              ? 'overflow-hidden'
+              : 'overflow-y-auto',
           )}
         >
           {loading && (
@@ -1434,7 +1478,7 @@ export default function LeagueStatsConcept(): JSX.Element {
             <div
               className={cx(
                 'grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]',
-                activeTab === StatsTab.WEAPONS && 'h-full min-h-0',
+                activeDetailView === StatsDetailView.WEAPONS && 'h-full min-h-0',
               )}
             >
               <article className="border-base-content/10 relative border">
@@ -1504,7 +1548,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                 </div>
               </article>
 
-              {activeTab === StatsTab.WEAPONS
+              {activeDetailView === StatsDetailView.WEAPONS
                 ? renderWeaponTable(weaponRows)
                 : renderMatchTable(activePerformances)}
             </div>
@@ -1572,10 +1616,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                             )}
                           </td>
                           <td
-                            className={cx(
-                              'font-semibold',
-                              getRatingColorClass(Number(row.rating)),
-                            )}
+                            className={cx('font-semibold', getRatingColorClass(Number(row.rating)))}
                           >
                             {row.rating}
                           </td>
