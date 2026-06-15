@@ -40,13 +40,42 @@ import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { backfillCompetitionLocations } from './competition-locations';
 
-type SimulatedTeam = Prisma.TeamGetPayload<{
-  include: { players: { include: { careerStints: true } } };
-}>;
-type SimulatedCompetitor = Prisma.MatchToTeamGetPayload<{
-  include: { team: { include: { players: { include: { careerStints: true } } } } };
-}>;
-type SimulatedGame = Prisma.GameGetPayload<{ include: { teams: true } }>;
+type SimulatedTeam = {
+  id: number;
+  players: Array<{
+    id: number;
+    xp: number;
+    starter: boolean;
+    role?: string | null;
+    careerStints: Array<{
+      endedAt?: Date | string | null;
+      startedAt: Date | string;
+      starter: boolean;
+      teamId?: number | null;
+    }>;
+  }>;
+};
+type SimulatedCompetitor = {
+  id: number;
+  result?: number | null;
+  score?: number | null;
+  team: SimulatedTeam;
+};
+type SimulatedMatch = {
+  id: number;
+  competitors: Array<SimulatedCompetitor | null>;
+  games: Array<SimulatedGame>;
+};
+type SimulatedGame = {
+  id: number;
+  map?: string | null;
+  num: number;
+  teams: Array<{
+    id: number;
+    score?: number | null;
+    teamId?: number | null;
+  }>;
+};
 
 type SimulatedMapInput = {
   game: SimulatedGame;
@@ -56,6 +85,45 @@ type SimulatedMapInput = {
 type SimulatedParticipant = SimulatedTeam['players'][number] & {
   performanceWeight: number;
 };
+
+const simulatedMatchCompetitorsSelect = {
+  id: true,
+  result: true,
+  score: true,
+  seed: true,
+  team: {
+    select: {
+      id: true,
+      players: {
+        select: {
+          id: true,
+          xp: true,
+          starter: true,
+          careerStints: {
+            select: {
+              endedAt: true,
+              startedAt: true,
+              starter: true,
+              teamId: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.MatchToTeamSelect;
+
+const simulatedMatchGamesSelect = {
+  id: true,
+  num: true,
+  teams: {
+    select: {
+      id: true,
+      score: true,
+      teamId: true,
+    },
+  },
+} satisfies Prisma.GameSelect;
 
 const SIMULATED_WEAPONS = [
   'ak47',
@@ -428,6 +496,10 @@ function areSameNumberSet(a: Array<number>, b: Array<number>) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+function getBackfillMatchDate(profileDate: Date | string) {
+  return new Date(profileDate);
+}
+
 export async function legacyBackfillNpcMatchStats(
   onProgress?: (progress: { completed: number; total: number; percent: number }) => void,
 ) {
@@ -463,19 +535,16 @@ export async function legacyBackfillNpcMatchStats(
   const total = await DatabaseClient.prisma.match.count({ where });
   const matches = await DatabaseClient.prisma.match.findMany({
     where,
-    include: {
+    select: {
+      id: true,
       competitors: {
-        include: {
-          team: { include: { players: { include: { careerStints: true } } } },
-        },
+        select: simulatedMatchCompetitorsSelect,
         orderBy: {
           seed: 'asc',
         },
       },
       games: {
-        include: {
-          teams: true,
-        },
+        select: simulatedMatchGamesSelect,
         orderBy: {
           num: 'asc',
         },
@@ -489,7 +558,9 @@ export async function legacyBackfillNpcMatchStats(
 
   onProgress?.({ completed, total, percent: total ? 0 : 100 });
 
-  for (const match of matches) {
+  const backfillMatchDate = getBackfillMatchDate(profile.date);
+
+  for (const match of matches as Array<SimulatedMatch>) {
     const [home, away] = match.competitors;
 
     if (!home?.team || !away?.team || !match.games.length) {
@@ -505,7 +576,7 @@ export async function legacyBackfillNpcMatchStats(
       away,
       home,
       maps,
-      matchDate: match.date,
+      matchDate: backfillMatchDate,
       matchId: match.id,
     });
     const transaction: Prisma.PrismaPromise<unknown>[] = [
@@ -596,19 +667,16 @@ export async function repairMissingLegacyBackfillNpcMatchStats() {
       competitionId: { not: null },
       events: { none: {} },
     },
-    include: {
+    select: {
+      id: true,
       competitors: {
-        include: {
-          team: { include: { players: { include: { careerStints: true } } } },
-        },
+        select: simulatedMatchCompetitorsSelect,
         orderBy: {
           seed: 'asc',
         },
       },
       games: {
-        include: {
-          teams: true,
-        },
+        select: simulatedMatchGamesSelect,
         orderBy: {
           num: 'asc',
         },
@@ -620,7 +688,9 @@ export async function repairMissingLegacyBackfillNpcMatchStats() {
   });
   let repaired = 0;
 
-  for (const match of matches) {
+  const backfillMatchDate = getBackfillMatchDate(profile.date);
+
+  for (const match of matches as Array<SimulatedMatch>) {
     const [home, away] = match.competitors;
 
     if (!home?.team || !away?.team || !match.games.length) {
@@ -634,7 +704,7 @@ export async function repairMissingLegacyBackfillNpcMatchStats() {
       away,
       home,
       maps,
-      matchDate: match.date,
+      matchDate: backfillMatchDate,
       matchId: match.id,
     });
     const transaction: Prisma.PrismaPromise<unknown>[] = [
@@ -724,8 +794,12 @@ export async function repairLegacyBackfillSeriesMaps() {
         some: {},
       },
     },
-    include: {
+    select: {
       games: {
+        select: {
+          id: true,
+          num: true,
+        },
         orderBy: {
           num: 'asc',
         },
@@ -739,12 +813,6 @@ export async function repairLegacyBackfillSeriesMaps() {
       return;
     }
 
-    const uniqueMaps = new Set(match.games.map((game) => game.map).filter(Boolean));
-
-    if (uniqueMaps.size >= match.games.length) {
-      return;
-    }
-
     const seriesMapNames = shuffle(activeMapNames).slice(0, match.games.length);
 
     match.games.forEach((game, index) => {
@@ -752,7 +820,7 @@ export async function repairLegacyBackfillSeriesMaps() {
         DatabaseClient.prisma.game.update({
           where: { id: game.id },
           data: {
-            map: seriesMapNames[index] || game.map,
+            map: seriesMapNames[index] || activeMapNames[index % activeMapNames.length] || 'de_dust2',
           },
         }),
       );
@@ -805,24 +873,25 @@ export async function repairLegacyBackfillSimulatedLineups() {
         },
       },
     },
-    include: {
+    select: {
+      id: true,
       competitors: {
-        include: {
-          team: { include: { players: { include: { careerStints: true } } } },
-        },
+        select: simulatedMatchCompetitorsSelect,
         orderBy: {
           seed: 'asc',
         },
       },
       games: {
-        include: {
-          teams: true,
-        },
+        select: simulatedMatchGamesSelect,
         orderBy: {
           num: 'asc',
         },
       },
-      players: true,
+      players: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: {
       date: 'asc',
@@ -830,7 +899,9 @@ export async function repairLegacyBackfillSimulatedLineups() {
   });
   let repaired = 0;
 
-  for (const match of matches) {
+  const backfillMatchDate = getBackfillMatchDate(profile.date);
+
+  for (const match of matches as Array<SimulatedMatch & { players: Array<{ id: number }> }>) {
     const [home, away] = match.competitors;
 
     if (!home?.team || !away?.team || !match.games.length) {
@@ -838,7 +909,7 @@ export async function repairLegacyBackfillSimulatedLineups() {
     }
 
     const currentPlayerIds = match.players.map((player) => player.id).sort((a, b) => a - b);
-    const expectedPlayerIds = getExpectedSimulatedPlayerIds(home, away, match.date);
+    const expectedPlayerIds = getExpectedSimulatedPlayerIds(home, away, backfillMatchDate);
 
     if (
       expectedPlayerIds.length < Constants.Application.SQUAD_MIN_LENGTH * 2 ||
@@ -852,7 +923,7 @@ export async function repairLegacyBackfillSimulatedLineups() {
       away,
       home,
       maps,
-      matchDate: match.date,
+      matchDate: backfillMatchDate,
       matchId: match.id,
     });
 

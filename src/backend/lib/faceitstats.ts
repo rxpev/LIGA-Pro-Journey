@@ -24,7 +24,10 @@ export async function computeLifetimeStats(
       matchType: "FACEIT_PUG",
       status: Constants.MatchStatus.COMPLETED,
     },
-    include: { events: true },
+    select: {
+      id: true,
+      faceitIsWin: true,
+    },
     orderBy: { date: "desc" },
     take: limit ?? undefined,
   });
@@ -76,7 +79,13 @@ export async function getRecentMatches(profileId: number) {
       matchType: "FACEIT_PUG",
       status: Constants.MatchStatus.COMPLETED,
     },
-    include: { games: true },
+    select: {
+      id: true,
+      date: true,
+      faceitEloDelta: true,
+      faceitIsWin: true,
+      games: true,
+    },
     orderBy: { date: "desc" },
     take: 15,
   });

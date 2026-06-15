@@ -40,7 +40,10 @@ export async function computeLeagueLifetimeStats(
       ...(since ? { date: { gte: since.toISOString() } } : {}),
       competitors: { some: { teamId } },
     },
-    include: { competitors: true },
+    select: {
+      id: true,
+      competitors: true,
+    },
     orderBy: { date: "desc" },
     take: limit ?? undefined,
   });
@@ -133,7 +136,9 @@ export async function getRecentLeagueMatches(teamId: number, take = 15) {
       competitionId: { not: null },
       competitors: { some: { teamId } },
     },
-    include: {
+    select: {
+      id: true,
+      date: true,
       games: true,
       competitors: { include: { team: true } },
       competition: {
