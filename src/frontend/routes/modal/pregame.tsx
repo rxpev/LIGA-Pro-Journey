@@ -353,11 +353,7 @@ export default function () {
             </span>
           </li>
           <li>
-            {match.competition.tier.groupSize
-              ? `${t('shared.matchday')} ${match.round}`
-              : Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
-                ? Util.parseSwissRound(match.round)
-                : Util.parseCupRounds(match.round, match.totalRounds)}
+            {Util.getMatchRoundLabel(match, t('shared.matchday'))}
           </li>
           {match.games.length > 1 && (
             <li>

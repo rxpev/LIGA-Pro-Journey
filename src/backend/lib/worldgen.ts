@@ -54,6 +54,24 @@ type SimulatedTeam = {
       teamId?: number | null;
     }>;
   }>;
+  careerStints?: Array<{
+    endedAt?: Date | string | null;
+    startedAt: Date | string;
+    starter: boolean;
+    teamId?: number | null;
+    player: {
+      id: number;
+      xp: number;
+      starter: boolean;
+      role?: string | null;
+      careerStints: Array<{
+        endedAt?: Date | string | null;
+        startedAt: Date | string;
+        starter: boolean;
+        teamId?: number | null;
+      }>;
+    };
+  }>;
 };
 type SimulatedCompetitor = {
   id: number;
@@ -63,6 +81,7 @@ type SimulatedCompetitor = {
 };
 type SimulatedMatch = {
   id: number;
+  date: Date;
   competitors: Array<SimulatedCompetitor | null>;
   games: Array<SimulatedGame>;
 };
@@ -99,12 +118,37 @@ const simulatedMatchCompetitorsSelect = {
           id: true,
           xp: true,
           starter: true,
+          role: true,
           careerStints: {
             select: {
               endedAt: true,
               startedAt: true,
               starter: true,
               teamId: true,
+            },
+          },
+        },
+      },
+      careerStints: {
+        select: {
+          endedAt: true,
+          startedAt: true,
+          starter: true,
+          teamId: true,
+          player: {
+            select: {
+              id: true,
+              xp: true,
+              starter: true,
+              role: true,
+              careerStints: {
+                select: {
+                  endedAt: true,
+                  startedAt: true,
+                  starter: true,
+                  teamId: true,
+                },
+              },
             },
           },
         },
@@ -136,6 +180,7 @@ const SIMULATED_WEAPONS = [
   'usp_silencer',
   'glock',
 ];
+const SIMULATED_BACKFILL_MATCH_BATCH_SIZE = 25;
 
 function isDateWithinCareerStint(
   date: Date,
@@ -151,27 +196,62 @@ function isDateWithinCareerStint(
 }
 
 function getSimulatedLineup(team: SimulatedTeam, matchDate: Date): Array<SimulatedParticipant> {
-  const historicalPlayers = team.players
+  const teamStintPlayers = (team.careerStints ?? [])
+    .filter((stint) => isDateWithinCareerStint(matchDate, stint, team.id))
+    .sort((a, b) => {
+      if (Number(b.starter) !== Number(a.starter)) {
+        return Number(b.starter) - Number(a.starter);
+      }
+
+      return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+    });
+  const historicalByPlayer = new Map<number, (typeof teamStintPlayers)[number]>();
+
+  teamStintPlayers.forEach((stint) => {
+    if (!historicalByPlayer.has(stint.player.id)) {
+      historicalByPlayer.set(stint.player.id, stint);
+    }
+  });
+
+  const teamHistoricalLineup = Array.from(historicalByPlayer.values())
+    .sort((a, b) => {
+      if (Number(b.starter) !== Number(a.starter)) {
+        return Number(b.starter) - Number(a.starter);
+      }
+
+      return (b.player.xp ?? 0) - (a.player.xp ?? 0);
+    })
+    .map((stint) => ({
+      ...stint.player,
+      starter: stint.starter,
+    }));
+  const playerHistoricalLineup = team.players
     .map((player) => ({
       player,
       stint: player.careerStints
         ?.filter((stint) => isDateWithinCareerStint(matchDate, stint, team.id))
         .sort((a, b) => Number(b.starter) - Number(a.starter))[0],
     }))
-    .filter((entry) => !!entry.stint);
-  const historicalLineup =
-    historicalPlayers.length >= Constants.Application.SQUAD_MIN_LENGTH
-      ? historicalPlayers
-          .sort((a, b) => {
-            if (Number(b.stint.starter) !== Number(a.stint.starter)) {
-              return Number(b.stint.starter) - Number(a.stint.starter);
-            }
+    .filter((entry): entry is typeof entry & { stint: NonNullable<typeof entry.stint> } =>
+      Boolean(entry.stint),
+    )
+    .sort((a, b) => {
+      if (Number(b.stint.starter) !== Number(a.stint.starter)) {
+        return Number(b.stint.starter) - Number(a.stint.starter);
+      }
 
-            return (b.player.xp ?? 0) - (a.player.xp ?? 0);
-          })
-          .map((entry) => entry.player)
-      : [];
-  const sortedPlayers = (historicalLineup.length ? historicalLineup : team.players).sort((a, b) => {
+      return (b.player.xp ?? 0) - (a.player.xp ?? 0);
+    })
+    .map((entry) => ({
+      ...entry.player,
+      starter: entry.stint.starter,
+    }));
+  const lineup = teamHistoricalLineup.length
+    ? teamHistoricalLineup
+    : playerHistoricalLineup.length
+      ? playerHistoricalLineup
+      : team.players;
+  const sortedPlayers = lineup.sort((a, b) => {
     if (Number(b.starter) !== Number(a.starter)) {
       return Number(b.starter) - Number(a.starter);
     }
@@ -379,7 +459,8 @@ function getLegacyBackfillMapScores(
 
   if (games.length === 1) {
     const hasStoredScore = home.score != null && away.score != null;
-    const fallbackWinnerId = home.result === Constants.MatchResult.WIN ? home.team.id : away.team.id;
+    const fallbackWinnerId =
+      home.result === Constants.MatchResult.WIN ? home.team.id : away.team.id;
     const fallbackLoserRounds = random(0, 11);
     const score = {
       [home.team.id]: hasStoredScore
@@ -474,9 +555,7 @@ function getStoredLegacyBackfillMapScores(
     return storedMaps;
   }
 
-  return getLegacyBackfillMapScores(home, away, games, activeMapNames).filter(
-    (map) => !!map.game,
-  );
+  return getLegacyBackfillMapScores(home, away, games, activeMapNames).filter((map) => !!map.game);
 }
 
 function getExpectedSimulatedPlayerIds(
@@ -496,8 +575,34 @@ function areSameNumberSet(a: Array<number>, b: Array<number>) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function getBackfillMatchDate(profileDate: Date | string) {
-  return new Date(profileDate);
+function getSimulatedBackfillBatchWhere(
+  where: Prisma.MatchWhereInput,
+  after?: { date: Date; id: number },
+): Prisma.MatchWhereInput {
+  if (!after) {
+    return where;
+  }
+
+  return {
+    AND: [
+      where,
+      {
+        OR: [
+          {
+            date: {
+              gt: after.date,
+            },
+          },
+          {
+            date: after.date,
+            id: {
+              gt: after.id,
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export async function legacyBackfillNpcMatchStats(
@@ -533,97 +638,104 @@ export async function legacyBackfillNpcMatchStats(
     events: { none: {} },
   };
   const total = await DatabaseClient.prisma.match.count({ where });
-  const matches = await DatabaseClient.prisma.match.findMany({
-    where,
-    select: {
-      id: true,
-      competitors: {
-        select: simulatedMatchCompetitorsSelect,
-        orderBy: {
-          seed: 'asc',
-        },
-      },
-      games: {
-        select: simulatedMatchGamesSelect,
-        orderBy: {
-          num: 'asc',
-        },
-      },
-    },
-    orderBy: {
-      date: 'asc',
-    },
-  });
   let completed = 0;
+  let after: { date: Date; id: number } | undefined;
 
   onProgress?.({ completed, total, percent: total ? 0 : 100 });
 
-  const backfillMatchDate = getBackfillMatchDate(profile.date);
-
-  for (const match of matches as Array<SimulatedMatch>) {
-    const [home, away] = match.competitors;
-
-    if (!home?.team || !away?.team || !match.games.length) {
-      completed += 1;
-      onProgress?.({ completed, total, percent: total ? (completed / total) * 100 : 100 });
-      continue;
-    }
-
-    const maps = getLegacyBackfillMapScores(home, away, match.games, activeMapNames).filter(
-      (map) => !!map.game,
-    );
-    const simulatedStats = buildSimulatedMatchEvents({
-      away,
-      home,
-      maps,
-      matchDate: backfillMatchDate,
-      matchId: match.id,
-    });
-    const transaction: Prisma.PrismaPromise<unknown>[] = [
-      DatabaseClient.prisma.match.update({
-        where: { id: match.id },
-        data: {
-          players: simulatedStats.playerIds.length
-            ? {
-                connect: simulatedStats.playerIds.map((id) => ({ id })),
-              }
-            : undefined,
-          games: {
-            update: maps.map(({ game, map, score }) => ({
-              where: { id: game.id },
-              data: {
-                map,
-                status: Constants.MatchStatus.COMPLETED,
-                teams: {
-                  update: game.teams.map((team) => ({
-                    where: { id: team.id },
-                    data: {
-                      score: score[team.teamId ?? 0],
-                      result: Simulator.getMatchResult(team.teamId ?? 0, score),
-                    },
-                  })),
-                },
-              },
-            })),
+  while (true) {
+    const matches = await DatabaseClient.prisma.match.findMany({
+      where: getSimulatedBackfillBatchWhere(where, after),
+      select: {
+        id: true,
+        date: true,
+        competitors: {
+          select: simulatedMatchCompetitorsSelect,
+          orderBy: {
+            seed: 'asc',
           },
         },
-      }),
-    ];
+        games: {
+          select: simulatedMatchGamesSelect,
+          orderBy: {
+            num: 'asc',
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      take: SIMULATED_BACKFILL_MATCH_BATCH_SIZE,
+    });
 
-    if (simulatedStats.events.length) {
-      transaction.push(
-        ...simulatedStats.events.map((event) =>
-          DatabaseClient.prisma.matchEvent.create({
-            data: event,
-          }),
-        ),
-      );
+    if (!matches.length) {
+      break;
     }
 
-    await DatabaseClient.prisma.$transaction(transaction);
+    for (const match of matches as Array<SimulatedMatch>) {
+      after = { date: match.date, id: match.id };
+      const [home, away] = match.competitors;
 
-    completed += 1;
-    onProgress?.({ completed, total, percent: total ? (completed / total) * 100 : 100 });
+      if (!home?.team || !away?.team || !match.games.length) {
+        completed += 1;
+        onProgress?.({ completed, total, percent: total ? (completed / total) * 100 : 100 });
+        continue;
+      }
+
+      const maps = getLegacyBackfillMapScores(home, away, match.games, activeMapNames).filter(
+        (map) => !!map.game,
+      );
+      const simulatedStats = buildSimulatedMatchEvents({
+        away,
+        home,
+        maps,
+        matchDate: match.date,
+        matchId: match.id,
+      });
+      const transaction: Prisma.PrismaPromise<unknown>[] = [
+        DatabaseClient.prisma.match.update({
+          where: { id: match.id },
+          data: {
+            players: simulatedStats.playerIds.length
+              ? {
+                  connect: simulatedStats.playerIds.map((id) => ({ id })),
+                }
+              : undefined,
+            games: {
+              update: maps.map(({ game, map, score }) => ({
+                where: { id: game.id },
+                data: {
+                  map,
+                  status: Constants.MatchStatus.COMPLETED,
+                  teams: {
+                    update: game.teams.map((team) => ({
+                      where: { id: team.id },
+                      data: {
+                        score: score[team.teamId ?? 0],
+                        result: Simulator.getMatchResult(team.teamId ?? 0, score),
+                      },
+                    })),
+                  },
+                },
+              })),
+            },
+          },
+        }),
+      ];
+
+      if (simulatedStats.events.length) {
+        transaction.push(
+          ...simulatedStats.events.map((event) =>
+            DatabaseClient.prisma.matchEvent.create({
+              data: event,
+            }),
+          ),
+        );
+      }
+
+      await DatabaseClient.prisma.$transaction(transaction);
+
+      completed += 1;
+      onProgress?.({ completed, total, percent: total ? (completed / total) * 100 : 100 });
+    }
   }
 
   await DatabaseClient.prisma.profile.update({
@@ -661,95 +773,103 @@ export async function repairMissingLegacyBackfillNpcMatchStats() {
     },
   });
   const activeMapNames = activeMapPool.map((poolEntry) => poolEntry.gameMap.name);
-  const matches = await DatabaseClient.prisma.match.findMany({
-    where: {
-      status: Constants.MatchStatus.COMPLETED,
-      competitionId: { not: null },
-      events: { none: {} },
-    },
-    select: {
-      id: true,
-      competitors: {
-        select: simulatedMatchCompetitorsSelect,
-        orderBy: {
-          seed: 'asc',
-        },
-      },
-      games: {
-        select: simulatedMatchGamesSelect,
-        orderBy: {
-          num: 'asc',
-        },
-      },
-    },
-    orderBy: {
-      date: 'asc',
-    },
-  });
+  const where: Prisma.MatchWhereInput = {
+    status: Constants.MatchStatus.COMPLETED,
+    competitionId: { not: null },
+    events: { none: {} },
+  };
   let repaired = 0;
+  let after: { date: Date; id: number } | undefined;
 
-  const backfillMatchDate = getBackfillMatchDate(profile.date);
-
-  for (const match of matches as Array<SimulatedMatch>) {
-    const [home, away] = match.competitors;
-
-    if (!home?.team || !away?.team || !match.games.length) {
-      continue;
-    }
-
-    const maps = getLegacyBackfillMapScores(home, away, match.games, activeMapNames).filter(
-      (map) => !!map.game,
-    );
-    const simulatedStats = buildSimulatedMatchEvents({
-      away,
-      home,
-      maps,
-      matchDate: backfillMatchDate,
-      matchId: match.id,
-    });
-    const transaction: Prisma.PrismaPromise<unknown>[] = [
-      DatabaseClient.prisma.match.update({
-        where: { id: match.id },
-        data: {
-          players: simulatedStats.playerIds.length
-            ? {
-                connect: simulatedStats.playerIds.map((id) => ({ id })),
-              }
-            : undefined,
-          games: {
-            update: maps.map(({ game, map, score }) => ({
-              where: { id: game.id },
-              data: {
-                map,
-                status: Constants.MatchStatus.COMPLETED,
-                teams: {
-                  update: game.teams.map((team) => ({
-                    where: { id: team.id },
-                    data: {
-                      score: score[team.teamId ?? 0],
-                      result: Simulator.getMatchResult(team.teamId ?? 0, score),
-                    },
-                  })),
-                },
-              },
-            })),
+  while (true) {
+    const matches = await DatabaseClient.prisma.match.findMany({
+      where: getSimulatedBackfillBatchWhere(where, after),
+      select: {
+        id: true,
+        date: true,
+        competitors: {
+          select: simulatedMatchCompetitorsSelect,
+          orderBy: {
+            seed: 'asc',
           },
         },
-      }),
-    ];
+        games: {
+          select: simulatedMatchGamesSelect,
+          orderBy: {
+            num: 'asc',
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      take: SIMULATED_BACKFILL_MATCH_BATCH_SIZE,
+    });
 
-    if (simulatedStats.events.length) {
-      transaction.push(
-        ...simulatedStats.events.map((event) =>
-          DatabaseClient.prisma.matchEvent.create({
-            data: event,
-          }),
-        ),
-      );
+    if (!matches.length) {
+      break;
     }
 
-    await DatabaseClient.prisma.$transaction(transaction);
-    repaired += 1;
+    for (const match of matches as Array<SimulatedMatch>) {
+      after = { date: match.date, id: match.id };
+      const [home, away] = match.competitors;
+
+      if (!home?.team || !away?.team || !match.games.length) {
+        continue;
+      }
+
+      const maps = getLegacyBackfillMapScores(home, away, match.games, activeMapNames).filter(
+        (map) => !!map.game,
+      );
+      const simulatedStats = buildSimulatedMatchEvents({
+        away,
+        home,
+        maps,
+        matchDate: match.date,
+        matchId: match.id,
+      });
+      const transaction: Prisma.PrismaPromise<unknown>[] = [
+        DatabaseClient.prisma.match.update({
+          where: { id: match.id },
+          data: {
+            players: simulatedStats.playerIds.length
+              ? {
+                  connect: simulatedStats.playerIds.map((id) => ({ id })),
+                }
+              : undefined,
+            games: {
+              update: maps.map(({ game, map, score }) => ({
+                where: { id: game.id },
+                data: {
+                  map,
+                  status: Constants.MatchStatus.COMPLETED,
+                  teams: {
+                    update: game.teams.map((team) => ({
+                      where: { id: team.id },
+                      data: {
+                        score: score[team.teamId ?? 0],
+                        result: Simulator.getMatchResult(team.teamId ?? 0, score),
+                      },
+                    })),
+                  },
+                },
+              })),
+            },
+          },
+        }),
+      ];
+
+      if (simulatedStats.events.length) {
+        transaction.push(
+          ...simulatedStats.events.map((event) =>
+            DatabaseClient.prisma.matchEvent.create({
+              data: event,
+            }),
+          ),
+        );
+      }
+
+      await DatabaseClient.prisma.$transaction(transaction);
+      repaired += 1;
+    }
   }
 
   return { repaired };
@@ -820,7 +940,8 @@ export async function repairLegacyBackfillSeriesMaps() {
         DatabaseClient.prisma.game.update({
           where: { id: game.id },
           data: {
-            map: seriesMapNames[index] || activeMapNames[index % activeMapNames.length] || 'de_dust2',
+            map:
+              seriesMapNames[index] || activeMapNames[index % activeMapNames.length] || 'de_dust2',
           },
         }),
       );
@@ -861,94 +982,99 @@ export async function repairLegacyBackfillSimulatedLineups() {
     },
   });
   const activeMapNames = activeMapPool.map((poolEntry) => poolEntry.gameMap.name);
-  const matches = await DatabaseClient.prisma.match.findMany({
-    where: {
-      status: Constants.MatchStatus.COMPLETED,
-      competitionId: { not: null },
-      events: {
-        some: {
-          payload: {
-            contains: 'simulated',
+  const where: Prisma.MatchWhereInput = {
+    status: Constants.MatchStatus.COMPLETED,
+    competitionId: { not: null },
+    events: {
+      some: {
+        payload: {
+          contains: 'simulated',
+        },
+      },
+    },
+  };
+  let repaired = 0;
+  let after: { date: Date; id: number } | undefined;
+
+  while (true) {
+    const matches = await DatabaseClient.prisma.match.findMany({
+      where: getSimulatedBackfillBatchWhere(where, after),
+      select: {
+        id: true,
+        date: true,
+        competitors: {
+          select: simulatedMatchCompetitorsSelect,
+          orderBy: {
+            seed: 'asc',
+          },
+        },
+        games: {
+          select: simulatedMatchGamesSelect,
+          orderBy: {
+            num: 'asc',
+          },
+        },
+        players: {
+          select: {
+            id: true,
           },
         },
       },
-    },
-    select: {
-      id: true,
-      competitors: {
-        select: simulatedMatchCompetitorsSelect,
-        orderBy: {
-          seed: 'asc',
-        },
-      },
-      games: {
-        select: simulatedMatchGamesSelect,
-        orderBy: {
-          num: 'asc',
-        },
-      },
-      players: {
-        select: {
-          id: true,
-        },
-      },
-    },
-    orderBy: {
-      date: 'asc',
-    },
-  });
-  let repaired = 0;
-
-  const backfillMatchDate = getBackfillMatchDate(profile.date);
-
-  for (const match of matches as Array<SimulatedMatch & { players: Array<{ id: number }> }>) {
-    const [home, away] = match.competitors;
-
-    if (!home?.team || !away?.team || !match.games.length) {
-      continue;
-    }
-
-    const currentPlayerIds = match.players.map((player) => player.id).sort((a, b) => a - b);
-    const expectedPlayerIds = getExpectedSimulatedPlayerIds(home, away, backfillMatchDate);
-
-    if (
-      expectedPlayerIds.length < Constants.Application.SQUAD_MIN_LENGTH * 2 ||
-      areSameNumberSet(currentPlayerIds, expectedPlayerIds)
-    ) {
-      continue;
-    }
-
-    const maps = getStoredLegacyBackfillMapScores(home, away, match.games, activeMapNames);
-    const simulatedStats = buildSimulatedMatchEvents({
-      away,
-      home,
-      maps,
-      matchDate: backfillMatchDate,
-      matchId: match.id,
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      take: SIMULATED_BACKFILL_MATCH_BATCH_SIZE,
     });
 
-    await DatabaseClient.prisma.$transaction([
-      DatabaseClient.prisma.matchEvent.deleteMany({
-        where: {
-          matchId: match.id,
-        },
-      }),
-      DatabaseClient.prisma.match.update({
-        where: { id: match.id },
-        data: {
-          players: {
-            set: simulatedStats.playerIds.map((id) => ({ id })),
-          },
-        },
-      }),
-      ...simulatedStats.events.map((event) =>
-        DatabaseClient.prisma.matchEvent.create({
-          data: event,
-        }),
-      ),
-    ]);
+    if (!matches.length) {
+      break;
+    }
 
-    repaired += 1;
+    for (const match of matches as Array<SimulatedMatch & { players: Array<{ id: number }> }>) {
+      after = { date: match.date, id: match.id };
+      const [home, away] = match.competitors;
+
+      if (!home?.team || !away?.team || !match.games.length) {
+        continue;
+      }
+
+      const currentPlayerIds = match.players.map((player) => player.id).sort((a, b) => a - b);
+      const expectedPlayerIds = getExpectedSimulatedPlayerIds(home, away, match.date);
+
+      if (!expectedPlayerIds.length || areSameNumberSet(currentPlayerIds, expectedPlayerIds)) {
+        continue;
+      }
+
+      const maps = getStoredLegacyBackfillMapScores(home, away, match.games, activeMapNames);
+      const simulatedStats = buildSimulatedMatchEvents({
+        away,
+        home,
+        maps,
+        matchDate: match.date,
+        matchId: match.id,
+      });
+
+      await DatabaseClient.prisma.$transaction([
+        DatabaseClient.prisma.matchEvent.deleteMany({
+          where: {
+            matchId: match.id,
+          },
+        }),
+        DatabaseClient.prisma.match.update({
+          where: { id: match.id },
+          data: {
+            players: {
+              set: simulatedStats.playerIds.map((id) => ({ id })),
+            },
+          },
+        }),
+        ...simulatedStats.events.map((event) =>
+          DatabaseClient.prisma.matchEvent.create({
+            data: event,
+          }),
+        ),
+      ]);
+
+      repaired += 1;
+    }
   }
 
   return { repaired };

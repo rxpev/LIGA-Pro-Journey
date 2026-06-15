@@ -257,6 +257,112 @@ export function parseSwissRound(round: number) {
   return `Swiss Round #${round}`;
 }
 
+type MatchRoundLabelContext = {
+  payload?: string | null;
+  round?: number | null;
+  totalRounds?: number | null;
+  competition?: {
+    tournament?: string | null;
+    tier?: {
+      groupSize?: number | null;
+      slug?: string | null;
+    } | null;
+  } | null;
+};
+
+function parseTournamentRoundFlags(tournament?: string | null) {
+  if (!tournament) {
+    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false };
+  }
+
+  try {
+    const parsed = JSON.parse(tournament);
+
+    return {
+      isDoubleElim:
+        parsed?.brackets?.options?.last === Constants.BracketIdentifier.LOWER ||
+        parsed?.iemGroup?.options?.last === Constants.BracketIdentifier.LOWER,
+      isGroupSwiss: Boolean(parsed?.groupSwiss),
+      isIemGroup: Boolean(parsed?.iemGroup),
+    };
+  } catch {
+    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false };
+  }
+}
+
+function parseBracketMatchId(payload?: string | null) {
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(payload) as { s?: number; r?: number; m?: number };
+  } catch {
+    return null;
+  }
+}
+
+export function getMatchRoundLabel(match: MatchRoundLabelContext, matchdayLabel = 'Matchday') {
+  const tierSlug = match.competition?.tier?.slug as Constants.TierSlug | undefined;
+
+  if (tierSlug && Constants.TierSwissConfig[tierSlug]) {
+    return parseSwissRound(match.round ?? 0);
+  }
+
+  const matchId = parseBracketMatchId(match.payload);
+  const { isDoubleElim, isGroupSwiss, isIemGroup } = parseTournamentRoundFlags(
+    match.competition?.tournament,
+  );
+
+  if (isIemGroup && matchId) {
+    if (matchId.s === Constants.BracketIdentifier.LOWER) {
+      return (
+        {
+          1: 'Lower round 1',
+          2: 'Lower semi-finals',
+          3: 'Lower final',
+        }[matchId.r ?? 0] || `Round ${matchId.r}`
+      );
+    }
+
+    return (
+      {
+        1: 'Opening round',
+        2: 'Upper semi-finals',
+        3: 'Upper final',
+      }[matchId.r ?? 0] || `Round ${matchId.r}`
+    );
+  }
+
+  if (isDoubleElim && matchId) {
+    if (matchId.s === Constants.BracketIdentifier.LOWER) {
+      return (
+        {
+          1: 'Lower round 1',
+          2: 'Lower round 2',
+          3: 'Lower semi-finals',
+          4: 'Lower final',
+          5: 'Grand final',
+        }[matchId.r ?? 0] || `Lower round ${matchId.r}`
+      );
+    }
+
+    return (
+      {
+        1: 'Opening round',
+        2: 'Upper semi-finals',
+        3: 'Upper final',
+      }[matchId.r ?? 0] || `Upper round ${matchId.r}`
+    );
+  }
+
+  if (match.competition?.tier?.groupSize || isGroupSwiss) {
+    return `${matchdayLabel} ${match.round ?? 0}`;
+  }
+
+  return parseCupRounds(match.round ?? 0, match.totalRounds ?? 0);
+}
+
 /**
  * Returns the league tier size for the given federation,
  * falling back to the provided default when no override exists.
