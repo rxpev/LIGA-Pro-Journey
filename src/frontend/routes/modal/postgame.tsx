@@ -67,6 +67,7 @@ type MatchVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number]
 type MatchInfoMatch = Matches<typeof Eagers.matchEvents>[number];
 type SwissSiblingMatch = Matches<typeof Eagers.match>[number];
 type SwissRecord = { losses: number; wins: number };
+type MiniSwissConfig = { maxLosses: number; maxWins: number };
 
 /** @enum */
 enum Rating {
@@ -282,15 +283,35 @@ function getSwissRecordBeforeMatch(
     );
 }
 
+function getGroupSwissConfig(match: MatchInfoMatch): MiniSwissConfig | null {
+  try {
+    const parsed = JSON.parse(match.competition.tournament || '{}');
+    const options = parsed?.groupSwiss?.options;
+
+    return options?.maxLosses && options?.maxWins
+      ? { maxLosses: options.maxLosses, maxWins: options.maxWins }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSwissCompetitorRecords(
+  match: MatchInfoMatch,
+  competitionMatches: SwissSiblingMatch[],
+) {
+  return match.competitors.map((competitor) => ({
+    competitor,
+    record: getSwissRecordBeforeMatch(match, competitionMatches, competitor.teamId),
+  }));
+}
+
 function getMatchFormatNotes(match: MatchInfoMatch, competitionMatches: SwissSiblingMatch[] = []) {
   const tierSlug = match.competition.tier.slug as Constants.TierSlug;
   const swissConfig = Constants.TierSwissConfig[tierSlug];
 
   if (swissConfig) {
-    const competitorRecords = match.competitors.map((competitor) => ({
-      competitor,
-      record: getSwissRecordBeforeMatch(match, competitionMatches, competitor.teamId),
-    }));
+    const competitorRecords = getSwissCompetitorRecords(match, competitionMatches);
     const records = competitorRecords
       .map(({ record }) => `${record.wins}-${record.losses}`)
       .filter((record, index, list) => list.indexOf(record) === index);
@@ -312,15 +333,31 @@ function getMatchFormatNotes(match: MatchInfoMatch, competitionMatches: SwissSib
     }`;
   }
 
-  if (match.competition.tier.groupSize) {
-    if (match.competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
-      return `* Matchday ${match.round}`;
-    }
+  const groupSwissConfig = getGroupSwissConfig(match);
 
-    return `* ${Util.parseCupRounds(match.round, match.totalRounds)}`;
+  if (groupSwissConfig) {
+    const competitorRecords = getSwissCompetitorRecords(match, competitionMatches);
+    const records = competitorRecords
+      .map(({ record }) => `${record.wins}-${record.losses}`)
+      .filter((record, index, list) => list.indexOf(record) === index);
+    const winner = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.WIN,
+    );
+    const loser = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.LOSS,
+    );
+    const details = [
+      match.round > 1 && records.length === 1 && records[0],
+      winner && winner.record.wins + 1 >= groupSwissConfig.maxWins && 'winning team advances',
+      loser &&
+        loser.record.losses + 1 >= groupSwissConfig.maxLosses &&
+        'losing team is eliminated',
+    ].filter(Boolean);
+
+    return `* ${Util.getMatchRoundLabel(match)}${details.length ? ` (${details.join(', ')})` : ''}`;
   }
 
-  return `* ${Util.parseCupRounds(match.round, match.totalRounds)}`;
+  return `* ${Util.getMatchRoundLabel(match)}`;
 }
 
 function MatchInfo(props: { competitionMatches: SwissSiblingMatch[]; match: MatchInfoMatch }) {
@@ -886,7 +923,10 @@ export default function () {
 
     api.match.findVetoList(match.id).then(setVetoes);
 
-    if (Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]) {
+    if (
+      Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug] ||
+      getGroupSwissConfig(match)
+    ) {
       api.matches
         .all<typeof Eagers.match>({
           where: {
@@ -958,11 +998,7 @@ export default function () {
             </span>
           </li>
           <li>
-            {match.competition.tier.groupSize
-              ? `${t('shared.matchday')} ${match.round}`
-              : Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug]
-                ? Util.parseSwissRound(match.round)
-                : Util.parseCupRounds(match.round, match.totalRounds)}
+            {Util.getMatchRoundLabel(match, t('shared.matchday'))}
           </li>
           <li>
             {matchGame
