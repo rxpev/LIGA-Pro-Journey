@@ -65,6 +65,9 @@ interface ScoreboardProps {
 
 type MatchVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number];
 type MatchInfoMatch = Matches<typeof Eagers.matchEvents>[number];
+type PostgameMatch = Matches<typeof Eagers.matchEvents>[number];
+type PostgameCompetitor = PostgameMatch['competitors'][number];
+type PostgamePlayer = PostgameMatch['players'][number];
 type SwissSiblingMatch = Matches<typeof Eagers.match>[number];
 type SwissRecord = { losses: number; wins: number };
 type MiniSwissConfig = { maxLosses: number; maxWins: number };
@@ -79,6 +82,13 @@ const VETO_BADGE_STYLES = {
   [Constants.MapVetoAction.BAN]: 'badge-error',
   [Constants.MapVetoAction.DECIDER]: 'badge-warning',
   [Constants.MapVetoAction.PICK]: 'badge-success',
+};
+const TEAM_COUNTRY_CORE_SIZE = 3;
+const MIXED_REGION_COUNTRY_CODES: Record<string, string> = {
+  AS: 'as',
+  EU: 'eu',
+  NA: 'na',
+  SA: 'sa',
 };
 
 function getExhibitionEventPlayerId(
@@ -252,6 +262,65 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   return start <= date && (!end || end >= date);
 }
 
+function getHistoricalCompetitorPlayers(match: PostgameMatch, competitor: PostgameCompetitor) {
+  const matchDate = new Date(match.date);
+
+  return match.players.filter((player) =>
+    player.careerStints?.some(
+      (stint) =>
+        stint.teamId === competitor.team.id &&
+        isWithinStint(matchDate, stint.startedAt, stint.endedAt),
+    ),
+  );
+}
+
+function getHistoricalTeamCountryCode(
+  match: PostgameMatch,
+  competitor: PostgameCompetitor,
+): string | undefined {
+  const historicalPlayers = getHistoricalCompetitorPlayers(match, competitor);
+  const countryCounts = historicalPlayers.reduce<Record<string, number>>((counts, player) => {
+    const code = player.country?.code?.toLowerCase();
+
+    if (code) {
+      counts[code] = (counts[code] || 0) + 1;
+    }
+
+    return counts;
+  }, {});
+  const historicalCountryCore = Object.entries(countryCounts).sort(
+    ([codeA, countA], [codeB, countB]) => countB - countA || codeA.localeCompare(codeB),
+  )[0];
+
+  if ((historicalCountryCore?.[1] ?? 0) >= TEAM_COUNTRY_CORE_SIZE) {
+    return historicalCountryCore?.[0];
+  }
+
+  const regionCounts = historicalPlayers.reduce<Record<string, number>>(
+    (counts, player: PostgamePlayer) => {
+      const regionCode = player.country?.continent?.code?.toUpperCase();
+
+      if (regionCode && MIXED_REGION_COUNTRY_CODES[regionCode]) {
+        counts[regionCode] = (counts[regionCode] || 0) + 1;
+      }
+
+      return counts;
+    },
+    {},
+  );
+  const historicalRegionCore = Object.entries(regionCounts).sort(
+    ([codeA, countA], [codeB, countB]) => countB - countA || codeA.localeCompare(codeB),
+  )[0];
+
+  if ((historicalRegionCore?.[1] ?? 0) >= TEAM_COUNTRY_CORE_SIZE) {
+    return MIXED_REGION_COUNTRY_CODES[historicalRegionCore[0]];
+  }
+
+  const fallbackCode = competitor.team.country?.code?.toLowerCase();
+
+  return fallbackCode;
+}
+
 function getSwissRecordBeforeMatch(
   match: MatchInfoMatch,
   competitionMatches: SwissSiblingMatch[],
@@ -296,10 +365,7 @@ function getGroupSwissConfig(match: MatchInfoMatch): MiniSwissConfig | null {
   }
 }
 
-function getSwissCompetitorRecords(
-  match: MatchInfoMatch,
-  competitionMatches: SwissSiblingMatch[],
-) {
+function getSwissCompetitorRecords(match: MatchInfoMatch, competitionMatches: SwissSiblingMatch[]) {
   return match.competitors.map((competitor) => ({
     competitor,
     record: getSwissRecordBeforeMatch(match, competitionMatches, competitor.teamId),
@@ -349,9 +415,7 @@ function getMatchFormatNotes(match: MatchInfoMatch, competitionMatches: SwissSib
     const details = [
       match.round > 1 && records.length === 1 && records[0],
       winner && winner.record.wins + 1 >= groupSwissConfig.maxWins && 'winning team advances',
-      loser &&
-        loser.record.losses + 1 >= groupSwissConfig.maxLosses &&
-        'losing team is eliminated',
+      loser && loser.record.losses + 1 >= groupSwissConfig.maxLosses && 'losing team is eliminated',
     ].filter(Boolean);
 
     return `* ${Util.getMatchRoundLabel(match)}${details.length ? ` (${details.join(', ')})` : ''}`;
@@ -375,10 +439,7 @@ function MatchInfo(props: { competitionMatches: SwissSiblingMatch[]; match: Matc
     </article>
   );
 }
-function PostgameTeamHeader(props: {
-  competitor: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
-  side: 'left' | 'right';
-}) {
+function PostgameTeamHeader(props: { competitor: PostgameCompetitor; side: 'left' | 'right' }) {
   return (
     <article
       className={cx(
@@ -395,11 +456,11 @@ function PostgameTeamHeader(props: {
 }
 
 function PostgameScoreHeader(props: {
-  away: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
+  away: PostgameCompetitor;
   awayScore: number | null;
-  home: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
+  home: PostgameCompetitor;
   homeScore: number | null;
-  match: Matches<typeof Eagers.matchEvents>[number];
+  match: PostgameMatch;
 }) {
   const competitionLogo = Util.getCompetitionLogo(
     props.match.competition.tier.slug,
@@ -409,8 +470,8 @@ function PostgameScoreHeader(props: {
       organizer: props.match.competition.organizer,
     },
   );
-  const homeCountryCode = props.home.team.country?.code?.toLowerCase();
-  const awayCountryCode = props.away.team.country?.code?.toLowerCase();
+  const homeCountryCode = getHistoricalTeamCountryCode(props.match, props.home);
+  const awayCountryCode = getHistoricalTeamCountryCode(props.match, props.away);
   const homeCountryBackground = getCustomCountryBackground(homeCountryCode);
   const awayCountryBackground = getCustomCountryBackground(awayCountryCode);
   const matchDateLabel = formatMatchDate(props.match.date);
@@ -589,16 +650,8 @@ function VetoSummary(props: {
 function Scoreboard(props: ScoreboardProps) {
   const t = useTranslation('windows');
   const players = React.useMemo(() => {
-    const matchDate = new Date(props.match.date);
-
-    return props.match.players.filter((player) =>
-      player.careerStints?.some(
-        (stint) =>
-          stint.teamId === props.competitor.team.id &&
-          isWithinStint(matchDate, stint.startedAt, stint.endedAt),
-      ),
-    );
-  }, [props.competitor.team.id, props.match.date, props.match.players]);
+    return getHistoricalCompetitorPlayers(props.match, props.competitor);
+  }, [props.competitor, props.match]);
   const matchEvents = React.useMemo(
     () =>
       props.matchGame
@@ -997,9 +1050,7 @@ export default function () {
               )}
             </span>
           </li>
-          <li>
-            {Util.getMatchRoundLabel(match, t('shared.matchday'))}
-          </li>
+          <li>{Util.getMatchRoundLabel(match, t('shared.matchday'))}</li>
           <li>
             {matchGame
               ? Util.convertMapPool(matchGame.map, settings.general.game)

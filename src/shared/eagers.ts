@@ -100,7 +100,11 @@ export const matchEvents = {
     },
     players: {
       include: {
-        country: true,
+        country: {
+          include: {
+            continent: true,
+          },
+        },
         careerStints: true,
       },
     },
