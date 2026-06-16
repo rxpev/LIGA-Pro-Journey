@@ -6,7 +6,7 @@
 import log from "electron-log";
 import { ipcMain } from "electron";
 import { Prisma } from "@prisma/client";
-import { DatabaseClient, Worldgen } from "@liga/backend/lib";
+import { DatabaseClient } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
 import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
 
@@ -45,9 +45,6 @@ export default function registerDatabaseHandlers() {
     const settings = Util.loadSettings(profile.settings);
     log.transports.console.level = settings.general.logLevel as log.LogLevel;
     log.transports.file.level = settings.general.logLevel as log.LogLevel;
-    await Worldgen.repairMissingLegacyBackfillNpcMatchStats();
-    await Worldgen.repairLegacyBackfillSeriesMaps();
-    await Worldgen.repairLegacyBackfillSimulatedLineups();
 
     return prisma.profile.update({
       where: { id: profile.id },
