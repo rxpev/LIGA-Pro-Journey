@@ -58,18 +58,22 @@ const weaponSettings = [
 export default function () {
   const location = useLocation();
   const navigate = useNavigate();
+  const routeState = location.state as {
+    inCareer?: boolean;
+    returnToPlayMatchId?: number;
+    tab?: string;
+  } | null;
   const t = useTranslation('windows');
   const { state, dispatch } = React.useContext(AppStateContext);
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
   const [activeTab, setActiveTab] = React.useState(
-    (location.state as { tab?: string } | null)?.tab === 'game-settings'
+    routeState?.tab === 'game-settings'
       ? Tab.GAME_SETTINGS
       : Tab.GENERAL,
   );
-  const returnToPlayMatchId = (location.state as { returnToPlayMatchId?: number } | null)
-    ?.returnToPlayMatchId;
+  const returnToPlayMatchId = routeState?.returnToPlayMatchId;
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
   const [arenaModeStatus, setArenaModeStatus] = React.useState<Awaited<
@@ -271,7 +275,9 @@ export default function () {
     return match ? appStatus.path : '';
   }, [appStatus]);
   const showLegacyBackfillNpcMatchStats =
-    !!state.profile && (!state.profile.simulateNpcMatchStats || legacyBackfillBusy);
+    !!routeState?.inCareer &&
+    !!state.profile &&
+    (!state.profile.simulateNpcMatchStats || legacyBackfillBusy);
 
   return (
     <main>

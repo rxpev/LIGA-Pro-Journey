@@ -10,12 +10,14 @@ export default function Statistics() {
   const navigate = useNavigate();
   const { state, dispatch } = React.useContext(AppStateContext);
   const audioClick = useAudio('button-click.wav');
+  const audioRelease = useAudio('button-release.wav');
   const windowData = state.windowData.landing;
   const [enabled, setEnabled] = React.useState(
     windowData?.statistics?.simulateNpcMatchStats ?? false,
   );
 
   const updateEnabled = (value: boolean) => {
+    (value ? audioClick : audioRelease)();
     setEnabled(value);
     dispatch(
       windowDataUpdate({

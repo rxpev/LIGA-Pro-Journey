@@ -74,6 +74,14 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
   const audioRelease = useAudio('button-release.wav');
   const overflowClass = props.request.target === '/settings' ? 'overflow-hidden' : 'overflow-auto';
   const hasHeader = props.request.target === '/postgame';
+  const isCareerWindow = !!document.getElementById(Constants.WindowIdentifier.Main);
+  const routeState =
+    props.request.target === '/settings'
+      ? {
+          ...(props.request.payload as Record<string, unknown> | undefined),
+          inCareer: isCareerWindow,
+        }
+      : props.request.payload;
 
   React.useEffect(() => {
     const interactiveSelector = [
@@ -169,7 +177,7 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
           className={`w-full ${hasHeader ? 'min-h-0 flex-1 overflow-auto' : 'h-full'} [&>main]:!h-full [&>main]:!w-full`}
         >
           <MemoryRouter
-            initialEntries={[{ pathname: props.request.target, state: props.request.payload }]}
+            initialEntries={[{ pathname: props.request.target, state: routeState }]}
           >
             <RouterRoutes>
               <Route path="/brackets" element={<Routes.Modal.Brackets />} />
