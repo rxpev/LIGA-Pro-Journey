@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { differenceBy, groupBy } from 'lodash';
+import { differenceBy } from 'lodash';
 import { subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -65,17 +65,6 @@ function getRatingColorClass(rating: number) {
   }
 
   return 'text-inherit';
-}
-
-function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
-  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
-  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
-  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
-  const deaths = killOrAssistEvents.filter(
-    (event) => event.victimId === playerId && !event.assistId,
-  ).length;
-
-  return Util.getPlayerRating(kills, deaths, assists);
 }
 
 function getCustomCountryBackground(code?: string | null) {
@@ -249,85 +238,14 @@ export default function () {
     const teamIds = match.competitors
       .map((competitor) => competitor.teamId)
       .filter((teamId): teamId is number => teamId != null);
-    const teamIdSet = new Set(teamIds);
 
     if (!teamIds.length) {
       return;
     }
 
     api.matches
-      .all<typeof Eagers.matchEvents>({
-        ...Eagers.matchEvents,
-        where: {
-          status: Constants.MatchStatus.COMPLETED,
-          competitionId: { not: null as null },
-          matchType: { not: 'FACEIT_PUG' },
-          date: {
-            gte: subMonths(state.profile.date, 3),
-            lte: state.profile.date,
-          },
-          competitors: {
-            some: {
-              teamId: {
-                in: teamIds,
-              },
-            },
-          },
-          events: {
-            some: {},
-          },
-        },
-      })
-      .then((recentMatches) => {
-        const ratingRows: Record<number, { maps: number; ratingSum: number }> = {};
-
-        recentMatches.forEach((recentMatch) => {
-          Object.values(groupBy(recentMatch.events, 'gameId')).forEach((gameEvents) => {
-            const playerIds = new Set<number>();
-
-            gameEvents.forEach((event) => {
-              if (event.attacker?.teamId != null && teamIdSet.has(event.attacker.teamId)) {
-                playerIds.add(event.attackerId);
-              }
-
-              if (event.assist?.teamId != null && teamIdSet.has(event.assist.teamId)) {
-                playerIds.add(event.assistId);
-              }
-
-              if (event.victim?.teamId != null && teamIdSet.has(event.victim.teamId)) {
-                playerIds.add(event.victimId);
-              }
-            });
-
-            playerIds.forEach((playerId) => {
-              const rating = getPlayerRatingFromEvents(playerId, gameEvents);
-
-              if (!Number.isFinite(rating)) {
-                return;
-              }
-
-              if (!ratingRows[playerId]) {
-                ratingRows[playerId] = { maps: 0, ratingSum: 0 };
-              }
-
-              ratingRows[playerId].maps += 1;
-              ratingRows[playerId].ratingSum += rating;
-            });
-          });
-        });
-
-        setRecentPlayerRatings(
-          Object.fromEntries(
-            Object.entries(ratingRows).map(([playerId, row]) => [
-              Number(playerId),
-              {
-                maps: row.maps,
-                rating: row.maps ? row.ratingSum / row.maps : 0,
-              },
-            ]),
-          ),
-        );
-      });
+      .recentPlayerRatings(teamIds, subMonths(state.profile.date, 3), state.profile.date)
+      .then(setRecentPlayerRatings);
   }, [match, state.profile]);
 
   if (!state.profile || !match) {

@@ -24,7 +24,6 @@ import faceitLevel7 from '../../assets/faceit/7.png';
 import faceitLevel8 from '../../assets/faceit/8.png';
 import faceitLevel9 from '../../assets/faceit/9.png';
 import faceitLevel10 from '../../assets/faceit/10.png';
-import { groupBy } from 'lodash';
 
 /** @type {Player} */
 type Player =
@@ -70,6 +69,12 @@ type HonorGroup = {
 
 type RatingSummary = {
   maps: number;
+  rating: number;
+};
+
+type RatingGame = {
+  date: Date | string;
+  teamIds: number[];
   rating: number;
 };
 
@@ -121,39 +126,11 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   return start <= date && (!end || end >= date);
 }
 
-function getPlayerRatingFromEvents(playerId: number, events: Array<{ [key: string]: any }>) {
-  const killOrAssistEvents = events.filter((event) => !!event.attackerId || !!event.assistId);
-  const kills = killOrAssistEvents.filter((event) => event.attackerId === playerId).length;
-  const assists = killOrAssistEvents.filter((event) => event.assistId === playerId).length;
-  const deaths = killOrAssistEvents.filter(
-    (event) => event.victimId === playerId && !event.assistId,
-  ).length;
-
-  return Util.getPlayerRating(kills, deaths, assists);
-}
-
 function getRatingSummary(
-  playerId: number,
-  matches: Array<any>,
-  predicate: (match: any) => boolean = () => true,
+  games: RatingGame[],
+  predicate: (game: RatingGame) => boolean = () => true,
 ): RatingSummary | null {
-  const ratings = matches
-    .filter(predicate)
-    .flatMap((match) =>
-      Object.values(groupBy(match.events, 'gameId')).flatMap((gameEvents) => {
-        const hasPlayerEvent = gameEvents.some(
-          (event) =>
-            event.attackerId === playerId || event.assistId === playerId || event.victimId === playerId,
-        );
-
-        if (!hasPlayerEvent) {
-          return [];
-        }
-
-        const rating = getPlayerRatingFromEvents(playerId, gameEvents);
-        return Number.isFinite(rating) ? [rating] : [];
-      }),
-    );
+  const ratings = games.filter(predicate).map((game) => game.rating);
 
   if (!ratings.length) {
     return null;
@@ -178,7 +155,7 @@ export default function TransferModal() {
   const { state } = React.useContext(AppStateContext);
   const [player, setPlayer] = React.useState<Player>();
   const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
-  const [ratingMatches, setRatingMatches] = React.useState<Array<any>>([]);
+  const [ratingGames, setRatingGames] = React.useState<RatingGame[]>([]);
 
   React.useEffect(() => {
     if (!location.state) return;
@@ -202,31 +179,13 @@ export default function TransferModal() {
   }, []);
 
   React.useEffect(() => {
-    setRatingMatches([]);
+    setRatingGames([]);
 
     if (!state.profile?.simulateNpcMatchStats || !player) {
       return;
     }
 
-    api.matches
-      .all<typeof Eagers.matchEvents>({
-        ...Eagers.matchEvents,
-        where: {
-          status: Constants.MatchStatus.COMPLETED,
-          competitionId: { not: null as null },
-          matchType: { not: 'FACEIT_PUG' },
-          events: {
-            some: {
-              OR: [
-                { attackerId: player.id },
-                { assistId: player.id },
-                { victimId: player.id },
-              ],
-            },
-          },
-        },
-      })
-      .then(setRatingMatches);
+    api.matches.playerRatingGames(player.id).then(setRatingGames);
   }, [player, state.profile?.simulateNpcMatchStats]);
 
   const teamHistory = React.useMemo(() => {
@@ -379,7 +338,7 @@ export default function TransferModal() {
   );
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
-  const playerRating = player ? getRatingSummary(player.id, ratingMatches) : null;
+  const playerRating = player ? getRatingSummary(ratingGames) : null;
 
   if (!player) {
     return (
@@ -568,11 +527,10 @@ export default function TransferModal() {
               const stintRating =
                 state.profile?.simulateNpcMatchStats && stint.teamId
                   ? getRatingSummary(
-                      player.id,
-                      ratingMatches,
-                      (match) =>
-                        isWithinStint(match.date, stint.startedAt, stint.endedAt) &&
-                        match.competitors.some((competitor: any) => competitor.teamId === stint.teamId),
+                      ratingGames,
+                      (game) =>
+                        isWithinStint(new Date(game.date), stint.startedAt, stint.endedAt) &&
+                        game.teamIds.includes(stint.teamId),
                     )
                   : null;
 

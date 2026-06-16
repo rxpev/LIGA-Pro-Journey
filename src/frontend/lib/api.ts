@@ -360,6 +360,36 @@ export default {
       >,
     count: (where?: Prisma.MatchWhereInput) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_COUNT, where) as Promise<number>,
+    globalPlayerStats: (params: {
+      currentDate?: Date | string;
+      federationSlug?: string;
+      name?: string;
+      page: number;
+      pageSize: number;
+      sort: 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team';
+      teamId?: number;
+      tierId?: number;
+      year?: string;
+    }) =>
+      ipcRenderer.invoke(Constants.IPCRoute.MATCHES_GLOBAL_PLAYER_STATS, params) as Promise<{
+        players: Array<{
+          id: number;
+          name: string;
+          avatar?: string | null;
+          country?: { code: string; name: string } | null;
+          team?: { id: number; name: string; blazon?: string | null; tier?: number | null } | null;
+          rating: number;
+          kills: number;
+          deaths: number;
+          assists: number;
+          maps: number;
+        }>;
+        total: number;
+      }>,
+    playerRatingGames: (playerId: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PLAYER_RATING_GAMES, playerId) as Promise<
+        Array<{ date: Date | string; teamIds: number[]; rating: number }>
+      >,
     previous: <T = typeof Eagers.match>(
       query: Prisma.MatchFindManyArgs,
       id: number,
@@ -368,6 +398,12 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PREVIOUS, query, id, limit) as Promise<
         Array<Prisma.MatchGetPayload<T>>
       >,
+    recentPlayerRatings: (teamIds: number[], from: Date | string, to: Date | string) =>
+      ipcRenderer.invoke(Constants.IPCRoute.MATCHES_RECENT_PLAYER_RATINGS, {
+        teamIds,
+        from,
+        to,
+      }) as Promise<Record<number, { maps: number; rating: number }>>,
     upcoming: <T = typeof Eagers.match>(query: Partial<Prisma.MatchFindManyArgs>, limit?: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_UPCOMING, query, limit) as Promise<
         Array<Prisma.MatchGetPayload<T>>

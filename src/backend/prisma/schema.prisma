@@ -248,6 +248,8 @@ model Match {
   players       Player[]
   profileId     Int?
   profile       Profile?     @relation(fields: [profileId], references: [id])
+
+  @@index([status, matchType, competitionId, date])
 }
 
 model MatchEvent {
@@ -272,6 +274,24 @@ model MatchEvent {
   victimId   Int?
   winner     MatchToTeam? @relation(fields: [winnerId], references: [id])
   winnerId   Int?
+
+  @@index([matchId, gameId])
+  @@index([attackerId, matchId])
+  @@index([assistId, matchId])
+  @@index([victimId, matchId])
+}
+
+model MatchPlayerGameStat {
+  playerId Int
+  matchId  Int
+  gameKey  Int
+  kills    Int @default(0)
+  assists  Int @default(0)
+  deaths   Int @default(0)
+
+  @@id([playerId, matchId, gameKey])
+  @@index([matchId])
+  @@index([playerId])
 }
 
 model MatchToTeam {
@@ -288,6 +308,9 @@ model MatchToTeam {
   matchId Int
   team    Team? @relation(fields: [teamId], references: [id])
   teamId  Int?
+
+  @@index([matchId, teamId])
+  @@index([teamId, matchId])
 }
 
 model MatchVeto {

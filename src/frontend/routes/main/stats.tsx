@@ -151,7 +151,7 @@ const CompetitionStageLabels: Record<CompetitionStageOption, string> = {
 
 const CompetitionStageOptions: CompetitionStageOption[] = ['', 'GROUP_STAGE', 'PLAYOFFS'];
 
-const GlobalPlayerPageSize = 45;
+const GlobalPlayerPageSize = 20;
 
 enum Rating {
   LOW = 0.95,
@@ -481,6 +481,45 @@ function buildOfficialMatchWhere(params: {
   return where;
 }
 
+function getPlayerEventWhere(playerId: number) {
+  return {
+    OR: [{ attackerId: playerId }, { assistId: playerId }, { victimId: playerId }],
+  };
+}
+
+function getPlayerScopedMatchEventsEager(playerId: number) {
+  return {
+    include: {
+      ...Eagers.match.include,
+      events: {
+        where: getPlayerEventWhere(playerId),
+        orderBy: {
+          timestamp: 'asc' as unknown as 'asc',
+        },
+        select: {
+          id: true,
+          attackerId: true,
+          assistId: true,
+          victimId: true,
+          gameId: true,
+          weapon: true,
+          headshot: true,
+          timestamp: true,
+        },
+      },
+      players: {
+        where: {
+          id: playerId,
+        },
+        include: {
+          country: true,
+          careerStints: true,
+        },
+      },
+    },
+  };
+}
+
 function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
   const killOrAssistEvents = events.filter((event: any) => !!event.attackerId || !!event.assistId);
   const kills = killOrAssistEvents.filter((event: any) => event.attackerId === playerId).length;
@@ -491,6 +530,13 @@ function getPlayerPerformanceFromEvents(playerId: number, events: any[]) {
   const plusMinus = kills - deaths;
   const rating = Util.getPlayerRating(kills, deaths, assists);
   return { kills, deaths, plusMinus, rating };
+}
+
+function hasPlayerEvents(playerId: number, events: any[]) {
+  return events.some(
+    (event: any) =>
+      event.attackerId === playerId || event.assistId === playerId || event.victimId === playerId,
+  );
 }
 
 function getSeriesAwarePerformance(
@@ -544,6 +590,22 @@ function getPlayedGames(match: MatchRecord) {
   return [...(match.games || [])]
     .filter((game: any) => isPlayedGame(game))
     .sort((a: any, b: any) => Number(b.num ?? 0) - Number(a.num ?? 0));
+}
+
+function getEventsForGames(match: MatchRecord, games: any[], forceGameScope = false) {
+  const allEvents = match.events || [];
+  if (
+    !forceGameScope &&
+    games.length === getPlayedGames(match).length &&
+    (match.games || []).length <= 1
+  ) {
+    return allEvents;
+  }
+
+  const gameIds = new Set(games.map((game: any) => game.id));
+  return allEvents.filter(
+    (event: any) => gameIds.has(event.gameId) || (gameIds.size === 1 && !event.gameId),
+  );
 }
 
 function getWeaponKey(weapon: string) {
@@ -776,39 +838,70 @@ export default function LeagueStatsConcept(): JSX.Element {
   );
 
   React.useEffect(() => {
-    if (!careerTeamIds.length) {
+    const playerId = state.profile?.player?.id;
+    if (activeTab === StatsTab.GLOBAL_PLAYERS) {
+      setMatches([]);
+      setLoading(false);
+      return;
+    }
+
+    if (activeTab !== StatsTab.TEAMMATES && !playerId) {
+      setMatches([]);
+      setLoading(false);
+      return;
+    }
+
+    if (activeTab === StatsTab.TEAMMATES && !careerTeamIds.length) {
       setMatches([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    api.matches
-      .all({
-        ...Eagers.matchEvents,
-        where: {
-          status: Constants.MatchStatus.COMPLETED,
-          competitors: {
-            some: {
-              teamId: {
-                in: careerTeamIds,
+    const where =
+      activeTab === StatsTab.TEAMMATES
+        ? {
+            status: Constants.MatchStatus.COMPLETED,
+            competitors: {
+              some: {
+                teamId: {
+                  in: careerTeamIds,
+                },
               },
             },
-          },
-          competitionId: {
-            not: null as null,
-          },
-          matchType: {
-            not: 'FACEIT_PUG',
-          },
-        },
+            competitionId: {
+              not: null as null,
+            },
+            matchType: {
+              not: 'FACEIT_PUG',
+            },
+          }
+        : {
+            status: Constants.MatchStatus.COMPLETED,
+            events: {
+              some: getPlayerEventWhere(Number(playerId)),
+            },
+            competitionId: {
+              not: null as null,
+            },
+            matchType: {
+              not: 'FACEIT_PUG',
+            },
+          };
+
+    api.matches
+      .all({
+        ...(activeTab === StatsTab.TEAMMATES
+          ? Eagers.matchEvents
+          : getPlayerScopedMatchEventsEager(Number(playerId))),
+        where,
         orderBy: {
           date: 'desc',
         },
       })
       .then((result: any[]) => setMatches(result.filter(isLeagueMatch)))
       .finally(() => setLoading(false));
-  }, [careerTeamIds]);
+  }, [activeTab, careerTeamIds, state.profile?.player?.id]);
 
   React.useEffect(() => {
     if (!canViewGlobalPlayerStats || activeTab !== StatsTab.GLOBAL_PLAYERS) {
@@ -818,189 +911,22 @@ export default function LeagueStatsConcept(): JSX.Element {
       return;
     }
 
-    const listMatchWhere = buildOfficialMatchWhere({
-      selectedYear: selectedGlobalYear,
-      currentDate: state.profile?.date,
-    });
-    const displayStatsMatchWhere = buildOfficialMatchWhere({
-      selectedYear: selectedGlobalYear,
-      currentDate: state.profile?.date,
-    });
-    const playerWhere = {
-      matches: {
-        some: listMatchWhere,
-      },
-      ...(selectedCareerTeamId ? { teamId: Number(selectedCareerTeamId) } : {}),
-      ...(selectedGlobalPlayerTierId || selectedGlobalFederationSlug
-        ? {
-            team: {
-              ...(selectedGlobalPlayerTierId ? { tier: Number(selectedGlobalPlayerTierId) } : {}),
-              ...(selectedGlobalFederationSlug
-                ? {
-                    country: {
-                      continent: {
-                        federation: {
-                          slug: selectedGlobalFederationSlug,
-                        },
-                      },
-                    },
-                  }
-                : {}),
-            },
-          }
-        : {}),
-      ...(selectedGlobalPlayerName
-        ? {
-            name: {
-              contains: selectedGlobalPlayerName,
-            },
-          }
-        : {}),
-      OR: [
-        { kills: { some: { match: listMatchWhere } } },
-        { assists: { some: { match: listMatchWhere } } },
-        { deaths: { some: { match: listMatchWhere } } },
-      ],
-    };
-
     setGlobalPlayersLoading(true);
-    const orderBy: any =
-      selectedGlobalPlayerSort === 'rating'
-        ? { kills: { _count: 'desc' as const } }
-        : selectedGlobalPlayerSort === 'kills'
-          ? { kills: { _count: 'desc' as const } }
-          : selectedGlobalPlayerSort === 'deaths'
-            ? { deaths: { _count: 'desc' as const } }
-            : selectedGlobalPlayerSort === 'maps'
-              ? { matches: { _count: 'desc' as const } }
-              : selectedGlobalPlayerSort === 'team'
-                ? { team: { name: 'asc' as const } }
-                : { name: 'asc' as const };
-
-    Promise.all([
-      api.players.count(playerWhere),
-      api.players.all({
-        where: playerWhere,
-        orderBy,
-        take: GlobalPlayerPageSize,
-        skip: GlobalPlayerPageSize * (Math.max(globalPlayerPage, 1) - 1),
-        include: Eagers.player.include,
-      }),
-    ])
-      .then(async ([count, players]: any) => {
-        setNumGlobalPlayers(count);
-        const playerIds = players.map((player: any) => player.id);
-        const pageMatches = playerIds.length
-          ? await api.matches.all({
-              include: {
-                events: {
-                  select: {
-                    attackerId: true,
-                    assistId: true,
-                    victimId: true,
-                    gameId: true,
-                  },
-                },
-                games: {
-                  include: {
-                    teams: true,
-                  },
-                },
-                players: {
-                  select: {
-                    id: true,
-                  },
-                },
-              },
-              where: {
-                ...displayStatsMatchWhere,
-                players: {
-                  some: {
-                    id: {
-                      in: playerIds,
-                    },
-                  },
-                },
-              },
-              orderBy: {
-                date: 'desc',
-              },
-            })
-          : [];
-
-        const rows = players.map((player: any) => {
-          const totals = pageMatches.reduce(
-            (acc: any, match: any) => {
-              const played = (match.players || []).some(
-                (matchPlayer: any) => matchPlayer.id === player.id,
-              );
-              if (!played) {
-                return acc;
-              }
-
-              const gamesForStats = getPlayedGames(match);
-              if (!gamesForStats.length) {
-                return acc;
-              }
-
-              const allEvents = match.events || [];
-              const eventsForStats =
-                (match.games || []).length > 1
-                  ? allEvents.filter((event: any) =>
-                      gamesForStats.some((game: any) => game.id === event.gameId),
-                    )
-                  : allEvents;
-              const hasRecordedStats = eventsForStats.some(
-                (event: any) =>
-                  event.attackerId === player.id ||
-                  event.assistId === player.id ||
-                  event.victimId === player.id,
-              );
-              if (!hasRecordedStats) {
-                return acc;
-              }
-
-              const performance = getSeriesAwarePerformance(
-                player.id,
-                eventsForStats,
-                (match.games || []).length > 1,
-              );
-
-              acc.matches += 1;
-              acc.maps += gamesForStats.length;
-              acc.kills += performance.kills;
-              acc.deaths += performance.deaths;
-              acc.assists += eventsForStats.filter(
-                (event: any) => event.assistId === player.id,
-              ).length;
-              acc.ratingSum += performance.rating;
-              return acc;
-            },
-            { matches: 0, maps: 0, kills: 0, deaths: 0, assists: 0, ratingSum: 0 },
-          );
-
-          return {
-            id: player.id,
-            name: player.name,
-            avatar: player.avatar,
-            country: player.country,
-            team: player.team,
-            kills: totals.kills,
-            assists: totals.assists,
-            deaths: totals.deaths,
-            maps: totals.maps,
-            rating: totals.matches ? totals.ratingSum / totals.matches : 0,
-          };
-        });
-
-        setGlobalPlayers(
-          ['rating', 'kills', 'deaths', 'maps'].includes(selectedGlobalPlayerSort)
-            ? rows.sort((a: StatsPlayerOption, b: StatsPlayerOption) => {
-                const metric = selectedGlobalPlayerSort as 'rating' | 'kills' | 'deaths' | 'maps';
-                return (b[metric] || 0) - (a[metric] || 0) || a.name.localeCompare(b.name);
-              })
-            : rows,
-        );
+    api.matches
+      .globalPlayerStats({
+        currentDate: state.profile?.date,
+        federationSlug: selectedGlobalFederationSlug || undefined,
+        name: selectedGlobalPlayerName || undefined,
+        page: globalPlayerPage,
+        pageSize: GlobalPlayerPageSize,
+        sort: selectedGlobalPlayerSort,
+        teamId: selectedCareerTeamId ? Number(selectedCareerTeamId) : undefined,
+        tierId: selectedGlobalPlayerTierId ? Number(selectedGlobalPlayerTierId) : undefined,
+        year: selectedGlobalYear || undefined,
+      })
+      .then(({ players, total }) => {
+        setNumGlobalPlayers(total);
+        setGlobalPlayers(players);
       })
       .finally(() => setGlobalPlayersLoading(false));
   }, [
@@ -1030,7 +956,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     setGlobalPlayerMatchesLoading(true);
     api.matches
       .all({
-        ...Eagers.matchEvents,
+        ...getPlayerScopedMatchEventsEager(Number(selectedGlobalPlayerId)),
         where: {
           ...buildOfficialMatchWhere({
             selectedCareerTeamId,
@@ -1042,10 +968,8 @@ export default function LeagueStatsConcept(): JSX.Element {
             selectedTimeframe,
             currentDate: state.profile?.date,
           }),
-          players: {
-            some: {
-              id: Number(selectedGlobalPlayerId),
-            },
+          events: {
+            some: getPlayerEventWhere(Number(selectedGlobalPlayerId)),
           },
         },
         orderBy: {
@@ -1213,7 +1137,9 @@ export default function LeagueStatsConcept(): JSX.Element {
     const scopedSelectedMap = activeTab === StatsTab.TOURNAMENTS ? '' : selectedMap;
 
     return matchesByFilters.flatMap((match: any) => {
-      const played = (match.players || []).some((player: any) => player.id === playerId);
+      const played =
+        (match.players || []).some((player: any) => player.id === playerId) ||
+        hasPlayerEvents(playerId, match.events || []);
       if (!played) {
         return [];
       }
@@ -1225,13 +1151,11 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const allEvents = match.events || [];
-      const eventsForStats =
-        scopedSelectedMap || (match.games || []).length > 1
-          ? allEvents.filter((event: any) =>
-              gamesForStats.some((game: any) => game.id === event.gameId),
-            )
-          : allEvents;
+      const eventsForStats = getEventsForGames(
+        match,
+        gamesForStats,
+        Boolean(scopedSelectedMap) || (match.games || []).length > 1,
+      );
 
       const performance = getSeriesAwarePerformance(
         playerId,
@@ -1409,13 +1333,11 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const allEvents = match.events || [];
-      const eventsForStats =
-        selectedMap || (match.games || []).length > 1
-          ? allEvents.filter((event: any) =>
-              gamesForStats.some((game: any) => game.id === event.gameId),
-            )
-          : allEvents;
+      const eventsForStats = getEventsForGames(
+        match,
+        gamesForStats,
+        Boolean(selectedMap) || (match.games || []).length > 1,
+      );
 
       const performance = getSeriesAwarePerformance(
         teammateId,
@@ -1431,7 +1353,9 @@ export default function LeagueStatsConcept(): JSX.Element {
     const playerId = Number(selectedGlobalPlayerId);
 
     return matchesByFilters.flatMap((match: any) => {
-      const played = (match.players || []).some((player: any) => player.id === playerId);
+      const played =
+        (match.players || []).some((player: any) => player.id === playerId) ||
+        hasPlayerEvents(playerId, match.events || []);
       if (!played) {
         return [];
       }
@@ -1443,20 +1367,13 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const allEvents = match.events || [];
-      const eventsForStats =
-        selectedMap || (match.games || []).length > 1
-          ? allEvents.filter((event: any) =>
-              gamesForStats.some((game: any) => game.id === event.gameId),
-            )
-          : allEvents;
-
-      const hasRecordedStats = eventsForStats.some(
-        (event: any) =>
-          event.attackerId === playerId ||
-          event.assistId === playerId ||
-          event.victimId === playerId,
+      const eventsForStats = getEventsForGames(
+        match,
+        gamesForStats,
+        Boolean(selectedMap) || (match.games || []).length > 1,
       );
+
+      const hasRecordedStats = hasPlayerEvents(playerId, eventsForStats);
       if (!hasRecordedStats) {
         return [];
       }
@@ -1541,7 +1458,9 @@ export default function LeagueStatsConcept(): JSX.Element {
         return;
       }
 
-      const played = (match.players || []).some((player: any) => player.id === playerId);
+      const played =
+        (match.players || []).some((player: any) => player.id === playerId) ||
+        hasPlayerEvents(playerId, match.events || []);
       if (!played) {
         return;
       }
@@ -1553,11 +1472,11 @@ export default function LeagueStatsConcept(): JSX.Element {
         return;
       }
 
-      const gameIds = new Set(gamesForStats.map((game: any) => game.id));
-      const eventsForStats =
-        selectedMap || (match.games || []).length > 1
-          ? (match.events || []).filter((event: any) => gameIds.has(event.gameId))
-          : match.events || [];
+      const eventsForStats = getEventsForGames(
+        match,
+        gamesForStats,
+        Boolean(selectedMap) || (match.games || []).length > 1,
+      );
 
       eventsForStats.forEach((event: any) => {
         if (event.attackerId !== playerId || !event.weapon) {
@@ -1666,11 +1585,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         : getPlayedGames(item.match);
 
       return games.map((game: any) => {
-        const allEvents = item.match.events || [];
-        const gameEvents =
-          (item.match.games || []).length > 1
-            ? allEvents.filter((event: any) => event.gameId === game.id)
-            : allEvents.filter((event: any) => !event.gameId || event.gameId === game.id);
+        const gameEvents = getEventsForGames(item.match, [game], true);
         const { plusMinus, rating } = getPlayerPerformanceFromEvents(playerId, gameEvents);
 
         const ownGameTeam = game.teams?.find(
