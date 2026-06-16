@@ -6,7 +6,6 @@
  */
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { differenceBy } from 'lodash';
 import { subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -20,6 +19,17 @@ import southAmericaFlag from '@liga/frontend/assets/flags/sa.svg';
 
 /** @type {Matches} */
 type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.all<T>>>;
+type MatchGame = Matches[number]['games'][number];
+type MatchVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number];
+type CompetitionMatch = Matches[number];
+type MiniSwissConfig = { maxLosses: number; maxWins: number };
+type SwissRecord = { losses: number; wins: number };
+
+const VETO_BADGE_STYLES = {
+  [Constants.MapVetoAction.BAN]: 'badge-error',
+  [Constants.MapVetoAction.DECIDER]: 'badge-warning',
+  [Constants.MapVetoAction.PICK]: 'badge-success',
+};
 
 function getOrdinalDay(day: number) {
   if (day >= 11 && day <= 13) {
@@ -89,6 +99,243 @@ function getCustomCountryBackground(code?: string | null) {
   }
 }
 
+function getSwissRecordBeforeMatch(
+  match: Matches[number],
+  competitionMatches: CompetitionMatch[],
+  teamId: number,
+): SwissRecord {
+  return competitionMatches
+    .filter(
+      (sibling) =>
+        sibling.id !== match.id &&
+        sibling.status === Constants.MatchStatus.COMPLETED &&
+        (sibling.round || 0) < (match.round || 0) &&
+        sibling.competitors.some((competitor) => competitor.teamId === teamId),
+    )
+    .reduce<SwissRecord>(
+      (record, sibling) => {
+        const competitor = sibling.competitors.find((entry) => entry.teamId === teamId);
+
+        if (competitor?.result === Constants.MatchResult.WIN) {
+          return { ...record, wins: record.wins + 1 };
+        }
+
+        if (competitor?.result === Constants.MatchResult.LOSS) {
+          return { ...record, losses: record.losses + 1 };
+        }
+
+        return record;
+      },
+      { losses: 0, wins: 0 },
+    );
+}
+
+function getGroupSwissConfig(match: Matches[number]): MiniSwissConfig | null {
+  try {
+    const parsed = JSON.parse(match.competition.tournament || '{}');
+    const options = parsed?.groupSwiss?.options;
+
+    return options?.maxLosses && options?.maxWins
+      ? { maxLosses: options.maxLosses, maxWins: options.maxWins }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSwissCompetitorRecords(match: Matches[number], competitionMatches: CompetitionMatch[]) {
+  return match.competitors.map((competitor) => ({
+    competitor,
+    record: getSwissRecordBeforeMatch(match, competitionMatches, competitor.teamId),
+  }));
+}
+
+function getMatchFormatNotes(match: Matches[number], competitionMatches: CompetitionMatch[] = []) {
+  const tierSlug = match.competition.tier.slug as Constants.TierSlug;
+  const swissConfig = Constants.TierSwissConfig[tierSlug];
+
+  if (swissConfig) {
+    const competitorRecords = getSwissCompetitorRecords(match, competitionMatches);
+    const records = competitorRecords
+      .map(({ record }) => `${record.wins}-${record.losses}`)
+      .filter((record, index, list) => list.indexOf(record) === index);
+    const winner = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.WIN,
+    );
+    const loser = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.LOSS,
+    );
+    const consequences = [
+      winner && winner.record.wins + 1 >= swissConfig.maxWins && 'Winning team advances',
+      loser && loser.record.losses + 1 >= swissConfig.maxLosses && 'Losing team is eliminated',
+    ].filter(Boolean);
+    const recordLabel =
+      match.round > 1 && records.length === 1 ? ` (teams with a ${records[0]} record)` : '';
+
+    return `* ${Util.parseSwissRound(match.round)}${recordLabel}${
+      consequences.length ? `. ${consequences.join('; ')}.` : ''
+    }`;
+  }
+
+  const groupSwissConfig = getGroupSwissConfig(match);
+
+  if (groupSwissConfig) {
+    const competitorRecords = getSwissCompetitorRecords(match, competitionMatches);
+    const records = competitorRecords
+      .map(({ record }) => `${record.wins}-${record.losses}`)
+      .filter((record, index, list) => list.indexOf(record) === index);
+    const winner = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.WIN,
+    );
+    const loser = competitorRecords.find(
+      ({ competitor }) => competitor.result === Constants.MatchResult.LOSS,
+    );
+    const details = [
+      match.round > 1 && records.length === 1 && records[0],
+      winner && winner.record.wins + 1 >= groupSwissConfig.maxWins && 'winning team advances',
+      loser && loser.record.losses + 1 >= groupSwissConfig.maxLosses && 'losing team is eliminated',
+    ].filter(Boolean);
+
+    return `* ${Util.getMatchRoundLabel(match)}${details.length ? ` (${details.join(', ')})` : ''}`;
+  }
+
+  return `* ${Util.getMatchRoundLabel(match)}`;
+}
+
+function MatchInfo(props: { competitionMatches: CompetitionMatch[]; match: Matches[number] }) {
+  return (
+    <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
+      <header className="border-base-content/10 border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
+        Match
+      </header>
+      <section className="space-y-5 px-3 py-3 text-xs leading-5 opacity-70">
+        <p>
+          Best of {props.match.games.length} ({props.match.competition.tier.lan ? 'LAN' : 'Online'})
+        </p>
+        <p>{getMatchFormatNotes(props.match, props.competitionMatches)}</p>
+      </section>
+    </article>
+  );
+}
+
+function PregameVetoSummary(props: {
+  competitionMatches: CompetitionMatch[];
+  match: Matches[number];
+  settings: typeof Constants.Settings;
+  vetoes: Array<MatchVetoEntry>;
+}) {
+  const decidedMaps = React.useMemo(
+    () =>
+      props.match.games.map((game) => ({
+        game,
+        veto: props.vetoes.find(
+          (entry) =>
+            entry.map === game.map &&
+            [Constants.MapVetoAction.DECIDER, Constants.MapVetoAction.PICK].includes(
+              entry.type as Constants.MapVetoAction,
+            ),
+        ),
+      })),
+    [props.match.games, props.vetoes],
+  );
+  const mapsDecided = decidedMaps.some(({ veto }) => !!veto);
+
+  return (
+    <section className="border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-b p-2">
+      <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
+        <header className="border-base-content/10 border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
+          <span>Maps</span>
+        </header>
+        {mapsDecided && (
+          <section
+            className="grid h-[118px] gap-2 p-2"
+            style={{ gridTemplateColumns: `repeat(${decidedMaps.length}, minmax(0, 1fr))` }}
+          >
+            {decidedMaps.map(({ game, veto }) => {
+              const competitor =
+                veto && props.match.competitors.find((entry) => entry.teamId === veto.teamId);
+
+              return (
+                <MapCard
+                  key={game.id + '__pregame_veto_map'}
+                  competitor={competitor}
+                  game={game}
+                  settings={props.settings}
+                  veto={veto}
+                />
+              );
+            })}
+          </section>
+        )}
+        {!mapsDecided && (
+          <section className="p-2">
+            <figure className="border-base-content/10 relative h-[118px] overflow-hidden rounded-sm border">
+              <Image
+                className="h-full w-full object-cover opacity-25 grayscale"
+                src="resources://maps/allmaps.png"
+              />
+              <figcaption className="absolute inset-0 grid place-items-center">
+                <span className="border-base-content/20 bg-base-300/80 text-base-content/80 rounded-sm border px-4 py-1 text-lg font-black uppercase shadow">
+                  TBA
+                </span>
+              </figcaption>
+            </figure>
+          </section>
+        )}
+      </article>
+      <MatchInfo competitionMatches={props.competitionMatches} match={props.match} />
+    </section>
+  );
+}
+
+function MapCard(props: {
+  competitor?: Matches[number]['competitors'][number] | false;
+  game: MatchGame;
+  settings: typeof Constants.Settings;
+  veto?: MatchVetoEntry;
+}) {
+  return (
+    <figure
+      className={cx(
+        'relative overflow-hidden rounded-sm border',
+        props.veto ? 'border-base-content/30 opacity-100' : 'border-base-content/10 opacity-40',
+      )}
+    >
+      <Image
+        className="h-full w-full object-cover"
+        src={Util.convertMapPool(props.game.map, props.settings.general.game, true)}
+        title={Util.convertMapPool(props.game.map, props.settings.general.game)}
+      />
+      <figcaption className="bg-base-300/85 absolute inset-x-0 bottom-0 px-2 py-1 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-bold">
+            {props.veto ? Util.convertMapPool(props.game.map, props.settings.general.game) : 'TBD'}
+          </span>
+          {!!props.veto && (
+            <span
+              className={cx(
+                'badge badge-xs uppercase',
+                VETO_BADGE_STYLES[props.veto.type as Constants.MapVetoAction],
+              )}
+            >
+              {props.veto.type}
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="flex min-w-0 items-center gap-1">
+            {!!props.competitor && <img src={props.competitor.team.blazon} className="size-4" />}
+            <span className="truncate opacity-70">
+              {props.competitor ? props.competitor.team.name : '\u00a0'}
+            </span>
+          </span>
+          <span>&nbsp;</span>
+        </div>
+      </figcaption>
+    </figure>
+  );
+}
+
 function PregameTeamHeader(props: {
   competitor: Matches[number]['competitors'][number];
   side: 'left' | 'right';
@@ -102,9 +349,7 @@ function PregameTeamHeader(props: {
     >
       <div className="grid w-28 place-items-center gap-1">
         <img src={props.competitor.team.blazon} className="size-16 object-contain" />
-        <p className="max-w-full truncate px-1 text-sm font-black">
-          {props.competitor.team.name}
-        </p>
+        <p className="max-w-full truncate px-1 text-sm font-black">{props.competitor.team.name}</p>
       </div>
     </article>
   );
@@ -174,7 +419,7 @@ export function PregameMatchHeader(props: {
 
       <article className="relative z-10 grid place-items-center gap-1">
         <Image src={competitionLogo} className="size-24 object-contain" />
-        <p className="text-base-content/60 text-xs font-bold uppercase leading-none tracking-wide">
+        <p className="text-base-content/60 text-xs leading-none font-bold tracking-wide uppercase">
           {matchDateLabel}
         </p>
       </article>
@@ -194,6 +439,8 @@ export default function () {
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
   const [match, setMatch] = React.useState<Matches[number]>();
+  const [competitionMatches, setCompetitionMatches] = React.useState<CompetitionMatch[]>([]);
+  const [vetoes, setVetoes] = React.useState<Array<MatchVetoEntry>>([]);
   const [userSquad, setUserSquad] = React.useState<
     Awaited<ReturnType<typeof api.squad.all<typeof Eagers.player>>>
   >([]);
@@ -223,6 +470,32 @@ export default function () {
       })
       .then((matches) => setMatch(matches[0]));
   }, []);
+
+  React.useEffect(() => {
+    if (!match) {
+      return;
+    }
+
+    api.match.findVetoList(match.id).then(setVetoes);
+
+    if (
+      Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug] ||
+      getGroupSwissConfig(match)
+    ) {
+      api.matches
+        .all({
+          where: {
+            competitionId: match.competitionId,
+          },
+          include: Eagers.match.include,
+          orderBy: [{ round: 'asc' }, { id: 'asc' }],
+        })
+        .then(setCompetitionMatches);
+      return;
+    }
+
+    setCompetitionMatches([]);
+  }, [match]);
 
   // grab basic match info
   const game = React.useMemo(() => match && match.games[0], [match]);
@@ -270,9 +543,7 @@ export default function () {
               )}
             </span>
           </li>
-          <li>
-            {Util.getMatchRoundLabel(match, t('shared.matchday'))}
-          </li>
+          <li>{Util.getMatchRoundLabel(match, t('shared.matchday'))}</li>
           {match.games.length > 1 && (
             <li>
               {t('shared.bestOf')}&nbsp;
@@ -285,6 +556,12 @@ export default function () {
         </ul>
       </header>
       <PregameMatchHeader home={home} away={away} match={match} />
+      <PregameVetoSummary
+        competitionMatches={competitionMatches}
+        match={match}
+        settings={settingsAll}
+        vetoes={vetoes}
+      />
       <section className="divide-base-content/10 grid grid-cols-2 items-start divide-x">
         {match.competitors.map((competitor) => {
           const isUserTeam = competitor.teamId === state.profile.teamId;
@@ -300,84 +577,68 @@ export default function () {
           }
 
           const starters = Util.getSquad(team, state.profile, true);
-          const bench = differenceBy(team.players, starters, 'id');
-          const squad = { starters, bench };
-
           return (
             <table key={competitor.id + '__competitor'} className="table-xs table table-fixed">
-              {Object.keys(squad).map((key) => (
-                <React.Fragment key={key}>
-                  <thead>
-                    <tr className="border-t-base-content/10 border-t">
-                      <th>{key.toUpperCase()}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {squad[key as keyof typeof squad].map((player) => (
-                      <tr key={player.id + '__squad'}>
-                        <td
-                          title={player.id === state.profile.playerId ? t('shared.you') : undefined}
-                          className={cx(
-                            'p-0',
-                            player.id === state.profile.playerId && 'bg-base-200/50',
-                          )}
-                        >
-                          <PlayerCard
-                            compact
-                            key={player.id + '__squad'}
-                            className="border-transparent bg-transparent"
-                            game={settingsAll.general.game}
-                            player={player}
-                            compactMetric={
-                              state.profile?.simulateNpcMatchStats
-                                ? {
-                                    className: recentPlayerRatings[player.id]
-                                      ? getRatingColorClass(recentPlayerRatings[player.id].rating)
-                                      : 'text-muted',
-                                    subtitle: recentPlayerRatings[player.id]
-                                      ? `(Past 3 months - ${recentPlayerRatings[player.id].maps} maps)`
-                                      : '(Past 3 months)',
-                                    title: 'Rating',
-                                    value: recentPlayerRatings[player.id]
-                                      ? recentPlayerRatings[player.id].rating.toFixed(2)
-                                      : '-',
-                                  }
-                                : undefined
-                            }
-                            noStats={player.id === state.profile.playerId}
-                            showStatusBadge={false}
-                            wideCompactIdentity
-                            onClickStarter={
-                              isUserTeam &&
-                              player.id !== state.profile.playerId &&
-                              (userSquad.filter((userPlayer) => userPlayer.starter).length <
-                                Constants.Application.SQUAD_MIN_LENGTH - 1 ||
-                                player.starter) &&
-                              (() => {
-                                api.squad
-                                  .update({
-                                    where: { id: player.id },
-                                    data: {
-                                      starter: !player.starter,
-                                    },
-                                  })
-                                  .then(setUserSquad);
+              <thead>
+                <tr className="border-t-base-content/10 border-t">
+                  <th>EXPECTED LINEUP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {starters.map((player) => (
+                  <tr key={player.id + '__squad'}>
+                    <td
+                      title={player.id === state.profile.playerId ? t('shared.you') : undefined}
+                      className={cx(
+                        'p-0',
+                        player.id === state.profile.playerId && 'bg-base-200/50',
+                      )}
+                    >
+                      <PlayerCard
+                        compact
+                        key={player.id + '__squad'}
+                        className="border-transparent bg-transparent"
+                        game={settingsAll.general.game}
+                        player={player}
+                        compactMetric={
+                          state.profile?.simulateNpcMatchStats
+                            ? {
+                                className: recentPlayerRatings[player.id]
+                                  ? getRatingColorClass(recentPlayerRatings[player.id].rating)
+                                  : 'text-muted',
+                                subtitle: '(Past 3 months)',
+                                title: 'Rating',
+                                value: recentPlayerRatings[player.id]
+                                  ? recentPlayerRatings[player.id].rating.toFixed(2)
+                                  : '-',
+                              }
+                            : undefined
+                        }
+                        noStats={player.id === state.profile.playerId}
+                        showStatusBadge={false}
+                        wideCompactIdentity
+                        onClickStarter={
+                          isUserTeam &&
+                          player.id !== state.profile.playerId &&
+                          (userSquad.filter((userPlayer) => userPlayer.starter).length <
+                            Constants.Application.SQUAD_MIN_LENGTH - 1 ||
+                            player.starter) &&
+                          (() => {
+                            api.squad
+                              .update({
+                                where: { id: player.id },
+                                data: {
+                                  starter: !player.starter,
+                                },
                               })
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                    {squad[key as keyof typeof squad].length === 0 && (
-                      <tr>
-                        <td className="h-[70px] text-center">
-                          <b>{team.name}</b> {t('shared.noBench')}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </React.Fragment>
-              ))}
+                              .then(setUserSquad);
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           );
         })}
