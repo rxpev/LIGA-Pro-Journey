@@ -727,9 +727,7 @@ function getPlayerMatchCompetitor(match: MatchRecord, playerId: number, selected
   }
 
   if (selectedCareerTeamId) {
-    return match.competitors.find(
-      (competitor: any) => String(competitor.teamId) === selectedCareerTeamId,
-    );
+    return undefined;
   }
 
   return match.competitors[0];
@@ -759,6 +757,19 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [selectedGlobalPlayerId, setSelectedGlobalPlayerId] = React.useState<string>('');
+  const [selectedGlobalDetailCompetitionGroup, setSelectedGlobalDetailCompetitionGroup] =
+    React.useState<string>('');
+  const [selectedGlobalDetailMap, setSelectedGlobalDetailMap] = React.useState<string>('');
+  const [selectedGlobalDetailSeason, setSelectedGlobalDetailSeason] = React.useState<string>('');
+  const [selectedGlobalDetailTimeframe, setSelectedGlobalDetailTimeframe] =
+    React.useState<TimeframeOption>('');
+  const [selectedGlobalDetailMatchType, setSelectedGlobalDetailMatchType] =
+    React.useState<MatchTypeOption>('');
+  const [selectedGlobalDetailCompetitionStage, setSelectedGlobalDetailCompetitionStage] =
+    React.useState<CompetitionStageOption>('');
+  const [selectedGlobalDetailCareerTeamId, setSelectedGlobalDetailCareerTeamId] =
+    React.useState<string>('');
+  const [selectedGlobalListTeamId, setSelectedGlobalListTeamId] = React.useState<string>('');
   const [selectedGlobalYear, setSelectedGlobalYear] = React.useState<string>('');
   const [selectedGlobalPlayerName, setSelectedGlobalPlayerName] = React.useState('');
   const [selectedGlobalFederationSlug, setSelectedGlobalFederationSlug] =
@@ -776,6 +787,50 @@ export default function LeagueStatsConcept(): JSX.Element {
   const previousActiveTab = React.useRef<StatsTab>(activeTab);
   const shouldDefaultTeammateTeam = React.useRef(false);
   const canViewGlobalPlayerStats = Boolean(state.profile?.simulateNpcMatchStats);
+  const isGlobalPlayerDetailView = activeTab === StatsTab.GLOBAL_PLAYERS && !!selectedGlobalPlayerId;
+  const activeSelectedCompetitionGroup = isGlobalPlayerDetailView
+    ? selectedGlobalDetailCompetitionGroup
+    : selectedCompetitionGroup;
+  const activeSelectedMap = isGlobalPlayerDetailView ? selectedGlobalDetailMap : selectedMap;
+  const activeSelectedSeason = isGlobalPlayerDetailView
+    ? selectedGlobalDetailSeason
+    : selectedSeason;
+  const activeSelectedTimeframe = isGlobalPlayerDetailView
+    ? selectedGlobalDetailTimeframe
+    : selectedTimeframe;
+  const activeSelectedMatchType = isGlobalPlayerDetailView
+    ? selectedGlobalDetailMatchType
+    : selectedMatchType;
+  const activeSelectedCompetitionStage = isGlobalPlayerDetailView
+    ? selectedGlobalDetailCompetitionStage
+    : selectedCompetitionStage;
+  const activeSelectedCareerTeamId = isGlobalPlayerDetailView
+    ? selectedGlobalDetailCareerTeamId
+    : selectedCareerTeamId;
+  const setActiveSelectedCompetitionGroup = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailCompetitionGroup
+    : setSelectedCompetitionGroup;
+  const setActiveSelectedMap = isGlobalPlayerDetailView ? setSelectedGlobalDetailMap : setSelectedMap;
+  const setActiveSelectedSeason = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailSeason
+    : setSelectedSeason;
+  const setActiveSelectedTimeframe = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailTimeframe
+    : setSelectedTimeframe;
+  const setActiveSelectedMatchType = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailMatchType
+    : setSelectedMatchType;
+  const setActiveSelectedCompetitionStage = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailCompetitionStage
+    : setSelectedCompetitionStage;
+  const setActiveSelectedCareerTeamId = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailCareerTeamId
+    : setSelectedCareerTeamId;
+  const closeGlobalPlayerDetail = React.useCallback(() => {
+    setSelectedGlobalPlayerId('');
+    setGlobalPlayerMatches([]);
+    setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+  }, []);
 
   const settingsAll = React.useMemo(() => {
     if (!state.profile) {
@@ -920,7 +975,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         page: globalPlayerPage,
         pageSize: GlobalPlayerPageSize,
         sort: selectedGlobalPlayerSort,
-        teamId: selectedCareerTeamId ? Number(selectedCareerTeamId) : undefined,
+        teamId: selectedGlobalListTeamId ? Number(selectedGlobalListTeamId) : undefined,
         tierId: selectedGlobalPlayerTierId ? Number(selectedGlobalPlayerTierId) : undefined,
         year: selectedGlobalYear || undefined,
       })
@@ -933,8 +988,8 @@ export default function LeagueStatsConcept(): JSX.Element {
     activeTab,
     canViewGlobalPlayerStats,
     globalPlayerPage,
-    selectedCareerTeamId,
     selectedGlobalFederationSlug,
+    selectedGlobalListTeamId,
     selectedGlobalPlayerName,
     selectedGlobalPlayerSort,
     selectedGlobalPlayerTierId,
@@ -958,16 +1013,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       .all({
         ...getPlayerScopedMatchEventsEager(Number(selectedGlobalPlayerId)),
         where: {
-          ...buildOfficialMatchWhere({
-            selectedCareerTeamId,
-            selectedCompetitionGroup,
-            selectedCompetitionStage,
-            selectedMap,
-            selectedMatchType,
-            selectedSeason,
-            selectedTimeframe,
-            currentDate: state.profile?.date,
-          }),
+          ...buildOfficialMatchWhere({}),
           events: {
             some: getPlayerEventWhere(Number(selectedGlobalPlayerId)),
           },
@@ -981,15 +1027,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [
     activeTab,
     canViewGlobalPlayerStats,
-    selectedCareerTeamId,
-    selectedCompetitionGroup,
-    selectedCompetitionStage,
     selectedGlobalPlayerId,
-    selectedMap,
-    selectedMatchType,
-    selectedSeason,
-    selectedTimeframe,
-    state.profile?.date,
   ]);
 
   React.useEffect(() => {
@@ -997,6 +1035,12 @@ export default function LeagueStatsConcept(): JSX.Element {
       setActiveTab(StatsTab.INDIVIDUAL);
     }
   }, [activeTab, canViewGlobalPlayerStats]);
+
+  React.useEffect(() => {
+    if (activeTab !== StatsTab.GLOBAL_PLAYERS && selectedGlobalPlayerId) {
+      closeGlobalPlayerDetail();
+    }
+  }, [activeTab, closeGlobalPlayerDetail, selectedGlobalPlayerId]);
 
   const matchesForCurrentTab =
     activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatches : matches;
@@ -1042,7 +1086,19 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   const careerTeamOptions = React.useMemo(() => {
     const map = new Map<number, { id: number; name: string; blazon?: string }>();
-    if (activeTab === StatsTab.GLOBAL_PLAYERS) {
+    if (activeTab === StatsTab.GLOBAL_PLAYERS && selectedGlobalPlayerId) {
+      const playerId = Number(selectedGlobalPlayerId);
+      globalPlayerMatches.forEach((match: any) => {
+        const competitor = getPlayerMatchCompetitor(match, playerId);
+        if (competitor?.team) {
+          map.set(competitor.team.id, {
+            id: competitor.team.id,
+            name: competitor.team.name,
+            blazon: competitor.team.blazon,
+          });
+        }
+      });
+    } else if (activeTab === StatsTab.GLOBAL_PLAYERS) {
       globalPlayerTeams.forEach((team: any) =>
         map.set(team.id, {
           id: team.id,
@@ -1061,7 +1117,17 @@ export default function LeagueStatsConcept(): JSX.Element {
     }
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeTab, globalPlayerTeams, careerStints]);
+  }, [activeTab, selectedGlobalPlayerId, globalPlayerMatches, globalPlayerTeams, careerStints]);
+
+  React.useEffect(() => {
+    if (
+      isGlobalPlayerDetailView &&
+      selectedGlobalDetailCareerTeamId &&
+      !careerTeamOptions.some((team) => String(team.id) === selectedGlobalDetailCareerTeamId)
+    ) {
+      setSelectedGlobalDetailCareerTeamId('');
+    }
+  }, [careerTeamOptions, isGlobalPlayerDetailView, selectedGlobalDetailCareerTeamId]);
 
   const matchesByFilters = React.useMemo(() => {
     if (activeTab === StatsTab.TOURNAMENTS) {
@@ -1069,34 +1135,41 @@ export default function LeagueStatsConcept(): JSX.Element {
     }
 
     return matchesForCurrentTab.filter((match: any) => {
-      const byCompetition = selectedCompetitionGroup
-        ? getCompetitionGroup(match) === selectedCompetitionGroup
+      const byCompetition = activeSelectedCompetitionGroup
+        ? getCompetitionGroup(match) === activeSelectedCompetitionGroup
         : true;
-      const byMap = selectedMap
-        ? getPlayedGames(match).some((game: any) => game.map === selectedMap)
+      const byMap = activeSelectedMap
+        ? getPlayedGames(match).some((game: any) => game.map === activeSelectedMap)
         : true;
-      const byMatchType = selectedMatchType
-        ? selectedMatchType === 'LAN'
+      const byMatchType = activeSelectedMatchType
+        ? activeSelectedMatchType === 'LAN'
           ? Boolean(match.competition?.tier?.lan)
           : !Boolean(match.competition?.tier?.lan)
         : true;
-      const byCompetitionStage = selectedCompetitionStage
-        ? getCompetitionStage(match) === selectedCompetitionStage
+      const byCompetitionStage = activeSelectedCompetitionStage
+        ? getCompetitionStage(match) === activeSelectedCompetitionStage
         : true;
-      const bySeason = selectedSeason ? String(match.competition?.season) === selectedSeason : true;
+      const bySeason = activeSelectedSeason
+        ? String(match.competition?.season) === activeSelectedSeason
+        : true;
       const byTimeframe = state.profile?.date
-        ? isWithinTimeframe(match.date, state.profile.date, selectedTimeframe)
+        ? isWithinTimeframe(match.date, state.profile.date, activeSelectedTimeframe)
         : true;
       const byCareerTeam =
         activeTab === StatsTab.GLOBAL_PLAYERS
-          ? selectedCareerTeamId
-            ? match.competitors.some(
-                (competitor: any) => String(competitor.teamId) === selectedCareerTeamId,
-              )
+          ? activeSelectedCareerTeamId
+            ? getPlayerMatchCompetitor(
+                match,
+                Number(selectedGlobalPlayerId),
+                activeSelectedCareerTeamId,
+              )?.teamId === Number(activeSelectedCareerTeamId)
             : true
           : careerStints
               .filter((stint: any) => {
-                if (selectedCareerTeamId && String(stint.teamId) !== selectedCareerTeamId) {
+                if (
+                  activeSelectedCareerTeamId &&
+                  String(stint.teamId) !== activeSelectedCareerTeamId
+                ) {
                   return false;
                 }
 
@@ -1119,13 +1192,13 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [
     matches,
     matchesForCurrentTab,
-    selectedCompetitionGroup,
-    selectedMap,
-    selectedMatchType,
-    selectedCompetitionStage,
-    selectedSeason,
-    selectedTimeframe,
-    selectedCareerTeamId,
+    activeSelectedCompetitionGroup,
+    activeSelectedMap,
+    activeSelectedMatchType,
+    activeSelectedCompetitionStage,
+    activeSelectedSeason,
+    activeSelectedTimeframe,
+    activeSelectedCareerTeamId,
     careerStints,
     activeTab,
     state.profile?.date,
@@ -1134,7 +1207,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const ownPlayerPerformances = React.useMemo(() => {
     const playerId = state.profile?.player?.id;
     if (!playerId) return [] as MatchPerformance[];
-    const scopedSelectedMap = activeTab === StatsTab.TOURNAMENTS ? '' : selectedMap;
+    const scopedSelectedMap = activeTab === StatsTab.TOURNAMENTS ? '' : activeSelectedMap;
 
     return matchesByFilters.flatMap((match: any) => {
       const played =
@@ -1164,14 +1237,14 @@ export default function LeagueStatsConcept(): JSX.Element {
       );
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, state.profile?.player?.id, selectedMap, activeTab]);
+  }, [matchesByFilters, state.profile?.player?.id, activeSelectedMap, activeTab]);
 
   const teammates = React.useMemo(() => {
     const selfId = state.profile?.player?.id;
     const map = new Map<number, { id: number; name: string; avatar?: string }>();
 
     matchesByFilters.forEach((match: any) => {
-      const ownTeam = getCareerMatchCompetitor(match, careerStints, selectedCareerTeamId);
+      const ownTeam = getCareerMatchCompetitor(match, careerStints, activeSelectedCareerTeamId);
       const userTeamStints = careerStints.filter(
         (stint: any) =>
           stint.teamId === ownTeam?.teamId &&
@@ -1205,7 +1278,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     });
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [matchesByFilters, careerStints, selectedCareerTeamId, state.profile?.player?.id]);
+  }, [matchesByFilters, careerStints, activeSelectedCareerTeamId, state.profile?.player?.id]);
 
   React.useEffect(() => {
     if (!teammates.length) {
@@ -1232,6 +1305,13 @@ export default function LeagueStatsConcept(): JSX.Element {
     selectedMatchType,
     selectedCompetitionStage,
     selectedCareerTeamId,
+    selectedGlobalDetailCompetitionGroup,
+    selectedGlobalDetailSeason,
+    selectedGlobalDetailTimeframe,
+    selectedGlobalDetailMap,
+    selectedGlobalDetailMatchType,
+    selectedGlobalDetailCompetitionStage,
+    selectedGlobalDetailCareerTeamId,
     selectedTeammateId,
     selectedGlobalPlayerId,
   ]);
@@ -1239,7 +1319,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   React.useEffect(() => {
     setGlobalPlayerPage(1);
   }, [
-    selectedCareerTeamId,
+    selectedGlobalListTeamId,
     selectedGlobalFederationSlug,
     selectedGlobalPlayerName,
     selectedGlobalPlayerSort,
@@ -1326,8 +1406,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const gamesForStats = selectedMap
-        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+      const gamesForStats = activeSelectedMap
+        ? getPlayedGames(match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(match);
       if (!gamesForStats.length) {
         return [];
@@ -1336,17 +1416,23 @@ export default function LeagueStatsConcept(): JSX.Element {
       const eventsForStats = getEventsForGames(
         match,
         gamesForStats,
-        Boolean(selectedMap) || (match.games || []).length > 1,
+        Boolean(activeSelectedMap) || (match.games || []).length > 1,
       );
 
       const performance = getSeriesAwarePerformance(
         teammateId,
         eventsForStats,
-        !selectedMap && (match.games || []).length > 1,
+        !activeSelectedMap && (match.games || []).length > 1,
       );
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, selectedTeammateId, selectedMap, careerStints, selectedCareerTeamId]);
+  }, [
+    matchesByFilters,
+    selectedTeammateId,
+    activeSelectedMap,
+    careerStints,
+    selectedCareerTeamId,
+  ]);
 
   const globalPlayerPerformances = React.useMemo(() => {
     if (!selectedGlobalPlayerId) return [] as MatchPerformance[];
@@ -1360,8 +1446,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const gamesForStats = selectedMap
-        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+      const gamesForStats = activeSelectedMap
+        ? getPlayedGames(match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(match);
       if (!gamesForStats.length) {
         return [];
@@ -1370,7 +1456,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       const eventsForStats = getEventsForGames(
         match,
         gamesForStats,
-        Boolean(selectedMap) || (match.games || []).length > 1,
+        Boolean(activeSelectedMap) || (match.games || []).length > 1,
       );
 
       const hasRecordedStats = hasPlayerEvents(playerId, eventsForStats);
@@ -1381,11 +1467,11 @@ export default function LeagueStatsConcept(): JSX.Element {
       const performance = getSeriesAwarePerformance(
         playerId,
         eventsForStats,
-        !selectedMap && (match.games || []).length > 1,
+        !activeSelectedMap && (match.games || []).length > 1,
       );
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, selectedGlobalPlayerId, selectedMap]);
+  }, [matchesByFilters, selectedGlobalPlayerId, activeSelectedMap]);
 
   const tournamentRows = React.useMemo(() => {
     const grouped = new Map<
@@ -1465,8 +1551,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         return;
       }
 
-      const gamesForStats = selectedMap
-        ? getPlayedGames(match).filter((game: any) => game.map === selectedMap)
+      const gamesForStats = activeSelectedMap
+        ? getPlayedGames(match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(match);
       if (!gamesForStats.length) {
         return;
@@ -1475,7 +1561,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       const eventsForStats = getEventsForGames(
         match,
         gamesForStats,
-        Boolean(selectedMap) || (match.games || []).length > 1,
+        Boolean(activeSelectedMap) || (match.games || []).length > 1,
       );
 
       eventsForStats.forEach((event: any) => {
@@ -1505,7 +1591,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       .sort(
         (a, b) => b.kills - a.kills || b.hsPercent - a.hsPercent || a.label.localeCompare(b.label),
       );
-  }, [activeStatsPlayerId, matchesByFilters, selectedMap]);
+  }, [activeStatsPlayerId, matchesByFilters, activeSelectedMap]);
 
   const activePerformances =
     activeTab === StatsTab.TEAMMATES
@@ -1533,21 +1619,21 @@ export default function LeagueStatsConcept(): JSX.Element {
       avgKills: totals.matches ? Math.round(totals.kills / totals.matches) : 0,
       mapsPlayed: activePerformances.reduce((acc: number, item: any) => {
         const playedGames = getPlayedGames(item.match);
-        if (selectedMap) {
-          return acc + playedGames.filter((game: any) => game.map === selectedMap).length;
+        if (activeSelectedMap) {
+          return acc + playedGames.filter((game: any) => game.map === activeSelectedMap).length;
         }
         return acc + playedGames.length;
       }, 0),
     };
-  }, [activePerformances, selectedMap]);
+  }, [activePerformances, activeSelectedMap]);
 
   const featuredMapSlug =
-    selectedMap || getPlayedGames(activePerformances[0]?.match || {})[0]?.map || 'de_mirage';
+    activeSelectedMap || getPlayedGames(activePerformances[0]?.match || {})[0]?.map || 'de_mirage';
   const featuredMapImage = Util.convertMapPool(featuredMapSlug, settingsAll.general.game, true);
   const featuredMapLabel = Util.convertMapPool(featuredMapSlug, settingsAll.general.game);
-  const hasMapSelected = !!selectedMap;
+  const hasMapSelected = !!activeSelectedMap;
   const selectedFilterTeam = careerTeamOptions.find(
-    (team: any) => String(team.id) === selectedCareerTeamId,
+    (team: any) => String(team.id) === activeSelectedCareerTeamId,
   );
   const headerTeamLabel =
     activeTab === StatsTab.GLOBAL_PLAYERS
@@ -1557,7 +1643,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         : selectedFilterTeam?.name || 'Any team';
   const headerTeamLogo =
     (activeTab === StatsTab.TEAMMATES || activeTab === StatsTab.GLOBAL_PLAYERS) &&
-    !selectedCareerTeamId
+    !activeSelectedCareerTeamId
       ? null
       : selectedFilterTeam?.blazon ||
         state.profile?.team?.blazon ||
@@ -1575,13 +1661,13 @@ export default function LeagueStatsConcept(): JSX.Element {
       const playerId = activeStatsPlayerId;
       const ownTeam =
         activeTab === StatsTab.GLOBAL_PLAYERS && playerId
-          ? getPlayerMatchCompetitor(item.match, playerId, selectedCareerTeamId)
-          : getCareerMatchCompetitor(item.match, careerStints, selectedCareerTeamId);
+          ? getPlayerMatchCompetitor(item.match, playerId, activeSelectedCareerTeamId)
+          : getCareerMatchCompetitor(item.match, careerStints, activeSelectedCareerTeamId);
       const opponent = item.match.competitors.find(
         (competitor: any) => competitor.teamId !== ownTeam?.teamId,
       );
-      const games = selectedMap
-        ? getPlayedGames(item.match).filter((game: any) => game.map === selectedMap)
+      const games = activeSelectedMap
+        ? getPlayedGames(item.match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(item.match);
 
       return games.map((game: any) => {
@@ -1843,8 +1929,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         />
         <select
           className="select select-sm select-bordered w-full rounded-none"
-          value={selectedCareerTeamId}
-          onChange={(event) => setSelectedCareerTeamId(event.target.value)}
+          value={selectedGlobalListTeamId}
+          onChange={(event) => setSelectedGlobalListTeamId(event.target.value)}
         >
           <option value="">Any team</option>
           {careerTeamOptions.map((team: any) => (
@@ -1931,6 +2017,13 @@ export default function LeagueStatsConcept(): JSX.Element {
                   key={player.id}
                   className="hover:bg-base-content/10 cursor-pointer"
                   onClick={() => {
+                    setSelectedGlobalDetailCompetitionGroup('');
+                    setSelectedGlobalDetailMap('');
+                    setSelectedGlobalDetailSeason('');
+                    setSelectedGlobalDetailTimeframe('');
+                    setSelectedGlobalDetailMatchType('');
+                    setSelectedGlobalDetailCompetitionStage('');
+                    setSelectedGlobalDetailCareerTeamId('');
                     setSelectedGlobalPlayerId(String(player.id));
                     setActiveDetailView(StatsDetailView.MATCH_HISTORY);
                   }}
@@ -2008,7 +2101,12 @@ export default function LeagueStatsConcept(): JSX.Element {
                 'btn btn-wide border-base-content/10 rounded-none border-0 border-r font-normal shadow-none',
                 activeTab === tab && 'btn-active!',
               )}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                if (selectedGlobalPlayerId) {
+                  closeGlobalPlayerDetail();
+                }
+                setActiveTab(tab);
+              }}
             >
               {tab === StatsTab.INDIVIDUAL
                 ? 'Individual'
@@ -2061,8 +2159,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Competition</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedCompetitionGroup}
-                  onChange={(e) => setSelectedCompetitionGroup(e.target.value)}
+                  value={activeSelectedCompetitionGroup}
+                  onChange={(e) => setActiveSelectedCompetitionGroup(e.target.value)}
                 >
                   <option value="">Any competition</option>
                   {competitionOptions.map((c) => (
@@ -2076,8 +2174,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Season</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedSeason}
-                  onChange={(e) => setSelectedSeason(e.target.value)}
+                  value={activeSelectedSeason}
+                  onChange={(e) => setActiveSelectedSeason(e.target.value)}
                 >
                   <option value="">All seasons</option>
                   {seasonOptions.map((season) => (
@@ -2089,8 +2187,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Timeframe</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedTimeframe}
-                  onChange={(e) => setSelectedTimeframe(e.target.value as TimeframeOption)}
+                  value={activeSelectedTimeframe}
+                  onChange={(e) => setActiveSelectedTimeframe(e.target.value as TimeframeOption)}
                 >
                   {TimeframeOptions.map((option) => (
                     <option key={option || 'all'} value={option}>
@@ -2103,8 +2201,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Map</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedMap}
-                  onChange={(e) => setSelectedMap(e.target.value)}
+                  value={activeSelectedMap}
+                  onChange={(e) => setActiveSelectedMap(e.target.value)}
                 >
                   <option value="">Any map</option>
                   {mapOptions.map((m) => (
@@ -2118,8 +2216,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Match type</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedMatchType}
-                  onChange={(e) => setSelectedMatchType(e.target.value as MatchTypeOption)}
+                  value={activeSelectedMatchType}
+                  onChange={(e) => setActiveSelectedMatchType(e.target.value as MatchTypeOption)}
                 >
                   {MatchTypeOptions.map((option) => (
                     <option key={option || 'any'} value={option}>
@@ -2134,9 +2232,9 @@ export default function LeagueStatsConcept(): JSX.Element {
                 </label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedCompetitionStage}
+                  value={activeSelectedCompetitionStage}
                   onChange={(e) =>
-                    setSelectedCompetitionStage(e.target.value as CompetitionStageOption)
+                    setActiveSelectedCompetitionStage(e.target.value as CompetitionStageOption)
                   }
                 >
                   {CompetitionStageOptions.map((option) => (
@@ -2150,8 +2248,8 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
                 <select
                   className="select select-sm select-bordered w-full rounded-none"
-                  value={selectedCareerTeamId}
-                  onChange={(e) => setSelectedCareerTeamId(e.target.value)}
+                  value={activeSelectedCareerTeamId}
+                  onChange={(e) => setActiveSelectedCareerTeamId(e.target.value)}
                 >
                   <option value="">Any team</option>
                   {careerTeamOptions.map((t) => (
@@ -2189,10 +2287,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <header className="mb-3 flex items-center justify-between">
                   <button
                     className="btn btn-ghost btn-sm rounded-none"
-                    onClick={() => {
-                      setSelectedGlobalPlayerId('');
-                      setGlobalPlayerMatches([]);
-                    }}
+                    onClick={closeGlobalPlayerDetail}
                   >
                     Back to players
                   </button>
