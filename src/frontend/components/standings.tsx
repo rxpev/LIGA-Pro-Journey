@@ -136,6 +136,7 @@ function StandingsMatchRows(props: {
         return (
           <div
             key={`${match.id}__standings_match`}
+            data-interaction-hover-sound="none"
             className={cx(
               'grid grid-cols-[4.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 px-4 py-2 text-xs',
               onClick && 'hover:bg-base-content/10 cursor-pointer',
@@ -315,6 +316,7 @@ export default function (props: Props) {
           return (
             <React.Fragment key={competitor.team.id}>
               <tr
+                data-interaction-hover-sound="none"
                 className={cx(
                   'group',
                   getZoneColorValue(idx + (props.offset || 0), props.zones),

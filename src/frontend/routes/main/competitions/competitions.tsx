@@ -1035,6 +1035,7 @@ export default function () {
                     <button
                       key={card.key}
                       type="button"
+                      data-interaction-hover-sound="none"
                       className={cx(
                         'group border-base-content/10 bg-base-200 h-auto rounded border p-0 text-left shadow-none',
                         'hover:border-primary/60 hover:bg-base-300',

@@ -441,6 +441,7 @@ export default function () {
                 players.map((player) => (
                   <tr
                     key={player.name}
+                    data-interaction-hover-sound="none"
                     className="hover:bg-base-content/10 cursor-pointer"
                     onClick={() =>
                       api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {

@@ -1103,6 +1103,7 @@ export default function () {
             <Link
               key={team.id}
               to={`/teams?teamId=${team.id}`}
+              data-interaction-hover-sound="none"
               className={cx(
                 'card relative flex flex-col rounded-2xl p-4 shadow-sm transition-colors',
                 'bg-base-200/40 hover:bg-base-200/70',

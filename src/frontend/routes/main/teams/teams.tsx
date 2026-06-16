@@ -248,6 +248,7 @@ export default function () {
                   {searchedTeams.map((teamSearchResult) => (
                     <tr
                       key={teamSearchResult.id + '__search'}
+                      data-interaction-hover-sound="none"
                       className={cx(
                         'cursor-pointer',
                         teamSearchResult.id === team?.id && 'bg-base-content/10',
@@ -346,6 +347,7 @@ export default function () {
                   {rankings.map((teamRank, rank) => (
                     <tr
                       key={teamRank.id + '__ranking'}
+                      data-interaction-hover-sound="none"
                       className={cx(
                         'cursor-pointer',
                         teamRank.id === team?.id && 'bg-base-content/10',

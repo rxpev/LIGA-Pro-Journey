@@ -373,7 +373,7 @@ export default function () {
           <table className="table-xs table table-fixed">
             <tbody>
               {sortedSquad.map((player) => (
-                <tr key={player.id + '__squad'}>
+                <tr key={player.id + '__squad'} data-interaction-hover-sound="none">
                   <td
                     title={player.id === state.profile.playerId ? t('shared.you') : undefined}
                     className={cx(
@@ -454,6 +454,7 @@ export default function () {
                   return (
                     <tr
                       key={`${match.id}__match_previous`}
+                      data-interaction-hover-sound="none"
                       onClick={onClick}
                       className={cx(onClick && 'hover:bg-base-content/10 cursor-pointer')}
                     >

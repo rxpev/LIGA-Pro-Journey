@@ -343,6 +343,7 @@ function SwissTeamSlot(props: {
   return (
     <button
       type="button"
+      data-interaction-hover-sound="none"
       disabled={!props.team.team}
       title={props.team.team?.name}
       className={cx(
@@ -511,6 +512,7 @@ function SwissTerminalColumn(props: {
           <button
             type="button"
             key={competitor.team.id}
+            data-interaction-hover-sound="none"
             title={competitor.team.name}
             className={cx(
               'center rounded-full bg-black/15 p-1 transition-colors hover:bg-black/25',
@@ -640,6 +642,7 @@ function SwissEliminatedBox(props: {
               <button
                 type="button"
                 key={slot.key}
+                data-interaction-hover-sound="none"
                 title={slot.team?.name}
                 disabled={!slot.team}
                 className={cx(

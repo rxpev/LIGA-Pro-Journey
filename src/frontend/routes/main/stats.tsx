@@ -2015,6 +2015,7 @@ export default function LeagueStatsConcept(): JSX.Element {
               globalPlayers.map((player) => (
                 <tr
                   key={player.id}
+                  data-interaction-hover-sound="none"
                   className="hover:bg-base-content/10 cursor-pointer"
                   onClick={() => {
                     setSelectedGlobalDetailCompetitionGroup('');

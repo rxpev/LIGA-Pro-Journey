@@ -439,6 +439,7 @@ export default function () {
                               )}
                             >
                               <button
+                                data-interaction-hover-sound="none"
                                 className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 text-left"
                                 onClick={() => setSpotlight(match)}
                               >

@@ -93,11 +93,14 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
       !!element &&
       element.dataset.interactionSound !== 'none' &&
       !element.matches(':disabled, [aria-disabled="true"], .menu-disabled');
+    const canPlayInteractionHoverSound = (element: HTMLElement | null) =>
+      canPlayInteractionSound(element) &&
+      element.closest<HTMLElement>('[data-interaction-hover-sound="none"]') == null;
     const onInteractionHover = (event: MouseEvent) => {
       const element = getInteractiveElement(event.target);
 
       if (
-        !canPlayInteractionSound(element) ||
+        !canPlayInteractionHoverSound(element) ||
         (event.relatedTarget instanceof Node && element.contains(event.relatedTarget))
       ) {
         return;

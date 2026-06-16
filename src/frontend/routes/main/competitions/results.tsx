@@ -186,6 +186,7 @@ export default function () {
               return (
                 <tr
                   key={match.id + match.date.toDateString() + '__match'}
+                  data-interaction-hover-sound="none"
                   onClick={onClick}
                   className={cx(onClick && 'hover:bg-base-content/10 cursor-pointer')}
                 >
