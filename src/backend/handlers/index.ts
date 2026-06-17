@@ -10,6 +10,7 @@ import { app, dialog, ipcMain, shell } from 'electron';
 import { Constants, Util, is } from '@liga/shared';
 import {
   DatabaseClient,
+  DiscordPresence,
   ArenaMode,
   FileManager,
   Game,
@@ -32,7 +33,7 @@ export { default as IPCPluginsHandler } from './plugins';
 export { default as IPCModsHandler } from './mods';
 export { default as IPCMapPool } from './map-pool';
 export { default as IPCShortlist } from './shortlist';
-export { default as IPCFaceitHandler } from "./faceit";
+export { default as IPCFaceitHandler } from './faceit';
 
 /**
  * Gets application information such as name and
@@ -103,6 +104,11 @@ export function IPCGenericHandler() {
     const profile = await DatabaseClient.prisma.profile.findFirst();
     return getLocale(profile);
   });
+  ipcMain.handle(
+    Constants.IPCRoute.APP_PRESENCE_UPDATE,
+    (_, update: { mode: DiscordPresence.PresenceMode; date?: string | null }) =>
+      DiscordPresence.update(update),
+  );
   ipcMain.handle(Constants.IPCRoute.APP_QUIT, () => app.quit());
   ipcMain.handle(
     Constants.IPCRoute.APP_ARENA_MODE_STATUS,
@@ -129,10 +135,9 @@ export function IPCGenericHandler() {
       settings = Util.loadSettings(profile.settings);
     }
 
-    const steamCandidates = [
-      settings.general.steamPath,
-      await Game.discoverSteamPath(),
-    ].filter((candidate): candidate is string => Boolean(candidate));
+    const steamCandidates = [settings.general.steamPath, await Game.discoverSteamPath()].filter(
+      (candidate): candidate is string => Boolean(candidate),
+    );
 
     let steamExecutablePath: string | undefined;
 

@@ -56,6 +56,8 @@ export default {
         options,
       ) as Promise<Electron.MessageBoxReturnValue>,
     info: () => ipcRenderer.invoke(Constants.IPCRoute.APP_INFO) as Promise<typeof AppInfo>,
+    presence: (update: { mode: 'career' | 'custom-games' | 'main-menu'; date?: string | null }) =>
+      ipcRenderer.invoke(Constants.IPCRoute.APP_PRESENCE_UPDATE, update) as Promise<void>,
     quit: () => ipcRenderer.invoke(Constants.IPCRoute.APP_QUIT) as Promise<unknown>,
     arenaModeStatus: (settings?: typeof Constants.Settings) =>
       ipcRenderer.invoke(Constants.IPCRoute.APP_ARENA_MODE_STATUS, settings) as Promise<{

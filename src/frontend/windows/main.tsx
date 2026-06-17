@@ -6,6 +6,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
+import { format as formatDate } from 'date-fns';
 import { Toast, Toaster, toast } from 'react-hot-toast';
 import { FaBars, FaCaretDown, FaEnvelopeOpen, FaExclamationTriangle, FaHome } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
@@ -37,8 +38,6 @@ import {
 } from 'react-router-dom';
 import InAppModal from './in-app-modal';
 import '@liga/frontend/assets/styles.css';
-
-
 
 /** @constant */
 const ROLE_LABELS: Record<string, string> = {
@@ -211,13 +210,10 @@ function Root() {
   const audioNotification = useAudio('notification.wav');
 
   React.useEffect(() => {
-    const removeClosePromptListener = api.ipc.on(
-      Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE,
-      () => {
-        audioNegativeAlert();
-        setCalendarClosePromptVisible(true);
-      },
-    );
+    const removeClosePromptListener = api.ipc.on(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, () => {
+      audioNegativeAlert();
+      setCalendarClosePromptVisible(true);
+    });
 
     return () => {
       removeClosePromptListener();
@@ -363,6 +359,22 @@ function Root() {
     api.window.setFullscreen(Util.loadSettings(state.profile.settings).general.fullscreen);
   }, [state.profile?.settings]);
 
+  React.useEffect(() => {
+    if (!state.profile?.date) {
+      return;
+    }
+
+    const date =
+      state.profile.date instanceof Date ? state.profile.date : new Date(state.profile.date);
+
+    api.app.presence({
+      mode: 'career',
+      date: Number.isNaN(date.getTime())
+        ? String(state.profile.date)
+        : formatDate(date, Constants.Settings.calendar.calendarDateFormat),
+    });
+  }, [state.profile?.date]);
+
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],
@@ -454,15 +466,18 @@ function Root() {
               <li className="py-2">
                 <div className="flex items-center justify-between gap-3">
                   {/* Left: FLAG • ROLENAME */}
-                  <div className="min-w-0 flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span
                       title={state.profile?.player?.country?.name || 'Unknown Country'}
-                      className={cx('fp', (state.profile?.player?.country?.code || '').toLowerCase())}
+                      className={cx(
+                        'fp',
+                        (state.profile?.player?.country?.code || '').toLowerCase(),
+                      )}
                     />
                     <span className="opacity-60">•</span>
                     <span
                       className={cx(
-                        'font-semibold text-base truncate',
+                        'truncate text-base font-semibold',
                         ROLE_COLOR_CLASSES[state.profile?.player?.role ?? ''] || 'text-blue-300',
                       )}
                     >
@@ -474,7 +489,7 @@ function Root() {
                   <div className="shrink-0">
                     <div
                       className={cx(
-                        'h-9 w-9 rounded-full grid place-items-center',
+                        'grid h-9 w-9 place-items-center rounded-full',
                         ROLE_BADGE_CLASSES[state.profile?.player?.role ?? ''] || 'bg-blue-300',
                       )}
                     >
@@ -491,7 +506,7 @@ function Root() {
               <li>
                 <a
                   role="button"
-                  className="text-sm font-semibold text-warning"
+                  className="text-warning text-sm font-semibold"
                   onClick={() => navigate('/squad')}
                 >
                   <Image
@@ -509,7 +524,9 @@ function Root() {
               <li>
                 <a
                   onClick={() =>
-                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, { target: '/user' })
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                      target: '/user',
+                    })
                   }
                 >
                   Edit Player Avatar
@@ -518,7 +535,9 @@ function Root() {
               <li>
                 <a
                   onClick={() =>
-                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, { target: '/settings' })
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                      target: '/settings',
+                    })
                   }
                 >
                   {t('shared.settings')}

@@ -4,13 +4,13 @@
  * @module
  */
 import * as Sqrl from 'squirrelly';
-import { format } from "date-fns";
+import { format } from 'date-fns';
 import * as IPCHandlers from '@liga/backend/handlers';
 import * as Protocols from '@liga/backend/protocols';
 import log from 'electron-log';
 import { app, protocol, BrowserWindow } from 'electron';
 import { Constants, Util, is } from '@liga/shared';
-import { DatabaseClient, WindowManager } from '@liga/backend/lib';
+import { DatabaseClient, DiscordPresence, WindowManager } from '@liga/backend/lib';
 
 /**
  * This method will be called when Electron has finished
@@ -42,6 +42,8 @@ async function handleOnReady() {
 
   // create initial splash window
   WindowManager.get(WindowManager.WINDOW_CONFIGS.splash.id);
+
+  DiscordPresence.start();
 }
 
 /**
@@ -55,6 +57,7 @@ async function handleOnReady() {
  */
 function handleAllClosed() {
   if (process.platform !== 'darwin') {
+    DiscordPresence.stop();
     app.quit();
   }
 }
@@ -104,10 +107,10 @@ function handleOnActivate() {
   }
 
   // set up squirrelly custom filters
-  Sqrl.filters.define("currency", Util.formatCurrency);
+  Sqrl.filters.define('currency', Util.formatCurrency);
 
-  Sqrl.filters.define("date", (value: any) => {
-    if (!value) return "";
+  Sqrl.filters.define('date', (value: any) => {
+    if (!value) return '';
 
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
@@ -128,5 +131,6 @@ function handleOnActivate() {
   // handle window lifecycle events
   app.on('ready', handleOnReady);
   app.on('window-all-closed', handleAllClosed);
+  app.on('before-quit', () => DiscordPresence.stop());
   app.on('activate', handleOnActivate);
 })();

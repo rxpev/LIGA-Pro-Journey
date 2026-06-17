@@ -24,82 +24,87 @@ import '@liga/frontend/assets/styles.css';
 
 const LANDING_ROUTE_STORAGE_KEY = 'landingRoute';
 const initialLandingRoute =
-  window.sessionStorage.getItem(LANDING_ROUTE_STORAGE_KEY) === '/exhibition'
-    ? '/exhibition'
-    : '/';
+  window.sessionStorage.getItem(LANDING_ROUTE_STORAGE_KEY) === '/exhibition' ? '/exhibition' : '/';
 
 /**
  * Configure routes.
  *
  * @constant
  */
-const routes = createMemoryRouter([
-  {
-    path: '/',
-    element: <Root />,
-    children: [
-      // standalone routes
-      {
-        element: <Routes.Landing.Home />,
-        index: true,
-      },
-      {
-        path: '/connect/:id',
-        element: <Routes.Landing.Connect />,
-      },
-      {
-        path: '/exhibition',
-        element: <Routes.Landing.Exhibition />,
-      },
+const routes = createMemoryRouter(
+  [
+    {
+      path: '/',
+      element: <Root />,
+      children: [
+        // standalone routes
+        {
+          element: <Routes.Landing.Home />,
+          index: true,
+        },
+        {
+          path: '/connect/:id',
+          element: <Routes.Landing.Connect />,
+        },
+        {
+          path: '/exhibition',
+          element: <Routes.Landing.Exhibition />,
+        },
 
-      // composite routes
-      {
-        path: '/load',
-        element: <Routes.Landing.Load.Load />,
-        children: [
-          {
-            path: '/load/delete/:id',
-            element: <Routes.Landing.Load.Delete />,
-          },
-        ],
-      },
-      {
-        path: '/create',
-        element: <Routes.Landing.Create.Create />,
-        children: [
-          {
-            element: <Routes.Landing.Create.User />,
-            index: true,
-          },
-          {
-            path: '/create/2',
-            children: [
-              {
-                path: '/create/2',
-                element: <Routes.Landing.Create.Role />,
-              },
-            ],
-          },
-          {
-            path: '/create/3',
-            element: <Routes.Landing.Create.Statistics />,
-          },
-          {
-            path: '/create/4',
-            element: <Routes.Landing.Create.Save />,
-          },
-        ],
-      },
-    ],
+        // composite routes
+        {
+          path: '/load',
+          element: <Routes.Landing.Load.Load />,
+          children: [
+            {
+              path: '/load/delete/:id',
+              element: <Routes.Landing.Load.Delete />,
+            },
+          ],
+        },
+        {
+          path: '/create',
+          element: <Routes.Landing.Create.Create />,
+          children: [
+            {
+              element: <Routes.Landing.Create.User />,
+              index: true,
+            },
+            {
+              path: '/create/2',
+              children: [
+                {
+                  path: '/create/2',
+                  element: <Routes.Landing.Create.Role />,
+                },
+              ],
+            },
+            {
+              path: '/create/3',
+              element: <Routes.Landing.Create.Statistics />,
+            },
+            {
+              path: '/create/4',
+              element: <Routes.Landing.Create.Save />,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  {
+    initialEntries: [initialLandingRoute],
   },
-], {
-  initialEntries: [initialLandingRoute],
-});
+);
 
 function RoutePersistence(): React.ReactNode {
   const location = useLocation();
 
   React.useEffect(() => {
+    api.app.presence({
+      mode: location.pathname === '/exhibition' ? 'custom-games' : 'main-menu',
+    });
+
     if (location.pathname === '/exhibition') {
       window.sessionStorage.setItem(LANDING_ROUTE_STORAGE_KEY, location.pathname);
       return;
