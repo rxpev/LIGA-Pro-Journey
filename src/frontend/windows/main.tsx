@@ -372,8 +372,9 @@ function Root() {
       date: Number.isNaN(date.getTime())
         ? String(state.profile.date)
         : formatDate(date, Constants.Settings.calendar.calendarDateFormat),
+      role: state.profile.player?.role ?? null,
     });
-  }, [state.profile?.date]);
+  }, [state.profile?.date, state.profile?.player?.role]);
 
   // setup the navigation menu items
   const navItems = [

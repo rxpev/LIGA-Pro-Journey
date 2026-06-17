@@ -106,8 +106,7 @@ export function IPCGenericHandler() {
   });
   ipcMain.handle(
     Constants.IPCRoute.APP_PRESENCE_UPDATE,
-    (_, update: { mode: DiscordPresence.PresenceMode; date?: string | null }) =>
-      DiscordPresence.update(update),
+    (_, update: DiscordPresence.PresenceUpdate) => DiscordPresence.update(update),
   );
   ipcMain.handle(Constants.IPCRoute.APP_QUIT, () => app.quit());
   ipcMain.handle(

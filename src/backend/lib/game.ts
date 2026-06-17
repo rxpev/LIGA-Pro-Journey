@@ -4,6 +4,7 @@
  * @module
  */
 import * as FileManager from './file-manager';
+import * as DiscordPresence from './discord-presence';
 import * as PluginManager from './plugins';
 import * as RCON from './rcon';
 import * as Scorebot from './scorebot';
@@ -378,6 +379,9 @@ export class Server {
   private clientConnected: boolean;
   private clientProcessMonitor?: NodeJS.Timeout;
   private clientProcessSeen: boolean;
+  private livePresenceHalf: number;
+  private livePresenceRounds: number;
+  private livePresenceScoreByTeamId: Record<number, number>;
 
   // FACEIT fields
   private isFaceit: boolean;
@@ -457,6 +461,9 @@ export class Server {
     this.clientConnected = false;
     this.clientProcessSeen = false;
     this.faceitUserServerId = null;
+    this.livePresenceHalf = 0;
+    this.livePresenceRounds = 1;
+    this.livePresenceScoreByTeamId = {};
 
     // handle game override
     if (gameOverride) {
@@ -584,6 +591,120 @@ export class Server {
     return this.matchGame.map;
   }
 
+  private get presenceMatchType(): DiscordPresence.LiveMatchType {
+    if (this.isFaceit) {
+      return 'faceit';
+    }
+
+    if (this.match?.competition?.tier?.slug === Constants.TierSlug.EXHIBITION_FRIENDLY) {
+      return 'custom';
+    }
+
+    return 'league';
+  }
+
+  private get presenceUserTeamId(): number | undefined {
+    if (this.spectating) {
+      return undefined;
+    }
+
+    if (this.isFaceit && this.faceitRoom) {
+      const userId = this.profile.playerId;
+      if (this.faceitRoom.teamA?.some((player: any) => player.id === userId)) {
+        return 1;
+      }
+      if (this.faceitRoom.teamB?.some((player: any) => player.id === userId)) {
+        return 2;
+      }
+    }
+
+    return this.profile.teamId ?? undefined;
+  }
+
+  private get livePresenceOrderedScore(): [number, number] {
+    const [leftTeamId, rightTeamId] = this.livePresenceOrderedTeamIds;
+
+    return [
+      this.livePresenceScoreByTeamId[leftTeamId] ?? 0,
+      this.livePresenceScoreByTeamId[rightTeamId] ?? 0,
+    ];
+  }
+
+  private get livePresenceOrderedTeamIds(): [number, number] {
+    const competitorTeamIds = this.competitors.map((competitor) => competitor.teamId);
+    const userTeamId = this.presenceUserTeamId;
+    const leftTeamId =
+      userTeamId && competitorTeamIds.includes(userTeamId) ? userTeamId : competitorTeamIds[0];
+    const rightTeamId =
+      competitorTeamIds.find((teamId) => teamId !== leftTeamId) ?? competitorTeamIds[1];
+
+    return [leftTeamId, rightTeamId];
+  }
+
+  private get livePresenceTeamNames(): [string, string] {
+    const [leftTeamId, rightTeamId] = this.livePresenceOrderedTeamIds;
+    const leftTeam = this.competitors.find((competitor) => competitor.teamId === leftTeamId);
+    const rightTeam = this.competitors.find((competitor) => competitor.teamId === rightTeamId);
+
+    return [leftTeam?.team?.name ?? 'Team A', rightTeam?.team?.name ?? 'Team B'];
+  }
+
+  private updateLiveDiscordPresence(): void {
+    DiscordPresence.update({
+      map: this.map,
+      mode: DiscordPresence.PresenceMode.LIVE_MATCH,
+      matchType: this.presenceMatchType,
+      score: this.livePresenceOrderedScore,
+      spectating: this.spectating,
+      teams: this.presenceMatchType === 'faceit' ? undefined : this.livePresenceTeamNames,
+    }).catch((error) => this.log.debug('Discord Rich Presence live match update failed', error));
+  }
+
+  private recordLivePresenceRound(payload: Scorebot.EventPayloadRoundOver): void {
+    const { maxRounds, maxRoundsOvertime } = this.settings.matchRules;
+    let invert = this.livePresenceHalf % 2 === 1;
+
+    if (this.livePresenceRounds > maxRounds) {
+      const roundsOvertime = this.livePresenceRounds - maxRounds;
+      const overtimeCount = Math.ceil(roundsOvertime / maxRoundsOvertime);
+
+      if (overtimeCount % 2 === 1) {
+        invert = this.livePresenceHalf % 2 === 0;
+      }
+    }
+
+    const winnerSideAtStart = invert ? 1 - payload.winner : payload.winner;
+    const winnerTeamId =
+      winnerSideAtStart === 0
+        ? (this.sideTeamIds?.t ?? this.competitors[0]?.teamId)
+        : (this.sideTeamIds?.ct ?? this.competitors[1]?.teamId);
+
+    if (winnerTeamId != null) {
+      this.livePresenceScoreByTeamId[winnerTeamId] =
+        (this.livePresenceScoreByTeamId[winnerTeamId] ?? 0) + 1;
+    }
+
+    if (this.livePresenceRounds > maxRounds) {
+      const roundsOvertime = this.livePresenceRounds - maxRounds;
+      const overtimeRound = ((roundsOvertime - 1) % maxRoundsOvertime) + 1;
+
+      if (
+        overtimeRound === maxRoundsOvertime / 2 ||
+        overtimeRound === maxRoundsOvertime
+      ) {
+        this.livePresenceHalf += 1;
+      }
+    } else if (
+      this.livePresenceRounds === maxRounds / 2 ||
+      this.livePresenceRounds === maxRounds
+    ) {
+      this.livePresenceHalf += 1;
+    }
+
+    this.livePresenceRounds += 1;
+    this.updateLiveDiscordPresence();
+  }
+
 
   /**
    * Determines whether overtime is allowed.
@@ -651,6 +772,9 @@ export class Server {
 
     this.cleanupStarted = true;
     this.log.info('Cleaning up...');
+    DiscordPresence.restoreNonLive().catch((error) =>
+      this.log.debug('Discord Rich Presence restore failed', error),
+    );
 
     await Promise.all(
       this.cleanupCallbacks.map(async (callback) => {
@@ -1948,6 +2072,13 @@ End\n
       throw error;
     }
 
+    this.livePresenceHalf = 0;
+    this.livePresenceRounds = 1;
+    this.livePresenceScoreByTeamId = Object.fromEntries(
+      this.competitors.map((competitor) => [competitor.teamId, 0]),
+    );
+    this.updateLiveDiscordPresence();
+
     // 8) Push events into in-memory buffer
     this.scorebot.on(Scorebot.EventIdentifier.PLAYER_ASSISTED, (payload) =>
       this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_ASSISTED, payload }),
@@ -1955,9 +2086,10 @@ End\n
     this.scorebot.on(Scorebot.EventIdentifier.PLAYER_KILLED, (payload) =>
       this.scorebotEvents.push({ type: Scorebot.EventIdentifier.PLAYER_KILLED, payload }),
     );
-    this.scorebot.on(Scorebot.EventIdentifier.ROUND_OVER, (payload) =>
-      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.ROUND_OVER, payload }),
-    );
+    this.scorebot.on(Scorebot.EventIdentifier.ROUND_OVER, (payload) => {
+      this.scorebotEvents.push({ type: Scorebot.EventIdentifier.ROUND_OVER, payload });
+      this.recordLivePresenceRound(payload);
+    });
 
     // 9) Resolve when GAME_OVER fires
     return new Promise((resolve) => {
@@ -1988,6 +2120,9 @@ End\n
         }
         this.log.info('Final result: %O', payload);
         this.result = payload;
+        DiscordPresence.restoreNonLive().catch((error) =>
+          this.log.debug('Discord Rich Presence restore failed', error),
+        );
         resolve();
       });
     });

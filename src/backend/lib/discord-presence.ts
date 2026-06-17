@@ -8,12 +8,21 @@ const RECONNECT_DELAY_MS = 30_000;
 export enum PresenceMode {
   CAREER = 'career',
   CUSTOM_GAMES = 'custom-games',
+  LIVE_MATCH = 'live-match',
   MAIN_MENU = 'main-menu',
 }
 
-type PresenceUpdate = {
+export type LiveMatchType = 'league' | 'faceit' | 'custom';
+
+export type PresenceUpdate = {
   mode: PresenceMode;
   date?: string | null;
+  map?: string | null;
+  matchType?: LiveMatchType;
+  role?: string | null;
+  score?: [number, number];
+  spectating?: boolean;
+  teams?: [string, string];
 };
 
 type DiscordClient = {
@@ -29,18 +38,84 @@ let connected = false;
 let connecting: Promise<void> | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let lastUpdate: PresenceUpdate = { mode: PresenceMode.MAIN_MENU };
+let lastNonLiveUpdate: PresenceUpdate = lastUpdate;
 const startedAt = Date.now();
 
+function truncatePresenceText(text: string): string {
+  return text.length > 128 ? `${text.slice(0, 125)}...` : text;
+}
+
+function getMatchLabel(update: PresenceUpdate): string {
+  return update.matchType === 'faceit'
+    ? 'FACEIT Pug'
+    : update.matchType === 'custom'
+      ? 'Custom Game'
+      : 'Match';
+}
+
+function getScoreText(update: PresenceUpdate): string | null {
+  return update.score ? `${update.score[0]}-${update.score[1]}` : null;
+}
+
+function getRoleLabel(role?: string | null): string | null {
+  switch (role) {
+    case 'AWPER':
+    case 'SNIPER':
+      return 'AWPer';
+    case 'IGL':
+      return 'IGL';
+    case 'RIFLER':
+      return 'Rifler';
+    default:
+      return null;
+  }
+}
+
 function getDetails(update: PresenceUpdate): string {
+  if (update.mode === PresenceMode.LIVE_MATCH) {
+    const verb = update.spectating ? 'Watching' : 'Playing';
+    const details = [`${verb} ${getMatchLabel(update)}`];
+
+    if (update.map) {
+      details.push(update.map);
+    }
+
+    return truncatePresenceText(details.join(' | '));
+  }
+
   if (update.mode === PresenceMode.CUSTOM_GAMES) {
     return 'In Custom Games';
   }
 
   if (update.mode === PresenceMode.CAREER) {
+    const role = getRoleLabel(update.role);
+    if (role) {
+      return `In Career - ${role}`;
+    }
+
     return update.date ? `In Career - ${update.date}` : 'In Career';
   }
 
   return 'In Main Menu';
+}
+
+function getState(update: PresenceUpdate): string | undefined {
+  if (update.mode !== PresenceMode.LIVE_MATCH) {
+    return undefined;
+  }
+
+  const score = getScoreText(update);
+  const parts: string[] = [];
+
+  if (update.matchType !== 'faceit' && update.teams) {
+    parts.push(`${update.teams[0]} vs ${update.teams[1]}`);
+  }
+
+  if (score) {
+    parts.push(score);
+  }
+
+  return parts.length ? truncatePresenceText(parts.join(' | ')) : undefined;
 }
 
 function clearReconnectTimer(): void {
@@ -99,6 +174,10 @@ export async function start(): Promise<void> {
 export async function update(update: PresenceUpdate): Promise<void> {
   lastUpdate = update;
 
+  if (update.mode !== PresenceMode.LIVE_MATCH) {
+    lastNonLiveUpdate = update;
+  }
+
   if (!connected || !client) {
     connect().catch((error) => log.debug('Discord Rich Presence connection failed', error));
     return;
@@ -106,9 +185,14 @@ export async function update(update: PresenceUpdate): Promise<void> {
 
   await client.setActivity({
     details: getDetails(update),
+    state: getState(update),
     startTimestamp: startedAt,
     instance: false,
   });
+}
+
+export async function restoreNonLive(): Promise<void> {
+  await update(lastNonLiveUpdate);
 }
 
 export async function stop(): Promise<void> {
