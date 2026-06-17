@@ -1224,6 +1224,7 @@ export const Settings = {
     gameLaunchOptions: null as string,
     theme: ThemeType.SYSTEM,
     fullscreen: true,
+    discordPresence: true,
     locale: null as LocaleIdentifier,
     volume: 0.05,
     faceitMatchFoundTune: 'whoosh_whip.wav' as string | null,

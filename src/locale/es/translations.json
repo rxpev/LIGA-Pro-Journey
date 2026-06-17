@@ -210,6 +210,7 @@
     "settings": {
       "botChatterTitle": "Conversación de Bots",
       "botDifficultyTitle": "Dificultad de Bots",
+      "discordPresenceTitle": "Discord Presence",
       "gamePathSubtitle": "Game Library path that points to your CS:GO install. e.g. D:\\SteamLibrary",
       "gamePathTitle": "Ruta de la Biblioteca de Juegos",
       "gameSubtitle": "Esto lanzará el juego seleccionado al jugar partidos.",

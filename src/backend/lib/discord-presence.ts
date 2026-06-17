@@ -39,6 +39,7 @@ let connecting: Promise<void> | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let lastUpdate: PresenceUpdate = { mode: PresenceMode.MAIN_MENU };
 let lastNonLiveUpdate: PresenceUpdate = lastUpdate;
+let enabled = true;
 const startedAt = Date.now();
 
 function truncatePresenceText(text: string): string {
@@ -126,6 +127,10 @@ function clearReconnectTimer(): void {
 }
 
 function scheduleReconnect(): void {
+  if (!enabled) {
+    return;
+  }
+
   if (reconnectTimer) {
     return;
   }
@@ -138,6 +143,10 @@ function scheduleReconnect(): void {
 }
 
 async function connect(): Promise<void> {
+  if (!enabled) {
+    return;
+  }
+
   if (connected || connecting) {
     return connecting;
   }
@@ -178,6 +187,10 @@ export async function update(update: PresenceUpdate): Promise<void> {
     lastNonLiveUpdate = update;
   }
 
+  if (!enabled) {
+    return;
+  }
+
   if (!connected || !client) {
     connect().catch((error) => log.debug('Discord Rich Presence connection failed', error));
     return;
@@ -193,6 +206,17 @@ export async function update(update: PresenceUpdate): Promise<void> {
 
 export async function restoreNonLive(): Promise<void> {
   await update(lastNonLiveUpdate);
+}
+
+export async function setEnabled(value: boolean): Promise<void> {
+  enabled = value;
+
+  if (!enabled) {
+    await stop();
+    return;
+  }
+
+  await start();
 }
 
 export async function stop(): Promise<void> {

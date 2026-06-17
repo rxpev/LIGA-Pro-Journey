@@ -11,7 +11,7 @@ import { ipcMain } from 'electron';
 import { glob } from 'glob';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
-import { DatabaseClient, Game, WindowManager, Worldgen } from '@liga/backend/lib';
+import { DatabaseClient, DiscordPresence, Game, WindowManager, Worldgen } from '@liga/backend/lib';
 
 export default function registerProfileHandlers() {
   ipcMain.handle(
@@ -84,6 +84,10 @@ export default function registerProfileHandlers() {
     if (newSettings.general.logLevel !== settings.general.logLevel) {
       log.transports.console.level = newSettings.general.logLevel as log.LogLevel;
       log.transports.file.level = newSettings.general.logLevel as log.LogLevel;
+    }
+
+    if (newSettings.general.discordPresence !== settings.general.discordPresence) {
+      await DiscordPresence.setEnabled(newSettings.general.discordPresence);
     }
 
     // Rediscover game path if game mode changed

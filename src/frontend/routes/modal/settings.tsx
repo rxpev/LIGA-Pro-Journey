@@ -333,6 +333,23 @@ export default function () {
             </section>
             <section>
               <header>
+                <p>{t('settings.discordPresenceTitle')}</p>
+              </header>
+              <article>
+                <input
+                  type="checkbox"
+                  data-interaction-sound="none"
+                  className="toggle"
+                  onChange={(event) =>
+                    onToggleSettingsUpdate('general.discordPresence', event.target.checked)
+                  }
+                  checked={settings.general.discordPresence}
+                  value={String(settings.general.discordPresence)}
+                />
+              </article>
+            </section>
+            <section>
+              <header>
                 <p>{t('settings.volumeTitle')}</p>
               </header>
               <article>
