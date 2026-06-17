@@ -1608,6 +1608,13 @@ End\n
     const defaultArgs = [
       '-insecure',
       '-novid',
+      '-tickrate 128',
+      '+rate',
+      '786432',
+      '+cl_updaterate',
+      '128',
+      '+cl_cmdrate',
+      '128',
     ];
 
     const launchArgs = [...defaultArgs, ...this.userArgs];
@@ -1777,6 +1784,18 @@ End\n
       '-usercon',
       '-insecure',
       '-tickrate 128',
+      '+sv_minupdaterate',
+      '128',
+      '+sv_maxupdaterate',
+      '128',
+      '+sv_mincmdrate',
+      '128',
+      '+sv_maxcmdrate',
+      '128',
+      '+sv_minrate',
+      '786432',
+      '+sv_maxrate',
+      '0',
       '-maxplayers_override',
       '10',
       '-game',
