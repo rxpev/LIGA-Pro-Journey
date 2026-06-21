@@ -16,6 +16,7 @@ import asiaFlag from '@liga/frontend/assets/flags/as.svg';
 import euFlag from '@liga/frontend/assets/flags/eu.svg';
 import northAmericaFlag from '@liga/frontend/assets/flags/na.svg';
 import southAmericaFlag from '@liga/frontend/assets/flags/sa.svg';
+import worldFlag from '@liga/frontend/assets/flags/world.svg';
 
 /** @type {Matches} */
 type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.all<T>>>;
@@ -90,10 +91,13 @@ function getCustomCountryBackground(code?: string | null) {
     case 'north_america':
       return northAmericaFlag;
     case 'sa':
+    case 'xsa':
     case 'south-america':
     case 'southamerica':
     case 'south_america':
       return southAmericaFlag;
+    case 'other':
+      return worldFlag;
     default:
       return null;
   }
@@ -369,8 +373,8 @@ export function PregameMatchHeader(props: {
     },
   );
 
-  const homeCountryCode = props.home.team.country?.code?.toLowerCase();
-  const awayCountryCode = props.away.team.country?.code?.toLowerCase();
+  const homeCountryCode = Util.getTeamDisplayCountry(props.home.team).code.toLowerCase();
+  const awayCountryCode = Util.getTeamDisplayCountry(props.away.team).code.toLowerCase();
   const homeCountryBackground = getCustomCountryBackground(homeCountryCode);
   const awayCountryBackground = getCustomCountryBackground(awayCountryCode);
   const matchDateLabel = formatMatchDate(props.match.date);

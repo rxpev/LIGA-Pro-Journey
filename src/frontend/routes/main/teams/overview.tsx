@@ -103,7 +103,14 @@ export default function () {
       .then(setCompetition);
     api.players
       .all({
-        ...Eagers.player,
+        include: {
+          ...Eagers.player.include,
+          country: {
+            include: {
+              continent: true,
+            },
+          },
+        },
         where: {
           teamId: team.id,
         },
@@ -296,6 +303,10 @@ export default function () {
     competition?.tier.slug,
     competition?.tier.league.name,
   );
+  const displayCountry = React.useMemo(
+    () => Util.getTeamDisplayCountry({ ...team, players: squad }),
+    [squad, team],
+  );
 
   const sortedSquad = React.useMemo(
     () => [...squad].sort((a, b) => Number(b.starter) - Number(a.starter)),
@@ -323,9 +334,9 @@ export default function () {
               <h3 className="truncate text-xl leading-tight font-bold" title={team.name}>
                 {team.name}
               </h3>
-              <p className="mt-1 truncate text-sm" title={team.country.name}>
-                <span className={cx('fp', team.country.code.toLowerCase())} />
-                &nbsp;{team.country.name}
+              <p className="mt-1 truncate text-sm" title={displayCountry.name}>
+                <span className={cx('fp', displayCountry.code.toLowerCase())} />
+                &nbsp;{displayCountry.name}
               </p>
             </article>
           </section>

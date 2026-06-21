@@ -14,6 +14,7 @@ const mixedRegionCountries = [
   { code: 'na', name: 'North America', continentCode: 'NA' },
   { code: 'sa', name: 'South America', continentCode: 'SA' },
   { code: 'as', name: 'Asia', continentCode: 'AS' },
+  { code: 'other', name: 'Other', continentCode: '' },
 ] as const;
 
 const continentOverrides: Partial<Record<CountryCode, string>> = {

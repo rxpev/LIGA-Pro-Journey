@@ -16,6 +16,7 @@ import asiaFlag from '@liga/frontend/assets/flags/as.svg';
 import euFlag from '@liga/frontend/assets/flags/eu.svg';
 import northAmericaFlag from '@liga/frontend/assets/flags/na.svg';
 import southAmericaFlag from '@liga/frontend/assets/flags/sa.svg';
+import worldFlag from '@liga/frontend/assets/flags/world.svg';
 
 /** @type {Matches} */
 type Matches<T = typeof Eagers.match> = Awaited<ReturnType<typeof api.matches.all<T>>>;
@@ -194,10 +195,13 @@ function getCustomCountryBackground(code?: string | null) {
       return northAmericaFlag;
 
     case 'sa':
+    case 'xsa':
     case 'south-america':
     case 'southamerica':
     case 'south_america':
       return southAmericaFlag;
+    case 'other':
+      return worldFlag;
 
     default:
       return null;
@@ -316,9 +320,7 @@ function getHistoricalTeamCountryCode(
     return MIXED_REGION_COUNTRY_CODES[historicalRegionCore[0]];
   }
 
-  const fallbackCode = competitor.team.country?.code?.toLowerCase();
-
-  return fallbackCode;
+  return Util.getTeamDisplayCountry({ ...competitor.team, players: historicalPlayers }).code;
 }
 
 function getSwissRecordBeforeMatch(

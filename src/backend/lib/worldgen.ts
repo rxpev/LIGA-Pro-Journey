@@ -5127,6 +5127,7 @@ const MIXED_REGION_STORAGE_CODES: Record<string, string> = {
   sa: 'SA',
   as: 'AS',
 };
+const OTHER_TEAM_COUNTRY_CODE = 'other';
 
 function getTeamRegionCode(team: {
   countryId: number;
@@ -5493,6 +5494,14 @@ async function recalculateTeamCountryIdentity(teamId: number) {
       });
       nextCountryId = regionCountry?.id ?? null;
     }
+  }
+
+  if (!nextCountryId) {
+    const otherCountry = await DatabaseClient.prisma.country.findUnique({
+      where: { code: OTHER_TEAM_COUNTRY_CODE },
+      select: { id: true },
+    });
+    nextCountryId = otherCountry?.id ?? null;
   }
 
   if (!nextCountryId || nextCountryId === team.countryId) {

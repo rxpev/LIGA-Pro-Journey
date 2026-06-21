@@ -106,7 +106,8 @@ meter::-webkit-meter-bar {
 .fp.americas,
 .fp.na,
 .fp.xsa,
-.fp.as {
+.fp.as,
+.fp.other {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -130,6 +131,10 @@ meter::-webkit-meter-bar {
 
 .fp.as {
   background-image: url('./flags/as.png');
+}
+
+.fp.other {
+  background-image: url('./flags/world.svg');
 }
 
 /** adjust react-hot-toast stylings */

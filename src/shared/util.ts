@@ -649,6 +649,85 @@ export function getSquad(
   return willIncludeUser ? [...squad, user!] : squad;
 }
 
+const TEAM_COUNTRY_CORE_SIZE = 3;
+
+const TEAM_REGION_DISPLAY_COUNTRIES: Record<string, { code: string; name: string }> = {
+  AS: { code: 'as', name: 'Asia' },
+  EU: { code: 'eu', name: 'Europe' },
+  NA: { code: 'na', name: 'North America' },
+  SA: { code: 'xsa', name: 'South America' },
+};
+
+export const OTHER_TEAM_COUNTRY = { code: 'other', name: 'Other' } as const;
+
+export function getTeamDisplayCountry(team: {
+  country?: { code?: string | null; name?: string | null } | null;
+  players?: Array<{
+    starter?: boolean | null;
+    countryId?: number | null;
+    country?: {
+      code?: string | null;
+      name?: string | null;
+      continent?: { code?: string | null } | null;
+    } | null;
+  }> | null;
+}) {
+  const players = (team.players || []).filter((player) => player.starter !== false);
+
+  if (players.length >= TEAM_COUNTRY_CORE_SIZE) {
+    const countryCounts = new Map<string, { count: number; code: string; name: string }>();
+    const regionCounts = new Map<string, number>();
+    let hasRegionContext = false;
+
+    for (const player of players) {
+      const countryCode = player.country?.code;
+      const countryName = player.country?.name;
+
+      if (countryCode && countryName) {
+        const key = player.countryId != null ? String(player.countryId) : countryCode.toUpperCase();
+        const current = countryCounts.get(key);
+        countryCounts.set(key, {
+          code: countryCode,
+          count: (current?.count ?? 0) + 1,
+          name: countryName,
+        });
+      }
+
+      const regionCode = player.country?.continent?.code?.toUpperCase();
+      hasRegionContext ||= regionCode != null;
+      if (regionCode && TEAM_REGION_DISPLAY_COUNTRIES[regionCode]) {
+        regionCounts.set(regionCode, (regionCounts.get(regionCode) ?? 0) + 1);
+      }
+    }
+
+    const dominantCountry = [...countryCounts.values()].sort(
+      (a, b) => b.count - a.count || a.code.localeCompare(b.code),
+    )[0];
+
+    if ((dominantCountry?.count ?? 0) >= TEAM_COUNTRY_CORE_SIZE) {
+      return { code: dominantCountry.code, name: dominantCountry.name };
+    }
+
+    const dominantRegion = [...regionCounts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    )[0];
+
+    if ((dominantRegion?.[1] ?? 0) >= TEAM_COUNTRY_CORE_SIZE) {
+      return TEAM_REGION_DISPLAY_COUNTRIES[dominantRegion[0]];
+    }
+
+    return hasRegionContext
+      ? OTHER_TEAM_COUNTRY
+      : team.country?.code && team.country?.name
+        ? { code: team.country.code, name: team.country.name }
+        : OTHER_TEAM_COUNTRY;
+  }
+
+  return team.country?.code && team.country?.name
+    ? { code: team.country.code, name: team.country.name }
+    : OTHER_TEAM_COUNTRY;
+}
+
 /**
  * Converts an integer to a letter of the alphabet.
  *

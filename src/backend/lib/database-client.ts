@@ -92,6 +92,7 @@ const mixedRegionCountries = [
   { code: 'na', name: 'North America', continentCode: 'NA' },
   { code: 'xsa', name: 'South America', continentCode: 'SA' },
   { code: 'as', name: 'Asia', continentCode: 'AS' },
+  { code: 'other', name: 'Other', continentCode: '' },
 ] as const;
 
 const mixedRegionCodes = new Set(['EU', 'NA', 'XSA', 'AS']);
@@ -398,6 +399,10 @@ export default class DatabaseClient {
         if (dominantContinent?.[1] >= 3) {
           nextCountryId = regionCountryIds.get(dominantContinent[0]) ?? null;
         }
+      }
+
+      if (!nextCountryId) {
+        nextCountryId = regionCountryIds.get('OTHER') ?? null;
       }
 
       if (!nextCountryId || nextCountryId === team.countryId) {
