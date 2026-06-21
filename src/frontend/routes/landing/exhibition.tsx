@@ -32,6 +32,7 @@ interface TeamSelectorProps {
   onChange: (teamId: number) => void;
   onTeamUpdate?: (team: TeamData) => void;
   onEditRoster?: (team: TeamData) => void;
+  excludedTeamId?: number;
   initialFederationId?: number;
   initialTierId?: number;
   initialTeamId?: number;
@@ -169,12 +170,21 @@ function TeamSelector(props: TeamSelectorProps) {
     }
 
     const initialTeam = props.initialTeamId
-      ? teams.find((team) => team.id === props.initialTeamId)
+      ? teams.find((team) => team.id === props.initialTeamId && team.id !== props.excludedTeamId)
       : undefined;
-    const randomTeam = initialTeam || sample(teams);
+    const randomTeam =
+      initialTeam || sample(teams.filter((team) => team.id !== props.excludedTeamId));
 
-    setSelectedTeam(toTeamOption(randomTeam));
-  }, [props.initialTeamId, selectedTeam, teams]);
+    if (randomTeam) {
+      setSelectedTeam(toTeamOption(randomTeam));
+    }
+  }, [props.excludedTeamId, props.initialTeamId, selectedTeam, teams]);
+
+  React.useEffect(() => {
+    if (selectedTeam?.id === props.excludedTeamId) {
+      setSelectedTeam(undefined);
+    }
+  }, [props.excludedTeamId, selectedTeam?.id]);
 
   const onFederationSelection = (federationId: number) => {
     setSelectedFederationId(federationId);
@@ -198,6 +208,7 @@ function TeamSelector(props: TeamSelectorProps) {
         const tierSlug = Constants.Prestige[candidateTeam.tier];
 
         return (
+          candidateTeam.id !== props.excludedTeamId &&
           federationSlug &&
           federationSlug !== Constants.FederationSlug.ESPORTS_WORLD &&
           isFederationSlug(federationSlug) &&
@@ -233,13 +244,14 @@ function TeamSelector(props: TeamSelectorProps) {
         label: Constants.IdiomaticTier[prestige],
         options: teams
           .filter((team) => team.tier === Constants.Prestige.findIndex((tier) => tier === prestige))
+          .filter((team) => team.id !== props.excludedTeamId)
           .map((team) => ({
             ...team,
             value: team.id,
             label: team.name,
           })),
       })),
-    [isTierEnabled, teams, selectedTierId],
+    [isTierEnabled, props.excludedTeamId, teams, selectedTierId],
   );
 
   // isolate the selected team
@@ -543,6 +555,7 @@ export default function () {
   }, [appStatus]);
 
   const selectedMap = settings.matchRules.mapOverride || mapPool[0]?.gameMap?.name;
+  const hasDuplicateTeams = Boolean(homeTeamId && awayTeamId && homeTeamId === awayTeamId);
 
   React.useEffect(() => {
     if (homeTeamId) {
@@ -911,6 +924,7 @@ export default function () {
         onMouseDown={audioRelease}
       />
       <TeamSelector
+        excludedTeamId={awayTeamId}
         initialFederationId={1}
         initialTierId={4}
         initialTeamId={homeTeamId}
@@ -976,6 +990,7 @@ export default function () {
         </section>
       </section>
       <TeamSelector
+        excludedTeamId={homeTeamId}
         initialFederationId={2}
         initialTierId={4}
         initialTeamId={awayTeamId}
@@ -1129,9 +1144,7 @@ export default function () {
                     data-interaction-sound="none"
                     className="toggle"
                     checked={settings.gameSettings[weapon.setting]}
-                    onChange={(event) =>
-                      onToggleSettingsUpdate(weapon.path, event.target.checked)
-                    }
+                    onChange={(event) => onToggleSettingsUpdate(weapon.path, event.target.checked)}
                   />
                 </aside>
               </article>
@@ -1199,36 +1212,43 @@ export default function () {
         </form>
         <button
           className="btn btn-xl btn-block btn-primary"
+          disabled={hasDuplicateTeams}
           onMouseDown={audioClick}
           onClick={() => {
+            if (hasDuplicateTeams) {
+              return;
+            }
+
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
-            return api.play.exhibition(
-              {
-                ...settings,
-                arenaMode: {
-                  ...settings.arenaMode,
-                  enabled: arenaModeInstalled && settings.arenaMode.enabled,
-                },
-              },
-              orderedTeamIds,
-              homeTeamId,
-              [
+            return api.play
+              .exhibition(
                 {
-                  teamId: homeTeamId,
-                  playerIds: homeRoster.filter((playerId): playerId is number =>
-                    Number.isInteger(playerId),
-                  ),
+                  ...settings,
+                  arenaMode: {
+                    ...settings.arenaMode,
+                    enabled: arenaModeInstalled && settings.arenaMode.enabled,
+                  },
                 },
-                {
-                  teamId: awayTeamId,
-                  playerIds: awayRoster.filter((playerId): playerId is number =>
-                    Number.isInteger(playerId),
-                  ),
-                },
-              ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
-              spectating,
-            ).catch(() => setMatchAbandonedPromptVisible(true));
+                orderedTeamIds,
+                homeTeamId,
+                [
+                  {
+                    teamId: homeTeamId,
+                    playerIds: homeRoster.filter((playerId): playerId is number =>
+                      Number.isInteger(playerId),
+                    ),
+                  },
+                  {
+                    teamId: awayTeamId,
+                    playerIds: awayRoster.filter((playerId): playerId is number =>
+                      Number.isInteger(playerId),
+                    ),
+                  },
+                ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
+                spectating,
+              )
+              .catch(() => setMatchAbandonedPromptVisible(true));
           }}
         >
           {spectating ? 'Spectate' : t('main.dashboard.play')}
