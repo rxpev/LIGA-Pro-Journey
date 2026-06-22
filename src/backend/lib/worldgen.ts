@@ -39,6 +39,14 @@ import { computeLifetimeStats } from './faceitstats';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { backfillCompetitionLocations } from './competition-locations';
+import {
+  filterNpcTransferCompatibleCandidates,
+  getLowerLeaguePromotionCandidateScore,
+  getNpcTransferCompatibilityScore,
+  getNpcTransferTeamIdentity,
+  isNpcTransferCompatible,
+  sortNpcTransferCandidatesByFit,
+} from './npc-transfer-identity';
 
 type SimulatedTeam = {
   id: number;
@@ -79,6 +87,27 @@ type SimulatedCompetitor = {
   score?: number | null;
   team: SimulatedTeam;
 };
+
+const NPC_TRANSFER_TEAM_INCLUDE = {
+  ...Eagers.team.include,
+  country: {
+    include: {
+      continent: true,
+    },
+  },
+  players: {
+    include: {
+      country: {
+        include: {
+          continent: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.TeamInclude;
+
+type NpcTransferTeam = Prisma.TeamGetPayload<{ include: typeof NPC_TRANSFER_TEAM_INCLUDE }>;
+const NPC_BACKFILL_CHAIN_MAX_DEPTH = 3;
 type SimulatedMatch = {
   id: number;
   date: Date;
@@ -3926,6 +3955,15 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
             continent: true,
           },
         },
+        players: {
+          include: {
+            country: {
+              include: {
+                continent: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -5183,9 +5221,14 @@ function getTeamNationalityCohesion(team: {
   const players = (team.players || []).filter((player) => player.starter !== false);
   if (!players.length) return 0;
 
-  const preferredCount = players.filter((player) =>
-    matchesTeamCountryPreference(team, player),
-  ).length;
+  const identity = getNpcTransferTeamIdentity(team);
+  const preferredCount = players.filter((player) => {
+    if (identity.type === 'national-lock' || identity.type === 'national-core') {
+      return player.countryId === identity.countryId;
+    }
+
+    return matchesTeamCountryPreference(team, player);
+  }).length;
   return preferredCount / players.length;
 }
 
@@ -5229,15 +5272,135 @@ function getNationalReplacementXpTolerance(team: {
   return 10;
 }
 
-function getNPCFreeAgentSignChance(team: { tier?: number | null }) {
+function getNPCFreeAgentSignChance(team: {
+  tier?: number | null;
+  players?: Array<{ starter?: boolean | null; countryId?: number | null }> | null;
+}) {
   const baseChance = Constants.TransferSettings.PBX_NPC_FREE_AGENT_SIGN;
   const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
   const proTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_PRO);
   const teamTier = team.tier ?? 0;
+  const identity = getNpcTransferTeamIdentity(team);
+  const nationalActivityBoost =
+    identity.type === 'national-core' ? 6 : identity.type === 'national-lock' ? 3 : 0;
 
-  if (teamTier >= proTierIdx) return Math.max(3, baseChance - 5);
-  if (teamTier >= advancedTierIdx) return Math.max(4, baseChance - 3);
-  return baseChance;
+  if (teamTier >= proTierIdx) return Math.max(3, baseChance - 5 + nationalActivityBoost);
+  if (teamTier >= advancedTierIdx) return Math.max(4, baseChance - 3 + nationalActivityBoost);
+  return baseChance + nationalActivityBoost;
+}
+
+function getMissingIntermediateLeagueTierCount(params: {
+  federationSlug?: string | null;
+  sourceTier?: number | null;
+  destinationTier?: number | null;
+}) {
+  const { federationSlug, sourceTier, destinationTier } = params;
+  if (
+    !federationSlug ||
+    typeof sourceTier !== 'number' ||
+    typeof destinationTier !== 'number' ||
+    sourceTier >= destinationTier
+  ) {
+    return 0;
+  }
+
+  const disabledTiers =
+    Constants.LeagueTierDisabledByFederation[federationSlug as Constants.FederationSlug] ?? [];
+
+  let missingCount = 0;
+  for (let tier = sourceTier + 1; tier < destinationTier; tier += 1) {
+    const tierSlug = Constants.Prestige[tier] as TierSlug | undefined;
+    if (tierSlug && disabledTiers.includes(tierSlug)) {
+      missingCount += 1;
+    }
+  }
+
+  return missingCount;
+}
+
+function getLowerLeagueTransferBoost(params: {
+  from: {
+    tier?: number | null;
+    competitionFederation?: { slug?: string | null } | null;
+    competitionFederationId?: number | null;
+    countryId?: number | null;
+    country?: {
+      code?: string | null;
+      continent?: { code?: string | null; federationId?: number | null } | null;
+    } | null;
+    players?: Array<{
+      starter?: boolean | null;
+      countryId?: number | null;
+      country?: {
+        continent?: { code?: string | null; federationId?: number | null } | null;
+      } | null;
+    }> | null;
+  };
+  player: {
+    xp?: number | null;
+    countryId?: number | null;
+    country?: { continent?: { code?: string | null; federationId?: number | null } | null } | null;
+  };
+  sourceTier?: number | null;
+}) {
+  const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
+  const proTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_PRO);
+  return getLowerLeaguePromotionCandidateScore(params.from, params.player, {
+    destinationTier: params.from.tier,
+    sourceTier: params.sourceTier,
+    advancedTier: advancedTierIdx,
+    proTier: proTierIdx,
+    missingIntermediateTiers: getMissingIntermediateLeagueTierCount({
+      federationSlug: params.from.competitionFederation?.slug ?? null,
+      sourceTier: params.sourceTier,
+      destinationTier: params.from.tier,
+    }),
+  });
+}
+
+function getNPCBuyerActivityWeight(team: {
+  tier?: number | null;
+  competitionFederation?: { slug?: string | null } | null;
+  players?: Array<{ starter?: boolean | null; countryId?: number | null }> | null;
+}) {
+  const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
+  const proTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_PRO);
+  const tier = team.tier ?? 0;
+  const identity = getNpcTransferTeamIdentity(team);
+
+  let weight = 100;
+  if (tier >= advancedTierIdx) weight += 35;
+  if (tier >= proTierIdx) weight += 35;
+  if (identity.type === 'national-core') weight += 75;
+  if (identity.type === 'national-lock') weight += 65;
+
+  const disabledTiers =
+    Constants.LeagueTierDisabledByFederation[
+      team.competitionFederation?.slug as Constants.FederationSlug
+    ] ?? [];
+  const missingMainPath = disabledTiers.filter(
+    (tierSlug) => tierSlug === TierSlug.LEAGUE_INTERMEDIATE || tierSlug === TierSlug.LEAGUE_MAIN,
+  ).length;
+  if (tier >= advancedTierIdx) weight += missingMainPath * 25;
+
+  return Math.max(1, Math.round(weight));
+}
+
+function sampleNPCBuyer<T extends { id: number } & Parameters<typeof getNPCBuyerActivityWeight>[0]>(
+  buyers: T[],
+) {
+  if (!buyers.length) return undefined;
+
+  const byId = new Map(buyers.map((team) => [String(team.id), team]));
+  const pickedId = String(
+    Chance.roll(
+      Object.fromEntries(
+        buyers.map((team) => [String(team.id), getNPCBuyerActivityWeight(team)]),
+      ) as Record<string, number>,
+    ),
+  );
+
+  return byId.get(pickedId) ?? sample(buyers);
 }
 
 function canReplaceStarterWithPlayer(params: {
@@ -5267,15 +5430,15 @@ function canReplaceStarterWithPlayer(params: {
   const incomingXp = incoming.xp ?? 0;
   const victimXp = victim.xp ?? 0;
 
+  if (!isNpcTransferCompatible(team, incoming)) {
+    return false;
+  }
+
   if (incomingXp > victimXp) return true;
 
-  const incomingMatchesCountry = matchesTeamCountryPreference(team, incoming);
-  const victimMatchesCountry = matchesTeamCountryPreference(team, victim);
-  if (
-    incomingMatchesCountry &&
-    !victimMatchesCountry &&
-    incomingXp >= victimXp - getNationalReplacementXpTolerance(team)
-  ) {
+  const incomingFit = getNpcTransferCompatibilityScore(team, incoming);
+  const victimFit = getNpcTransferCompatibilityScore(team, victim);
+  if (incomingFit > victimFit && incomingXp >= victimXp - getNationalReplacementXpTolerance(team)) {
     return true;
   }
 
@@ -5303,9 +5466,14 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 ) {
   if (!candidates.length) return candidates;
 
-  const sameCountryCandidates = candidates.filter((candidate) =>
-    matchesTeamCountryPreference(team, candidate),
-  );
+  const compatibleCandidates = filterNpcTransferCompatibleCandidates(team, candidates);
+  if (!compatibleCandidates.length) return [];
+
+  const identity = getNpcTransferTeamIdentity(team);
+  const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
+    if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
+    return matchesTeamCountryPreference(team, candidate);
+  });
   const cohesion = getTeamNationalityCohesion(team as any);
   const sameCountryChance = Math.min(
     100,
@@ -5319,7 +5487,7 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
   const sameFederationCandidates =
     teamFederationId == null
       ? []
-      : candidates.filter((candidate) => {
+      : compatibleCandidates.filter((candidate) => {
           if (
             sameCountryCandidates.some(
               (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
@@ -5342,7 +5510,7 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     ? sameCountryCandidates
     : sameFederationCandidates.length
       ? sameFederationCandidates
-      : candidates;
+      : compatibleCandidates;
 }
 
 function selectNPCTargetCandidatesByCountryPreference<
@@ -5366,15 +5534,20 @@ function selectNPCTargetCandidatesByCountryPreference<
 ) {
   if (!candidates.length) return candidates;
 
+  const compatibleCandidates = filterNpcTransferCompatibleCandidates(team, candidates);
+  if (!compatibleCandidates.length) return [];
+
   const teamRegionCode = getTeamRegionCode(team);
   const teamFederationId = team.competitionFederationId ?? null;
   const isInternationalTeam = isInternationalTeamCountry(team);
+  const identity = getNpcTransferTeamIdentity(team);
 
-  const sameCountryCandidates = candidates.filter(
-    (candidate) => candidate.countryId === team.countryId,
-  );
+  const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
+    if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
+    return candidate.countryId === team.countryId;
+  });
   const federationInternationalCandidates = isInternationalTeam
-    ? candidates.filter((candidate) => {
+    ? compatibleCandidates.filter((candidate) => {
         if (
           sameCountryCandidates.some(
             (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
@@ -5390,7 +5563,7 @@ function selectNPCTargetCandidatesByCountryPreference<
         return candidate.country?.continent?.federationId === teamFederationId;
       })
     : [];
-  const otherCountryCandidates = candidates.filter(
+  const otherCountryCandidates = compatibleCandidates.filter(
     (candidate) =>
       !sameCountryCandidates.some(
         (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
@@ -5549,6 +5722,13 @@ function selectCountryAwareOfferPool<
       code?: string | null;
       continent?: { code?: string | null; federationId?: number | null } | null;
     } | null;
+    players?: Array<{
+      starter?: boolean | null;
+      countryId?: number | null;
+      country?: {
+        continent?: { code?: string | null; federationId?: number | null } | null;
+      } | null;
+    }> | null;
   },
 >(
   teams: T[],
@@ -5561,8 +5741,22 @@ function selectCountryAwareOfferPool<
 
   if (!playerCountryId) return repeatSafeTeams;
 
-  const sameCountryTeams = repeatSafeTeams.filter((team) => team.countryId === playerCountryId);
-  const sameCoreTeams = repeatSafeTeams.filter((team) => {
+  const playerCandidate = {
+    countryId: playerCountryId,
+    country: {
+      continent: {
+        code: playerCountryContinentCode ?? null,
+        federationId: playerFederationId ?? null,
+      },
+    },
+  };
+  const compatibleTeams = repeatSafeTeams.filter((team) =>
+    isNpcTransferCompatible(team, playerCandidate),
+  );
+  if (!compatibleTeams.length) return [];
+
+  const sameCountryTeams = compatibleTeams.filter((team) => team.countryId === playerCountryId);
+  const sameCoreTeams = compatibleTeams.filter((team) => {
     if (team.countryId === playerCountryId) return false;
     const teamRegionCode = getTeamRegionCode(team);
     return Boolean(
@@ -5572,7 +5766,7 @@ function selectCountryAwareOfferPool<
         MIXED_REGION_COUNTRY_CODES.has(teamRegionCode),
     );
   });
-  const otherSameFederationTeams = repeatSafeTeams.filter((team) => {
+  const otherSameFederationTeams = compatibleTeams.filter((team) => {
     if (team.countryId === playerCountryId) return false;
 
     const teamRegionCode = getTeamRegionCode(team);
@@ -5589,7 +5783,7 @@ function selectCountryAwareOfferPool<
 
     return team.competitionFederationId === playerFederationId;
   });
-  const fallbackTeams = repeatSafeTeams.filter(
+  const fallbackTeams = compatibleTeams.filter(
     (team) =>
       !sameCountryTeams.some((candidate) => candidate.id === team.id) &&
       !sameCoreTeams.some((candidate) => candidate.id === team.id) &&
@@ -5615,7 +5809,13 @@ function selectCountryAwareOfferPool<
     ([, bucket]) => bucket.teams.length,
   );
   if (!availableBuckets.length) {
-    return fallbackTeams.length ? fallbackTeams : repeatSafeTeams;
+    return fallbackTeams.length
+      ? fallbackTeams.sort(
+          (a, b) =>
+            getNpcTransferCompatibilityScore(b, playerCandidate) -
+            getNpcTransferCompatibilityScore(a, playerCandidate),
+        )
+      : compatibleTeams;
   }
 
   const pickedBucket = String(
@@ -5654,6 +5854,15 @@ export async function sendPlayerInviteForUser() {
       country: {
         include: {
           continent: true,
+        },
+      },
+      players: {
+        include: {
+          country: {
+            include: {
+              continent: true,
+            },
+          },
         },
       },
     },
@@ -5925,6 +6134,15 @@ export async function sendUserFaceitOffer() {
           continent: true,
         },
       },
+      players: {
+        include: {
+          country: {
+            include: {
+              continent: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -6186,6 +6404,10 @@ async function selectBenchVictim(params: {
     include: { country: { include: { continent: true } } },
   });
   if (!team) return null;
+  const teamContext = {
+    ...team,
+    players: teamPlayers,
+  };
 
   const incoming = {
     xp: incomingXp,
@@ -6197,18 +6419,20 @@ async function selectBenchVictim(params: {
   const lowerXp = candidates
     .filter((victim) =>
       canReplaceStarterWithPlayer({
-        team,
+        team: teamContext,
         incoming,
         victim,
       }),
     )
     .sort((a, b) => {
       const aNationalUpgrade =
-        matchesTeamCountryPreference(team, incoming) && !matchesTeamCountryPreference(team, a)
+        getNpcTransferCompatibilityScore(teamContext, incoming) >
+        getNpcTransferCompatibilityScore(teamContext, a)
           ? 1
           : 0;
       const bNationalUpgrade =
-        matchesTeamCountryPreference(team, incoming) && !matchesTeamCountryPreference(team, b)
+        getNpcTransferCompatibilityScore(teamContext, incoming) >
+        getNpcTransferCompatibilityScore(teamContext, b)
           ? 1
           : 0;
       if (aNationalUpgrade !== bNationalUpgrade) return bNationalUpgrade - aNationalUpgrade;
@@ -6370,55 +6594,358 @@ async function reinstateBenchedPlayerAfterSale(params: {
   teamId: number;
   soldRole: string;
   date: Date;
-}) {
-  const { teamId, soldRole, date } = params;
+  excludedPlayerId?: number | null;
+  visitedTeamIds?: Set<number>;
+  depth?: number;
+}): Promise<boolean> {
+  const {
+    teamId,
+    soldRole,
+    date,
+    excludedPlayerId,
+    visitedTeamIds = new Set<number>(),
+    depth = NPC_BACKFILL_CHAIN_MAX_DEPTH,
+  } = params;
+  if (depth < 0) return Promise.resolve(false);
 
   const team = await DatabaseClient.prisma.team.findFirst({
     where: { id: teamId },
-    include: { players: true },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
 
-  if (!team) return Promise.resolve();
+  if (!team) return Promise.resolve(false);
+  visitedTeamIds.add(teamId);
 
   const soldNorm = normalizeRole(soldRole);
 
-  const starterCount = (team.players || []).filter((p) => p.starter).length;
-  if (starterCount >= Constants.Application.SQUAD_MIN_LENGTH) {
-    return Promise.resolve();
-  }
+  const activePlayers = (team.players || []).filter((p) => p.id !== excludedPlayerId);
+  const starterCount = activePlayers.filter((p) => p.starter).length;
+  const needsStarter = starterCount < Constants.Application.SQUAD_MIN_LENGTH;
+  const needsAwper = countStarterSnipers(activePlayers as any) < 1;
+  if (!needsStarter && !needsAwper) return Promise.resolve(true);
 
-  let candidates = (team.players || [])
+  const canFillWithRole = (role: string | null | undefined) => {
+    if (needsAwper) return isSniperRole(role);
+    return soldNorm ? normalizeRole(role) === soldNorm : !isSniperRole(role);
+  };
+
+  let candidates = activePlayers
     .filter((p) => !p.starter && p.transferListed)
-    .filter((p) => normalizeRole(p.role) === soldNorm)
+    .filter((p) => canFillWithRole(p.role))
     .sort((a, b) => (b.xp || 0) - (a.xp || 0));
 
   if (!candidates.length) {
-    candidates = (team.players || [])
+    candidates = activePlayers
+      .filter((p) => !p.starter)
+      .filter((p) => canFillWithRole(p.role))
+      .sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  }
+
+  if (!candidates.length && !needsAwper) {
+    candidates = activePlayers
       .filter((p) => !p.starter && p.transferListed)
       .sort((a, b) => (b.xp || 0) - (a.xp || 0));
   }
 
   const promoted = candidates[0];
-  if (!promoted) return Promise.resolve();
+  if (promoted) {
+    await DatabaseClient.prisma.player.update({
+      where: { id: promoted.id },
+      data: {
+        starter: true,
+        transferListed: false,
+        lastOfferAt: null,
+      },
+    });
+    await closeOpenCareerStints(DatabaseClient.prisma, promoted.id, date);
+    await startCareerStint(DatabaseClient.prisma, {
+      playerId: promoted.id,
+      teamId,
+      tier: team.tier ?? null,
+      starter: true,
+      startedAt: date,
+    });
 
+    return Promise.resolve(true);
+  }
+
+  const freeAgents = await DatabaseClient.prisma.player.findMany({
+    where: {
+      teamId: null,
+      userControlled: false,
+    },
+    include: {
+      country: {
+        include: {
+          continent: true,
+        },
+      },
+    },
+    take: 250,
+  });
+
+  const freeAgent = sortNpcTransferCandidatesByFit(
+    team,
+    freeAgents.filter((p) => canFillWithRole(p.role)),
+  )[0];
+
+  if (!freeAgent) {
+    const signedBackfill = await findSignedNPCBackfillCandidate({
+      team,
+      canFillWithRole,
+      visitedTeamIds,
+      depth,
+    });
+
+    if (!signedBackfill) return Promise.resolve(false);
+
+    const { player, fromTeam } = signedBackfill;
+    const years = getTierContractYears(team.tier);
+    const contractEnd = addYears(date, years);
+    await DatabaseClient.prisma.player.update({
+      where: { id: player.id },
+      data: {
+        teamId,
+        starter: true,
+        transferListed: false,
+        contractEnd,
+        lastOfferAt: null,
+      },
+    });
+
+    await DatabaseClient.prisma.transfer.create({
+      data: {
+        status: Constants.TransferStatus.TEAM_ACCEPTED,
+        from: { connect: { id: teamId } },
+        to: { connect: { id: fromTeam.id } },
+        target: { connect: { id: player.id } },
+        offers: {
+          create: [
+            {
+              status: Constants.TransferStatus.TEAM_ACCEPTED,
+              cost: player.cost || 0,
+              wages: player.wages || 0,
+              contractYears: years,
+            },
+          ],
+        },
+      },
+    });
+
+    await closeOpenCareerStints(DatabaseClient.prisma, player.id, date);
+    await startCareerStint(DatabaseClient.prisma, {
+      playerId: player.id,
+      teamId,
+      tier: team.tier,
+      starter: true,
+      startedAt: date,
+    });
+
+    const donorBackfilled: boolean = await reinstateBenchedPlayerAfterSale({
+      teamId: fromTeam.id,
+      soldRole: player.role || '',
+      date,
+      visitedTeamIds,
+      depth: depth - 1,
+    });
+
+    return Promise.resolve(donorBackfilled);
+  }
+
+  const years = getTierContractYears(team.tier);
+  const contractEnd = addYears(date, years);
   await DatabaseClient.prisma.player.update({
-    where: { id: promoted.id },
+    where: { id: freeAgent.id },
     data: {
+      teamId,
       starter: true,
       transferListed: false,
+      contractEnd,
       lastOfferAt: null,
     },
   });
-  await closeOpenCareerStints(DatabaseClient.prisma, promoted.id, date);
+
+  await DatabaseClient.prisma.transfer.create({
+    data: {
+      status: Constants.TransferStatus.TEAM_ACCEPTED,
+      from: { connect: { id: teamId } },
+      to: { connect: { id: teamId } },
+      target: { connect: { id: freeAgent.id } },
+      offers: {
+        create: [
+          {
+            status: Constants.TransferStatus.TEAM_ACCEPTED,
+            cost: 0,
+            wages: freeAgent.wages || 0,
+            contractYears: years,
+          },
+        ],
+      },
+    },
+  });
+
+  await closeOpenCareerStints(DatabaseClient.prisma, freeAgent.id, date);
   await startCareerStint(DatabaseClient.prisma, {
-    playerId: promoted.id,
+    playerId: freeAgent.id,
     teamId,
-    tier: team.tier ?? null,
+    tier: team.tier,
     starter: true,
     startedAt: date,
   });
 
-  return Promise.resolve();
+  return Promise.resolve(true);
+}
+
+async function findSignedNPCBackfillCandidate(params: {
+  team: NpcTransferTeam;
+  canFillWithRole: (role: string | null | undefined) => boolean;
+  visitedTeamIds: Set<number>;
+  depth: number;
+}) {
+  const { team, canFillWithRole, visitedTeamIds, depth } = params;
+  if (depth <= 0) return null;
+
+  const blockedTeamIds = Array.from(new Set([...visitedTeamIds, team.id]));
+  const donorTeams = await DatabaseClient.prisma.team.findMany({
+    where: {
+      id: { notIn: blockedTeamIds },
+      profile: null,
+      players: {
+        some: {
+          starter: true,
+          userControlled: false,
+        },
+      },
+    },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
+    take: 250,
+  });
+
+  const candidates = donorTeams.flatMap((fromTeam) =>
+    sortNpcTransferCandidatesByFit(
+      team,
+      (fromTeam.players || [])
+        .filter((player) => player.starter)
+        .filter((player) => !player.userControlled)
+        .filter((player) => canFillWithRole(player.role)),
+    ).map((player) => ({ player, fromTeam })),
+  );
+
+  candidates.sort((a, b) => {
+    const aScore =
+      (a.player.xp || 0) +
+      getNpcTransferCompatibilityScore(team, a.player) +
+      getLowerLeagueTransferBoost({
+        from: team,
+        player: a.player,
+        sourceTier: a.fromTeam.tier,
+      });
+    const bScore =
+      (b.player.xp || 0) +
+      getNpcTransferCompatibilityScore(team, b.player) +
+      getLowerLeagueTransferBoost({
+        from: team,
+        player: b.player,
+        sourceTier: b.fromTeam.tier,
+      });
+
+    return bScore - aScore || (b.player.xp || 0) - (a.player.xp || 0);
+  });
+
+  for (const candidate of candidates) {
+    const donorPlayersAfterSale = (candidate.fromTeam.players || []).filter(
+      (player) => player.id !== candidate.player.id,
+    );
+    if (ensureTeamFloorAndSniper({ players: donorPlayersAfterSale as any })) {
+      return candidate;
+    }
+
+    const canBackfillDonor = await canBackfillNPCStarterAfterSale({
+      teamId: candidate.fromTeam.id,
+      soldRole: candidate.player.role || '',
+      excludedPlayerId: candidate.player.id,
+      visitedTeamIds: new Set([...visitedTeamIds, team.id]),
+      depth: depth - 1,
+    });
+
+    if (canBackfillDonor) return candidate;
+  }
+
+  return null;
+}
+
+async function canFindSignedNPCBackfillCandidate(params: {
+  team: NpcTransferTeam;
+  canFillWithRole: (role: string | null | undefined) => boolean;
+  visitedTeamIds: Set<number>;
+  depth: number;
+}) {
+  return Boolean(await findSignedNPCBackfillCandidate(params));
+}
+
+async function canBackfillNPCStarterAfterSale(params: {
+  teamId: number;
+  soldRole: string;
+  excludedPlayerId?: number | null;
+  visitedTeamIds?: Set<number>;
+  depth?: number;
+}) {
+  const {
+    teamId,
+    soldRole,
+    excludedPlayerId,
+    visitedTeamIds = new Set<number>(),
+    depth = NPC_BACKFILL_CHAIN_MAX_DEPTH,
+  } = params;
+  if (depth < 0) return false;
+
+  const team = await DatabaseClient.prisma.team.findFirst({
+    where: { id: teamId },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
+  });
+  if (!team) return false;
+  visitedTeamIds.add(teamId);
+
+  const activePlayers = (team.players || []).filter((p) => p.id !== excludedPlayerId);
+  if (ensureTeamFloorAndSniper({ players: activePlayers as any })) return true;
+
+  const soldNorm = normalizeRole(soldRole);
+  const needsAwper = countStarterSnipers(activePlayers as any) < 1;
+  const canFillWithRole = (role: string | null | undefined) => {
+    if (needsAwper) return isSniperRole(role);
+    return soldNorm ? normalizeRole(role) === soldNorm : !isSniperRole(role);
+  };
+
+  const ownBench = activePlayers.some((p) => !p.starter && canFillWithRole(p.role));
+  if (ownBench) return true;
+
+  const freeAgents = await DatabaseClient.prisma.player.findMany({
+    where: {
+      teamId: null,
+      userControlled: false,
+    },
+    include: {
+      country: {
+        include: {
+          continent: true,
+        },
+      },
+    },
+    take: 250,
+  });
+
+  return (
+    sortNpcTransferCandidatesByFit(
+      team,
+      freeAgents.filter((p) => canFillWithRole(p.role)),
+    ).length > 0 ||
+    (await canFindSignedNPCBackfillCandidate({
+      team,
+      canFillWithRole,
+      visitedTeamIds,
+      depth,
+    }))
+  );
 }
 
 async function getCareerPeakTier(playerId: number) {
@@ -6545,10 +7072,10 @@ async function processNPCContractExtensions() {
         .filter((p) => !blockedRejoin.has(p.id))
         .filter((p) => canFillWithRole(p.role));
 
-      const freeAgent = selectNPCFreeAgentCandidatesByCountryPreference(
+      const freeAgent = sortNpcTransferCandidatesByFit(
         team,
-        freeAgentCandidates,
-      ).sort((a, b) => (b.xp || 0) - (a.xp || 0))[0];
+        selectNPCFreeAgentCandidatesByCountryPreference(team, freeAgentCandidates),
+      )[0];
 
       if (freeAgent) {
         const years = getTierContractYears(team.tier);
@@ -6630,19 +7157,10 @@ async function processNPCContractExtensions() {
         take: 250,
       });
 
-      const sameFed = team.competitionFederationId ?? null;
-      const teamRegionCode = getTeamRegionCode(team);
-
-      const donor = benched
-        .filter((p) => canFillWithRole(p.role))
-        .filter(
-          (p) =>
-            matchesTeamCountryPreference(team, p) ||
-            (teamRegionCode == null &&
-              sameFed != null &&
-              p.country?.continent?.federationId === sameFed),
-        )
-        .sort((a, b) => (a.xp || 0) - (b.xp || 0))[0];
+      const donor = sortNpcTransferCandidatesByFit(
+        team,
+        benched.filter((p) => canFillWithRole(p.role)),
+      )[0];
 
       if (!donor || !donor.teamId) break;
 
@@ -6816,10 +7334,7 @@ async function processNPCContractExtensions() {
   return Promise.resolve();
 }
 
-async function trySignNPCFreeAgent(params: {
-  from: Prisma.TeamGetPayload<typeof Eagers.team>;
-  date: Date;
-}) {
+async function trySignNPCFreeAgent(params: { from: NpcTransferTeam; date: Date }) {
   const { from, date } = params;
 
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
@@ -6850,6 +7365,10 @@ async function trySignNPCFreeAgent(params: {
 
   const advancedTierIdx = Constants.Prestige.findIndex((p) => p === TierSlug.LEAGUE_ADVANCED);
   const roleCandidates = freeAgents.filter((player) => {
+    if (!isNpcTransferCompatible(from, player)) {
+      return false;
+    }
+
     if ((player.xp || 0) >= 80 && (from.tier ?? 0) < advancedTierIdx) {
       return false;
     }
@@ -6889,15 +7408,13 @@ async function trySignNPCFreeAgent(params: {
     const cohesion = getTeamNationalityCohesion(from);
     const aScore =
       (a.xp || 0) +
-      (matchesTeamCountryPreference(from, a)
-        ? 45 + Math.round(cohesion * 70)
-        : -Math.round(cohesion * 45)) -
+      getNpcTransferCompatibilityScore(from, a) +
+      (matchesTeamCountryPreference(from, a) ? 45 + Math.round(cohesion * 50) : 0) -
       getVeteranOfferPenalty(a);
     const bScore =
       (b.xp || 0) +
-      (matchesTeamCountryPreference(from, b)
-        ? 45 + Math.round(cohesion * 70)
-        : -Math.round(cohesion * 45)) -
+      getNpcTransferCompatibilityScore(from, b) +
+      (matchesTeamCountryPreference(from, b) ? 45 + Math.round(cohesion * 50) : 0) -
       getVeteranOfferPenalty(b);
     return bScore - aScore;
   });
@@ -7018,13 +7535,17 @@ async function tryPlaceEliteNPCFreeAgent(params: {
     },
     orderBy: { elo: 'desc' },
     take: 20,
-    include: Eagers.team.include,
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
 
   if (!topTeams.length) return Promise.resolve(false);
 
-  const scoredTeams: Array<{ team: Prisma.TeamGetPayload<typeof Eagers.team>; score: number }> = [];
+  const scoredTeams: Array<{ team: NpcTransferTeam; score: number }> = [];
   for (const team of topTeams) {
+    if (!isNpcTransferCompatible(team, player)) {
+      continue;
+    }
+
     const victim = await selectBenchVictim({
       teamPlayers: team.players as any,
       teamId: team.id,
@@ -7039,17 +7560,7 @@ async function tryPlaceEliteNPCFreeAgent(params: {
 
     if (!victim) continue;
 
-    const sameCountry = matchesTeamCountryPreference(team, player);
-    const internationalTeam = isInternationalTeamCountry(team);
-    let score = (team.elo || 0) / 10;
-
-    if (sameCountry) {
-      score += 120 + Math.round(getTeamNationalityCohesion(team) * 80);
-    } else if (internationalTeam) {
-      score += 45;
-    } else {
-      score -= 45 + Math.round(getTeamNationalityCohesion(team) * 70);
-    }
+    let score = (team.elo || 0) / 10 + getNpcTransferCompatibilityScore(team, player);
 
     score -= getVeteranOfferPenalty(player);
     scoredTeams.push({ team, score });
@@ -7161,12 +7672,12 @@ export async function sendNPCTransferOffer() {
       tier: tierIdx,
       OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
     },
-    include: Eagers.team.include,
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
 
   if (!buyers.length) return Promise.resolve();
 
-  const from = sample(buyers);
+  const from = sampleNPCBuyer(buyers);
   if (!from) return Promise.resolve();
 
   if (await trySignNPCFreeAgent({ from, date: now })) {
@@ -7179,11 +7690,11 @@ export async function sendNPCTransferOffer() {
       tier: { lte: from.tier },
       OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
     },
-    include: Eagers.team.include,
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
 
   const sellers = sellersPool.filter(
-    (team) => team.players.length > Constants.Application.SQUAD_MIN_LENGTH,
+    (team) => team.players.length >= Constants.Application.SQUAD_MIN_LENGTH,
   );
 
   if (!sellers.length) return Promise.resolve();
@@ -7209,6 +7720,17 @@ export async function sendNPCTransferOffer() {
         const tierGap = (from.tier || 0) - (team.tier || 0);
         score += tierGap === 1 ? 34 : 12;
         score += Math.round(topXp / 500);
+        const promotionCandidateBoost = Math.max(
+          ...(team.players || []).map((player) =>
+            getLowerLeagueTransferBoost({
+              from,
+              player,
+              sourceTier: team.tier,
+            }),
+          ),
+          0,
+        );
+        score += promotionCandidateBoost;
       }
 
       // keep top-tier market healthy by preferring near-tier sellers
@@ -7236,10 +7758,7 @@ export async function sendNPCTransferOffer() {
   return sendTransferOffer(from, fallbackTo);
 }
 
-export async function sendTransferOffer(
-  from: Prisma.TeamGetPayload<typeof Eagers.team>,
-  to: Prisma.TeamGetPayload<typeof Eagers.team>,
-) {
+export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTeam) {
   if (!from || !to || from.id === to.id) {
     return Promise.resolve();
   }
@@ -7247,16 +7766,17 @@ export async function sendTransferOffer(
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
 
-  if (to.players.length <= Constants.Application.SQUAD_MIN_LENGTH) return Promise.resolve();
+  if (to.players.length < Constants.Application.SQUAD_MIN_LENGTH) return Promise.resolve();
 
   const preCandidates = (to.players || [])
     .filter((player) => player.id !== profile.playerId)
+    .filter((player) => isNpcTransferCompatible(from, player))
     .filter((player) => {
       const role = normalizeRole(player.role);
 
       // selling team must keep at least one sniper after sale
       if (role === 'SNIPER') {
-        return countSnipers(to.players as any) > 1;
+        return true;
       }
 
       return true;
@@ -7296,6 +7816,7 @@ export async function sendTransferOffer(
       incomingXp: player.xp || 0,
       incomingAge: player.age,
       incomingCountryId: player.countryId,
+      incomingCountry: player.country,
     });
 
     if (!victim) {
@@ -7329,17 +7850,28 @@ export async function sendTransferOffer(
         score += 20;
       }
 
+      score += getLowerLeagueTransferBoost({
+        from,
+        player,
+        sourceTier: to.tier,
+      });
+
+      const compatibilityScore = getNpcTransferCompatibilityScore(from, player);
+      if (!Number.isFinite(compatibilityScore)) {
+        score = Number.NEGATIVE_INFINITY;
+      } else {
+        score += compatibilityScore;
+      }
+
       if (matchesTeamCountryPreference(from, player)) {
         score +=
           Constants.TransferSettings.PBX_NPC_SAME_COUNTRY_BOOST +
-          Math.round(getTeamNationalityCohesion(from) * 60);
+          Math.round(getTeamNationalityCohesion(from) * 45);
 
         // allow picking strong same-country players from lower divisions
         if (to.tier < from.tier && (player.xp || 0) >= 70) {
           score += 30;
         }
-      } else if (!isInternationalTeamCountry(from)) {
-        score -= Math.round(30 + getTeamNationalityCohesion(from) * 55);
       }
 
       score -= getVeteranOfferPenalty(player);
@@ -7364,6 +7896,17 @@ export async function sendTransferOffer(
     preferredCandidates.some((player) => player.id === entry.player.id),
   )?.player;
   if (!target) return Promise.resolve();
+
+  const sellerPlayersAfterSale = (to.players || []).filter((player) => player.id !== target.id);
+  if (!ensureTeamFloorAndSniper({ players: sellerPlayersAfterSale as any })) {
+    const canBackfill = await canBackfillNPCStarterAfterSale({
+      teamId: to.id,
+      soldRole: target.role || '',
+      excludedPlayerId: target.id,
+    });
+
+    if (!canBackfill) return Promise.resolve();
+  }
 
   const fromFed = from.competitionFederationId ?? null;
   const toFed = to.competitionFederationId ?? null;
@@ -7507,13 +8050,29 @@ export async function onTransferParse(entry: Calendar) {
 
   const fromTeam = await DatabaseClient.prisma.team.findFirst({
     where: { id: transfer.from.id },
-    include: { players: true },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
   const toTeam = await DatabaseClient.prisma.team.findFirst({
     where: { id: transfer.to.id },
-    include: { players: true },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
   });
   if (!fromTeam || !toTeam) return Promise.resolve();
+
+  if (!isNpcTransferCompatible(fromTeam, transfer.target)) {
+    await DatabaseClient.prisma.transfer.update({
+      where: { id: transfer.id },
+      data: {
+        status: Constants.TransferStatus.TEAM_REJECTED,
+        offers: {
+          updateMany: {
+            where: { transferId: transfer.id, status: Constants.TransferStatus.TEAM_PENDING },
+            data: { status: Constants.TransferStatus.TEAM_REJECTED },
+          },
+        },
+      },
+    });
+    return Promise.resolve();
+  }
 
   // keep both teams valid after trade (>=5 players and at least one sniper each)
   if (!ensureTeamFloorAndSniper({ players: fromTeam.players as any })) {
@@ -7523,7 +8082,12 @@ export async function onTransferParse(entry: Calendar) {
   const role = normalizeRole(transfer.target.role);
   const toPlayersAfterSale = (toTeam.players || []).filter((p) => p.id !== transfer.target.id);
   if (!ensureTeamFloorAndSniper({ players: toPlayersAfterSale as any })) {
-    return Promise.resolve();
+    const canBackfill = await canBackfillNPCStarterAfterSale({
+      teamId: toTeam.id,
+      soldRole: transfer.target.role || '',
+      excludedPlayerId: transfer.target.id,
+    });
+    if (!canBackfill) return Promise.resolve();
   }
 
   const victim = await selectBenchVictim({
@@ -7593,11 +8157,12 @@ export async function onTransferParse(entry: Calendar) {
     });
   }
 
-  await reinstateBenchedPlayerAfterSale({
+  const sellerBackfilled = await reinstateBenchedPlayerAfterSale({
     teamId: transfer.to.id,
     soldRole: transfer.target.role || '',
     date: profile.date,
   });
+  if (!sellerBackfilled) return Promise.resolve();
 
   await closeOpenCareerStints(DatabaseClient.prisma, transfer.target.id, profile.date);
   await startCareerStint(DatabaseClient.prisma, {

@@ -36,7 +36,8 @@
     "package": "electron-forge package",
     "postinstall": "npm run db:migrate && npm run cli:init",
     "publish": "electron-forge publish",
-    "start": "electron-forge start"
+    "start": "electron-forge start",
+    "test:npc-transfers": "ts-node -r tsconfig-paths/register src/backend/lib/npc-transfer-identity.test.ts"
   },
   "prettier": {
     "singleQuote": true,

@@ -43,7 +43,8 @@ async function handleOnReady() {
   // create initial splash window
   WindowManager.get(WindowManager.WINDOW_CONFIGS.splash.id);
 
-  const profile = await DatabaseClient.prisma.profile.findFirst();
+  const prisma = await DatabaseClient.connect();
+  const profile = await prisma.profile.findFirst();
   await DiscordPresence.setEnabled(
     profile ? Util.loadSettings(profile.settings).general.discordPresence : true,
   );
