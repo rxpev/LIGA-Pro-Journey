@@ -19,10 +19,19 @@ type PlayerLike = {
 };
 
 type TeamLike = {
+  id?: number;
   countryId?: number | null;
   competitionFederationId?: number | null;
   country?: CountryLike;
   players?: PlayerLike[] | null;
+};
+
+export type UserOfferFitBucket = 'national' | 'regional' | 'other';
+
+export const USER_OFFER_FIT_BUCKET_WEIGHTS: Record<UserOfferFitBucket, number> = {
+  national: 45,
+  regional: 55,
+  other: 8,
 };
 
 export type NpcTransferTeamIdentity =
@@ -76,6 +85,11 @@ export function getNpcTransferRegionIdentity(entity: { country?: CountryLike }):
   return 'Other';
 }
 
+export function isNpcTransferRegionalSquadIdentity(entity: { country?: CountryLike }) {
+  const countryCode = entity.country?.code?.toLowerCase() ?? null;
+  return Boolean(countryCode && REGION_STORAGE_CODES[countryCode]);
+}
+
 export function getNpcTransferTeamIdentity(team: TeamLike): NpcTransferTeamIdentity {
   const starters = (team.players ?? []).filter((player) => player.starter !== false);
   const countryCounts = new Map<number, number>();
@@ -123,6 +137,69 @@ export function getNpcTransferCompatibilityScore(team: TeamLike, candidate: Play
   }
 
   return (sameRegion ? 45 : -12) + (sameFederation ? 8 : 0);
+}
+
+function getStarterNationalityMatchCount(team: TeamLike, candidate: PlayerLike) {
+  if (candidate.countryId == null) return 0;
+
+  return (team.players ?? []).filter(
+    (player) => player.starter !== false && player.countryId === candidate.countryId,
+  ).length;
+}
+
+export function getUserOfferFitBucket(team: TeamLike, candidate: PlayerLike): UserOfferFitBucket {
+  if (!isNpcTransferCompatible(team, candidate)) return 'other';
+
+  const identity = getNpcTransferTeamIdentity(team);
+  const starterMatches = getStarterNationalityMatchCount(team, candidate);
+  const matchesNationalIdentity =
+    (identity.type === 'national-lock' || identity.type === 'national-core') &&
+    candidate.countryId === identity.countryId;
+
+  if (matchesNationalIdentity || starterMatches > 0) {
+    return 'national';
+  }
+
+  if (identity.type === 'regional' && isNpcTransferRegionalSquadIdentity(team)) {
+    return 'regional';
+  }
+
+  return 'other';
+}
+
+export function getUserOfferFitScore(team: TeamLike, candidate: PlayerLike) {
+  if (!isNpcTransferCompatible(team, candidate)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const identity = getNpcTransferTeamIdentity(team);
+  const starterMatches = getStarterNationalityMatchCount(team, candidate);
+  const sameRegion = getNpcTransferRegionIdentity(candidate) === identity.region;
+  const sameFederation =
+    team.competitionFederationId != null &&
+    candidate.country?.continent?.federationId === team.competitionFederationId;
+  const regionalSquad = identity.type === 'regional' && isNpcTransferRegionalSquadIdentity(team);
+
+  if (
+    (identity.type === 'national-lock' || identity.type === 'national-core') &&
+    candidate.countryId === identity.countryId
+  ) {
+    return identity.type === 'national-lock' ? 245 + identity.count * 8 : 215;
+  }
+
+  if (starterMatches > 0) {
+    return 115 + starterMatches * 25 + (sameFederation ? 10 : 0);
+  }
+
+  if (regionalSquad) {
+    return sameRegion ? 180 + (sameFederation ? 25 : 0) : 28 + (sameFederation ? 8 : 0);
+  }
+
+  if (identity.type === 'national-core') {
+    return (sameRegion ? 52 : 22) + (sameFederation ? 8 : 0);
+  }
+
+  return (sameRegion ? 78 : 30) + (sameFederation ? 8 : 0);
 }
 
 export function getLowerLeaguePromotionCandidateScore(
@@ -188,8 +265,12 @@ export function sortNpcTransferCandidatesByFit<T extends PlayerLike & { xp?: num
 export const __npcTransferIdentityTest = {
   getNpcTransferTeamIdentity,
   getNpcTransferRegionIdentity,
+  isNpcTransferRegionalSquadIdentity,
   isNpcTransferCompatible,
   getNpcTransferCompatibilityScore,
+  USER_OFFER_FIT_BUCKET_WEIGHTS,
+  getUserOfferFitBucket,
+  getUserOfferFitScore,
   getLowerLeaguePromotionCandidateScore,
   filterNpcTransferCompatibleCandidates,
   sortNpcTransferCandidatesByFit,

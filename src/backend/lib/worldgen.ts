@@ -44,8 +44,12 @@ import {
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
   getNpcTransferTeamIdentity,
+  getUserOfferFitBucket,
+  getUserOfferFitScore,
   isNpcTransferCompatible,
   sortNpcTransferCandidatesByFit,
+  USER_OFFER_FIT_BUCKET_WEIGHTS,
+  UserOfferFitBucket,
 } from './npc-transfer-identity';
 
 type SimulatedTeam = {
@@ -5713,6 +5717,17 @@ export async function recalculateAllTeamCountryIdentities() {
   return Promise.resolve();
 }
 
+function expandWeightedUserOfferPool<T>(entries: Array<{ team: T; score: number }>) {
+  if (!entries.length) return [];
+
+  const minScore = Math.min(...entries.map((entry) => entry.score));
+  return entries.flatMap((entry) => {
+    const normalizedScore = Math.max(1, Math.round(entry.score - minScore + 1));
+    const copies = Math.max(1, Math.min(20, Math.ceil(normalizedScore / 12)));
+    return Array.from({ length: copies }, () => entry.team);
+  });
+}
+
 function selectCountryAwareOfferPool<
   T extends {
     id: number;
@@ -5755,67 +5770,40 @@ function selectCountryAwareOfferPool<
   );
   if (!compatibleTeams.length) return [];
 
-  const sameCountryTeams = compatibleTeams.filter((team) => team.countryId === playerCountryId);
-  const sameCoreTeams = compatibleTeams.filter((team) => {
-    if (team.countryId === playerCountryId) return false;
-    const teamRegionCode = getTeamRegionCode(team);
-    return Boolean(
-      playerCountryContinentCode &&
-        teamRegionCode &&
-        teamRegionCode === playerCountryContinentCode.toUpperCase() &&
-        MIXED_REGION_COUNTRY_CODES.has(teamRegionCode),
-    );
-  });
-  const otherSameFederationTeams = compatibleTeams.filter((team) => {
-    if (team.countryId === playerCountryId) return false;
+  const scoredTeams = compatibleTeams
+    .map((team) => ({
+      team,
+      bucket: getUserOfferFitBucket(team, playerCandidate),
+      score: getUserOfferFitScore(team, playerCandidate),
+    }))
+    .filter((entry) => Number.isFinite(entry.score));
 
-    const teamRegionCode = getTeamRegionCode(team);
-    if (
-      playerCountryContinentCode &&
-      teamRegionCode &&
-      teamRegionCode === playerCountryContinentCode.toUpperCase() &&
-      MIXED_REGION_COUNTRY_CODES.has(teamRegionCode)
-    ) {
-      return false;
-    }
-
-    if (playerFederationId == null) return false;
-
-    return team.competitionFederationId === playerFederationId;
-  });
-  const fallbackTeams = compatibleTeams.filter(
-    (team) =>
-      !sameCountryTeams.some((candidate) => candidate.id === team.id) &&
-      !sameCoreTeams.some((candidate) => candidate.id === team.id) &&
-      !otherSameFederationTeams.some((candidate) => candidate.id === team.id),
-  );
-
-  const weightedBuckets = {
-    sameCountry: {
-      teams: sameCountryTeams,
-      weight: UserOfferSettings.SAME_COUNTRY_OFFER_CHANCE,
-    },
-    sameCore: {
-      teams: sameCoreTeams,
-      weight: UserOfferSettings.SAME_CORE_OFFER_CHANCE,
-    },
-    otherSameFederation: {
-      teams: otherSameFederationTeams,
-      weight: UserOfferSettings.SAME_FEDERATION_OTHER_COUNTRY_OFFER_CHANCE,
-    },
-  } as const;
+  const weightedBuckets: Record<UserOfferFitBucket, { teams: typeof scoredTeams; weight: number }> =
+    {
+      national: {
+        teams: scoredTeams.filter((entry) => entry.bucket === 'national'),
+        weight: USER_OFFER_FIT_BUCKET_WEIGHTS.national,
+      },
+      regional: {
+        teams: scoredTeams.filter((entry) => entry.bucket === 'regional'),
+        weight: USER_OFFER_FIT_BUCKET_WEIGHTS.regional,
+      },
+      other: {
+        teams: scoredTeams.filter((entry) => entry.bucket === 'other'),
+        weight: USER_OFFER_FIT_BUCKET_WEIGHTS.other,
+      },
+    };
 
   const availableBuckets = Object.entries(weightedBuckets).filter(
     ([, bucket]) => bucket.teams.length,
   );
+
   if (!availableBuckets.length) {
-    return fallbackTeams.length
-      ? fallbackTeams.sort(
-          (a, b) =>
-            getNpcTransferCompatibilityScore(b, playerCandidate) -
-            getNpcTransferCompatibilityScore(a, playerCandidate),
-        )
-      : compatibleTeams;
+    return compatibleTeams.sort(
+      (a, b) =>
+        getNpcTransferCompatibilityScore(b, playerCandidate) -
+        getNpcTransferCompatibilityScore(a, playerCandidate),
+    );
   }
 
   const pickedBucket = String(
@@ -5824,13 +5812,13 @@ function selectCountryAwareOfferPool<
         availableBuckets.map(([bucketName, bucket]) => [bucketName, bucket.weight]),
       ) as Record<string, number>,
     ),
-  ) as keyof typeof weightedBuckets;
+  ) as UserOfferFitBucket;
 
   if (weightedBuckets[pickedBucket]?.teams.length) {
-    return weightedBuckets[pickedBucket].teams;
+    return expandWeightedUserOfferPool(weightedBuckets[pickedBucket].teams);
   }
 
-  return availableBuckets[0]?.[1].teams ?? (fallbackTeams.length ? fallbackTeams : repeatSafeTeams);
+  return expandWeightedUserOfferPool(availableBuckets[0]?.[1].teams ?? scoredTeams);
 }
 
 /**

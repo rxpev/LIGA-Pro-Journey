@@ -3,8 +3,11 @@ import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
+  getUserOfferFitBucket,
+  getUserOfferFitScore,
   isNpcTransferCompatible,
   sortNpcTransferCandidatesByFit,
+  USER_OFFER_FIT_BUCKET_WEIGHTS,
 } from './npc-transfer-identity';
 
 const continents = {
@@ -24,6 +27,11 @@ const countries = {
   brazil: { id: 30, country: { code: 'br', continent: continents.southAmerica } },
   usa: { id: 40, country: { code: 'us', continent: continents.northAmerica } },
   australia: { id: 50, country: { code: 'au', continent: continents.oceania } },
+  europe: { id: 60, country: { code: 'eu', continent: continents.europe } },
+  asia: { id: 61, country: { code: 'as', continent: continents.asia } },
+  northAmerica: { id: 62, country: { code: 'na', continent: continents.northAmerica } },
+  southAmerica: { id: 63, country: { code: 'xsa', continent: continents.southAmerica } },
+  other: { id: 64, country: { code: 'other', continent: continents.oceania } },
 };
 
 const tiers = {
@@ -71,6 +79,24 @@ const fourDanishTeam = team(countries.denmark, [
   player(4, countries.denmark),
   player(5, countries.sweden),
 ]);
+const fourGermanTeam = team(countries.germany, [
+  player(1, countries.germany),
+  player(2, countries.germany),
+  player(3, countries.germany),
+  player(4, countries.germany),
+  player(5, countries.sweden),
+]);
+const fiveGermanTeam = team(
+  countries.germany,
+  [1, 2, 3, 4, 5].map((id) => player(id, countries.germany)),
+);
+const threeGermanTeam = team(countries.germany, [
+  player(1, countries.germany),
+  player(2, countries.germany),
+  player(3, countries.germany),
+  player(4, countries.denmark),
+  player(5, countries.sweden),
+]);
 const threeSwedishTeam = team(countries.sweden, [
   player(1, countries.sweden),
   player(2, countries.sweden),
@@ -98,6 +124,62 @@ const mixedNorthAmericanTeam = team(countries.usa, [
   player(3, countries.sweden),
   player(4, countries.germany),
   player(5, countries.china),
+]);
+const europeanRegionalTeam = team(countries.europe, [
+  player(1, countries.denmark),
+  player(2, countries.sweden),
+  player(3, countries.germany),
+  player(4, countries.china),
+  player(5, countries.brazil),
+]);
+const europeanRegionalNoGermanTeam = team(countries.europe, [
+  player(1, countries.denmark),
+  player(2, countries.sweden),
+  player(3, countries.china),
+  player(4, countries.korea),
+  player(5, countries.brazil),
+]);
+const asianRegionalTeam = team(countries.asia, [
+  player(1, countries.china),
+  player(2, countries.korea),
+  player(3, countries.sweden),
+  player(4, countries.brazil),
+  player(5, countries.usa),
+]);
+const northAmericanRegionalTeam = team(countries.northAmerica, [
+  player(1, countries.usa),
+  player(2, countries.china),
+  player(3, countries.sweden),
+  player(4, countries.brazil),
+  player(5, countries.korea),
+]);
+const southAmericanRegionalTeam = team(countries.southAmerica, [
+  player(1, countries.brazil),
+  player(2, countries.china),
+  player(3, countries.sweden),
+  player(4, countries.usa),
+  player(5, countries.korea),
+]);
+const otherRegionalTeam = team(countries.other, [
+  player(1, countries.australia),
+  player(2, countries.china),
+  player(3, countries.sweden),
+  player(4, countries.usa),
+  player(5, countries.korea),
+]);
+const twoGermanMixedTeam = team(countries.europe, [
+  player(1, countries.germany),
+  player(2, countries.germany),
+  player(3, countries.sweden),
+  player(4, countries.china),
+  player(5, countries.brazil),
+]);
+const oneGermanMixedTeam = team(countries.europe, [
+  player(1, countries.germany),
+  player(2, countries.denmark),
+  player(3, countries.sweden),
+  player(4, countries.china),
+  player(5, countries.brazil),
 ]);
 
 assert.deepEqual(
@@ -167,6 +249,97 @@ assert.equal(
   getNpcTransferCompatibilityScore(fiveChineseTeam, player(101, countries.denmark)),
   Number.NEGATIVE_INFINITY,
   'competitionFederationId does not override roster nationality locks',
+);
+
+assert.equal(
+  getUserOfferFitScore(fiveChineseTeam, player(101, countries.germany)),
+  Number.NEGATIVE_INFINITY,
+  'German users cannot receive offers from 5-player Danish/Chinese-style national locks',
+);
+
+assert.equal(
+  getUserOfferFitScore(fourDanishTeam, player(101, countries.germany)),
+  Number.NEGATIVE_INFINITY,
+  'German users cannot receive offers from 4-player non-German national locks',
+);
+
+assert.equal(
+  getUserOfferFitBucket(fourGermanTeam, player(101, countries.germany)),
+  'national',
+  'German users can receive offers from 4-player German national locks',
+);
+
+assert.equal(
+  getUserOfferFitBucket(fiveGermanTeam, player(101, countries.germany)),
+  'national',
+  'German users can receive offers from 5-player German national locks',
+);
+
+assert.equal(
+  getUserOfferFitBucket(europeanRegionalTeam, player(101, countries.germany)),
+  'national',
+  'regional teams with German starters count as national-oriented user offers',
+);
+
+assert.equal(
+  getUserOfferFitBucket(europeanRegionalNoGermanTeam, player(101, countries.germany)),
+  'regional',
+  'European regional teams without German starters count as international regional user offers',
+);
+
+assert.ok(
+  getUserOfferFitScore(europeanRegionalNoGermanTeam, player(101, countries.germany)) >
+    getUserOfferFitScore(asianRegionalTeam, player(101, countries.germany)),
+  'German users are much more likely to receive European regional offers than Asian regional offers',
+);
+
+assert.ok(
+  getUserOfferFitScore(asianRegionalTeam, player(101, countries.germany)) > 0 &&
+    getUserOfferFitScore(northAmericanRegionalTeam, player(101, countries.germany)) > 0 &&
+    getUserOfferFitScore(southAmericanRegionalTeam, player(101, countries.germany)) > 0 &&
+    getUserOfferFitScore(otherRegionalTeam, player(101, countries.germany)) > 0,
+  'German users can rarely receive Asian, North American, South American, or Other regional offers',
+);
+
+assert.equal(
+  getUserOfferFitBucket(threeGermanTeam, player(101, countries.germany)),
+  'national',
+  '3-player German national cores are national-oriented user offers',
+);
+
+assert.ok(
+  getUserOfferFitScore(threeGermanTeam, player(101, countries.germany)) >
+    getUserOfferFitScore(threeSwedishTeam, player(101, countries.germany)),
+  '3-player German cores are much more likely than 3-player non-German cores for German users',
+);
+
+assert.equal(
+  getUserOfferFitBucket(twoGermanMixedTeam, player(101, countries.germany)),
+  'national',
+  'mixed teams with 2 German starters can send national-oriented user offers',
+);
+
+assert.equal(
+  getUserOfferFitBucket(oneGermanMixedTeam, player(101, countries.germany)),
+  'national',
+  'mixed teams with 1 German starter can send national-oriented user offers',
+);
+
+assert.ok(
+  getUserOfferFitScore(threeSwedishTeam, player(101, countries.germany)) > 0,
+  '3-player non-German cores can still offer German users at reduced likelihood',
+);
+
+assert.equal(
+  USER_OFFER_FIT_BUCKET_WEIGHTS.national,
+  45,
+  'user-offer pool targets 45% national-oriented offers when enough teams exist',
+);
+
+assert.equal(
+  USER_OFFER_FIT_BUCKET_WEIGHTS.regional,
+  55,
+  'user-offer pool targets 55% international regional offers when enough teams exist',
 );
 
 assert.ok(
