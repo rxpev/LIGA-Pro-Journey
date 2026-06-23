@@ -30,6 +30,16 @@ export enum Application {
 
 export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
 
+export type CustomGameOptions = {
+  mode: 'classic' | 'deathmatch';
+  deathmatch?: {
+    gameTime: number;
+    headshotOnly: boolean;
+    pistolsOnly: boolean;
+    forceBuy: boolean;
+  };
+};
+
 /** @enum */
 export enum AwardAction {
   CONFETTI,

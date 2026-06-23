@@ -440,6 +440,7 @@ export default {
       teamId: number,
       rosterOverrides?: Array<{ teamId: number; playerIds: Array<number> }>,
       spectating?: boolean,
+      customGameOptions?: Constants.CustomGameOptions,
     ) =>
       ipcRenderer.invoke(
         Constants.IPCRoute.PLAY_EXHIBITION,
@@ -448,6 +449,7 @@ export default {
         teamId,
         rosterOverrides,
         spectating,
+        customGameOptions,
       ),
     start: (spectating?: boolean) => ipcRenderer.invoke(Constants.IPCRoute.PLAY_START, spectating),
   },

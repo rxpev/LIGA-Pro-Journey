@@ -16,7 +16,9 @@ import classicModeImage from '@liga/frontend/assets/customgames/classic.png';
 import comingSoonModeImage from '@liga/frontend/assets/customgames/comingsoon.png';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
 import deathmatchModeImage from '@liga/frontend/assets/customgames/deathmatch.png';
+import headshotOnlyIcon from '@liga/frontend/assets/customgames/headshot.png';
 import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
+import mp9Icon from '@liga/frontend/assets/weapons/2D/mp9.svg';
 import spectatingIcon from '@liga/frontend/assets/customgames/spectating.png';
 import uspsIcon from '@liga/frontend/assets/weapons/2D/usp_silencer.svg';
 import mysteryModeImage1 from '@liga/frontend/assets/customgames/1.png';
@@ -41,6 +43,7 @@ type DeathmatchDifficulty = 'pro' | 'hard' | 'medium' | 'easy';
 type DeathmatchSlot = {
   id: number;
   name: string;
+  teamId?: number | null;
   avatar?: string | null;
   teamBlazon?: string | null;
   isUser?: boolean;
@@ -59,7 +62,8 @@ interface TeamSelectorProps {
 
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
-const deathmatchMaxPlayerOptions = [20, 18, 16, 14, 12, 10] as const;
+const DEATHMATCH_MAX_PLAYERS = 10;
+const deathmatchGameTimeOptions = [10, 20, 30, 45, 60] as const;
 
 const deathmatchDifficulties: Array<{
   id: DeathmatchDifficulty;
@@ -444,31 +448,31 @@ function DeathmatchLineupColumn(props: {
   );
 
   return (
-    <section className="bg-base-300/35 border-base-content/10 flex w-64 flex-col border shadow-2xl">
-      <header className="border-base-content/10 flex h-16 shrink-0 items-center justify-center gap-3 border-b px-4">
-        <Image src={props.icon} className="size-10" />
-        <span className="text-base font-bold">{props.title}</span>
+    <section className="bg-base-300/35 border-base-content/10 flex w-80 flex-col border shadow-2xl">
+      <header className="border-base-content/10 flex h-20 shrink-0 items-center justify-center gap-4 border-b px-5">
+        <Image src={props.icon} className="size-14" />
+        <span className="text-xl font-bold">{props.title}</span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col">
         {slots.map((player, index) => (
           <article
             key={`${player.id}_${index}`}
             className={cx(
-              'border-base-content/10 flex h-[55px] items-center gap-3 border-b px-3',
+              'border-base-content/10 flex h-[82px] items-center gap-4 border-b px-4',
               player.isUser && 'bg-primary/15 text-primary font-bold',
             )}
           >
-            <span className="text-base-content/50 w-5 text-right text-xs tabular-nums">
+            <span className="text-base-content/50 w-7 text-right text-sm tabular-nums">
               {index + 1}
             </span>
             <Image
               src={player.avatar || 'resources://avatars/empty.png'}
-              className="size-9 rounded object-cover"
+              className="size-14 rounded object-cover"
             />
-            <span className="min-w-0 truncate text-sm">{player.name}</span>
+            <span className="min-w-0 truncate text-lg">{player.name}</span>
             <Image
               src={player.teamBlazon || props.icon}
-              className="ml-auto size-7 shrink-0 object-contain opacity-80"
+              className="ml-auto size-10 shrink-0 object-contain opacity-80"
             />
           </article>
         ))}
@@ -488,7 +492,10 @@ export default function () {
   const [selectedGameMode, setSelectedGameMode] = React.useState<CustomGameMode>('classic');
   const [deathmatchDifficulty, setDeathmatchDifficulty] =
     React.useState<DeathmatchDifficulty>('pro');
-  const [deathmatchMaxPlayers, setDeathmatchMaxPlayers] = React.useState(20);
+  const [deathmatchGameTime, setDeathmatchGameTime] = React.useState(10);
+  const [deathmatchHeadshotOnly, setDeathmatchHeadshotOnly] = React.useState(false);
+  const [deathmatchPistolsOnly, setDeathmatchPistolsOnly] = React.useState(false);
+  const [deathmatchForceBuy, setDeathmatchForceBuy] = React.useState(false);
   const [currentProfile, setCurrentProfile] = React.useState<ProfileData | null>(null);
   const [deathmatchTPlayers, setDeathmatchTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
   const [deathmatchCTPlayers, setDeathmatchCTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
@@ -539,7 +546,7 @@ export default function () {
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
   const isDeathmatchMode = selectedGameMode === 'deathmatch';
-  const deathmatchSlotsPerSide = deathmatchMaxPlayers / 2;
+  const deathmatchSlotsPerSide = DEATHMATCH_MAX_PLAYERS / 2;
   const selectedDeathmatchDifficulty = React.useMemo(
     () =>
       deathmatchDifficulties.find((difficulty) => difficulty.id === deathmatchDifficulty) ||
@@ -634,6 +641,7 @@ export default function () {
     const userSlot: DeathmatchSlot = {
       id: -1,
       name: 'YOU',
+      teamId: currentProfile?.teamId,
       avatar: userPlayer?.avatar || 'resources://avatars/empty.png',
       teamBlazon: currentProfile?.team?.blazon,
       isUser: true,
@@ -661,6 +669,7 @@ export default function () {
       ...tPlayers.map((player) => ({
         id: player.id,
         name: player.name,
+        teamId: player.teamId,
         avatar: player.avatar,
         teamBlazon: player.team?.blazon,
       })),
@@ -669,6 +678,7 @@ export default function () {
       ctPlayers.map((player) => ({
         id: player.id,
         name: player.name,
+        teamId: player.teamId,
         avatar: player.avatar,
         teamBlazon: player.team?.blazon,
       })),
@@ -753,6 +763,25 @@ export default function () {
 
   const selectedMap = settings.matchRules.mapOverride || mapPool[0]?.gameMap?.name;
   const hasDuplicateTeams = Boolean(homeTeamId && awayTeamId && homeTeamId === awayTeamId);
+  const deathmatchHomeTeamId =
+    currentProfile?.teamId ||
+    homeTeamId ||
+    deathmatchTPlayers.find((player) => Number.isInteger(player.teamId))?.teamId;
+  const deathmatchAwayTeamId =
+    deathmatchCTPlayers.find(
+      (player) => Number.isInteger(player.teamId) && player.teamId !== deathmatchHomeTeamId,
+    )?.teamId ||
+    awayTeamId ||
+    allPlayersPool.find(
+      (player) => Number.isInteger(player.teamId) && player.teamId !== deathmatchHomeTeamId,
+    )?.teamId;
+  const canLaunchDeathmatch = Boolean(
+    deathmatchHomeTeamId &&
+      deathmatchAwayTeamId &&
+      deathmatchHomeTeamId !== deathmatchAwayTeamId &&
+      deathmatchTPlayers.length &&
+      deathmatchCTPlayers.length,
+  );
 
   React.useEffect(() => {
     if (homeTeamId) {
@@ -1286,25 +1315,25 @@ export default function () {
         </React.Fragment>
       )}
       {isDeathmatchMode && (
-        <section className="flex flex-1 items-center justify-center gap-8 px-8">
+        <section className="flex flex-1 items-center justify-center gap-10 px-8">
           <DeathmatchLineupColumn
             icon="resources://avatars/t.png"
             maxSlots={deathmatchSlotsPerSide}
             title="T Side"
             players={deathmatchTPlayers}
           />
-          <section className="center w-72 gap-4 text-center">
-            <details className="dropdown h-14 w-72">
-              <summary className="btn border-primary/60 bg-primary/20 text-primary hover:bg-primary/30 h-full w-full rounded-md border text-lg font-black shadow-lg">
+          <section className="center w-80 gap-5 text-center">
+            <details className="dropdown h-16 w-80">
+              <summary className="btn border-primary/60 bg-primary/20 text-primary hover:bg-primary/30 h-full w-full rounded-md border text-xl font-black shadow-lg">
                 {selectedDeathmatchDifficulty.label}
               </summary>
-              <ul className="dropdown-content bg-base-200 border-base-content/10 rounded-box z-20 mt-1 flex w-72 flex-col gap-1 border p-1 shadow-2xl">
+              <ul className="dropdown-content bg-base-200 border-base-content/10 rounded-box z-20 mt-1 flex w-80 flex-col gap-1 border p-1 shadow-2xl">
                 {deathmatchDifficulties.map((difficulty) => (
                   <li key={difficulty.id} className="w-full">
                     <button
                       type="button"
                       className={cx(
-                        'hover:bg-base-300 w-full rounded px-4 py-3 text-center text-base font-bold',
+                        'hover:bg-base-300 w-full rounded px-4 py-4 text-center text-lg font-bold',
                         deathmatchDifficulty === difficulty.id && 'bg-primary/20 text-primary',
                       )}
                       onClick={() => {
@@ -1318,7 +1347,7 @@ export default function () {
                 ))}
               </ul>
             </details>
-            <article className="border-base-content/20 bg-base-300/20 h-40 w-72 overflow-hidden rounded-md border shadow-sm">
+            <article className="border-base-content/20 bg-base-300/20 h-52 w-80 overflow-hidden rounded-md border shadow-sm">
               {!!selectedMap && (
                 <Image
                   className="h-full w-full object-cover"
@@ -1327,14 +1356,14 @@ export default function () {
                 />
               )}
             </article>
-            <article className="border-base-content/20 bg-base-300/20 h-14 w-72 rounded-md border p-0 shadow-sm">
+            <article className="border-base-content/20 bg-base-300/20 h-16 w-80 rounded-md border p-0 shadow-sm">
               <details className="dropdown h-full w-full">
-                <summary className="btn btn-ghost h-full w-full rounded-md text-center">
+                <summary className="btn btn-ghost h-full w-full rounded-md text-center text-base">
                   {selectedMap
                     ? Util.convertMapPool(selectedMap, settings.general.game)
                     : 'Choose Map'}
                 </summary>
-                <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-72 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
+                <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-80 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
                   {mapPool.map((map) => (
                     <li key={map.gameMap.name} className="w-full">
                       <button
@@ -1483,27 +1512,120 @@ export default function () {
               </aside>
             </article>
             {isDeathmatchMode && (
-              <article>
-                <header>
-                  <p>Max Players</p>
-                </header>
-                <aside>
-                  <select
-                    className="select w-full"
-                    value={deathmatchMaxPlayers}
-                    onChange={(event) => {
-                      audioClick();
-                      setDeathmatchMaxPlayers(Number(event.target.value));
-                    }}
-                  >
-                    {deathmatchMaxPlayerOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </aside>
-              </article>
+              <React.Fragment>
+                <article>
+                  <header>
+                    <p>Game Time</p>
+                  </header>
+                  <aside>
+                    <select
+                      className="select w-full"
+                      value={deathmatchGameTime}
+                      onChange={(event) => {
+                        audioClick();
+                        setDeathmatchGameTime(Number(event.target.value));
+                      }}
+                    >
+                      {deathmatchGameTimeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option} min
+                        </option>
+                      ))}
+                    </select>
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-12 w-20 object-contain"
+                          draggable={false}
+                          src={headshotOnlyIcon}
+                        />
+                      </span>
+                      <span>Headshot Only</span>
+                    </p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={deathmatchHeadshotOnly}
+                      onChange={(event) => {
+                        (event.target.checked ? audioClick : audioRelease)();
+                        setDeathmatchHeadshotOnly(event.target.checked);
+                      }}
+                    />
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-10 w-20 object-contain"
+                          draggable={false}
+                          src={uspsIcon}
+                        />
+                      </span>
+                      <span>Pistols Only</span>
+                    </p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={deathmatchPistolsOnly}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        (checked ? audioClick : audioRelease)();
+                        setDeathmatchPistolsOnly(checked);
+
+                        if (checked) {
+                          setDeathmatchForceBuy(false);
+                        }
+                      }}
+                    />
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-10 w-20 object-contain"
+                          draggable={false}
+                          src={mp9Icon}
+                        />
+                      </span>
+                      <span>Force Buy</span>
+                    </p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={deathmatchForceBuy}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        (checked ? audioClick : audioRelease)();
+                        setDeathmatchForceBuy(checked);
+
+                        if (checked) {
+                          setDeathmatchPistolsOnly(false);
+                        }
+                      }}
+                    />
+                  </aside>
+                </article>
+              </React.Fragment>
             )}
             {!isDeathmatchMode && (
               <React.Fragment>
@@ -1601,12 +1723,52 @@ export default function () {
         </form>
         <button
           className="btn btn-xl btn-block btn-primary"
-          disabled={!isDeathmatchMode && hasDuplicateTeams}
+          disabled={isDeathmatchMode ? !canLaunchDeathmatch : hasDuplicateTeams}
           onMouseDown={audioClick}
           onClick={() => {
             if (isDeathmatchMode) {
-              audioNegativeAlert();
-              return;
+              if (!canLaunchDeathmatch || !deathmatchHomeTeamId || !deathmatchAwayTeamId) {
+                audioNegativeAlert();
+                return;
+              }
+
+              return api.play
+                .exhibition(
+                  {
+                    ...settings,
+                    arenaMode: {
+                      ...settings.arenaMode,
+                      enabled: false,
+                    },
+                  },
+                  [deathmatchHomeTeamId, deathmatchAwayTeamId],
+                  deathmatchHomeTeamId,
+                  [
+                    {
+                      teamId: deathmatchHomeTeamId,
+                      playerIds: deathmatchTPlayers
+                        .map((player) => player.id)
+                        .filter((playerId): playerId is number => Number.isInteger(playerId)),
+                    },
+                    {
+                      teamId: deathmatchAwayTeamId,
+                      playerIds: deathmatchCTPlayers
+                        .map((player) => player.id)
+                        .filter((playerId): playerId is number => Number.isInteger(playerId)),
+                    },
+                  ],
+                  false,
+                  {
+                    mode: 'deathmatch',
+                    deathmatch: {
+                      gameTime: deathmatchGameTime,
+                      headshotOnly: deathmatchHeadshotOnly,
+                      pistolsOnly: deathmatchPistolsOnly,
+                      forceBuy: deathmatchForceBuy,
+                    },
+                  },
+                )
+                .catch(() => setMatchAbandonedPromptVisible(true));
             }
 
             if (hasDuplicateTeams) {
@@ -1641,6 +1803,9 @@ export default function () {
                   },
                 ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
                 spectating,
+                {
+                  mode: 'classic',
+                },
               )
               .catch(() => setMatchAbandonedPromptVisible(true));
           }}

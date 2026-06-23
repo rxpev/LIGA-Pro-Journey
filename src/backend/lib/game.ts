@@ -539,11 +539,15 @@ export class Server {
         const isUserTeam = competitor.teamId === this.profile.teamId;
 
         const forceSize =
-          this.spectating
-            ? Constants.Application.SQUAD_MIN_LENGTH
-            : isUserTeam
+          this.isDeathmatchCustomGame
+            ? isUserTeam && !this.spectating
               ? Constants.Application.SQUAD_MIN_LENGTH - 1
-              : Constants.Application.SQUAD_MIN_LENGTH;
+              : Constants.Application.SQUAD_MIN_LENGTH
+            : this.spectating
+              ? Constants.Application.SQUAD_MIN_LENGTH
+              : isUserTeam
+                ? Constants.Application.SQUAD_MIN_LENGTH - 1
+                : Constants.Application.SQUAD_MIN_LENGTH;
         return {
           ...competitor,
           team: {
@@ -589,6 +593,36 @@ export class Server {
     }
 
     return this.matchGame.map;
+  }
+
+  private get customGameOptions() {
+    return (this.match as any)?.customGameOptions as Constants.CustomGameOptions | undefined;
+  }
+
+  private get isDeathmatchCustomGame() {
+    return this.customGameOptions?.mode === 'deathmatch';
+  }
+
+  private get deathmatchServerSettings() {
+    const deathmatch = this.customGameOptions?.deathmatch;
+
+    if (!this.isDeathmatchCustomGame || !deathmatch) {
+      return {
+        isDeathmatch: 0,
+        gameTime: 0,
+        headshotOnly: 0,
+        pistolsOnly: 0,
+        forceBuy: 0,
+      };
+    }
+
+    return {
+      isDeathmatch: 1,
+      gameTime: deathmatch.gameTime,
+      headshotOnly: +deathmatch.headshotOnly,
+      pistolsOnly: +deathmatch.pistolsOnly,
+      forceBuy: +deathmatch.forceBuy,
+    };
   }
 
   private get presenceMatchType(): DiscordPresence.LiveMatchType {
@@ -1120,6 +1154,7 @@ End\n
     const isIGL = !this.isFaceit && userIsIGL ? 1 : 0;
     const bot_defer_to_human_items = isIGL;
     const isLan = this.getIsLanMatch() ? 1 : 0;
+    const deathmatchSettings = this.deathmatchServerSettings;
 
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
@@ -1279,6 +1314,11 @@ End\n
         isLan,
         isIGL,
         bot_defer_to_human_items,
+        isDeathmatch: deathmatchSettings.isDeathmatch,
+        deathmatch_game_time: deathmatchSettings.gameTime,
+        deathmatch_headshot_only: deathmatchSettings.headshotOnly,
+        deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
+        deathmatch_force_buy: deathmatchSettings.forceBuy,
 
         match_stat: 'FACEIT PUG',
         teamflag_t: tTeam.team.country?.code || 'EU',
@@ -1313,6 +1353,11 @@ End\n
         isLan,
         isIGL,
         bot_defer_to_human_items,
+        isDeathmatch: deathmatchSettings.isDeathmatch,
+        deathmatch_game_time: deathmatchSettings.gameTime,
+        deathmatch_headshot_only: deathmatchSettings.headshotOnly,
+        deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
+        deathmatch_force_buy: deathmatchSettings.forceBuy,
         humanteam,
 
         match_stat: this.match.competition.tier.name,
@@ -1327,15 +1372,43 @@ End\n
     let serverCfgRendered = Sqrl.render(serverTemplate, serverCfgData, {
       autoEscape: false,
     });
-    serverCfgRendered = /^\s*isLan\s+/im.test(serverCfgRendered)
-      ? serverCfgRendered.replace(/^\s*isLan\s+\S+.*$/im, `isLan "${isLan}"`)
-      : serverCfgRendered.replace(/\r?\n*$/, `\nisLan "${isLan}"\n`);
-    serverCfgRendered = /^\s*isCZ\s+/im.test(serverCfgRendered)
-      ? serverCfgRendered.replace(/^\s*isCZ\s+\S+.*$/im, `isCZ "${isCZ}"`)
-      : serverCfgRendered.replace(/\r?\n*$/, `\nisCZ "${isCZ}"\n`);
-    serverCfgRendered = /^\s*isIGL\s+/im.test(serverCfgRendered)
-      ? serverCfgRendered.replace(/^\s*isIGL\s+\S+.*$/im, `isIGL "${isIGL}"`)
-      : serverCfgRendered.replace(/\r?\n*$/, `\nisIGL "${isIGL}"\n`);
+    const upsertConVar = (content: string, name: string, value: string | number) => {
+      const pattern = new RegExp(`^\\s*${name}\\s+\\S+.*$`, 'im');
+      const line = `${name} "${value}"`;
+
+      return pattern.test(content)
+        ? content.replace(pattern, line)
+        : content.replace(/\r?\n*$/, `\n${line}\n`);
+    };
+
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'isLan', isLan);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'isCZ', isCZ);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'isIGL', isIGL);
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'isDeathmatch',
+      deathmatchSettings.isDeathmatch,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'deathmatch_game_time',
+      deathmatchSettings.gameTime,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'deathmatch_headshot_only',
+      deathmatchSettings.headshotOnly,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'deathmatch_pistols_only',
+      deathmatchSettings.pistolsOnly,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'deathmatch_force_buy',
+      deathmatchSettings.forceBuy,
+    );
 
     await fs.promises.writeFile(serverCfgPath, serverCfgRendered, 'utf8');
     this.log.info(`Generated server.cfg at: ${serverCfgPath}`);

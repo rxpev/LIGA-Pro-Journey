@@ -70,6 +70,7 @@ export default function () {
       teamId: number,
       rosterOverrides: Array<{ teamId: number; playerIds: Array<number> }> = [],
       spectating = false,
+      customGameOptions: Constants.CustomGameOptions = { mode: 'classic' },
     ) => {
       let previousPath = '';
       try {
@@ -118,6 +119,7 @@ export default function () {
           ),
         );
         let selectedUserPlayerId: number | null = null;
+        const maxRosterSize = Constants.Application.SQUAD_MIN_LENGTH;
 
         const applyRosterOverride = async (
           team: TeamWithPlayers | null,
@@ -134,7 +136,7 @@ export default function () {
 
           const uniquePlayerIds = [...new Set(override.playerIds)].slice(
             0,
-            Constants.Application.SQUAD_MIN_LENGTH,
+            maxRosterSize,
           );
           const includesYou = !spectating && team.id === teamId && uniquePlayerIds.includes(-1);
           const rosterIds = uniquePlayerIds.filter((playerId) => playerId !== -1);
@@ -151,10 +153,10 @@ export default function () {
             .filter((player): player is (typeof team.players)[number] => Boolean(player));
           const fallbackPlayers = team.players
             .filter((player) => !rosterIds.includes(player.id))
-            .slice(0, Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - forcedPlayers.length));
+            .slice(0, Math.max(0, maxRosterSize - forcedPlayers.length));
           let lineup = [...forcedPlayers, ...fallbackPlayers].slice(
             0,
-            Constants.Application.SQUAD_MIN_LENGTH,
+            maxRosterSize,
           );
 
           if (!spectating && team.id === teamId) {
@@ -175,7 +177,7 @@ export default function () {
               if (!lineup.some((player) => player.id === controlPlayer.id)) {
                 lineup = [...lineup, controlPlayer].slice(
                   0,
-                  Constants.Application.SQUAD_MIN_LENGTH,
+                  maxRosterSize,
                 );
               }
             } else if (lineup.length > 0 && !selectedUserPlayerId) {
@@ -187,9 +189,7 @@ export default function () {
             ...team,
             players: lineup.map((player, index) => ({
               ...player,
-              starter:
-                index < Constants.Application.SQUAD_MIN_LENGTH &&
-                player.id !== selectedUserPlayerId,
+              starter: index < maxRosterSize && player.id !== selectedUserPlayerId,
             })),
           };
         };
@@ -205,13 +205,13 @@ export default function () {
         const homeIds = new Set(home.players.map((player) => player.id));
         const awayOriginalPlayers = [...away.players];
         away.players = away.players.filter((player) => !homeIds.has(player.id));
-        if (away.players.length < Constants.Application.SQUAD_MIN_LENGTH) {
+        if (away.players.length < maxRosterSize) {
           const awayFallback = awayOriginalPlayers
             .filter(
               (player) =>
                 !homeIds.has(player.id) && !away.players.some((entry) => entry.id === player.id),
             )
-            .slice(0, Constants.Application.SQUAD_MIN_LENGTH - away.players.length);
+            .slice(0, maxRosterSize - away.players.length);
           away.players = [...away.players, ...awayFallback];
         }
 
@@ -243,6 +243,7 @@ export default function () {
         } as Prisma.TierGetPayload<{ include: { league: true } }>;
 
         const match = {
+          customGameOptions,
           games: [
             {
               status: Constants.MatchStatus.READY,
