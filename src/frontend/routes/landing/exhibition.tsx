@@ -11,21 +11,40 @@ import { cx } from '@liga/frontend/lib';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, MatchAbandonedPrompt } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
-import arenaModeIcon from '@liga/frontend/assets/arenamode.png';
+import arenaModeIcon from '@liga/frontend/assets/customgames/arenamode.png';
+import classicModeImage from '@liga/frontend/assets/customgames/classic.png';
+import comingSoonModeImage from '@liga/frontend/assets/customgames/comingsoon.png';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
+import deathmatchModeImage from '@liga/frontend/assets/customgames/deathmatch.png';
 import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
-import spectatingIcon from '@liga/frontend/assets/spectating.png';
+import spectatingIcon from '@liga/frontend/assets/customgames/spectating.png';
 import uspsIcon from '@liga/frontend/assets/weapons/2D/usp_silencer.svg';
+import mysteryModeImage1 from '@liga/frontend/assets/customgames/1.png';
+import mysteryModeImage2 from '@liga/frontend/assets/customgames/2.png';
 import {
   FaArrowLeft,
   FaCaretLeft,
   FaCaretRight,
   FaExclamationTriangle,
   FaFolderOpen,
+  FaLock,
   FaRandom,
 } from 'react-icons/fa';
 
 type TeamData = Awaited<ReturnType<typeof api.play.exhibitionTeams<typeof Eagers.team>>>[number];
+type ExhibitionPlayer = Awaited<
+  ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>
+>[number];
+type ProfileData = Awaited<ReturnType<typeof api.profiles.current<typeof Eagers.profile>>>;
+type CustomGameMode = 'classic' | 'deathmatch';
+type DeathmatchDifficulty = 'pro' | 'hard' | 'medium' | 'easy';
+type DeathmatchSlot = {
+  id: number;
+  name: string;
+  avatar?: string | null;
+  teamBlazon?: string | null;
+  isUser?: boolean;
+};
 
 /** @interface */
 interface TeamSelectorProps {
@@ -40,6 +59,38 @@ interface TeamSelectorProps {
 
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
+const deathmatchMaxPlayerOptions = [20, 18, 16, 14, 12, 10] as const;
+
+const deathmatchDifficulties: Array<{
+  id: DeathmatchDifficulty;
+  label: string;
+  minXp: number;
+  maxXp?: number;
+}> = [
+  {
+    id: 'pro',
+    label: 'PRO',
+    minXp: 60,
+  },
+  {
+    id: 'hard',
+    label: 'Hard',
+    minXp: 50,
+    maxXp: 70,
+  },
+  {
+    id: 'medium',
+    label: 'Medium',
+    minXp: 25,
+    maxXp: 50,
+  },
+  {
+    id: 'easy',
+    label: 'Easy',
+    minXp: 0,
+    maxXp: 24,
+  },
+];
 
 const weaponSettings = [
   {
@@ -362,6 +413,70 @@ function TeamSelector(props: TeamSelectorProps) {
   );
 }
 
+function shuffleDeathmatchPlayers(players: Array<ExhibitionPlayer>) {
+  const nextPlayers = [...players];
+
+  for (let i = nextPlayers.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [nextPlayers[i], nextPlayers[j]] = [nextPlayers[j], nextPlayers[i]];
+  }
+
+  return nextPlayers;
+}
+
+function DeathmatchLineupColumn(props: {
+  icon: string;
+  maxSlots: number;
+  players: Array<DeathmatchSlot>;
+  title: string;
+}) {
+  const slots = props.players.slice(0, props.maxSlots).concat(
+    Array.from({
+      length: Math.max(0, props.maxSlots - props.players.length),
+    }).map(
+      (_, index): DeathmatchSlot => ({
+        id: -1000 - index,
+        name: 'Empty',
+        avatar: 'resources://avatars/empty.png',
+        teamBlazon: props.icon,
+      }),
+    ),
+  );
+
+  return (
+    <section className="bg-base-300/35 border-base-content/10 flex w-64 flex-col border shadow-2xl">
+      <header className="border-base-content/10 flex h-16 shrink-0 items-center justify-center gap-3 border-b px-4">
+        <Image src={props.icon} className="size-10" />
+        <span className="text-base font-bold">{props.title}</span>
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {slots.map((player, index) => (
+          <article
+            key={`${player.id}_${index}`}
+            className={cx(
+              'border-base-content/10 flex h-[55px] items-center gap-3 border-b px-3',
+              player.isUser && 'bg-primary/15 text-primary font-bold',
+            )}
+          >
+            <span className="text-base-content/50 w-5 text-right text-xs tabular-nums">
+              {index + 1}
+            </span>
+            <Image
+              src={player.avatar || 'resources://avatars/empty.png'}
+              className="size-9 rounded object-cover"
+            />
+            <span className="min-w-0 truncate text-sm">{player.name}</span>
+            <Image
+              src={player.teamBlazon || props.icon}
+              className="ml-auto size-7 shrink-0 object-contain opacity-80"
+            />
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
  * Exports this module.
  *
@@ -370,6 +485,13 @@ function TeamSelector(props: TeamSelectorProps) {
 export default function () {
   const [appStatus, setAppStatus] = React.useState<NodeJS.ErrnoException>();
   const [settings, setSettings] = React.useState(Constants.Settings);
+  const [selectedGameMode, setSelectedGameMode] = React.useState<CustomGameMode>('classic');
+  const [deathmatchDifficulty, setDeathmatchDifficulty] =
+    React.useState<DeathmatchDifficulty>('pro');
+  const [deathmatchMaxPlayers, setDeathmatchMaxPlayers] = React.useState(20);
+  const [currentProfile, setCurrentProfile] = React.useState<ProfileData | null>(null);
+  const [deathmatchTPlayers, setDeathmatchTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
+  const [deathmatchCTPlayers, setDeathmatchCTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
   const [homeTeamId, setHomeTeamId] = React.useState<number>(() =>
     getStoredTeamId(EXHIBITION_HOME_TEAM_STORAGE_KEY),
   );
@@ -416,6 +538,14 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
+  const isDeathmatchMode = selectedGameMode === 'deathmatch';
+  const deathmatchSlotsPerSide = deathmatchMaxPlayers / 2;
+  const selectedDeathmatchDifficulty = React.useMemo(
+    () =>
+      deathmatchDifficulties.find((difficulty) => difficulty.id === deathmatchDifficulty) ||
+      deathmatchDifficulties[0],
+    [deathmatchDifficulty],
+  );
   const arenaModeInstalled = Boolean(
     arenaModeStatus?.installed &&
       arenaModeStatus.equalizerApoInstalled &&
@@ -431,6 +561,7 @@ export default function () {
     api.play.exhibitionFederations().then(setReplacementFederations);
 
     api.profiles.current().then(async (profile) => {
+      setCurrentProfile(profile);
       const profileSettings = profile?.settings
         ? (JSON.parse(profile.settings) as typeof Constants.Settings)
         : Constants.Settings;
@@ -485,6 +616,72 @@ export default function () {
       .then(setMapPool)
       .catch((): void => undefined);
   }, []);
+
+  React.useEffect(() => {
+    if (!isDeathmatchMode || allPlayersPool.length) {
+      return;
+    }
+
+    api.play.exhibitionPlayers<typeof Eagers.player>(Eagers.player).then(setAllPlayersPool);
+  }, [allPlayersPool.length, isDeathmatchMode]);
+
+  React.useEffect(() => {
+    if (!isDeathmatchMode || !allPlayersPool.length) {
+      return;
+    }
+
+    const userPlayer = currentProfile?.player;
+    const userSlot: DeathmatchSlot = {
+      id: -1,
+      name: 'YOU',
+      avatar: userPlayer?.avatar || 'resources://avatars/empty.png',
+      teamBlazon: currentProfile?.team?.blazon,
+      isUser: true,
+    };
+    const userPlayerId = currentProfile?.playerId || userPlayer?.id;
+    const isEligibleDifficultyPlayer = (player: ExhibitionPlayer) => {
+      const xp = player.xp || 0;
+      return (
+        xp >= selectedDeathmatchDifficulty.minXp &&
+        (selectedDeathmatchDifficulty.maxXp === undefined ||
+          xp <= selectedDeathmatchDifficulty.maxXp)
+      );
+    };
+    const randomPlayers = shuffleDeathmatchPlayers(
+      allPlayersPool.filter(
+        (player) => player.id !== userPlayerId && isEligibleDifficultyPlayer(player),
+      ),
+    );
+    const tBotCount = Math.max(0, deathmatchSlotsPerSide - 1);
+    const tPlayers = randomPlayers.slice(0, tBotCount);
+    const ctPlayers = randomPlayers.slice(tBotCount, tBotCount + deathmatchSlotsPerSide);
+
+    setDeathmatchTPlayers([
+      userSlot,
+      ...tPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        avatar: player.avatar,
+        teamBlazon: player.team?.blazon,
+      })),
+    ]);
+    setDeathmatchCTPlayers(
+      ctPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        avatar: player.avatar,
+        teamBlazon: player.team?.blazon,
+      })),
+    );
+  }, [
+    allPlayersPool,
+    currentProfile?.player,
+    currentProfile?.playerId,
+    currentProfile?.team?.blazon,
+    deathmatchSlotsPerSide,
+    isDeathmatchMode,
+    selectedDeathmatchDifficulty,
+  ]);
 
   // handle settings updates
   const onSettingsUpdate = (path: string, value: unknown) => {
@@ -917,88 +1114,251 @@ export default function () {
   };
 
   return (
-    <main className="frosted flex h-full w-full">
+    <main className="frosted relative flex h-full w-full pl-64">
       <FaArrowLeft
-        className="absolute top-5 left-5 size-5 cursor-pointer"
+        className="absolute top-5 left-5 z-10 size-5 cursor-pointer"
         onClick={() => navigate('/')}
         onMouseDown={audioRelease}
       />
-      <TeamSelector
-        excludedTeamId={awayTeamId}
-        initialFederationId={1}
-        initialTierId={4}
-        initialTeamId={homeTeamId}
-        onChange={setHomeTeamId}
-        onTeamUpdate={setHomeTeam}
-        onEditRoster={openRosterEditor}
-      />
-      <section className="center w-24 gap-4 text-center">
-        <p>
-          <em>
-            {spectating && homeTeam
-              ? `Pick ${homeTeam.name}'s starting side`
-              : 'Pick your starting side'}
-          </em>
-        </p>
-        <label className="swap swap-flip [&_article]:center [&_article]:gap-4 [&_article_svg]:size-8">
-          <input
-            type="checkbox"
-            checked={isUserCT}
-            onChange={(event) => setIsUserCT(event.target.checked)}
+      <nav className="border-base-content/10 bg-base-300/35 absolute inset-y-0 left-0 flex w-56 flex-col gap-3 overflow-y-auto border-r px-5 pt-28 pb-5 shadow-2xl">
+        <button
+          type="button"
+          className={cx(
+            'group border-base-content/20 bg-base-300/60 overflow-hidden rounded-md border text-left shadow-lg transition',
+            selectedGameMode === 'classic' && 'border-primary bg-base-200/80 shadow-primary/20',
+          )}
+          onMouseDown={() => {
+            audioClick();
+            setSelectedGameMode('classic');
+          }}
+        >
+          <img
+            alt=""
+            className="h-28 w-full object-cover"
+            draggable={false}
+            src={classicModeImage}
           />
-          <article className="swap-off">
-            <Image src="resources://avatars/t.png" />
-            <FaCaretLeft />
-          </article>
-          <article className="swap-on">
-            <Image src="resources://avatars/ct.png" />
-            <FaCaretRight />
-          </article>
-        </label>
-        <section className="mt-4 flex flex-col gap-2">
-          <article className="border-base-content/20 bg-base-300/20 h-24 w-44 overflow-hidden rounded-md border shadow-sm">
-            {!!selectedMap && (
-              <Image
-                className="h-full w-full object-cover"
-                src={Util.convertMapPool(selectedMap, settings.general.game, true)}
-                title={Util.convertMapPool(selectedMap, settings.general.game)}
+          <span className="block px-4 py-3 text-base font-semibold">Classic 5v5</span>
+        </button>
+        <button
+          type="button"
+          className={cx(
+            'border-base-content/20 bg-base-300/35 overflow-hidden rounded-md border text-left shadow-lg transition',
+            selectedGameMode === 'deathmatch'
+              ? 'border-primary bg-base-200/80 shadow-primary/20'
+              : 'hover:border-base-content/40',
+          )}
+          onMouseDown={() => {
+            audioClick();
+            setSelectedGameMode('deathmatch');
+          }}
+        >
+          <img
+            alt=""
+            className="h-28 w-full object-cover"
+            draggable={false}
+            src={deathmatchModeImage}
+          />
+          <span className="block px-4 py-3 text-base font-semibold">Deathmatch</span>
+        </button>
+        <button
+          type="button"
+          className="border-base-content/10 bg-base-300/35 overflow-hidden rounded-md border text-left opacity-50 shadow-lg"
+          aria-disabled
+          onMouseDown={audioNegativeAlert}
+        >
+          <figure className="relative h-28 w-full overflow-hidden">
+            <img
+              alt=""
+              className="h-full w-full object-cover blur-[1px] grayscale"
+              draggable={false}
+              src={comingSoonModeImage}
+            />
+            <span className="bg-base-300/75 absolute inset-0 grid place-items-center">
+              <FaLock className="size-8" />
+            </span>
+          </figure>
+          <span className="block px-4 py-3 text-base font-semibold">Coming Soon</span>
+        </button>
+        {[
+          { label: '?', image: mysteryModeImage1 },
+          { label: '?', image: mysteryModeImage2 },
+        ].map((slot, index) => (
+          <button
+            key={index}
+            type="button"
+            className="border-base-content/10 bg-base-300/35 overflow-hidden rounded-md border text-left opacity-50 shadow-lg"
+            aria-disabled
+            onMouseDown={audioNegativeAlert}
+          >
+            <figure className="relative h-28 w-full overflow-hidden">
+              <img
+                alt=""
+                className="h-full w-full scale-105 object-cover blur-[4px] grayscale opacity-55"
+                draggable={false}
+                src={slot.image}
               />
-            )}
-          </article>
-          <article className="border-base-content/20 bg-base-300/20 h-12 w-44 rounded-md border p-0 shadow-sm">
-            <details className="dropdown h-full w-full">
-              <summary className="btn btn-ghost h-full w-full rounded-md text-center">
-                {selectedMap
-                  ? Util.convertMapPool(selectedMap, settings.general.game)
-                  : 'Choose Map'}
+              <span className="bg-base-300/65 absolute inset-0 grid place-items-center backdrop-blur-[1px]">
+                <FaLock className="size-8 opacity-80" />
+              </span>
+            </figure>
+            <span className="block px-4 py-3 text-center text-base font-semibold">{slot.label}</span>
+          </button>
+        ))}
+      </nav>
+      {!isDeathmatchMode && (
+        <React.Fragment>
+          <TeamSelector
+            excludedTeamId={awayTeamId}
+            initialFederationId={1}
+            initialTierId={4}
+            initialTeamId={homeTeamId}
+            onChange={setHomeTeamId}
+            onTeamUpdate={setHomeTeam}
+            onEditRoster={openRosterEditor}
+          />
+          <section className="center w-24 gap-4 text-center">
+            <p>
+              <em>
+                {spectating && homeTeam
+                  ? `Pick ${homeTeam.name}'s starting side`
+                  : 'Pick your starting side'}
+              </em>
+            </p>
+            <label className="swap swap-flip [&_article]:center [&_article]:gap-4 [&_article_svg]:size-8">
+              <input
+                type="checkbox"
+                checked={isUserCT}
+                onChange={(event) => setIsUserCT(event.target.checked)}
+              />
+              <article className="swap-off">
+                <Image src="resources://avatars/t.png" />
+                <FaCaretLeft />
+              </article>
+              <article className="swap-on">
+                <Image src="resources://avatars/ct.png" />
+                <FaCaretRight />
+              </article>
+            </label>
+            <section className="mt-4 flex flex-col gap-2">
+              <article className="border-base-content/20 bg-base-300/20 h-24 w-44 overflow-hidden rounded-md border shadow-sm">
+                {!!selectedMap && (
+                  <Image
+                    className="h-full w-full object-cover"
+                    src={Util.convertMapPool(selectedMap, settings.general.game, true)}
+                    title={Util.convertMapPool(selectedMap, settings.general.game)}
+                  />
+                )}
+              </article>
+              <article className="border-base-content/20 bg-base-300/20 h-12 w-44 rounded-md border p-0 shadow-sm">
+                <details className="dropdown h-full w-full">
+                  <summary className="btn btn-ghost h-full w-full rounded-md text-center">
+                    {selectedMap
+                      ? Util.convertMapPool(selectedMap, settings.general.game)
+                      : 'Choose Map'}
+                  </summary>
+                  <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-44 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
+                    {mapPool.map((map) => (
+                      <li key={map.gameMap.name} className="w-full">
+                        <button
+                          type="button"
+                          className="hover:bg-base-300 w-full rounded px-2 py-2 text-center"
+                          onClick={() => onMapSelection(map.gameMap.name)}
+                        >
+                          {Util.convertMapPool(map.gameMap.name, settings.general.game)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </article>
+            </section>
+          </section>
+          <TeamSelector
+            excludedTeamId={homeTeamId}
+            initialFederationId={2}
+            initialTierId={4}
+            initialTeamId={awayTeamId}
+            onChange={setAwayTeamId}
+            onTeamUpdate={setAwayTeam}
+            onEditRoster={openRosterEditor}
+          />
+        </React.Fragment>
+      )}
+      {isDeathmatchMode && (
+        <section className="flex flex-1 items-center justify-center gap-8 px-8">
+          <DeathmatchLineupColumn
+            icon="resources://avatars/t.png"
+            maxSlots={deathmatchSlotsPerSide}
+            title="T Side"
+            players={deathmatchTPlayers}
+          />
+          <section className="center w-72 gap-4 text-center">
+            <details className="dropdown h-14 w-72">
+              <summary className="btn border-primary/60 bg-primary/20 text-primary hover:bg-primary/30 h-full w-full rounded-md border text-lg font-black shadow-lg">
+                {selectedDeathmatchDifficulty.label}
               </summary>
-              <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-44 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
-                {mapPool.map((map) => (
-                  <li key={map.gameMap.name} className="w-full">
+              <ul className="dropdown-content bg-base-200 border-base-content/10 rounded-box z-20 mt-1 flex w-72 flex-col gap-1 border p-1 shadow-2xl">
+                {deathmatchDifficulties.map((difficulty) => (
+                  <li key={difficulty.id} className="w-full">
                     <button
                       type="button"
-                      className="hover:bg-base-300 w-full rounded px-2 py-2 text-center"
-                      onClick={() => onMapSelection(map.gameMap.name)}
+                      className={cx(
+                        'hover:bg-base-300 w-full rounded px-4 py-3 text-center text-base font-bold',
+                        deathmatchDifficulty === difficulty.id && 'bg-primary/20 text-primary',
+                      )}
+                      onClick={() => {
+                        audioClick();
+                        setDeathmatchDifficulty(difficulty.id);
+                      }}
                     >
-                      {Util.convertMapPool(map.gameMap.name, settings.general.game)}
+                      {difficulty.label}
                     </button>
                   </li>
                 ))}
               </ul>
             </details>
-          </article>
+            <article className="border-base-content/20 bg-base-300/20 h-40 w-72 overflow-hidden rounded-md border shadow-sm">
+              {!!selectedMap && (
+                <Image
+                  className="h-full w-full object-cover"
+                  src={Util.convertMapPool(selectedMap, settings.general.game, true)}
+                  title={Util.convertMapPool(selectedMap, settings.general.game)}
+                />
+              )}
+            </article>
+            <article className="border-base-content/20 bg-base-300/20 h-14 w-72 rounded-md border p-0 shadow-sm">
+              <details className="dropdown h-full w-full">
+                <summary className="btn btn-ghost h-full w-full rounded-md text-center">
+                  {selectedMap
+                    ? Util.convertMapPool(selectedMap, settings.general.game)
+                    : 'Choose Map'}
+                </summary>
+                <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-72 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
+                  {mapPool.map((map) => (
+                    <li key={map.gameMap.name} className="w-full">
+                      <button
+                        type="button"
+                        className="hover:bg-base-300 w-full rounded px-2 py-2 text-center"
+                        onClick={() => onMapSelection(map.gameMap.name)}
+                      >
+                        {Util.convertMapPool(map.gameMap.name, settings.general.game)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </article>
+          </section>
+          <DeathmatchLineupColumn
+            icon="resources://avatars/ct.png"
+            maxSlots={deathmatchSlotsPerSide}
+            title="CT Side"
+            players={deathmatchCTPlayers}
+          />
         </section>
-      </section>
-      <TeamSelector
-        excludedTeamId={homeTeamId}
-        initialFederationId={2}
-        initialTierId={4}
-        initialTeamId={awayTeamId}
-        onChange={setAwayTeamId}
-        onTeamUpdate={setAwayTeam}
-        onEditRoster={openRosterEditor}
-      />
-      <section className="flex flex-1 flex-col p-4">
+      )}
+      <section className="flex w-[36rem] shrink-0 flex-col p-4">
         <form className="form-ios form-ios-col-2 w-full flex-1">
           <fieldset>
             <article>
@@ -1122,99 +1482,133 @@ export default function () {
                 />
               </aside>
             </article>
-            {weaponSettings.map((weapon) => (
-              <article key={weapon.path}>
+            {isDeathmatchMode && (
+              <article>
                 <header>
-                  <p className="flex items-center gap-4 not-italic">
-                    <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
-                      <img
-                        alt=""
-                        className="h-10 w-20 object-contain"
-                        draggable={false}
-                        src={weapon.icon}
-                      />
-                    </span>
-                    <span>{weapon.label}</span>
-                  </p>
-                  <p>{weapon.subtitle}</p>
+                  <p>Max Players</p>
                 </header>
                 <aside>
-                  <input
-                    type="checkbox"
-                    data-interaction-sound="none"
-                    className="toggle"
-                    checked={settings.gameSettings[weapon.setting]}
-                    onChange={(event) => onToggleSettingsUpdate(weapon.path, event.target.checked)}
-                  />
+                  <select
+                    className="select w-full"
+                    value={deathmatchMaxPlayers}
+                    onChange={(event) => {
+                      audioClick();
+                      setDeathmatchMaxPlayers(Number(event.target.value));
+                    }}
+                  >
+                    {deathmatchMaxPlayerOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </aside>
               </article>
-            ))}
-            <article className={cx(!arenaModeInstalled && 'opacity-50')}>
-              <header>
-                <p className="flex items-center gap-4 not-italic">
-                  <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
-                    <img
-                      alt=""
-                      className="h-14 w-14 object-contain"
-                      draggable={false}
-                      src={arenaModeIcon}
+            )}
+            {!isDeathmatchMode && (
+              <React.Fragment>
+                {weaponSettings.map((weapon) => (
+                  <article key={weapon.path}>
+                    <header>
+                      <p className="flex items-center gap-4 not-italic">
+                        <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
+                          <img
+                            alt=""
+                            className="h-10 w-20 object-contain"
+                            draggable={false}
+                            src={weapon.icon}
+                          />
+                        </span>
+                        <span>{weapon.label}</span>
+                      </p>
+                      <p>{weapon.subtitle}</p>
+                    </header>
+                    <aside>
+                      <input
+                        type="checkbox"
+                        data-interaction-sound="none"
+                        className="toggle"
+                        checked={settings.gameSettings[weapon.setting]}
+                        onChange={(event) =>
+                          onToggleSettingsUpdate(weapon.path, event.target.checked)
+                        }
+                      />
+                    </aside>
+                  </article>
+                ))}
+                <article className={cx(!arenaModeInstalled && 'opacity-50')}>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-14 w-14 object-contain"
+                          draggable={false}
+                          src={arenaModeIcon}
+                        />
+                      </span>
+                      <span>Arena Mode</span>
+                    </p>
+                    <p>Adds crowd noise and arena bass to your custom match.</p>
+                    {!arenaModeInstalled && (
+                      <p className="text-error">
+                        Arena Mode isn't installed. Install it from Game Settings.
+                      </p>
+                    )}
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      aria-disabled={!arenaModeInstalled}
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={arenaModeInstalled && settings.arenaMode.enabled}
+                      onChange={(event) => onArenaModeToggle(event.target.checked)}
                     />
-                  </span>
-                  <span>Arena Mode</span>
-                </p>
-                <p>Adds crowd noise and arena bass to your custom match.</p>
-                {!arenaModeInstalled && (
-                  <p className="text-error">
-                    Arena Mode isn't installed. Install it from Game Settings.
-                  </p>
-                )}
-              </header>
-              <aside>
-                <input
-                  type="checkbox"
-                  aria-disabled={!arenaModeInstalled}
-                  data-interaction-sound="none"
-                  className="toggle"
-                  checked={arenaModeInstalled && settings.arenaMode.enabled}
-                  onChange={(event) => onArenaModeToggle(event.target.checked)}
-                />
-              </aside>
-            </article>
-            <article>
-              <header>
-                <p className="flex items-center gap-4 not-italic">
-                  <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
-                    <img
-                      alt=""
-                      className="h-14 w-14 object-contain"
-                      draggable={false}
-                      src={spectatingIcon}
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-14 w-14 object-contain"
+                          draggable={false}
+                          src={spectatingIcon}
+                        />
+                      </span>
+                      <span>Spectate Match</span>
+                    </p>
+                    <p>Spectate the match.</p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={spectating}
+                      onChange={(event) => {
+                        (event.target.checked ? audioClick : audioRelease)();
+                        onSpectatingToggle(event.target.checked);
+                      }}
                     />
-                  </span>
-                  <span>Spectate Match</span>
-                </p>
-                <p>Spectate the match.</p>
-              </header>
-              <aside>
-                <input
-                  type="checkbox"
-                  data-interaction-sound="none"
-                  className="toggle"
-                  checked={spectating}
-                  onChange={(event) => {
-                    (event.target.checked ? audioClick : audioRelease)();
-                    onSpectatingToggle(event.target.checked);
-                  }}
-                />
-              </aside>
-            </article>
+                  </aside>
+                </article>
+              </React.Fragment>
+            )}
           </fieldset>
         </form>
         <button
           className="btn btn-xl btn-block btn-primary"
-          disabled={hasDuplicateTeams}
+          disabled={!isDeathmatchMode && hasDuplicateTeams}
           onMouseDown={audioClick}
           onClick={() => {
+            if (isDeathmatchMode) {
+              audioNegativeAlert();
+              return;
+            }
+
             if (hasDuplicateTeams) {
               return;
             }
