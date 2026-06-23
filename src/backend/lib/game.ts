@@ -1293,6 +1293,23 @@ End\n
 
     const shortnameT = await resolveTeamBlazonName(tTeam.team, tTeam.team.slug);
     const shortnameCT = await resolveTeamBlazonName(ctTeam.team, ctTeam.team.slug);
+    const teamBranding = this.isDeathmatchCustomGame
+      ? {
+          teamname_t: 'Terrorist',
+          teamname_ct: 'Counter Terrorist',
+          teamflag_t: '',
+          teamflag_ct: '',
+          shortname_t: '',
+          shortname_ct: '',
+        }
+      : {
+          teamname_t: tTeam.team.name,
+          teamname_ct: ctTeam.team.name,
+          teamflag_t: tTeam.team.country?.code || 'EU',
+          teamflag_ct: ctTeam.team.country?.code || 'EU',
+          shortname_t: shortnameT,
+          shortname_ct: shortnameCT,
+        };
 
     const serverCfgData = this.isFaceit
       ? {
@@ -1301,8 +1318,8 @@ End\n
         maxrounds: this.settings.matchRules.maxRounds,
         ot: +this.overtime,
         rcon_password: Constants.GameSettings.RCON_PASSWORD,
-        teamname_t: tTeam.team.name,
-        teamname_ct: ctTeam.team.name,
+        teamname_t: teamBranding.teamname_t,
+        teamname_ct: teamBranding.teamname_ct,
         gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
         spectating: +this.spectating,
         damage_prints: 0,
@@ -1321,10 +1338,12 @@ End\n
         deathmatch_force_buy: deathmatchSettings.forceBuy,
 
         match_stat: 'FACEIT PUG',
-        teamflag_t: tTeam.team.country?.code || 'EU',
-        teamflag_ct: ctTeam.team.country?.code || 'EU',
-        shortname_t: shortnameT || 'FACEITA',
-        shortname_ct: shortnameCT || 'FACEITB',
+        teamflag_t: teamBranding.teamflag_t,
+        teamflag_ct: teamBranding.teamflag_ct,
+        shortname_t:
+          teamBranding.shortname_t || (this.isDeathmatchCustomGame ? '' : 'FACEITA'),
+        shortname_ct:
+          teamBranding.shortname_ct || (this.isDeathmatchCustomGame ? '' : 'FACEITB'),
         stat_t: '',
         stat_ct: '',
         humanteam:
@@ -1340,8 +1359,8 @@ End\n
         maxrounds: this.settings.matchRules.maxRounds,
         ot: +this.overtime,
         rcon_password: Constants.GameSettings.RCON_PASSWORD,
-        teamname_t: tTeam.team.name,
-        teamname_ct: ctTeam.team.name,
+        teamname_t: teamBranding.teamname_t,
+        teamname_ct: teamBranding.teamname_ct,
         gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
         spectating: +this.spectating,
         damage_prints: 0,
@@ -1361,10 +1380,10 @@ End\n
         humanteam,
 
         match_stat: this.match.competition.tier.name,
-        teamflag_t: tTeam.team.country.code,
-        teamflag_ct: ctTeam.team.country.code,
-        shortname_t: shortnameT,
-        shortname_ct: shortnameCT,
+        teamflag_t: teamBranding.teamflag_t,
+        teamflag_ct: teamBranding.teamflag_ct,
+        shortname_t: teamBranding.shortname_t,
+        shortname_ct: teamBranding.shortname_ct,
         stat_t: tStats?.position ? Util.toOrdinalSuffix(tStats.position) : '',
         stat_ct: ctStats?.position ? Util.toOrdinalSuffix(ctStats.position) : '',
       };

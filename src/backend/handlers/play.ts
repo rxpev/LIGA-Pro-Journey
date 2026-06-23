@@ -287,6 +287,7 @@ export default function () {
 
         postgamePayload = {
           type: 'exhibition',
+          mode: customGameOptions.mode,
           map: gameServer.matchGame.map,
           game: settings.general.game,
           teams: [home, away].map((team) => ({

@@ -26,6 +26,7 @@ type MatchGame = Matches[number]['games'][number];
 
 type ExhibitionPostgamePayload = {
   type: 'exhibition';
+  mode?: Constants.CustomGameOptions['mode'];
   map: string;
   game: Constants.Game;
   fallbackPlayerId: number | null;
@@ -864,9 +865,110 @@ function ExhibitionScoreboard(props: {
   );
 }
 
+function DeathmatchPostgame(props: { payload: ExhibitionPostgamePayload }) {
+  const t = useTranslation('windows');
+  const players = props.payload.teams
+    .flatMap((team) => team.players)
+    .sort((playerA, playerB) => {
+      const reportA = getExhibitionPlayerPerformance(playerA, props.payload);
+      const reportB = getExhibitionPlayerPerformance(playerB, props.payload);
+
+      return reportB.kills.length - reportA.kills.length || reportB.rating - reportA.rating;
+    });
+
+  return (
+    <main className="flex h-screen w-full flex-col">
+      <header className="breadcrumbs border-base-content/10 bg-base-200 sticky top-0 z-30 border-b px-2 text-sm">
+        <ul>
+          <li>
+            <span>{t('landing.home.exhibition')}</span>
+          </li>
+          <li>Deathmatch</li>
+          <li>{Util.convertMapPool(props.payload.map, props.payload.game)}</li>
+        </ul>
+      </header>
+      <section className="card image-full h-16 rounded-none before:rounded-none!">
+        <figure>
+          <Image
+            className="h-full w-full"
+            src={Util.convertMapPool(props.payload.map, props.payload.game, true)}
+          />
+        </figure>
+        <header className="card-body grid place-items-center p-0">
+          <p className="text-2xl font-black">Deathmatch</p>
+        </header>
+      </section>
+      <table className="table-xs table">
+        <thead>
+          <tr className="border-t-base-content/10 border-t">
+            <th>Player</th>
+            <th title={t('postgame.kills')} className="w-[12%] text-center">
+              {t('postgame.killsAlt')}
+            </th>
+            <th title={t('postgame.deaths')} className="w-[12%] text-center">
+              {t('postgame.deathsAlt')}
+            </th>
+            <th title={t('postgame.kd')} className="w-[12%] text-center">
+              +/-
+            </th>
+            <th title="Rating" className="w-[12%] text-center">
+              {t('postgame.rating')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player) => {
+            const report = getExhibitionPlayerPerformance(player, props.payload);
+
+            return (
+              <tr key={`deathmatch_${player.id}_scoreboard`}>
+                <td>
+                  {!!player.country?.code && (
+                    <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
+                  )}
+                  <span>{player.name}</span>
+                </td>
+                <td className="text-center">{report.kills.length}</td>
+                <td className="text-center">{report.deaths.length}</td>
+                <td
+                  className={cx(
+                    'text-center',
+                    report.kd > 0 ? 'text-success' : 'text-error',
+                    report.kd === 0 && 'text-inherit',
+                  )}
+                >
+                  {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(report.kd)}
+                </td>
+                <td
+                  className={cx(
+                    'text-center',
+                    report.rating <= Rating.LOW && 'text-error',
+                    report.rating > Rating.LOW && report.rating < Rating.HIGH && 'text-inherit',
+                    report.rating >= Rating.HIGH && 'text-success',
+                  )}
+                >
+                  {new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(report.rating)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <section className="h-0 flex-grow" />
+    </main>
+  );
+}
+
 function ExhibitionPostgame(props: { payload: ExhibitionPostgamePayload }) {
   const t = useTranslation('windows');
   const [home, away] = props.payload.teams;
+
+  if (props.payload.mode === 'deathmatch') {
+    return <DeathmatchPostgame payload={props.payload} />;
+  }
 
   return (
     <main className="flex h-screen w-full flex-col">
