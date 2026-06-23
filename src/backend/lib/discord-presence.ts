@@ -17,6 +17,7 @@ export type LiveMatchType = 'league' | 'faceit' | 'custom';
 export type PresenceUpdate = {
   mode: PresenceMode;
   date?: string | null;
+  deathmatch?: boolean;
   map?: string | null;
   matchType?: LiveMatchType;
   role?: string | null;
@@ -47,6 +48,10 @@ function truncatePresenceText(text: string): string {
 }
 
 function getMatchLabel(update: PresenceUpdate): string {
+  if (update.deathmatch) {
+    return 'Deathmatch';
+  }
+
   return update.matchType === 'faceit'
     ? 'FACEIT Pug'
     : update.matchType === 'custom'
@@ -102,6 +107,10 @@ function getDetails(update: PresenceUpdate): string {
 
 function getState(update: PresenceUpdate): string | undefined {
   if (update.mode !== PresenceMode.LIVE_MATCH) {
+    return undefined;
+  }
+
+  if (update.deathmatch) {
     return undefined;
   }
 

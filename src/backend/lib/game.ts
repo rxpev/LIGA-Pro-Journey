@@ -684,13 +684,19 @@ export class Server {
   }
 
   private updateLiveDiscordPresence(): void {
+    const isDeathmatch = this.isDeathmatchCustomGame;
+
     DiscordPresence.update({
+      deathmatch: isDeathmatch,
       map: this.map,
       mode: DiscordPresence.PresenceMode.LIVE_MATCH,
       matchType: this.presenceMatchType,
-      score: this.livePresenceOrderedScore,
+      score: isDeathmatch ? undefined : this.livePresenceOrderedScore,
       spectating: this.spectating,
-      teams: this.presenceMatchType === 'faceit' ? undefined : this.livePresenceTeamNames,
+      teams:
+        isDeathmatch || this.presenceMatchType === 'faceit'
+          ? undefined
+          : this.livePresenceTeamNames,
     }).catch((error) => this.log.debug('Discord Rich Presence live match update failed', error));
   }
 
