@@ -366,6 +366,24 @@ export default function () {
             </section>
             <section>
               <header>
+                <p>{t('settings.musicVolumeTitle')}</p>
+              </header>
+              <article>
+                <input
+                  type="range"
+                  className="range range-sm"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={settings.general.musicVolume}
+                  onChange={(event) =>
+                    onSettingsUpdate('general.musicVolume', event.target.value)
+                  }
+                />
+              </article>
+            </section>
+            <section>
+              <header>
                 <p>{t('settings.faceitMatchFoundTuneTitle')}</p>
               </header>
               <article>

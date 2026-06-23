@@ -1236,7 +1236,8 @@ export const Settings = {
     fullscreen: true,
     discordPresence: true,
     locale: null as LocaleIdentifier,
-    volume: 0.05,
+    volume: 0.50,
+    musicVolume: 0.25,
     faceitMatchFoundTune: 'whoosh_whip.wav' as string | null,
   },
   calendar: {

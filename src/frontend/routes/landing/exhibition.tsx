@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { cloneDeep, sample, set } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
-import { useAudio, useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useLoopingAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, MatchAbandonedPrompt } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import arenaModeIcon from '@liga/frontend/assets/customgames/arenamode.png';
@@ -563,6 +563,9 @@ export default function () {
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
+  const menuMusic = useLoopingAudio('ProJourneyTheme.wav', {
+    fadeDuration: 1200,
+  });
 
   React.useEffect(() => {
     api.play.exhibitionFederations().then(setReplacementFederations);
@@ -1732,6 +1735,8 @@ export default function () {
                 return;
               }
 
+              menuMusic.fadeOut();
+
               return api.play
                 .exhibition(
                   {
@@ -1768,7 +1773,10 @@ export default function () {
                     },
                   },
                 )
-                .catch(() => setMatchAbandonedPromptVisible(true));
+                .catch(() => {
+                  menuMusic.play();
+                  setMatchAbandonedPromptVisible(true);
+                });
             }
 
             if (hasDuplicateTeams) {
@@ -1776,6 +1784,8 @@ export default function () {
             }
 
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
+
+            menuMusic.fadeOut();
 
             return api.play
               .exhibition(
@@ -1807,7 +1817,10 @@ export default function () {
                   mode: 'classic',
                 },
               )
-              .catch(() => setMatchAbandonedPromptVisible(true));
+              .catch(() => {
+                menuMusic.play();
+                setMatchAbandonedPromptVisible(true);
+              });
           }}
         >
           {spectating ? 'Spectate' : t('main.dashboard.play')}

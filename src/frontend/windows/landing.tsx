@@ -11,6 +11,7 @@ import LandingVideo from '@liga/frontend/assets/landing.webm';
 import { createMemoryRouter, RouterProvider, Outlet, useLocation } from 'react-router-dom';
 import { Constants, Eagers } from '@liga/shared';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
+import { useLoopingAudio } from '@liga/frontend/hooks';
 import {
   appInfoUpdate,
   continentsUpdate,
@@ -99,6 +100,13 @@ const routes = createMemoryRouter(
 
 function RoutePersistence(): React.ReactNode {
   const location = useLocation();
+  const isLoadingCareer =
+    location.pathname.startsWith('/connect/') || location.pathname === '/create/4';
+
+  useLoopingAudio('ProJourneyTheme.wav', {
+    enabled: !isLoadingCareer,
+    fadeDuration: 1200,
+  });
 
   React.useEffect(() => {
     api.app.presence({
