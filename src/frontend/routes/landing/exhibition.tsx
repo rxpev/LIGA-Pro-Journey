@@ -27,10 +27,12 @@ import {
   FaArrowLeft,
   FaCaretLeft,
   FaCaretRight,
+  FaCheck,
   FaExclamationTriangle,
   FaFolderOpen,
   FaLock,
   FaRandom,
+  FaTimes,
 } from 'react-icons/fa';
 
 type TeamData = Awaited<ReturnType<typeof api.play.exhibitionTeams<typeof Eagers.team>>>[number];
@@ -40,6 +42,7 @@ type ExhibitionPlayer = Awaited<
 type ProfileData = Awaited<ReturnType<typeof api.profiles.current<typeof Eagers.profile>>>;
 type CustomGameMode = 'classic' | 'deathmatch';
 type DeathmatchDifficulty = 'pro' | 'hard' | 'medium' | 'easy';
+type MapPoolEntry = Awaited<ReturnType<typeof api.mapPool.find>>[number];
 type DeathmatchSlot = {
   id: number;
   name: string;
@@ -481,6 +484,119 @@ function DeathmatchLineupColumn(props: {
   );
 }
 
+function SelectedMapPanel(props: {
+  buttonClassName: string;
+  game: Constants.Game;
+  imageClassName: string;
+  onOpen: () => void;
+  onPress: () => void;
+  selectedMap?: string;
+  wrapperClassName: string;
+}) {
+  const mapLabel = props.selectedMap
+    ? Util.convertMapPool(props.selectedMap, props.game)
+    : 'Map Selection';
+
+  return (
+    <section className={cx('flex flex-col gap-2', props.wrapperClassName)}>
+      <article
+        className={cx(
+          'border-base-content/20 bg-base-300/20 overflow-hidden rounded-md border shadow-sm',
+          props.imageClassName,
+        )}
+      >
+        {!!props.selectedMap && (
+          <Image
+            className="h-full w-full object-cover"
+            src={Util.convertMapPool(props.selectedMap, props.game, true)}
+            title={mapLabel}
+          />
+        )}
+      </article>
+      <button
+        type="button"
+        className={cx(
+          'btn btn-ghost border-base-content/20 bg-base-300/20 rounded-md border text-center shadow-sm',
+          props.buttonClassName,
+        )}
+        onClick={props.onOpen}
+        onMouseDown={props.onPress}
+      >
+        <span className="truncate">{mapLabel}</span>
+      </button>
+    </section>
+  );
+}
+
+function MapSelectionModal(props: {
+  game: Constants.Game;
+  mapPool: Array<MapPoolEntry>;
+  onClose: () => void;
+  onPress: () => void;
+  onSelect: (map: string) => void;
+  selectedMap?: string;
+}) {
+  return (
+    <section
+      className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm"
+      onMouseDown={props.onClose}
+    >
+      <article
+        className="bg-base-100 border-base-content/10 flex max-h-[86vh] w-full max-w-5xl flex-col border shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="border-base-content/10 flex shrink-0 items-center justify-between border-b px-6 py-4">
+          <p className="text-xl font-black">Map Selection</p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-square"
+            onClick={props.onClose}
+            onMouseDown={props.onPress}
+          >
+            <FaTimes />
+          </button>
+        </header>
+        <section className="grid min-h-0 grid-cols-5 gap-3 overflow-y-auto p-4">
+          {props.mapPool.map((map) => {
+            const mapName = map.gameMap.name;
+            const mapLabel = Util.convertMapPool(mapName, props.game);
+            const selected = props.selectedMap === mapName;
+
+            return (
+              <button
+                key={mapName}
+                type="button"
+                className={cx(
+                  'group border-base-content/10 bg-base-200 hover:border-base-content/30 relative overflow-hidden rounded-md border text-left shadow-md transition',
+                  selected && 'border-primary bg-primary/10 shadow-primary/20',
+                )}
+                onClick={() => props.onSelect(mapName)}
+                onMouseDown={props.onPress}
+              >
+                <figure className="relative aspect-[16/9] overflow-hidden">
+                  <Image
+                    className="h-full w-full object-cover transition group-hover:scale-105"
+                    src={Util.convertMapPool(mapName, props.game, true)}
+                    title={mapLabel}
+                  />
+                  {selected && (
+                    <span className="bg-primary text-primary-content absolute top-2 right-2 grid size-8 place-items-center rounded-full shadow-lg">
+                      <FaCheck className="size-4" />
+                    </span>
+                  )}
+                </figure>
+                <span className="block truncate px-3 py-3 text-center text-sm font-bold">
+                  {mapLabel}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+      </article>
+    </section>
+  );
+}
+
 /**
  * Exports this module.
  *
@@ -541,7 +657,8 @@ export default function () {
   > | null>(null);
   const [arenaModeInstallPromptVisible, setArenaModeInstallPromptVisible] = React.useState(false);
   const [matchAbandonedPromptVisible, setMatchAbandonedPromptVisible] = React.useState(false);
-  const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
+  const [mapSelectionModalVisible, setMapSelectionModalVisible] = React.useState(false);
+  const [mapPool, setMapPool] = React.useState<Array<MapPoolEntry>>([]);
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
@@ -813,6 +930,22 @@ export default function () {
     modified.matchRules.mapOverride = map;
     setSettings(modified);
   };
+
+  React.useEffect(() => {
+    if (!mapSelectionModalVisible) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMapSelectionModalVisible(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mapSelectionModalVisible]);
 
   const getDefaultRoster = React.useCallback(
     (team?: TeamData, injectYou = false): Array<number | null> => {
@@ -1226,7 +1359,7 @@ export default function () {
             <figure className="relative h-28 w-full overflow-hidden">
               <img
                 alt=""
-                className="h-full w-full scale-105 object-cover blur-[4px] grayscale opacity-55"
+                className="h-full w-full scale-105 object-cover opacity-55 blur-[4px] grayscale"
                 draggable={false}
                 src={slot.image}
               />
@@ -1234,7 +1367,9 @@ export default function () {
                 <FaLock className="size-8 opacity-80" />
               </span>
             </figure>
-            <span className="block px-4 py-3 text-center text-base font-semibold">{slot.label}</span>
+            <span className="block px-4 py-3 text-center text-base font-semibold">
+              {slot.label}
+            </span>
           </button>
         ))}
       </nav>
@@ -1272,39 +1407,15 @@ export default function () {
                 <FaCaretRight />
               </article>
             </label>
-            <section className="mt-4 flex flex-col gap-2">
-              <article className="border-base-content/20 bg-base-300/20 h-24 w-44 overflow-hidden rounded-md border shadow-sm">
-                {!!selectedMap && (
-                  <Image
-                    className="h-full w-full object-cover"
-                    src={Util.convertMapPool(selectedMap, settings.general.game, true)}
-                    title={Util.convertMapPool(selectedMap, settings.general.game)}
-                  />
-                )}
-              </article>
-              <article className="border-base-content/20 bg-base-300/20 h-12 w-44 rounded-md border p-0 shadow-sm">
-                <details className="dropdown h-full w-full">
-                  <summary className="btn btn-ghost h-full w-full rounded-md text-center">
-                    {selectedMap
-                      ? Util.convertMapPool(selectedMap, settings.general.game)
-                      : 'Choose Map'}
-                  </summary>
-                  <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-44 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
-                    {mapPool.map((map) => (
-                      <li key={map.gameMap.name} className="w-full">
-                        <button
-                          type="button"
-                          className="hover:bg-base-300 w-full rounded px-2 py-2 text-center"
-                          onClick={() => onMapSelection(map.gameMap.name)}
-                        >
-                          {Util.convertMapPool(map.gameMap.name, settings.general.game)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              </article>
-            </section>
+            <SelectedMapPanel
+              buttonClassName="h-12 w-44"
+              game={settings.general.game}
+              imageClassName="h-24 w-44"
+              selectedMap={selectedMap}
+              wrapperClassName="mt-4"
+              onOpen={() => setMapSelectionModalVisible(true)}
+              onPress={audioClick}
+            />
           </section>
           <TeamSelector
             excludedTeamId={homeTeamId}
@@ -1350,37 +1461,15 @@ export default function () {
                 ))}
               </ul>
             </details>
-            <article className="border-base-content/20 bg-base-300/20 h-52 w-80 overflow-hidden rounded-md border shadow-sm">
-              {!!selectedMap && (
-                <Image
-                  className="h-full w-full object-cover"
-                  src={Util.convertMapPool(selectedMap, settings.general.game, true)}
-                  title={Util.convertMapPool(selectedMap, settings.general.game)}
-                />
-              )}
-            </article>
-            <article className="border-base-content/20 bg-base-300/20 h-16 w-80 rounded-md border p-0 shadow-sm">
-              <details className="dropdown h-full w-full">
-                <summary className="btn btn-ghost h-full w-full rounded-md text-center text-base">
-                  {selectedMap
-                    ? Util.convertMapPool(selectedMap, settings.general.game)
-                    : 'Choose Map'}
-                </summary>
-                <ul className="dropdown-content bg-base-200 rounded-box z-20 mt-1 flex max-h-72 w-80 flex-col overflow-x-hidden overflow-y-auto p-1 shadow">
-                  {mapPool.map((map) => (
-                    <li key={map.gameMap.name} className="w-full">
-                      <button
-                        type="button"
-                        className="hover:bg-base-300 w-full rounded px-2 py-2 text-center"
-                        onClick={() => onMapSelection(map.gameMap.name)}
-                      >
-                        {Util.convertMapPool(map.gameMap.name, settings.general.game)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </article>
+            <SelectedMapPanel
+              buttonClassName="h-16 w-80 text-base"
+              game={settings.general.game}
+              imageClassName="h-52 w-80"
+              selectedMap={selectedMap}
+              wrapperClassName=""
+              onOpen={() => setMapSelectionModalVisible(true)}
+              onPress={audioClick}
+            />
           </section>
           <DeathmatchLineupColumn
             icon="resources://avatars/ct.png"
@@ -1390,7 +1479,12 @@ export default function () {
           />
         </section>
       )}
-      <section className="flex w-[36rem] shrink-0 flex-col p-4">
+      <section
+        className={cx(
+          'flex w-[36rem] shrink-0 flex-col',
+          isDeathmatchMode ? 'p-4' : 'py-4 pr-0 pl-8',
+        )}
+      >
         <form className="form-ios form-ios-col-2 w-full flex-1">
           <fieldset>
             <article>
@@ -1960,6 +2054,19 @@ export default function () {
             </footer>
           </article>
         </section>
+      )}
+      {mapSelectionModalVisible && (
+        <MapSelectionModal
+          game={settings.general.game}
+          mapPool={mapPool}
+          selectedMap={selectedMap}
+          onClose={() => setMapSelectionModalVisible(false)}
+          onPress={audioClick}
+          onSelect={(map) => {
+            onMapSelection(map);
+            setMapSelectionModalVisible(false);
+          }}
+        />
       )}
       {matchAbandonedPromptVisible && (
         <MatchAbandonedPrompt onClose={() => setMatchAbandonedPromptVisible(false)} />
