@@ -7,7 +7,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
-import LandingVideo from '@liga/frontend/assets/landing.webm';
+import LandingVideo from '@liga/frontend/assets/landing.mp4';
 import { createMemoryRouter, RouterProvider, Outlet, useLocation } from 'react-router-dom';
 import { Constants, Eagers } from '@liga/shared';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';

@@ -116,80 +116,80 @@ export default function () {
   ];
 
   return (
-    <main className="frosted center h-full w-2/5 p-5 xl:w-1/3">
-      <header className="mb-5">
-        <img src={Logo} className="size-32 object-cover" />
-      </header>
-      <nav className="menu w-full gap-2">
-        {!!profile && (
-          <section
-            className="bg-base-content/10 hover:bg-base-content/20 flex cursor-pointer items-center gap-5 rounded-md p-5"
-            onClick={() => navigate('/connect/' + profile.id)}
-            onMouseEnter={audioHover}
-            onMouseDown={audioClick}
-          >
-            <figure>
-              <FaClock className="size-12" />
-            </figure>
-            <article className="stack-y w-full min-w-0">
-              <h2>{t('landing.home.continue')}</h2>
-              <span className="divider mt-0 mb-0" />
-              <div className="flex items-center justify-between gap-5">
-                <aside className="min-w-0">
-                  <p>{profile.name}</p>
-                  <p>
-                    <em>{upperFirst(formatAppRelativeDate(profile.updatedAt, dateFormat))}</em>
-                  </p>
-                  <p className="text-muted">
-                    <em>{Util.getSaveFileName(profile.id)}</em>
-                  </p>
-                </aside>
-                <aside className="flex shrink-0 items-center gap-4">
-                  <span
-                    title={role}
-                    className={`inline-grid size-9 place-items-center rounded-full ${roleBadgeStyle}`}
+    <React.Fragment>
+      <main className="frosted center h-full w-2/5 p-5 xl:w-1/3">
+        <header className="mb-5">
+          <img src={Logo} className="size-44 object-cover" />
+        </header>
+        <nav className="menu w-full gap-2">
+          {!!profile && (
+            <section
+              className="bg-base-content/10 hover:bg-base-content/20 flex cursor-pointer items-center gap-5 rounded-md p-5"
+              onClick={() => navigate('/connect/' + profile.id)}
+              onMouseEnter={audioHover}
+              onMouseDown={audioClick}
+            >
+              <figure>
+                <FaClock className="size-12" />
+              </figure>
+              <article className="stack-y w-full min-w-0">
+                <h2>{t('landing.home.continue')}</h2>
+                <span className="divider mt-0 mb-0" />
+                <div className="flex items-center justify-between gap-5">
+                  <aside className="min-w-0">
+                    <p>{profile.name}</p>
+                    <p>
+                      <em>{upperFirst(formatAppRelativeDate(profile.updatedAt, dateFormat))}</em>
+                    </p>
+                    <p className="text-muted">
+                      <em>{Util.getSaveFileName(profile.id)}</em>
+                    </p>
+                  </aside>
+                  <aside className="flex shrink-0 items-center gap-4">
+                    <span
+                      title={role}
+                      className={`inline-grid size-9 place-items-center rounded-full ${roleBadgeStyle}`}
+                    >
+                      <img src={roleIcon} alt={role} className="size-8 object-contain opacity-95" />
+                    </span>
+                    <div className="flex max-w-32 items-center gap-2">
+                      <img
+                        src={teamBlazon}
+                        alt={teamName}
+                        title={teamName}
+                        className="size-9 shrink-0 object-contain"
+                      />
+                      <span className="truncate text-sm">{teamName}</span>
+                    </div>
+                  </aside>
+                </div>
+              </article>
+            </section>
+          )}
+          {actions.map((item, idx) => {
+            switch (item.type) {
+              case 'divider':
+                return <span key={item.type + idx} className="divider mt-0 mb-0" />;
+              default:
+                return (
+                  <button
+                    key={item.label}
+                    disabled={item.disabled}
+                    onClick={item.onClick ? item.onClick : () => navigate(item.path)}
+                    className="btn btn-ghost btn-md btn-block"
+                    onMouseEnter={audioHover}
+                    onMouseDown={item.noClickSound ? undefined : audioClick}
                   >
-                    <img src={roleIcon} alt={role} className="size-8 object-contain opacity-95" />
-                  </span>
-                  <div className="flex max-w-32 items-center gap-2">
-                    <img
-                      src={teamBlazon}
-                      alt={teamName}
-                      title={teamName}
-                      className="size-9 shrink-0 object-contain"
-                    />
-                    <span className="truncate text-sm">{teamName}</span>
-                  </div>
-                </aside>
-              </div>
-            </article>
-          </section>
-        )}
-        {actions.map((item, idx) => {
-          switch (item.type) {
-            case 'divider':
-              return <span key={item.type + idx} className="divider mt-0 mb-0" />;
-            default:
-              return (
-                <button
-                  key={item.label}
-                  disabled={item.disabled}
-                  onClick={item.onClick ? item.onClick : () => navigate(item.path)}
-                  className="btn btn-ghost btn-md btn-block"
-                  onMouseEnter={audioHover}
-                  onMouseDown={item.noClickSound ? undefined : audioClick}
-                >
-                  {item.label}
-                </button>
-              );
-          }
-        })}
-      </nav>
-      <footer className="w-full px-2">
-        <p>
-          <small>{state.appInfo?.version}</small>
-        </p>
-      </footer>
+                    {item.label}
+                  </button>
+                );
+            }
+          })}
+        </nav>
+      </main>
+      <p className="fixed right-7 bottom-6 z-20 text-2xl font-semibold text-base-content/80">
+        {state.appInfo?.version}
+      </p>
       {quitPromptVisible &&
         createPortal(
           <section className="bg-base-300/80 fixed inset-0 z-50 flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">
@@ -227,6 +227,6 @@ export default function () {
           </section>,
           document.body,
         )}
-    </main>
+    </React.Fragment>
   );
 }
