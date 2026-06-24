@@ -1299,10 +1299,10 @@ End\n
 
     const shortnameT = await resolveTeamBlazonName(tTeam.team, tTeam.team.slug);
     const shortnameCT = await resolveTeamBlazonName(ctTeam.team, ctTeam.team.slug);
-    const teamBranding = this.isDeathmatchCustomGame
+    const teamBranding = this.isDeathmatchCustomGame || this.isFaceit
       ? {
-          teamname_t: 'Terrorist',
-          teamname_ct: 'Counter Terrorist',
+          teamname_t: this.isFaceit ? tTeam.team.name : 'Terrorist',
+          teamname_ct: this.isFaceit ? ctTeam.team.name : 'Counter Terrorist',
           teamflag_t: '',
           teamflag_ct: '',
           shortname_t: '',
@@ -1346,10 +1346,8 @@ End\n
         match_stat: 'FACEIT PUG',
         teamflag_t: teamBranding.teamflag_t,
         teamflag_ct: teamBranding.teamflag_ct,
-        shortname_t:
-          teamBranding.shortname_t || (this.isDeathmatchCustomGame ? '' : 'FACEITA'),
-        shortname_ct:
-          teamBranding.shortname_ct || (this.isDeathmatchCustomGame ? '' : 'FACEITB'),
+        shortname_t: teamBranding.shortname_t,
+        shortname_ct: teamBranding.shortname_ct,
         stat_t: '',
         stat_ct: '',
         humanteam:
