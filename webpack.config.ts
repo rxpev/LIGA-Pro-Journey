@@ -11,6 +11,8 @@ import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
 import CopyPlugin from 'copy-webpack-plugin';
 import { EnvironmentPlugin } from 'webpack';
 
+const runtimeDatabaseWatchIgnore = /[\\/]src[\\/]backend[\\/]prisma[\\/]saves(?:[\\/]|$)/;
+
 /**
  * Webpack shared configuration.
  *
@@ -18,6 +20,9 @@ import { EnvironmentPlugin } from 'webpack';
  */
 const WebpackSharedConfig = {
   plugins: [new ForkTsCheckerWebpackPlugin({ logger: 'webpack-infrastructure' })],
+  watchOptions: {
+    ignored: runtimeDatabaseWatchIgnore,
+  },
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
     alias: {
