@@ -10,6 +10,7 @@ import { AppStateContext } from '@liga/frontend/redux';
 interface LoopingAudioOptions {
   enabled?: boolean;
   fadeDuration?: number;
+  fadeInDuration?: number;
 }
 
 interface ManagedAudio {
@@ -30,7 +31,7 @@ function getLoopingAudio(src: string) {
   const audio = new Audio('resources://audio/' + src);
   audio.loop = true;
 
-  const managed = {
+  const managed: ManagedAudio = {
     audio,
     retrying: false,
   };
@@ -70,6 +71,29 @@ function fadeOutAudio(managed: ManagedAudio, duration: number) {
       cancelFade(managed);
       audio.pause();
       audio.currentTime = 0;
+    }
+  }, 50);
+}
+
+function fadeInAudio(managed: ManagedAudio, targetVolume: number, duration: number) {
+  cancelFade(managed);
+
+  const audio = managed.audio;
+  const startVolume = audio.volume;
+  const startedAt = Date.now();
+
+  if (duration <= 0 || startVolume >= targetVolume) {
+    audio.volume = targetVolume;
+    return;
+  }
+
+  managed.fadeInterval = window.setInterval(() => {
+    const progress = Math.min(1, (Date.now() - startedAt) / duration);
+    audio.volume = startVolume + (targetVolume - startVolume) * progress;
+
+    if (progress >= 1) {
+      cancelFade(managed);
+      audio.volume = targetVolume;
     }
   }, 50);
 }
@@ -136,6 +160,7 @@ export function useLoopingAudio(src: string | null, options: LoopingAudioOptions
   );
   const targetVolume = settings.general.musicVolume;
   const fadeDuration = options.fadeDuration ?? 1000;
+  const fadeInDuration = options.fadeInDuration ?? 0;
   const managed = React.useMemo(() => (src ? getLoopingAudio(src) : null), [src]);
 
   const play = React.useCallback(async () => {
@@ -144,15 +169,24 @@ export function useLoopingAudio(src: string | null, options: LoopingAudioOptions
     }
 
     cancelFade(managed);
-    managed.audio.volume = targetVolume;
+
+    if (fadeInDuration > 0 && managed.audio.paused) {
+      managed.audio.volume = 0;
+    } else {
+      managed.audio.volume = targetVolume;
+    }
 
     try {
       await managed.audio.play();
       managed.retrying = false;
+
+      if (fadeInDuration > 0) {
+        fadeInAudio(managed, targetVolume, fadeInDuration);
+      }
     } catch {
       managed.retrying = true;
     }
-  }, [managed, src, targetVolume]);
+  }, [fadeInDuration, managed, src, targetVolume]);
 
   const fadeOut = React.useCallback(() => {
     if (!managed) {
@@ -182,6 +216,10 @@ export function useLoopingAudio(src: string | null, options: LoopingAudioOptions
 
   React.useEffect(() => {
     if (!managed || !options.enabled) {
+      return;
+    }
+
+    if (managed.fadeInterval) {
       return;
     }
 

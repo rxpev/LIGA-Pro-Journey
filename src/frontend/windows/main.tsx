@@ -351,9 +351,10 @@ function Root() {
   // setup the theme
   useTheme();
   const isFaceitMatchActive = !!state.faceitMatchRoom && !state.faceitMatchCompleted;
-  useLoopingAudio('tacticaldowntempo.wav', {
+  const careerMusic = useLoopingAudio('transferroom.wav', {
     enabled: !!state.profile && !state.playing && !isFaceitMatchActive,
     fadeDuration: 1200,
+    fadeInDuration: 1200,
   });
 
   React.useEffect(() => {
@@ -554,7 +555,8 @@ function Root() {
                 <a
                   data-interaction-sound="back"
                   onClick={async () => {
-                    await Util.sleep(MAIN_MENU_RELEASE_DELAY);
+                    careerMusic.fadeOut();
+                    await Util.sleep(Math.max(MAIN_MENU_RELEASE_DELAY, 1200));
                     api.calendar.requestMainMenu();
                   }}
                 >
