@@ -12,6 +12,7 @@ import {
   faceitRoomSet,
   faceitVetoSet,
   faceitVetoClear,
+  playingUpdate,
 } from "@liga/frontend/redux/actions";
 
 // ------------------------------
@@ -471,6 +472,8 @@ export default function MatchRoom({
       connectCooldownTimeoutRef.current = null;
     }, 45_000);
 
+    dispatch(playingUpdate(true));
+
     try {
       const result: { matchId: number } = await api.faceit.startMatch({
         ...room,
@@ -496,6 +499,8 @@ export default function MatchRoom({
       }
 
       setMatchAbandonedPromptVisible(true);
+    } finally {
+      dispatch(playingUpdate(false));
     }
   };
 

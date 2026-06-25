@@ -103,16 +103,19 @@ export function calendarAdvance(days?: number) {
 export function play(id: number, spectating?: boolean) {
   return async (dispatch: AppDispatch) => {
     dispatch(playingUpdate(true));
-    await Util.sleep(1000);
-    await api.play.start(spectating);
 
-    const match = await api.match.find({ where: { id } });
+    try {
+      await Util.sleep(1000);
+      await api.play.start(spectating);
 
-    if (match.status === Constants.MatchStatus.COMPLETED) {
-      dispatch(calendarAdvance(1));
+      const match = await api.match.find({ where: { id } });
+
+      if (match.status === Constants.MatchStatus.COMPLETED) {
+        dispatch(calendarAdvance(1));
+      }
+    } finally {
+      dispatch(playingUpdate(false));
     }
-
-    dispatch(playingUpdate(false));
   };
 }
 export function faceitRoomSet(room: any, matchId?: number) {

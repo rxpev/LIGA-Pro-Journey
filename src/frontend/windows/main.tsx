@@ -12,7 +12,7 @@ import { FaBars, FaCaretDown, FaEnvelopeOpen, FaExclamationTriangle, FaHome } fr
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
-import { useAudio, useTheme, useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useLoopingAudio, useTheme, useTranslation } from '@liga/frontend/hooks';
 import { Confetti, Image } from '@liga/frontend/components';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import riflerIcon from '@liga/frontend/assets/rifler.png';
@@ -350,6 +350,11 @@ function Root() {
 
   // setup the theme
   useTheme();
+  const isFaceitMatchActive = !!state.faceitMatchRoom && !state.faceitMatchCompleted;
+  useLoopingAudio('tacticaldowntempo.wav', {
+    enabled: !!state.profile && !state.playing && !isFaceitMatchActive,
+    fadeDuration: 1200,
+  });
 
   React.useEffect(() => {
     if (!state.profile) {
