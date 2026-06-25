@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { cloneDeep, sample, set } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
+import { setCustomGameMusicPaused } from '@liga/frontend/lib/landing-music';
 import { useAudio, useLoopingAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, MatchAbandonedPrompt } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
@@ -1829,6 +1830,7 @@ export default function () {
                 return;
               }
 
+              setCustomGameMusicPaused(true);
               menuMusic.fadeOut();
 
               return api.play
@@ -1868,8 +1870,10 @@ export default function () {
                   },
                 )
                 .catch(() => {
-                  menuMusic.play();
                   setMatchAbandonedPromptVisible(true);
+                })
+                .finally(() => {
+                  setCustomGameMusicPaused(false);
                 });
             }
 
@@ -1879,6 +1883,7 @@ export default function () {
 
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
+            setCustomGameMusicPaused(true);
             menuMusic.fadeOut();
 
             return api.play
@@ -1912,8 +1917,10 @@ export default function () {
                 },
               )
               .catch(() => {
-                menuMusic.play();
                 setMatchAbandonedPromptVisible(true);
+              })
+              .finally(() => {
+                setCustomGameMusicPaused(false);
               });
           }}
         >

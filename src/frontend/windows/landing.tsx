@@ -13,6 +13,10 @@ import { Constants, Eagers } from '@liga/shared';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import { useLoopingAudio } from '@liga/frontend/hooks';
 import {
+  isCustomGameMusicPaused,
+  onCustomGameMusicPausedChange,
+} from '@liga/frontend/lib/landing-music';
+import {
   appInfoUpdate,
   continentsUpdate,
   localeUpdate,
@@ -100,13 +104,22 @@ const routes = createMemoryRouter(
 
 function RoutePersistence(): React.ReactNode {
   const location = useLocation();
+  const [customGameMusicPaused, setCustomGameMusicPaused] = React.useState(
+    isCustomGameMusicPaused,
+  );
   const isLoadingCareer =
     location.pathname.startsWith('/connect/') || location.pathname === '/create/4';
+  const isCustomGameInProgress = location.pathname === '/exhibition' && customGameMusicPaused;
 
   useLoopingAudio('ProJourneyTheme.wav', {
-    enabled: !isLoadingCareer,
+    enabled: !isLoadingCareer && !isCustomGameInProgress,
     fadeDuration: 1200,
   });
+
+  React.useEffect(
+    () => onCustomGameMusicPausedChange(setCustomGameMusicPaused),
+    [],
+  );
 
   React.useEffect(() => {
     api.app.presence({
