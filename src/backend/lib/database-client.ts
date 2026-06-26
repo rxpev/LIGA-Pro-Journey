@@ -467,6 +467,7 @@ export default class DatabaseClient {
     // update the active db id
     activeId = id;
 
+    await DatabaseClient.enableExclusiveSaveLock(pool[id].client, id);
     await DatabaseClient.repairCountryMetadata(pool[id].client);
     await syncLeagueSchedule(pool[id].client as unknown as PrismaClient);
     await backfillCompetitionLocations(pool[id].client as unknown as PrismaClient);
@@ -770,6 +771,35 @@ export default class DatabaseClient {
 
     await pool[activeId].client.$disconnect();
     delete pool[activeId];
+  }
+
+  /**
+   * Returns whether the active database has an open client.
+   *
+   * @function
+   */
+  public static get connected() {
+    return !!pool[activeId];
+  }
+
+  /**
+   * Keeps the open career save locked to this process.
+   *
+   * @function
+   */
+  private static async enableExclusiveSaveLock(prisma: PrismaClientExtended, id: number) {
+    if (id === 0) {
+      return;
+    }
+
+    try {
+      await prisma.$queryRawUnsafe('PRAGMA locking_mode = EXCLUSIVE');
+      await prisma.$executeRawUnsafe('BEGIN EXCLUSIVE');
+      await prisma.$executeRawUnsafe('COMMIT');
+    } catch (error) {
+      DatabaseClient.log.warn('Could not acquire exclusive save lock.');
+      DatabaseClient.log.warn(error);
+    }
   }
 
   /**

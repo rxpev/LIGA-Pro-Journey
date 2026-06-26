@@ -5,7 +5,13 @@
 import { ipcMain } from 'electron';
 import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay } from 'date-fns';
 import { Prisma, Calendar } from '@prisma/client';
-import { DatabaseClient, Engine, WindowManager, Worldgen } from '@liga/backend/lib';
+import {
+  DatabaseClient,
+  disconnectActiveDatabaseWithIntegrity,
+  Engine,
+  WindowManager,
+  Worldgen,
+} from '@liga/backend/lib';
 import { Bot, Eagers, Constants, Util } from '@liga/shared';
 
 /**
@@ -18,7 +24,7 @@ function disableClose(event: Electron.Event) {
 }
 
 async function resetDatabaseForMainMenu() {
-  await DatabaseClient.disconnect();
+  await disconnectActiveDatabaseWithIntegrity();
   await DatabaseClient.connect(0);
 }
 

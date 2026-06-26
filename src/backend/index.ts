@@ -10,7 +10,14 @@ import * as Protocols from '@liga/backend/protocols';
 import log from 'electron-log';
 import { app, protocol, BrowserWindow } from 'electron';
 import { Constants, Util, is } from '@liga/shared';
-import { DatabaseClient, DiscordPresence, WindowManager } from '@liga/backend/lib';
+import {
+  DatabaseClient,
+  DiscordPresence,
+  disconnectActiveDatabaseWithIntegrity,
+  WindowManager,
+} from '@liga/backend/lib';
+
+let isQuittingAfterSaveIntegrity = false;
 
 /**
  * This method will be called when Electron has finished
@@ -62,6 +69,34 @@ async function handleOnReady() {
 function handleAllClosed() {
   if (process.platform !== 'darwin') {
     DiscordPresence.stop();
+    app.quit();
+  }
+}
+
+/**
+ * Seal the active career before Electron exits directly.
+ *
+ * @function
+ */
+async function handleBeforeQuit(event: Electron.Event) {
+  DiscordPresence.stop();
+
+  if (
+    isQuittingAfterSaveIntegrity
+    || !DatabaseClient.connected
+    || DatabaseClient.id === 0
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  isQuittingAfterSaveIntegrity = true;
+
+  try {
+    await disconnectActiveDatabaseWithIntegrity();
+  } catch (error) {
+    log.warn(error);
+  } finally {
     app.quit();
   }
 }
@@ -135,6 +170,6 @@ function handleOnActivate() {
   // handle window lifecycle events
   app.on('ready', handleOnReady);
   app.on('window-all-closed', handleAllClosed);
-  app.on('before-quit', () => DiscordPresence.stop());
+  app.on('before-quit', handleBeforeQuit);
   app.on('activate', handleOnActivate);
 })();

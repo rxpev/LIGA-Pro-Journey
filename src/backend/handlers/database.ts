@@ -6,12 +6,11 @@
 import log from "electron-log";
 import { ipcMain } from "electron";
 import { Prisma } from "@prisma/client";
-import { DatabaseClient } from "@liga/backend/lib";
+import { DatabaseClient, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
 import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
 import {
   removeLegacySaveIntegrity,
-  sealSaveIntegrity,
   verifySaveIntegrity,
 } from "@liga/backend/lib/save-integrity";
 
@@ -86,13 +85,7 @@ export default function registerDatabaseHandlers() {
   // DISCONNECT
   ipcMain.handle(Constants.IPCRoute.DATABASE_DISCONNECT, async () => {
     await Util.sleep(2000);
-    if (DatabaseClient.id !== 0) {
-      await sealSaveIntegrity(DatabaseClient.prisma as any, DatabaseClient.path).catch((error) => {
-        log.warn('Could not seal save integrity for %s.', DatabaseClient.path);
-        log.warn(error);
-      });
-    }
-    return DatabaseClient.disconnect();
+    return disconnectActiveDatabaseWithIntegrity();
   });
 
 
