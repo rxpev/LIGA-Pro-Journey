@@ -73,6 +73,7 @@ type PostgamePlayer = PostgameMatch['players'][number];
 type SwissSiblingMatch = Matches<typeof Eagers.match>[number];
 type SwissRecord = { losses: number; wins: number };
 type MiniSwissConfig = { maxLosses: number; maxWins: number };
+type PostgameGameTeam = MatchGame['teams'][number];
 
 /** @enum */
 enum Rating {
@@ -92,6 +93,18 @@ const MIXED_REGION_COUNTRY_CODES: Record<string, string> = {
   NA: 'na',
   SA: 'sa',
 };
+
+function getGameTeamForCompetitor(
+  game: MatchGame | undefined,
+  competitor: PostgameCompetitor | undefined,
+  fallbackIndex: number,
+): PostgameGameTeam | PostgameCompetitor | undefined {
+  if (!game || !competitor) {
+    return competitor;
+  }
+
+  return game.teams.find((team) => team.teamId === competitor.teamId) ?? game.teams[fallbackIndex];
+}
 
 function getExhibitionEventPlayerId(
   playerName: string | undefined,
@@ -586,7 +599,9 @@ function VetoSummary(props: {
             const selected = !props.matchGame || props.matchGame.id === game.id;
             const competitor =
               veto && props.match.competitors.find((entry) => entry.teamId === veto.teamId);
-            const [homeGame, awayGame] = game.teams;
+            const [home, away] = props.match.competitors;
+            const homeGame = getGameTeamForCompetitor(game, home, 0);
+            const awayGame = getGameTeamForCompetitor(game, away, 1);
             const hasScore = homeGame.score !== null && awayGame.score !== null;
             const unusedDecider = veto?.type === Constants.MapVetoAction.DECIDER && !hasScore;
 
@@ -1111,8 +1126,14 @@ export default function () {
   // grab basic match info
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
   const [matchGameHome, matchGameAway] = React.useMemo(
-    () => (matchGame ? matchGame.teams : match ? match.competitors : []),
-    [match, matchGame],
+    () =>
+      match
+        ? [
+            getGameTeamForCompetitor(matchGame, home, 0),
+            getGameTeamForCompetitor(matchGame, away, 1),
+          ]
+        : [],
+    [away, home, match, matchGame],
   );
   const matchEvents = React.useMemo(
     () =>
