@@ -1102,6 +1102,15 @@ export default class DatabaseClient {
   }
 
   /**
+   * Gets the id of the currently connected save.
+   *
+   * @function
+   */
+  public static get id() {
+    return activeId;
+  }
+
+  /**
    * Renames the old `databases` folder to `saves` in
    * order to resolve a naming collision with Chromium.
    *

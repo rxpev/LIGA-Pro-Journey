@@ -19,7 +19,10 @@ export default function () {
   const { id } = useParams();
   const navigate = useNavigate();
   const [status, setStatus] = React.useState('');
-  const [faceitLockout, setFaceitLockout] = React.useState(false);
+  const [integrityLockout, setIntegrityLockout] = React.useState<null | {
+    title: string;
+    message: string;
+  }>(null);
   const audioNegativeAlert = useAudio('negative-alert.wav');
   const audioRelease = useAudio('button-release.wav');
 
@@ -31,7 +34,19 @@ export default function () {
       .then(async (result) => {
         if (result?.blocked && result.reason === 'FACEIT_ELO_TAMPERED') {
           audioNegativeAlert();
-          setFaceitLockout(true);
+          setIntegrityLockout({
+            title: 'FACEIT Integrity Check Failed',
+            message: 'FACEIT ELO has been manually altered. Revert changes to continue.',
+          });
+          return false;
+        }
+
+        if (result?.blocked && result.reason === 'SAVE_TAMPERED') {
+          audioNegativeAlert();
+          setIntegrityLockout({
+            title: 'Save Integrity Check Failed',
+            message: 'This career save has been manually altered. Revert changes to continue.',
+          });
           return false;
         }
 
@@ -59,15 +74,15 @@ export default function () {
         </header>
       </main>
 
-      {faceitLockout && (
+      {integrityLockout && (
         <section className="bg-base-300/80 fixed inset-0 z-50 flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">
           <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
             <header className="stack-y mb-6">
               <div className="flex items-center gap-3">
                 <FaExclamationTriangle className="text-warning size-8 shrink-0" />
-                <p className="text-lg font-bold">FACEIT Integrity Check Failed</p>
+                <p className="text-lg font-bold">{integrityLockout.title}</p>
               </div>
-              <p>FACEIT ELO has been manually altered. Revert changes to continue.</p>
+              <p>{integrityLockout.message}</p>
             </header>
             <footer className="flex justify-end">
               <button

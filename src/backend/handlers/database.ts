@@ -9,6 +9,11 @@ import { Prisma } from "@prisma/client";
 import { DatabaseClient } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
 import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
+import {
+  removeLegacySaveIntegrity,
+  sealSaveIntegrity,
+  verifySaveIntegrity,
+} from "@liga/backend/lib/save-integrity";
 
 export default function registerDatabaseHandlers() {
   // CONNECT
@@ -33,12 +38,38 @@ export default function registerDatabaseHandlers() {
       );
 
       await DatabaseClient.disconnect();
-      await DatabaseClient.connect();
+      await DatabaseClient.connect(0);
 
       return {
         blocked: true,
         reason: 'FACEIT_ELO_TAMPERED',
       };
+    }
+
+    if ((parseInt(id) || 0) !== 0) {
+      const saveIntegrity = await verifySaveIntegrity(prisma as any, DatabaseClient.path);
+
+      if (!saveIntegrity.valid) {
+        log.warn(
+          'Blocked save load because save integrity failed: actual=%s expected=%s',
+          saveIntegrity.actualDigest,
+          saveIntegrity.expectedDigest,
+        );
+
+        await DatabaseClient.disconnect();
+        await DatabaseClient.connect(0);
+
+        return {
+          blocked: true,
+          reason: 'SAVE_TAMPERED',
+        };
+      }
+
+      if (saveIntegrity.initialized) {
+        log.info('Initialized save integrity seal for %s.', DatabaseClient.path);
+      }
+
+      await removeLegacySaveIntegrity(DatabaseClient.path);
     }
 
     // Load profile settings
@@ -55,6 +86,12 @@ export default function registerDatabaseHandlers() {
   // DISCONNECT
   ipcMain.handle(Constants.IPCRoute.DATABASE_DISCONNECT, async () => {
     await Util.sleep(2000);
+    if (DatabaseClient.id !== 0) {
+      await sealSaveIntegrity(DatabaseClient.prisma as any, DatabaseClient.path).catch((error) => {
+        log.warn('Could not seal save integrity for %s.', DatabaseClient.path);
+        log.warn(error);
+      });
+    }
     return DatabaseClient.disconnect();
   });
 

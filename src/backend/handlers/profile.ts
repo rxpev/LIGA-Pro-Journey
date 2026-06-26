@@ -12,6 +12,7 @@ import { glob } from 'glob';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import { DatabaseClient, DiscordPresence, Game, WindowManager, Worldgen } from '@liga/backend/lib';
+import { removeSaveIntegrity } from '@liga/backend/lib/save-integrity';
 
 export default function registerProfileHandlers() {
   ipcMain.handle(
@@ -201,6 +202,7 @@ export default function registerProfileHandlers() {
     if (!fs.existsSync(dbPath)) return Promise.reject();
 
     await DatabaseClient.forget(id);
+    await removeSaveIntegrity(dbPath);
     return fs.promises.unlink(dbPath);
   });
 
