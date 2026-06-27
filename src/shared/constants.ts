@@ -196,8 +196,10 @@ export enum CompetitionStatus {
 
 /** @enum */
 export enum ErrorCode {
+  EABANDONED = 'EABANDONED',
   ENOENT = 'ENOENT',
   ERUNNING = 'ERUNNING',
+  EINVAL = 'EINVAL',
 }
 
 /**
@@ -348,6 +350,7 @@ export enum IPCRoute {
   PLAY_EXHIBITION_FEDERATIONS = '/play/exhibition/federations',
   PLAY_EXHIBITION_TEAMS = '/play/exhibition/teams',
   PLAY_EXHIBITION_PLAYERS = '/play/exhibition/players',
+  PLAY_PROGRESS = '/play/progress',
   PLAY_START = '/play/start',
   PLAYERS_ALL = '/players/all',
   PLAYERS_COUNT = '/players/count',

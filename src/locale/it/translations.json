@@ -89,13 +89,29 @@
         "play": "Gioca",
         "playingMatchSubtitle": "Questo modale si chiuderà automaticamente dopo che la partita sarà conclusa.",
         "playingMatchTitle": "Partita in corso",
+        "matchStartupStatus": "Stato attuale",
+        "playingStatus": {
+          "PREPARING_MATCH": "Preparazione partita",
+          "COPYING_FILES": "Copia dei file",
+          "STARTING_SERVER": "Avvio server",
+          "CONNECTING_SERVER": "Connessione al server",
+          "WAITING_FOR_SERVER": "Attesa dei log del server",
+          "STARTING_CLIENT": "Avvio client di gioco",
+          "WATCHING_MATCH": "Partita in corso",
+          "SAVING_RESULTS": "Salvataggio risultati..."
+        },
         "pluginsError": "Plugin di gioco non installati! Non potrai avviare alcun gioco. Riavvia l'app per sistemare il problema.",
         "rest": "riposo",
         "runningError": "è in corso! Chiudi il gioco prima di avviare le tue partite.",
         "simulate": "Simula",
         "spectateMatch": "Guarda la Partita",
         "stopCalendar": "Stop Calendar",
-        "viewBracket": "Vedi Bracket"
+        "viewBracket": "Vedi Bracket",
+        "gamePathInvalid": "Il percorso della libreria di gioco e impostato in modo errato. Aggiornalo nelle impostazioni.",
+        "gamePathInvalidTitle": "Il percorso della libreria di gioco non e corretto",
+        "openSettings": "Apri impostazioni",
+        "matchAbandonedTitle": "La partita e stata abbandonata.",
+        "matchAbandonedSubtitle": "Nessun risultato e stato registrato."
       },
       "inbox": {
         "markAsRead": "Segna come Letto",

@@ -89,13 +89,29 @@
         "play": "Jouer",
         "playingMatchSubtitle": "Cette fenêtre se fermera automatiquement une fois que votre match est terminé.",
         "playingMatchTitle": "Match en cours",
+        "matchStartupStatus": "Etat actuel",
+        "playingStatus": {
+          "PREPARING_MATCH": "Preparation du match",
+          "COPYING_FILES": "Copie des fichiers",
+          "STARTING_SERVER": "Demarrage du serveur",
+          "CONNECTING_SERVER": "Connexion au serveur",
+          "WAITING_FOR_SERVER": "Attente des journaux du serveur",
+          "STARTING_CLIENT": "Demarrage du client du jeu",
+          "WATCHING_MATCH": "Match en cours",
+          "SAVING_RESULTS": "Sauvegarde des resultats..."
+        },
         "pluginsError": "Les plugins du jeu ne sont pas installés, vous ne pourrez pas lancer de jeu. Un redémarrage de l'application devrait corriger cette erreur.",
         "rest": "repos",
         "runningError": "est en cours d'exécution ! Fermez le jeu avant de pouvoir commencer un nouveau match.",
         "simulate": "Simuler",
         "spectateMatch": "Observer le match",
         "stopCalendar": "Stop Calendar",
-        "viewBracket": "Voir le tableau"
+        "viewBracket": "Voir le tableau",
+        "gamePathInvalid": "Le chemin de la bibliotheque du jeu est incorrect. Mettez-le a jour dans les reglages.",
+        "gamePathInvalidTitle": "Le chemin de la bibliotheque du jeu est incorrect",
+        "openSettings": "Ouvrir les reglages",
+        "matchAbandonedTitle": "Le match a ete abandonne.",
+        "matchAbandonedSubtitle": "Aucun resultat na ete enregistre."
       },
       "inbox": {
         "markAsRead": "Marquer comme lu",

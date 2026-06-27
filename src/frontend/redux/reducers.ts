@@ -59,6 +59,12 @@ function playing(state = InitialState.playing, action: AppAction) {
     : state;
 }
 
+function playError(state = InitialState.playError, action: AppAction) {
+  return action.type === ReduxActions.PLAY_ERROR_UPDATE
+    ? action.payload
+    : state;
+}
+
 function profile(state = InitialState.profile, action: AppAction) {
   return action.type === ReduxActions.PROFILE_UPDATE
     ? action.payload
@@ -209,6 +215,7 @@ export default function reducer(state: AppState, action: AppAction) {
     emails: emails(state.emails, action),
     locale: locale(state.locale, action),
     playing: playing(state.playing, action),
+    playError: playError(state.playError, action),
     profile: profile(state.profile, action),
     profiles: profiles(state.profiles, action),
     shortlist: shortlist(state.shortlist, action),

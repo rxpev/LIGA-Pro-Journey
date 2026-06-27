@@ -64,7 +64,7 @@ export default function () {
   ipcMain.handle(
     Constants.IPCRoute.PLAY_EXHIBITION,
     async (
-      _,
+      event,
       settings: typeof Constants.Settings,
       teamIds: Array<number>,
       teamId: number,
@@ -87,7 +87,20 @@ export default function () {
         Util.getSaveFileName(exhibitionSaveId),
       );
       let postgamePayload: unknown = null;
+      const landingWindow = WindowManager.get(Constants.WindowIdentifier.Landing);
+      let minimizedForClientLaunch = false;
+      const sendProgress = (status: string) => {
+        event.sender.send(Constants.IPCRoute.PLAY_PROGRESS, { status });
 
+        if (status === 'STARTING_CLIENT' && !minimizedForClientLaunch) {
+          minimizedForClientLaunch = true;
+          setTimeout(() => landingWindow.minimize(), 250);
+        }
+      };
+
+      sendProgress('PREPARING_MATCH');
+
+      sendProgress('COPYING_FILES');
       await fs.promises.mkdir(path.dirname(exhibitionSavePath), { recursive: true });
       await fs.promises.copyFile(rootSavePath, exhibitionSavePath);
       await DatabaseClient.connect(exhibitionSaveId);
@@ -104,10 +117,6 @@ export default function () {
         });
         const selectedMap =
           settings.matchRules.mapOverride || sample(mapPool)?.gameMap.name || 'de_dust2';
-
-        // minimize the landing window
-        const landingWindow = WindowManager.get(Constants.WindowIdentifier.Landing);
-        landingWindow.minimize();
 
         // grab team info
         const [homeRaw, awayRaw] = await Promise.all(
@@ -272,11 +281,13 @@ export default function () {
 
         // start the server and play the match
         const gameServer = new Game.Server(profile, match, null, spectating);
+        gameServer.onProgress(sendProgress);
         gameServer.onCleanup(() => ArenaMode.disable(settings));
         gameServer.onClientConnected(async () => {
           await ArenaMode.startCrowdLoop(settings);
         });
         await ArenaMode.runForMatch(settings, match, () => gameServer.start());
+        sendProgress('SAVING_RESULTS');
 
         const sideTeamIds = gameServer.getSideTeamIds();
         const [tScore, ctScore] = gameServer.result.score;
@@ -326,7 +337,7 @@ export default function () {
       }
     },
   );
-  ipcMain.handle(Constants.IPCRoute.PLAY_START, async (_, spectating?: boolean) => {
+  ipcMain.handle(Constants.IPCRoute.PLAY_START, async (event, spectating?: boolean) => {
     // grab today's match
     const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
     const entry = await DatabaseClient.prisma.calendar.findFirst({
@@ -342,9 +353,18 @@ export default function () {
       include: Eagers.match.include,
     });
 
-    // minimize main window
     const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
-    mainWindow.minimize();
+    let minimizedForClientLaunch = false;
+    const sendProgress = (status: string) => {
+      if (status === 'STARTING_CLIENT' && !minimizedForClientLaunch) {
+        minimizedForClientLaunch = true;
+        mainWindow.minimize();
+      }
+
+      event.sender.send(Constants.IPCRoute.PLAY_PROGRESS, { status });
+    };
+
+    sendProgress('PREPARING_MATCH');
 
     // load on-the-fly settings
     let settingsLocalStorage: string;
@@ -367,11 +387,13 @@ export default function () {
 
     // start the server and play the match
     const gameServer = new Game.Server(profile, match, null, spectating);
+    gameServer.onProgress(sendProgress);
     gameServer.onCleanup(() => ArenaMode.disable(settings));
     gameServer.onClientConnected(async () => {
       await ArenaMode.startCrowdLoop(settings);
     });
     await ArenaMode.runForMatch(settings, match, () => gameServer.start());
+    sendProgress('SAVING_RESULTS');
     const [home, away] = match.competitors;
     const sideTeamIds = gameServer.getSideTeamIds();
     const [tScore, ctScore] = gameServer.result.score;

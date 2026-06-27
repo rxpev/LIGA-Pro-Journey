@@ -472,7 +472,7 @@ export default function MatchRoom({
       connectCooldownTimeoutRef.current = null;
     }, 45_000);
 
-    dispatch(playingUpdate(true));
+    dispatch(playingUpdate({ status: "PREPARING_MATCH" }));
 
     try {
       const result: { matchId: number } = await api.faceit.startMatch({

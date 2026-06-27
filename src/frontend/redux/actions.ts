@@ -4,7 +4,7 @@
  * @module
  */
 import { Constants, Util } from "@liga/shared";
-import { AppDispatch, AppState } from "./state";
+import { AppDispatch, AppState, PlayingStatus } from "./state";
 
 /** Redux Action Enum */
 export enum ReduxActions {
@@ -14,6 +14,7 @@ export enum ReduxActions {
   EMAILS_UPDATE,
   EMAILS_DELETE,
   LOCALE_UPDATE,
+  PLAY_ERROR_UPDATE,
   PLAYING_UPDATE,
   PROFILE_UPDATE,
   PROFILES_DELETE,
@@ -56,6 +57,10 @@ export const emailsDelete = (payload: AppState["emails"]) => ({
 });
 export const localeUpdate = (payload: AppState["locale"]) => ({
   type: ReduxActions.LOCALE_UPDATE,
+  payload,
+});
+export const playErrorUpdate = (payload: AppState["playError"]) => ({
+  type: ReduxActions.PLAY_ERROR_UPDATE,
   payload,
 });
 export const playingUpdate = (payload: AppState["playing"]) => ({
@@ -102,18 +107,58 @@ export function calendarAdvance(days?: number) {
 /** Async: start gameplay */
 export function play(id: number, spectating?: boolean) {
   return async (dispatch: AppDispatch) => {
-    dispatch(playingUpdate(true));
+    dispatch(playingUpdate({ status: "PREPARING_MATCH" }));
+
+    const removeProgressListener = api.ipc.on(
+      Constants.IPCRoute.PLAY_PROGRESS,
+      (payload: { status?: PlayingStatus }) => {
+        if (!payload?.status) {
+          return;
+        }
+
+        dispatch(playingUpdate({ status: payload.status }));
+      },
+    );
 
     try {
       await Util.sleep(1000);
       await api.play.start(spectating);
+      dispatch(playingUpdate({ status: "SAVING_RESULTS" }));
 
       const match = await api.match.find({ where: { id } });
 
       if (match.status === Constants.MatchStatus.COMPLETED) {
         dispatch(calendarAdvance(1));
       }
+    } catch (error) {
+      const launchError = error as NodeJS.ErrnoException;
+      const launchErrorStatus = launchError?.code
+        ? JSON.stringify({
+            code: launchError.code,
+            message: launchError.message,
+            path: launchError.path,
+          })
+        : null;
+      const fallbackAbandonedStatus = JSON.stringify({
+        code: Constants.ErrorCode.EABANDONED,
+        message: "The match was abandoned.",
+      });
+      const status =
+        launchError?.code === Constants.ErrorCode.EABANDONED ? null : await api.app.status();
+      const playErrorStatus =
+        launchError?.code === Constants.ErrorCode.EABANDONED
+          ? launchErrorStatus || fallbackAbandonedStatus
+          : status || launchErrorStatus || fallbackAbandonedStatus;
+      dispatch(playingUpdate(false));
+      dispatch(appStatusUpdate(status));
+      dispatch(
+        playErrorUpdate({
+          status: playErrorStatus,
+          at: Date.now(),
+        }),
+      );
     } finally {
+      removeProgressListener();
       dispatch(playingUpdate(false));
     }
   };

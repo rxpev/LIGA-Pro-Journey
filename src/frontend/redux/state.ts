@@ -16,6 +16,22 @@ export interface PlayerCareerUser {
 
 export type PlayerCareerRole = 'RIFLER' | 'AWPER' | 'IGL';
 
+export type PlayingStatus =
+  | 'PREPARING_MATCH'
+  | 'COPYING_FILES'
+  | 'STARTING_SERVER'
+  | 'CONNECTING_SERVER'
+  | 'WAITING_FOR_SERVER'
+  | 'STARTING_CLIENT'
+  | 'WATCHING_MATCH'
+  | 'SAVING_RESULTS';
+
+export type PlayingState =
+  | false
+  | {
+      status: PlayingStatus;
+    };
+
 /** Fully flexible Redux action */
 export interface AppAction {
   type: number;
@@ -34,7 +50,11 @@ export interface AppState {
   >;
   emails: Awaited<ReturnType<typeof api.emails.all<typeof Eagers.email>>>;
   locale: Awaited<ReturnType<typeof api.app.locale>>;
-  playing: boolean;
+  playing: PlayingState;
+  playError: {
+    status: string;
+    at: number;
+  } | null;
   profile: Awaited<ReturnType<typeof api.profiles.current<typeof Eagers.profile>>>;
   profiles: Array<AppState['profile']>;
   shortlist: Awaited<ReturnType<typeof api.shortlist.all<typeof Eagers.shortlist>>>;
@@ -79,6 +99,7 @@ export const InitialState: AppState = {
   emails: [],
   locale: Locale.en,
   playing: false,
+  playError: null,
   profile: null,
   profiles: [],
   shortlist: [],

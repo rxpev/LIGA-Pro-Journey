@@ -9,8 +9,9 @@ import { cloneDeep, sample, set } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { setCustomGameMusicPaused } from '@liga/frontend/lib/landing-music';
+import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useLoopingAudio, useTranslation } from '@liga/frontend/hooks';
-import { Image, MatchAbandonedPrompt } from '@liga/frontend/components';
+import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import arenaModeIcon from '@liga/frontend/assets/customgames/arenamode.png';
 import classicModeImage from '@liga/frontend/assets/customgames/classic.png';
@@ -33,6 +34,7 @@ import {
   FaFolderOpen,
   FaLock,
   FaRandom,
+  FaSpinner,
   FaTimes,
 } from 'react-icons/fa';
 
@@ -67,6 +69,16 @@ interface TeamSelectorProps {
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
 const DEATHMATCH_MAX_PLAYERS = 10;
+const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
+  'PREPARING_MATCH',
+  'COPYING_FILES',
+  'STARTING_SERVER',
+  'CONNECTING_SERVER',
+  'WAITING_FOR_SERVER',
+  'STARTING_CLIENT',
+  'WATCHING_MATCH',
+  'SAVING_RESULTS',
+];
 const deathmatchGameTimeOptions = [10, 20, 30, 45, 60] as const;
 
 const deathmatchDifficulties: Array<{
@@ -657,7 +669,10 @@ export default function () {
     ReturnType<typeof api.app.arenaModeStatus>
   > | null>(null);
   const [arenaModeInstallPromptVisible, setArenaModeInstallPromptVisible] = React.useState(false);
-  const [matchAbandonedPromptVisible, setMatchAbandonedPromptVisible] = React.useState(false);
+  const [customGamePlayingStatus, setCustomGamePlayingStatus] =
+    React.useState<PlayingStatus | null>(null);
+  const [customGamePlayError, setCustomGamePlayError] =
+    React.useState<NodeJS.ErrnoException | null>(null);
   const [mapSelectionModalVisible, setMapSelectionModalVisible] = React.useState(false);
   const [mapPool, setMapPool] = React.useState<Array<MapPoolEntry>>([]);
   const navigate = useNavigate();
@@ -681,6 +696,7 @@ export default function () {
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
+  const lastInvalidGamePathError = React.useRef('');
   const menuMusic = useLoopingAudio('ProJourneyTheme.wav', {
     fadeDuration: 1200,
   });
@@ -819,11 +835,14 @@ export default function () {
     const modified = cloneDeep(settings);
     set(modified, path, value);
 
-    // detect game path again
-    api.app.detectGame(modified.general.game).then((gamePath) => {
-      modified.general.gamePath = gamePath;
+    if (path === 'general.game' || path === 'general.steamPath') {
+      api.app.detectGame(modified.general.game).then((gamePath) => {
+        modified.general.gamePath = gamePath;
+        setSettings(modified);
+      });
+    } else {
       setSettings(modified);
-    });
+    }
 
     // fetch map pool again
     api.mapPool
@@ -861,7 +880,10 @@ export default function () {
       return;
     }
 
-    api.app.status(settings).then((status) => setAppStatus(JSON.parse(status || false)));
+    api.app.status(settings).then((status) => {
+      const parsed = JSON.parse(status || false) as NodeJS.ErrnoException | false;
+      setAppStatus(parsed || undefined);
+    });
   }, [settings]);
 
   const steamPathError = React.useMemo(() => {
@@ -876,6 +898,10 @@ export default function () {
   const gamePathError = React.useMemo(() => {
     if (!appStatus) {
       return;
+    }
+
+    if (appStatus.code === Constants.ErrorCode.EINVAL) {
+      return appStatus.path;
     }
 
     const [, match] = appStatus.path.match(/((?:csgo|hl|hl2)\.exe)/) || [];
@@ -903,6 +929,70 @@ export default function () {
       deathmatchTPlayers.length &&
       deathmatchCTPlayers.length,
   );
+
+  const handleLaunchError = React.useCallback(async (error?: unknown) => {
+    const launchError = error as NodeJS.ErrnoException;
+    const status =
+      launchError?.code === Constants.ErrorCode.EABANDONED
+        ? null
+        : await api.app.status(settings);
+    const parsed = JSON.parse(status || false) as NodeJS.ErrnoException | false;
+    setAppStatus(parsed || undefined);
+
+    if (parsed && parsed.code === Constants.ErrorCode.EINVAL) {
+      if (lastInvalidGamePathError.current !== status) {
+        lastInvalidGamePathError.current = status;
+        audioNegativeAlert();
+      }
+      setCustomGamePlayError(parsed);
+      return;
+    }
+
+    audioNegativeAlert();
+    setCustomGamePlayError({
+      code: Constants.ErrorCode.EABANDONED,
+      message: launchError?.message || 'The match was abandoned.',
+    } as NodeJS.ErrnoException);
+  }, [audioNegativeAlert, settings]);
+
+  const runCustomGameLaunch = React.useCallback(
+    async (launch: () => Promise<unknown>) => {
+      setCustomGamePlayError(null);
+      setCustomGamePlayingStatus('PREPARING_MATCH');
+      setCustomGameMusicPaused(true);
+      menuMusic.fadeOut();
+
+      const removeProgressListener = api.ipc.on(
+        Constants.IPCRoute.PLAY_PROGRESS,
+        (payload: { status?: PlayingStatus }) => {
+          if (!payload?.status) {
+            return;
+          }
+
+          setCustomGamePlayingStatus(payload.status);
+        },
+      );
+
+      try {
+        await launch();
+        setCustomGamePlayingStatus('SAVING_RESULTS');
+      } catch (error) {
+        setCustomGamePlayingStatus(null);
+        await handleLaunchError(error);
+      } finally {
+        removeProgressListener();
+        setCustomGamePlayingStatus(null);
+        setCustomGameMusicPaused(false);
+      }
+    },
+    [handleLaunchError, menuMusic],
+  );
+  const customGamePlayingStatusIndex = Math.max(
+    0,
+    PLAYING_STATUS_STEPS.findIndex((step) => step === customGamePlayingStatus),
+  );
+  const customGamePlayingProgressValue =
+    ((customGamePlayingStatusIndex + 1) / PLAYING_STATUS_STEPS.length) * 100;
 
   React.useEffect(() => {
     if (homeTeamId) {
@@ -1830,11 +1920,8 @@ export default function () {
                 return;
               }
 
-              setCustomGameMusicPaused(true);
-              menuMusic.fadeOut();
-
-              return api.play
-                .exhibition(
+              return runCustomGameLaunch(() =>
+                api.play.exhibition(
                   {
                     ...settings,
                     arenaMode: {
@@ -1868,13 +1955,8 @@ export default function () {
                       forceBuy: deathmatchForceBuy,
                     },
                   },
-                )
-                .catch(() => {
-                  setMatchAbandonedPromptVisible(true);
-                })
-                .finally(() => {
-                  setCustomGameMusicPaused(false);
-                });
+                ),
+              );
             }
 
             if (hasDuplicateTeams) {
@@ -1883,11 +1965,8 @@ export default function () {
 
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
-            setCustomGameMusicPaused(true);
-            menuMusic.fadeOut();
-
-            return api.play
-              .exhibition(
+            return runCustomGameLaunch(() =>
+              api.play.exhibition(
                 {
                   ...settings,
                   arenaMode: {
@@ -1915,13 +1994,8 @@ export default function () {
                 {
                   mode: 'classic',
                 },
-              )
-              .catch(() => {
-                setMatchAbandonedPromptVisible(true);
-              })
-              .finally(() => {
-                setCustomGameMusicPaused(false);
-              });
+              ),
+            );
           }}
         >
           {spectating ? 'Spectate' : t('main.dashboard.play')}
@@ -2075,8 +2149,124 @@ export default function () {
           }}
         />
       )}
-      {matchAbandonedPromptVisible && (
-        <MatchAbandonedPrompt onClose={() => setMatchAbandonedPromptVisible(false)} />
+      {!!customGamePlayingStatus && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-5">
+              <div className="flex items-center gap-3">
+                <FaSpinner className="text-warning size-8 shrink-0 animate-spin" />
+                <p className="text-lg font-bold">{t('main.dashboard.playingMatchTitle')}</p>
+              </div>
+              <p className="opacity-70">{t('main.dashboard.playingMatchSubtitle')}</p>
+            </header>
+            <article className="bg-base-200 rounded p-4">
+              <p className="text-sm uppercase opacity-60">
+                {t('main.dashboard.matchStartupStatus')}
+              </p>
+              <p className="font-bold">
+                {t(`main.dashboard.playingStatus.${customGamePlayingStatus}`)}
+              </p>
+              <progress
+                className="progress progress-warning mt-4 w-full"
+                value={customGamePlayingProgressValue}
+                max="100"
+              />
+              <ul className="mt-4 space-y-2 text-sm">
+                {PLAYING_STATUS_STEPS.map((step, idx) => {
+                  const isComplete = idx < customGamePlayingStatusIndex;
+                  const isActive = idx === customGamePlayingStatusIndex;
+
+                  return (
+                    <li
+                      key={step}
+                      className={cx(
+                        'flex items-center gap-2',
+                        isActive && 'font-bold',
+                        !isActive && !isComplete && 'opacity-50',
+                      )}
+                    >
+                      {isComplete ? (
+                        <FaCheck className="text-success" />
+                      ) : (
+                        <span
+                          className={cx(
+                            'border-base-content/40 block size-4 rounded-full border',
+                            isActive && 'border-warning bg-warning',
+                          )}
+                        />
+                      )}
+                      <span>{t(`main.dashboard.playingStatus.${step}`)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </article>
+          </article>
+        </section>
+      )}
+      {!!customGamePlayError && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">
+                  {t(
+                    customGamePlayError.code === Constants.ErrorCode.EINVAL
+                      ? 'main.dashboard.gamePathInvalidTitle'
+                      : 'main.dashboard.matchAbandonedTitle',
+                  )}
+                </p>
+              </div>
+              <p>
+                {t(
+                  customGamePlayError.code === Constants.ErrorCode.EINVAL
+                    ? 'main.dashboard.gamePathInvalid'
+                    : 'main.dashboard.matchAbandonedSubtitle',
+                )}
+              </p>
+              {customGamePlayError.code === Constants.ErrorCode.EINVAL &&
+                !!customGamePlayError.path && (
+                <p
+                  className="bg-base-200 truncate p-2 text-sm"
+                  title={customGamePlayError.path}
+                >
+                  {customGamePlayError.path}
+                </p>
+              )}
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn"
+                onClick={() => setCustomGamePlayError(null)}
+              >
+                OK
+              </button>
+              {customGamePlayError.code === Constants.ErrorCode.EINVAL && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setCustomGamePlayError(null);
+                    api.app
+                      .dialog(Constants.WindowIdentifier.Landing, {
+                        properties: ['openDirectory'],
+                      })
+                      .then(
+                        (dialogData) =>
+                          !dialogData.canceled &&
+                          onSettingsUpdate('general.gamePath', dialogData.filePaths[0]),
+                      );
+                  }}
+                >
+                  {t('main.dashboard.openSettings')}
+                </button>
+              )}
+            </footer>
+          </article>
+        </section>
       )}
       {!!rosterContextMenu && (
         <button

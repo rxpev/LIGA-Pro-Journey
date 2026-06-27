@@ -89,13 +89,29 @@
         "play": "Jogar",
         "playingMatchSubtitle": "Essa janela vai fechar sozinha quando seu jogo acabar.",
         "playingMatchTitle": "Jogando partida",
+        "matchStartupStatus": "Status atual",
+        "playingStatus": {
+          "PREPARING_MATCH": "Preparando partida",
+          "COPYING_FILES": "Copiando arquivos",
+          "STARTING_SERVER": "Iniciando servidor",
+          "CONNECTING_SERVER": "Conectando ao servidor",
+          "WAITING_FOR_SERVER": "Aguardando logs do servidor",
+          "STARTING_CLIENT": "Iniciando cliente do jogo",
+          "WATCHING_MATCH": "Partida em andamento",
+          "SAVING_RESULTS": "Salvando resultados..."
+        },
         "pluginsError": "Plugins não instalados! Não será possível abrir o jogo. Tente reiniciar o programa para resolver o erro.",
         "rest": "Descanso",
         "runningError": "Já está aberto! Por favor feche o jogo antes de começar uma nova partida.",
         "simulate": "Simular",
         "spectateMatch": "Assistir",
         "stopCalendar": "Stop Calendar",
-        "viewBracket": "Ver chaveamento"
+        "viewBracket": "Ver chaveamento",
+        "gamePathInvalid": "O caminho da biblioteca do jogo esta configurado incorretamente. Atualize em Configuracoes.",
+        "gamePathInvalidTitle": "O caminho da biblioteca do jogo esta incorreto",
+        "openSettings": "Abrir Configuracoes",
+        "matchAbandonedTitle": "A partida foi abandonada.",
+        "matchAbandonedSubtitle": "Nenhum resultado foi registrado."
       },
       "inbox": {
         "markAsRead": "Fingir que já leu",

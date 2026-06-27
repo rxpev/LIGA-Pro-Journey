@@ -375,6 +375,7 @@ export class Server {
   private settings: typeof Constants.Settings;
   private spectating?: boolean;
   private cleanupCallbacks: Array<() => Promise<void> | void>;
+  private progressCallbacks: Array<(status: string) => Promise<void> | void>;
   private cleanupStarted: boolean;
   private clientConnectedCallbacks: Array<() => Promise<void> | void>;
   private clientConnected: boolean;
@@ -457,6 +458,7 @@ export class Server {
     this.spectating = Boolean(spectating);
     this.clientLaunchedViaSteam = false;
     this.cleanupCallbacks = [];
+    this.progressCallbacks = [];
     this.cleanupStarted = false;
     this.clientConnectedCallbacks = [];
     this.clientConnected = false;
@@ -2085,6 +2087,24 @@ End\n
   public async start(): Promise<void> {
     const logWaitMarkerTime = new Date();
 
+    await this.notifyProgress('PREPARING_MATCH');
+
+    if (this.settings.general.gamePath) {
+      const gameExecutable = getGameExecutable(
+        this.settings.general.game,
+        this.settings.general.gamePath,
+      );
+
+      try {
+        await fs.promises.access(gameExecutable, fs.constants.F_OK);
+      } catch (_) {
+        const error = new Error('Game Library Path is set incorrectly') as NodeJS.ErrnoException;
+        error.code = Constants.ErrorCode.EINVAL;
+        error.path = this.settings.general.gamePath;
+        throw error;
+      }
+    }
+
     if (this.settings.general.game === Constants.Game.CSGO && !this.settings.general.dedicatedServerPath) {
       try {
         this.settings.general.dedicatedServerPath = await discoverDedicatedServerPath(
@@ -2107,12 +2127,15 @@ End\n
     }
 
     // 1) Prepare files / plugins / cfgs
+    await this.notifyProgress('COPYING_FILES');
     await this.prepare();
 
     // 2) Launch server 
+    await this.notifyProgress('STARTING_SERVER');
     this.launchServerCSGO();
 
     // 3) Connect to RCON (server)
+    await this.notifyProgress('CONNECTING_SERVER');
     this.rcon = new RCON.Client(
       this.getLocalIP(),
       Constants.GameSettings.RCON_PORT,
@@ -2139,9 +2162,11 @@ End\n
         ? (this.settings.general.dedicatedServerPath || this.settings.general.gamePath)
         : this.settings.general.gamePath;
 
+    await this.notifyProgress('WAITING_FOR_SERVER');
     const logFile = await this.waitForLogFile(logRoot, logWaitMarkerTime);
 
     // 5) now launch the client (after server log is ready)
+    await this.notifyProgress('STARTING_CLIENT');
     await this.launchClientCSGO();
     this.scheduleClientProcessMonitorCSGO();
 
@@ -2165,6 +2190,7 @@ End\n
 
     // 7) Start scorebot on the selected log file
     this.log.info(`Scorebot watching log file: ${logFile}`);
+    await this.notifyProgress('WATCHING_MATCH');
 
     this.scorebot = new Scorebot.Watcher(logFile);
 
@@ -2208,9 +2234,28 @@ End\n
       this.recordLivePresenceRound(payload);
     });
 
-    // 9) Resolve when GAME_OVER fires
-    return new Promise((resolve) => {
+    // 9) Resolve when GAME_OVER fires, reject if cleanup happens first.
+    return new Promise((resolve, reject) => {
+      let settled = false;
+
+      this.onCleanup(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        const error = new Error('The match was abandoned.') as NodeJS.ErrnoException;
+        error.code = Constants.ErrorCode.EABANDONED;
+        reject(error);
+      });
+
       this.scorebot.on(Scorebot.EventIdentifier.GAME_OVER, async (payload) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+
         // In CS:GO we delay + adjust score ordering for OT
         if (true) {
           await Util.sleep(Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY * 1000);
@@ -2268,7 +2313,23 @@ End\n
     this.cleanupCallbacks.push(callback);
   }
 
+  public onProgress(callback: (status: string) => Promise<void> | void) {
+    this.progressCallbacks.push(callback);
+  }
+
   public onClientConnected(callback: () => Promise<void> | void) {
     this.clientConnectedCallbacks.push(callback);
+  }
+
+  private async notifyProgress(status: string) {
+    await Promise.all(
+      this.progressCallbacks.map(async (callback) => {
+        try {
+          await callback(status);
+        } catch (error) {
+          this.log.warn(error);
+        }
+      }),
+    );
   }
 }

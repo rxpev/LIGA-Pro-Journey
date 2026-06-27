@@ -162,7 +162,19 @@ export function IPCGenericHandler() {
         throw error;
       }
 
-      await fs.promises.access(gamePath, fs.constants.F_OK);
+      try {
+        await fs.promises.access(gamePath, fs.constants.F_OK);
+      } catch (error) {
+        if (settings.general.gamePath) {
+          const invalidPathError = new Error('Game Library Path is set incorrectly') as NodeJS.ErrnoException;
+          invalidPathError.code = Constants.ErrorCode.EINVAL;
+          invalidPathError.path = settings.general.gamePath;
+          throw invalidPathError;
+        }
+
+        throw error;
+      }
+
       await fs.promises.access(Plugins.getPath(), fs.constants.F_OK);
       await Game.isRunningAndThrow(gamePath);
       return Promise.resolve();

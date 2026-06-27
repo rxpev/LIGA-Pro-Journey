@@ -68,6 +68,7 @@ export default function () {
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
+  const lastInvalidGamePathError = React.useRef('');
   const [activeTab, setActiveTab] = React.useState(
     routeState?.tab === 'game-settings'
       ? Tab.GAME_SETTINGS
@@ -131,8 +132,19 @@ export default function () {
       return;
     }
 
-    api.app.status(settings).then((status) => setAppStatus(status ? JSON.parse(status) : null));
-  }, [settings]);
+    api.app.status(settings).then((status) => {
+      const parsed = status ? (JSON.parse(status) as NodeJS.ErrnoException) : null;
+      setAppStatus(parsed);
+
+      if (
+        parsed?.code === Constants.ErrorCode.EINVAL &&
+        lastInvalidGamePathError.current !== status
+      ) {
+        lastInvalidGamePathError.current = status;
+        audioNegativeAlert();
+      }
+    });
+  }, [audioNegativeAlert, settings]);
 
   React.useEffect(() => {
     api.app
@@ -270,6 +282,9 @@ export default function () {
   const gamePathError = React.useMemo(() => {
     if (!appStatus) {
       return;
+    }
+    if (appStatus.code === Constants.ErrorCode.EINVAL) {
+      return appStatus.path;
     }
     const [, match] = appStatus.path.match(/((?:csgo|hl|hl2)\.exe)/) || [];
     return match ? appStatus.path : '';

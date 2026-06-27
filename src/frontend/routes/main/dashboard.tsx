@@ -10,17 +10,20 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play } from '@liga/frontend/redux/actions';
+import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
 import { getTeamsRoundLabel, getTeamsTierLabel } from './teams/labels';
 import {
   FaCalendarDay,
   FaChartBar,
+  FaCheckCircle,
   FaCloudMoon,
   FaCog,
   FaExclamationTriangle,
   FaForward,
   FaMapSigns,
+  FaSpinner,
   FaStop,
   FaStopwatch,
   FaStream,
@@ -47,6 +50,17 @@ const ARENA_MODE_TIER_SLUGS = new Set<string>([
   Constants.TierSlug.CCT_GLOBAL_FINALS,
 ]);
 
+const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
+  'PREPARING_MATCH',
+  'COPYING_FILES',
+  'STARTING_SERVER',
+  'CONNECTING_SERVER',
+  'WAITING_FOR_SERVER',
+  'STARTING_CLIENT',
+  'WATCHING_MATCH',
+  'SAVING_RESULTS',
+];
+
 /**
  * Application status error banner.
  *
@@ -56,29 +70,28 @@ const ARENA_MODE_TIER_SLUGS = new Set<string>([
 export function StatusBanner(props: StatusBannerProps) {
   const t = useTranslation('windows');
 
-  if (!props.error) {
-    return null;
-  }
-
   const error = React.useMemo(
-    () => JSON.parse(props.error) as NodeJS.ErrnoException,
+    () => (props.error ? (JSON.parse(props.error) as NodeJS.ErrnoException) : null),
     [props.error],
   );
 
   // figure out which game is not installed
   const message = React.useMemo(() => {
-    if (error.code !== Constants.ErrorCode.ENOENT && error.code !== Constants.ErrorCode.ERUNNING) {
+    if (
+      !error ||
+      (error.code !== Constants.ErrorCode.ENOENT && error.code !== Constants.ErrorCode.ERUNNING)
+    ) {
       return;
     }
 
-    const [, match] = error.path.match(/((?:csgo|cstrike|cs2|hl|steam)\.exe)/) || [];
+    const [, match] = error.path?.match(/((?:csgo|cstrike|cs2|hl|steam)\.exe)/) || [];
     return match;
   }, [error]);
 
   const showSteamMissing =
-    error.code === Constants.ErrorCode.ENOENT && message === Constants.GameSettings.STEAM_EXE;
-  const showRunningError = error.code === Constants.ErrorCode.ERUNNING;
-  const showPluginsError = !!error.path?.includes('plugins');
+    error?.code === Constants.ErrorCode.ENOENT && message === Constants.GameSettings.STEAM_EXE;
+  const showRunningError = error?.code === Constants.ErrorCode.ERUNNING;
+  const showPluginsError = !!error?.path?.includes('plugins');
 
   if (!showSteamMissing && !showRunningError && !showPluginsError) {
     return null;
@@ -134,6 +147,8 @@ export default function () {
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
   const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
+  const [dismissedPlayErrorAt, setDismissedPlayErrorAt] = React.useState(0);
+  const soundedPlayErrorAt = React.useRef(0);
 
   const toDashboardTeamTierLabel = (
     tierSlug: Constants.TierSlug | string,
@@ -317,6 +332,40 @@ export default function () {
 
   // grab next match info
   const [spotlight] = React.useMemo(() => upcoming.slice(0, 1), [upcoming]);
+  const playingStatus = state.playing ? state.playing.status : undefined;
+  const playingStatusIndex = Math.max(
+    0,
+    PLAYING_STATUS_STEPS.findIndex((step) => step === playingStatus),
+  );
+  const playingProgressValue =
+    ((playingStatusIndex + 1) / PLAYING_STATUS_STEPS.length) * 100;
+  const playError = React.useMemo(() => {
+    if (!state.playError?.status) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(state.playError.status) as NodeJS.ErrnoException;
+    } catch (_) {
+      return null;
+    }
+  }, [state.playError?.status]);
+  const playErrorPromptVisible =
+    !!playError && !!state.playError && dismissedPlayErrorAt !== state.playError.at;
+  const playErrorIsInvalidGamePath = playError?.code === Constants.ErrorCode.EINVAL;
+
+  React.useEffect(() => {
+    if (
+      !playErrorPromptVisible ||
+      !state.playError ||
+      soundedPlayErrorAt.current === state.playError.at
+    ) {
+      return;
+    }
+
+    soundedPlayErrorAt.current = state.playError.at;
+    audioNegativeAlert();
+  }, [audioNegativeAlert, playErrorPromptVisible, state.playError]);
 
   // grab standings info
   const [standings] = React.useMemo(
@@ -352,7 +401,54 @@ export default function () {
       <dialog className={cx('modal', state.playing && 'modal-open')}>
         <section className="modal-box">
           <h3 className="text-lg">{t('main.dashboard.playingMatchTitle')}</h3>
-          <p className="py-4">{t('main.dashboard.playingMatchSubtitle')}</p>
+          <p className="pt-3 text-sm opacity-70">{t('main.dashboard.playingMatchSubtitle')}</p>
+          <article className="bg-base-200 mt-5 rounded p-4">
+            <div className="flex items-center gap-3">
+              <FaSpinner className="animate-spin text-xl" />
+              <div>
+                <p className="text-sm uppercase opacity-60">
+                  {t('main.dashboard.matchStartupStatus')}
+                </p>
+                <p className="font-bold">
+                  {t(`main.dashboard.playingStatus.${playingStatus || 'PREPARING_MATCH'}`)}
+                </p>
+              </div>
+            </div>
+            <progress
+              className="progress progress-warning mt-4 w-full"
+              value={playingProgressValue}
+              max="100"
+            />
+            <ul className="mt-4 space-y-2 text-sm">
+              {PLAYING_STATUS_STEPS.map((step, idx) => {
+                const isComplete = idx < playingStatusIndex;
+                const isActive = idx === playingStatusIndex;
+
+                return (
+                  <li
+                    key={step}
+                    className={cx(
+                      'flex items-center gap-2',
+                      isActive && 'font-bold',
+                      !isActive && !isComplete && 'opacity-50',
+                    )}
+                  >
+                    {isComplete ? (
+                      <FaCheckCircle className="text-success" />
+                    ) : (
+                      <span
+                        className={cx(
+                          'border-base-content/40 block size-4 rounded-full border',
+                          isActive && 'border-warning bg-warning',
+                        )}
+                      />
+                    )}
+                    <span>{t(`main.dashboard.playingStatus.${step}`)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </article>
         </section>
       </dialog>
 
@@ -1129,6 +1225,61 @@ export default function () {
               >
                 OK
               </button>
+            </footer>
+          </article>
+        </section>
+      )}
+      {playErrorPromptVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">
+                  {t(
+                    playErrorIsInvalidGamePath
+                      ? 'main.dashboard.gamePathInvalidTitle'
+                      : 'main.dashboard.matchAbandonedTitle',
+                  )}
+                </p>
+              </div>
+              <p>
+                {t(
+                  playErrorIsInvalidGamePath
+                    ? 'main.dashboard.gamePathInvalid'
+                    : 'main.dashboard.matchAbandonedSubtitle',
+                )}
+              </p>
+              {playErrorIsInvalidGamePath && !!playError.path && (
+                <p className="bg-base-200 truncate p-2 text-sm" title={playError.path}>
+                  {playError.path}
+                </p>
+              )}
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn"
+                onClick={() => setDismissedPlayErrorAt(state.playError?.at || 0)}
+              >
+                OK
+              </button>
+              {playErrorIsInvalidGamePath && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setDismissedPlayErrorAt(state.playError?.at || 0);
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                      target: '/settings',
+                      payload: { tab: 'game-settings' },
+                    });
+                  }}
+                >
+                  {t('main.dashboard.openSettings')}
+                </button>
+              )}
             </footer>
           </article>
         </section>
