@@ -666,7 +666,7 @@ export default function registerFaceitHandlers() {
   // ------------------------------------------------------
   // START FACEIT MATCH
   // ------------------------------------------------------
-  ipcMain.handle('faceit:startMatch', async (_, room: MatchRoom) => {
+  ipcMain.handle('faceit:startMatch', async (event, room: MatchRoom) => {
     try {
       await DatabaseClient.connect();
       const prisma = DatabaseClient.prisma;
@@ -744,6 +744,9 @@ export default function registerFaceitHandlers() {
       match.games[0].map = selectedMap;
 
       const game = new Game(profile, match, null, false);
+      game.onProgress((status) => {
+        event.sender.send(Constants.IPCRoute.PLAY_PROGRESS, { status });
+      });
       await game.start();
 
       const sides = game.getFaceitSides();

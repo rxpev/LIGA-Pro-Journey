@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getFaceitRankBadge, LEVEL_IMAGES } from "./faceit";
-import { Image, MatchAbandonedPrompt } from "@liga/frontend/components";
+import { Image, MatchLaunchModal } from "@liga/frontend/components";
 import { FaceitHeader } from "./faceit";
 import Scoreboard from "./scoreboard";
 import { levelFromElo } from "@liga/backend/lib/levels";
 import { Constants, Util } from "@liga/shared";
 import { AppStateContext } from "@liga/frontend/redux";
+import { useAudio } from "@liga/frontend/hooks";
+import type { PlayingStatus } from "@liga/frontend/redux/state";
 import awperIcon from "../../../assets/awper.png";
 import {
   faceitMatchCompleted,
@@ -198,6 +200,7 @@ export default function MatchRoom({
   high,
 }: MatchRoomProps): JSX.Element {
   const { state, dispatch } = React.useContext(AppStateContext);
+  const audioNegativeAlert = useAudio("negative-alert.wav");
 
   const {
     matchId,
@@ -238,8 +241,10 @@ export default function MatchRoom({
     }
   });
   const connectCooldownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastInvalidGamePathError = useRef<string | null>(null);
   const [isConnectCooldown, setIsConnectCooldown] = useState(false);
-  const [matchAbandonedPromptVisible, setMatchAbandonedPromptVisible] = useState(false);
+  const [faceitPlayingStatus, setFaceitPlayingStatus] = useState<PlayingStatus | null>(null);
+  const [faceitPlayError, setFaceitPlayError] = useState<NodeJS.ErrnoException | null>(null);
 
   // ------------------------------
   // SETTINGS / MAP POOL FOR VETO
@@ -460,9 +465,35 @@ export default function MatchRoom({
   // START MATCH
   // ------------------------------
 
+  const handleLaunchError = React.useCallback(async (error?: unknown) => {
+    const launchError = error as NodeJS.ErrnoException;
+    const status =
+      launchError?.code === Constants.ErrorCode.EABANDONED
+        ? null
+        : await api.app.status(settingsAll);
+    const parsed = JSON.parse(status || false) as NodeJS.ErrnoException | false;
+
+    if (parsed && parsed.code === Constants.ErrorCode.EINVAL) {
+      if (lastInvalidGamePathError.current !== status) {
+        lastInvalidGamePathError.current = status;
+        audioNegativeAlert();
+      }
+      setFaceitPlayError(parsed);
+      return;
+    }
+
+    audioNegativeAlert();
+    setFaceitPlayError({
+      code: Constants.ErrorCode.EABANDONED,
+      message: launchError?.message || "The match was abandoned.",
+    } as NodeJS.ErrnoException);
+  }, [audioNegativeAlert, settingsAll]);
+
   const handleStartMatch = async () => {
     if (!deciderMap || isConnectCooldown) return;
 
+    setFaceitPlayError(null);
+    setFaceitPlayingStatus("PREPARING_MATCH");
     setIsConnectCooldown(true);
     if (connectCooldownTimeoutRef.current) {
       clearTimeout(connectCooldownTimeoutRef.current);
@@ -473,6 +504,18 @@ export default function MatchRoom({
     }, 45_000);
 
     dispatch(playingUpdate({ status: "PREPARING_MATCH" }));
+
+    const removeProgressListener = api.ipc.on(
+      Constants.IPCRoute.PLAY_PROGRESS,
+      (payload: { status?: PlayingStatus }) => {
+        if (!payload?.status) {
+          return;
+        }
+
+        setFaceitPlayingStatus(payload.status);
+        dispatch(playingUpdate({ status: payload.status }));
+      },
+    );
 
     try {
       const result: { matchId: number } = await api.faceit.startMatch({
@@ -490,7 +533,7 @@ export default function MatchRoom({
       }
 
       setTab("scoreboard");
-    } catch (_) {
+    } catch (error) {
       setIsConnectCooldown(false);
 
       if (connectCooldownTimeoutRef.current) {
@@ -498,8 +541,11 @@ export default function MatchRoom({
         connectCooldownTimeoutRef.current = null;
       }
 
-      setMatchAbandonedPromptVisible(true);
+      setFaceitPlayingStatus(null);
+      await handleLaunchError(error);
     } finally {
+      removeProgressListener();
+      setFaceitPlayingStatus(null);
       dispatch(playingUpdate(false));
     }
   };
@@ -584,9 +630,18 @@ export default function MatchRoom({
 
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-white flex flex-col">
-      {matchAbandonedPromptVisible && (
-        <MatchAbandonedPrompt onClose={() => setMatchAbandonedPromptVisible(false)} />
-      )}
+      <MatchLaunchModal
+        variant="faceit"
+        status={faceitPlayingStatus}
+        error={faceitPlayError}
+        onCloseError={() => setFaceitPlayError(null)}
+        onOpenSettings={() => {
+          setFaceitPlayError(null);
+          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+            target: "/settings",
+          });
+        }}
+      />
       <FaceitHeader
         elo={elo}
         level={level}

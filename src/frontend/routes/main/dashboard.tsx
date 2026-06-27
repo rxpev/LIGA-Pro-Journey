@@ -1273,7 +1273,6 @@ export default function () {
                     setDismissedPlayErrorAt(state.playError?.at || 0);
                     api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                       target: '/settings',
-                      payload: { tab: 'game-settings' },
                     });
                   }}
                 >
@@ -1315,7 +1314,6 @@ export default function () {
                   setArenaModePromptMatchId(null);
                   api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                     target: '/settings',
-                    payload: { tab: 'game-settings' },
                   });
                 }}
               >

@@ -102,7 +102,7 @@
           "WAITING_FOR_SERVER": "Waiting for server logs",
           "STARTING_CLIENT": "Starting game client",
           "WATCHING_MATCH": "Match in progress",
-          "SAVING_RESULTS": "Saving results..."
+          "SAVING_RESULTS": "Saving results"
         },
         "openSettings": "Open Settings",
         "pluginsError": "Game plugins not installed! You will not be able to launch any games. Try restarting the app to fix this issue.",

@@ -794,7 +794,7 @@ export default function () {
                 onClick={async () => {
                   await savePregameState();
                   navigate('/settings', {
-                    state: { inCareer: true, tab: 'game-settings', returnToPlayMatchId: match.id },
+                    state: { inCareer: true, returnToPlayMatchId: match.id },
                   });
                 }}
               >
