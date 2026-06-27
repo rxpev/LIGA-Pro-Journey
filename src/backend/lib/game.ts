@@ -22,6 +22,7 @@ import { Prisma, Profile } from '@prisma/client';
 import { compact, flatten, random, startCase, uniq } from 'lodash';
 import { Constants, Bot, Chance, Util, Eagers, Dedent, is } from '@liga/shared';
 import DatabaseClient from "./database-client";
+import { CSGO_BOTPROFILE_TEMPLATE } from './csgo-botprofile-template';
 
 /**
  * Promisified version of `exec`.
@@ -874,14 +875,13 @@ export class Server {
 
     const baseDir = path.join(this.getDedicatedServerRoot(), this.gameDir);
     const original = path.join(baseDir, this.botConfigFile); // e.g. "botprofile.db"
-    const template = await fs.promises.readFile(original, 'utf8');
     const [home, away] = this.competitors;
 
     const allPlayers = [...home.team.players, ...away.team.players];
     await this.exportBotTemplatesJSON(allPlayers);
 
     const rendered = Sqrl.render(
-      template,
+      CSGO_BOTPROFILE_TEMPLATE,
       {
         home: home.team.players.map(this.generateBotDifficulty.bind(this)),
         away: away.team.players.map(this.generateBotDifficulty.bind(this)),
@@ -889,7 +889,9 @@ export class Server {
       { autoEscape: false },
     );
 
+    await fs.promises.chmod(original, 0o666).catch((): void => undefined);
     await fs.promises.writeFile(original, rendered, 'utf8');
+    await fs.promises.chmod(original, 0o444).catch((): void => undefined);
     this.log.info(`Generated botprofile at: ${original}`);
   }
 
@@ -1978,7 +1980,7 @@ End\n
       to,
       true,
       this.settings.general.game === Constants.Game.CSGO
-        ? [`${CSGO_TEAM_LOGOS_DIR}/**`]
+        ? [`${CSGO_TEAM_LOGOS_DIR}/**`, this.botConfigFile]
         : [],
     );
 
