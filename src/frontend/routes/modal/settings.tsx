@@ -68,6 +68,7 @@ export default function () {
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
+  const hasManuallyUpdatedInstallPath = React.useRef(false);
   const lastInvalidGamePathError = React.useRef('');
   const [activeTab, setActiveTab] = React.useState(
     routeState?.tab === 'game-settings'
@@ -137,6 +138,7 @@ export default function () {
       setAppStatus(parsed);
 
       if (
+        hasManuallyUpdatedInstallPath.current &&
         parsed?.code === Constants.ErrorCode.EINVAL &&
         lastInvalidGamePathError.current !== status
       ) {
@@ -190,6 +192,11 @@ export default function () {
       where: { id: state.profile.id },
       data: { settings: json },
     });
+  };
+
+  const onInstallPathSettingsUpdate = (path: string, value: string) => {
+    hasManuallyUpdatedInstallPath.current = true;
+    onSettingsUpdate(path, value);
   };
 
   const onToggleSettingsUpdate = (path: string, checked: boolean) => {
@@ -447,7 +454,10 @@ export default function () {
                       .then(
                         (dialogData) =>
                           !dialogData.canceled &&
-                          onSettingsUpdate('general.steamPath', dialogData.filePaths[0]),
+                          onInstallPathSettingsUpdate(
+                            'general.steamPath',
+                            dialogData.filePaths[0],
+                          ),
                       )
                   }
                 >
@@ -483,7 +493,10 @@ export default function () {
                       .then(
                         (dialogData) =>
                           !dialogData.canceled &&
-                          onSettingsUpdate('general.gamePath', dialogData.filePaths[0]),
+                          onInstallPathSettingsUpdate(
+                            'general.gamePath',
+                            dialogData.filePaths[0],
+                          ),
                       )
                   }
                 >
@@ -514,51 +527,15 @@ export default function () {
                       .then(
                         (dialogData) =>
                           !dialogData.canceled &&
-                          onSettingsUpdate('general.dedicatedServerPath', dialogData.filePaths[0]),
+                          onInstallPathSettingsUpdate(
+                            'general.dedicatedServerPath',
+                            dialogData.filePaths[0],
+                          ),
                       )
                   }
                 >
                   <FaFolderOpen />
                 </button>
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>Game Launch Timeout</p>
-                <p>Increase if your game generally needs more time to start up.</p>
-              </header>
-              <article>
-                <input
-                  type="number"
-                  min={1}
-                  className="input join-item bg-base-200 text-sm"
-                  value={settings.general.gameLaunchTimeout}
-                  onChange={(event) =>
-                    onSettingsUpdate(
-                      'general.gameLaunchTimeout',
-                      Math.max(
-                        1,
-                        Number(event.target.value) || Constants.Settings.general.gameLaunchTimeout,
-                      ),
-                    )
-                  }
-                />
-              </article>
-            </section>
-            <section>
-              <header>
-                <p>{t('settings.launchOptionsTitle')}</p>
-                <p>{t('settings.launchOptionsSubtitle')}</p>
-              </header>
-              <article>
-                <input
-                  type="text"
-                  className="input join-item bg-base-200 text-sm"
-                  value={settings.general.gameLaunchOptions || ''}
-                  onChange={(event) =>
-                    onSettingsUpdate('general.gameLaunchOptions', event.target.value)
-                  }
-                />
               </article>
             </section>
             <section>
@@ -818,6 +795,45 @@ export default function () {
                 >
                   <FaTrashAlt />
                 </button>
+              </article>
+            </section>
+            <section className="border-base-content/10 mt-8 border-t pt-6">
+              <header>
+                <p>{t('settings.launchOptionsTitle')}</p>
+                <p>(e.g. -freq 144)</p>
+              </header>
+              <article>
+                <input
+                  type="text"
+                  className="input join-item bg-base-200 text-sm"
+                  value={settings.general.gameLaunchOptions || ''}
+                  onChange={(event) =>
+                    onSettingsUpdate('general.gameLaunchOptions', event.target.value)
+                  }
+                />
+              </article>
+            </section>
+            <section>
+              <header>
+                <p>Game Launch Timeout</p>
+                <p>Increase if your game generally needs more time to start up.</p>
+              </header>
+              <article>
+                <input
+                  type="number"
+                  min={1}
+                  className="input join-item bg-base-200 text-sm"
+                  value={settings.general.gameLaunchTimeout}
+                  onChange={(event) =>
+                    onSettingsUpdate(
+                      'general.gameLaunchTimeout',
+                      Math.max(
+                        1,
+                        Number(event.target.value) || Constants.Settings.general.gameLaunchTimeout,
+                      ),
+                    )
+                  }
+                />
               </article>
             </section>
           </fieldset>
