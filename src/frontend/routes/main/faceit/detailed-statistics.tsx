@@ -300,7 +300,7 @@ export default function FaceitDetailedStatistics(): JSX.Element {
       <div className="border-b border-[#ffffff10] bg-[#0c0c0c]/70 px-4 py-3">
         <h3 className="text-base font-bold">Weapon Statistics</h3>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="h-0 min-h-0 flex-1 overflow-y-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 text-xs text-orange-50 uppercase">
             <tr className="bg-[#3a210b]">
@@ -358,7 +358,7 @@ export default function FaceitDetailedStatistics(): JSX.Element {
   );
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#0b0b0b] text-white">
+    <div className="flex h-screen min-h-0 w-full flex-col overflow-hidden bg-[#0b0b0b] text-white">
       <div className="flex w-full items-center justify-between border-b border-[#ff7300]/60 bg-[#0f0f0f] px-4 py-4 shadow-lg">
         <button
           data-interaction-sound="back"
@@ -373,8 +373,8 @@ export default function FaceitDetailedStatistics(): JSX.Element {
         <div className="w-16" />
       </div>
 
-      <div className="h-[calc(100vh-96px)] p-6">
-        <div className="flex h-full flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
+      <div className="min-h-0 flex-1 p-6">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
           <div className="flex w-full items-center justify-between border-b border-[#ff7300]/40 bg-[#0c0c0c] px-4 py-3">
             <h2 className="text-lg font-bold">DETAILED STATISTICS</h2>
             <button
@@ -391,18 +391,18 @@ export default function FaceitDetailedStatistics(): JSX.Element {
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden p-6">
+          <div className="min-h-0 flex-1 overflow-hidden p-6">
             {loading ? (
               <div className="text-sm opacity-70">Loading detailed FACEIT stats…</div>
             ) : activeView === DetailedStatsView.WEAPONS ? (
               renderWeaponStats()
             ) : (
-              <div className="grid h-full grid-cols-[220px_1fr_1fr] gap-4">
-                <div className="flex flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0b0b0b]">
+              <div className="grid h-full min-h-0 grid-cols-[220px_1fr_1fr] grid-rows-[minmax(0,1fr)] gap-4">
+                <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0b0b0b]">
                   <div className="border-b border-[#ffffff10] bg-[#0c0c0c]/70 px-4 py-3 text-lg font-semibold">
                     Map stats
                   </div>
-                  <div className="space-y-2 overflow-y-auto p-3">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
                     <button
                       onClick={() => setSelectedMapKey(null)}
                       className={`flex w-full items-center gap-3 rounded border px-3 py-2 text-left text-sm font-semibold transition ${
@@ -444,7 +444,7 @@ export default function FaceitDetailedStatistics(): JSX.Element {
                   </div>
                 </div>
 
-                <div className="flex min-h-0 flex-col rounded-lg border border-[#ffffff15] bg-[#0b0b0b] p-4">
+                <div className="flex h-full min-h-0 flex-col rounded-lg border border-[#ffffff15] bg-[#0b0b0b] p-4">
                   <h3 className="mb-4 text-base font-bold">
                     {selectedMap ? `${selectedMap.label} Statistics` : 'All Time Statistics'}
                   </h3>
@@ -560,7 +560,7 @@ export default function FaceitDetailedStatistics(): JSX.Element {
                   </div>
                 </div>
 
-                <div className="flex flex-col rounded-lg border border-[#ffffff15] bg-[#0b0b0b] p-4">
+                <div className="flex h-full min-h-0 flex-col rounded-lg border border-[#ffffff15] bg-[#0b0b0b] p-4">
                   <h3 className="mb-4 text-base font-bold">
                     {selectedMap ? `${selectedMap.label} Overview` : 'All Maps Overview'}
                   </h3>

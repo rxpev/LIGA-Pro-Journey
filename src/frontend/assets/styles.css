@@ -21,7 +21,7 @@
 
 /** global styles */
 body {
-  @apply bg-base-100 h-full overflow-hidden overflow-y-auto;
+  @apply bg-base-100 h-full overflow-hidden;
 }
 
 * {
@@ -236,7 +236,7 @@ meter::-webkit-meter-bar {
   }
 
   main > * {
-    @apply overflow-y-scroll;
+    @apply overflow-y-auto;
   }
 
   main > :nth-child(2) {

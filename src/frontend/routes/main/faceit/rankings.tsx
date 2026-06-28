@@ -69,7 +69,7 @@ export default function FaceitRankings(): JSX.Element {
   const isLastPage = totalPages === 0 || page >= totalPages;
 
   return (
-    <div className="w-full h-full bg-[#0b0b0b] text-white flex flex-col">
+    <div className="flex h-screen min-h-0 w-full flex-col overflow-hidden bg-[#0b0b0b] text-white">
       <div className="w-full bg-[#0f0f0f] border-b border-[#ff7300]/60 py-4 shadow-lg flex items-center justify-between px-4">
         <button
           data-interaction-sound="back"
@@ -84,9 +84,9 @@ export default function FaceitRankings(): JSX.Element {
         <div className="w-16" />
       </div>
 
-      <div className="p-6 h-[calc(100vh-96px)]">
-        <div className="grid grid-cols-[280px_1fr] gap-4 h-full">
-          <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] p-4 flex flex-col gap-4">
+      <div className="min-h-0 flex-1 p-6">
+        <div className="grid h-full min-h-0 grid-cols-[280px_1fr] grid-rows-[minmax(0,1fr)] gap-4">
+          <div className="flex h-full min-h-0 flex-col gap-4 rounded-lg border border-[#ffffff15] bg-[#0f0f0f] p-4">
             <h3 className="text-sm font-bold tracking-wide">FILTERS</h3>
 
             <div className="space-y-2">
@@ -131,13 +131,13 @@ export default function FaceitRankings(): JSX.Element {
             </div>
           </div>
 
-          <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] h-full flex flex-col overflow-hidden">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
             <div className="w-full bg-[#0c0c0c] py-3 px-4 border-b border-[#ff7300]/40 flex items-center justify-between">
               <h2 className="text-lg font-bold">{dynamicLeaderboardTitle}</h2>
               <span className="text-xs opacity-70">{totalPlayers} players</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-[#ffffff10]">
+            <div className="h-0 min-h-0 flex-1 divide-y divide-[#ffffff10] overflow-y-scroll">
               {loading ? (
                 <div className="px-4 py-4 text-sm opacity-60">Loading leaderboard...</div>
               ) : players.length === 0 ? (
@@ -183,7 +183,7 @@ export default function FaceitRankings(): JSX.Element {
               )}
             </div>
 
-            <div className="border-t border-[#ffffff10] px-4 py-3 bg-[#0c0c0c]/80 flex items-center justify-between">
+            <div className="flex shrink-0 items-center justify-between border-t border-[#ffffff10] bg-[#0c0c0c]/80 px-4 py-3">
               <button
                 disabled={isFirstPage || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}

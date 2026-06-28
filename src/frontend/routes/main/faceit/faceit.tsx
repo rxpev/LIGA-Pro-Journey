@@ -1,32 +1,38 @@
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import MatchRoom from "./matchroom";
-import { AppStateContext } from "@liga/frontend/redux";
-import {faceitRoomSet,faceitRoomClear,faceitQueueSet,faceitQueueClear,faceitQueueResolving,} from "@liga/frontend/redux/actions";
-import { shuffle } from "lodash";
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import MatchRoom from './matchroom';
+import { AppStateContext } from '@liga/frontend/redux';
+import {
+  faceitRoomSet,
+  faceitRoomClear,
+  faceitQueueSet,
+  faceitQueueClear,
+  faceitQueueResolving,
+} from '@liga/frontend/redux/actions';
+import { shuffle } from 'lodash';
 
-import Scoreboard from "./scoreboard";
+import Scoreboard from './scoreboard';
 
-import faceitLogo from "../../../assets/faceit/faceit.png";
-import level1 from "../../../assets/faceit/1.png";
-import level2 from "../../../assets/faceit/2.png";
-import level3 from "../../../assets/faceit/3.png";
-import level4 from "../../../assets/faceit/4.png";
-import level5 from "../../../assets/faceit/5.png";
-import level6 from "../../../assets/faceit/6.png";
-import level7 from "../../../assets/faceit/7.png";
-import level8 from "../../../assets/faceit/8.png";
-import level9 from "../../../assets/faceit/9.png";
-import level10 from "../../../assets/faceit/10.png";
-import killsIcon from "../../../assets/faceit/kills.png";
-import deathsIcon from "../../../assets/faceit/deaths.png";
-import headshotIcon from "../../../assets/faceit/headshot.png";
-import { Image } from "@liga/frontend/components";
-import { Constants, Util } from "@liga/shared";
-import { useAudio } from "@liga/frontend/hooks";
-import { useNavigate } from "react-router-dom";
-import { toast } from "react-hot-toast";
-import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from "react-icons/fa";
+import faceitLogo from '../../../assets/faceit/faceit.png';
+import level1 from '../../../assets/faceit/1.png';
+import level2 from '../../../assets/faceit/2.png';
+import level3 from '../../../assets/faceit/3.png';
+import level4 from '../../../assets/faceit/4.png';
+import level5 from '../../../assets/faceit/5.png';
+import level6 from '../../../assets/faceit/6.png';
+import level7 from '../../../assets/faceit/7.png';
+import level8 from '../../../assets/faceit/8.png';
+import level9 from '../../../assets/faceit/9.png';
+import level10 from '../../../assets/faceit/10.png';
+import killsIcon from '../../../assets/faceit/kills.png';
+import deathsIcon from '../../../assets/faceit/deaths.png';
+import headshotIcon from '../../../assets/faceit/headshot.png';
+import { Image } from '@liga/frontend/components';
+import { Constants, Util } from '@liga/shared';
+import { useAudio } from '@liga/frontend/hooks';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from 'react-icons/fa';
 
 export const LEVEL_IMAGES = [
   null,
@@ -42,11 +48,13 @@ export const LEVEL_IMAGES = [
   level10,
 ];
 
-export const RANK_IMAGES = [
-  null as string | null,
-];
+export const RANK_IMAGES = [null as string | null];
 
-const rankImagesContext = (require as any).context("../../../assets/faceit", false, /^\.\/rank\d+\.png$/);
+const rankImagesContext = (require as any).context(
+  '../../../assets/faceit',
+  false,
+  /^\.\/rank\d+\.png$/,
+);
 
 for (const key of rankImagesContext.keys()) {
   const match = key.match(/rank(\d+)\.png$/);
@@ -54,8 +62,7 @@ for (const key of rankImagesContext.keys()) {
   const rank = Number(match[1]);
   if (!Number.isFinite(rank) || rank < 1) continue;
   const loadedBadge = rankImagesContext(key);
-  RANK_IMAGES[rank] =
-    typeof loadedBadge === "string" ? loadedBadge : loadedBadge?.default || null;
+  RANK_IMAGES[rank] = typeof loadedBadge === 'string' ? loadedBadge : loadedBadge?.default || null;
 }
 
 export const getFaceitRankBadge = (rank: number): string | null => {
@@ -87,8 +94,8 @@ type MatchPlayer = {
   teamCountryId?: number | null;
   userControlled?: boolean;
   queueId?: string;
-  queueType?: "COUNTRY" | "TEAM" | "BOTH";
-  role?: "RIFLER" | "AWPER" | "IGL" | string;
+  queueType?: 'COUNTRY' | 'TEAM' | 'BOTH';
+  role?: 'RIFLER' | 'AWPER' | 'IGL' | string;
 };
 
 type MatchRoomData = {
@@ -148,7 +155,7 @@ const LEVEL_RANGES: Record<number, [number, number]> = {
 const isAwperRole = (role?: string | null) => {
   if (!role) return false;
   const normalized = String(role).toUpperCase();
-  return normalized === "AWPER" || normalized === "SNIPER";
+  return normalized === 'AWPER' || normalized === 'SNIPER';
 };
 
 const formatRecentMatchDate = (value?: string | Date | null) => {
@@ -157,10 +164,10 @@ const formatRecentMatchDate = (value?: string | Date | null) => {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
 
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "2-digit",
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: '2-digit',
   }).format(parsed);
 };
 
@@ -179,7 +186,7 @@ export default function Faceit(): JSX.Element {
   const [queueError, setQueueError] = useState<string | null>(null);
   const [currentSaveId, setCurrentSaveId] = useState<number | null>(() => {
     try {
-      const cached = Number(localStorage.getItem("liga-active-save-id") || 0);
+      const cached = Number(localStorage.getItem('liga-active-save-id') || 0);
       return Number.isFinite(cached) && cached > 0 ? cached : null;
     } catch {
       return null;
@@ -199,7 +206,7 @@ export default function Faceit(): JSX.Element {
   // QUEUE
   const [queueTimer, setQueueTimer] = useState(0);
   const faceitQueue = state.faceitQueue;
-  const queueing = faceitQueue.status === "QUEUEING" || faceitQueue.status === "RESOLVING";
+  const queueing = faceitQueue.status === 'QUEUEING' || faceitQueue.status === 'RESOLVING';
   const queueStartedAt = faceitQueue.startedAt;
   const queueTargetSec = faceitQueue.targetSec;
   const queueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -215,15 +222,15 @@ export default function Faceit(): JSX.Element {
   const queueBlockMessage = React.useMemo(() => {
     if (!daily) return null;
     if (daily.hasLiveUserMatchday) {
-      return "League match is live. Finish your match before queueing FACEIT.";
+      return 'League match is live. Finish your match before queueing FACEIT.';
     }
 
     if (daily.playedToday < daily.maxToday) return null;
 
     if (daily.hasPendingUserMatchday) {
-      return "Matchday scheduled today. FACEIT is limited to 2 matches to avoid skipping it.";
+      return 'Matchday scheduled today. FACEIT is limited to 2 matches to avoid skipping it.';
     }
-    return "Daily FACEIT limit reached.";
+    return 'Daily FACEIT limit reached.';
   }, [daily]);
 
   // SCOREBOARD OVERLAY
@@ -315,19 +322,19 @@ export default function Faceit(): JSX.Element {
 
   const leaderboardRegionTitle = React.useMemo(() => {
     const userCountryId = state.profile?.player?.countryId;
-    if (!userCountryId) return "REGIONAL RANKINGS";
+    if (!userCountryId) return 'REGIONAL RANKINGS';
 
     const continent = (state.continents as any[]).find((entry: any) =>
-      (entry.countries || []).some((country: any) => country.id === userCountryId)
+      (entry.countries || []).some((country: any) => country.id === userCountryId),
     );
 
-    const code = String(continent?.code || "").toUpperCase();
-    if (code === "EU") return "EU RANKINGS";
-    if (code === "AS") return "ASIA RANKINGS";
-    if (code === "OC") return "OCE RANKINGS";
-    if (code === "NA" || code === "SA") return "AMERICAS RANKINGS";
+    const code = String(continent?.code || '').toUpperCase();
+    if (code === 'EU') return 'EU RANKINGS';
+    if (code === 'AS') return 'ASIA RANKINGS';
+    if (code === 'OC') return 'OCE RANKINGS';
+    if (code === 'NA' || code === 'SA') return 'AMERICAS RANKINGS';
 
-    return "REGIONAL RANKINGS";
+    return 'REGIONAL RANKINGS';
   }, [state.profile, state.continents]);
 
   useEffect(() => {
@@ -347,7 +354,7 @@ export default function Faceit(): JSX.Element {
         const normalized = Number.isFinite(id) && id > 0 ? id : null;
         setCurrentSaveId(normalized);
         if (normalized) {
-          localStorage.setItem("liga-active-save-id", String(normalized));
+          localStorage.setItem('liga-active-save-id', String(normalized));
         }
       })
       .catch(() => setCurrentSaveId(null));
@@ -369,7 +376,7 @@ export default function Faceit(): JSX.Element {
       setQueueTimer(0);
       return;
     }
-    if (faceitQueue.status !== "QUEUEING" || !queueStartedAt || !queueTargetSec) {
+    if (faceitQueue.status !== 'QUEUEING' || !queueStartedAt || !queueTargetSec) {
       clearQueueInterval();
       if (!queueing) setQueueTimer(0);
       return;
@@ -482,28 +489,31 @@ export default function Faceit(): JSX.Element {
       };
 
       try {
-        const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
-        const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
+        const cachedSaveId = Number(localStorage.getItem('liga-active-save-id') || 0);
+        const resolvedSaveId =
+          currentSaveId ??
+          (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
         const saveScopedKey = resolvedSaveId ? `faceit-save-${resolvedSaveId}:party-members` : null;
 
         const storedParty =
           (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
-          localStorage.getItem("faceit-party-members");
+          localStorage.getItem('faceit-party-members');
         const hydratedParty = await hydrateStoredPartyMembers(storedParty);
         if (hydratedParty.length > 0) {
           const serializedParty = JSON.stringify(hydratedParty);
           if (saveScopedKey) {
             localStorage.setItem(saveScopedKey, serializedParty);
           }
-          localStorage.setItem("faceit-party-members", serializedParty);
+          localStorage.setItem('faceit-party-members', serializedParty);
         }
 
         const profileQueueElo = Number(state.profile?.faceitElo);
-        const baseQueueElo = Number.isFinite(elo) && elo > 0
-          ? elo
-          : Number.isFinite(profileQueueElo) && profileQueueElo > 0
-            ? profileQueueElo
-            : null;
+        const baseQueueElo =
+          Number.isFinite(elo) && elo > 0
+            ? elo
+            : Number.isFinite(profileQueueElo) && profileQueueElo > 0
+              ? profileQueueElo
+              : null;
 
         let queueElo = baseQueueElo;
         let maxPartyEloDelta = 0;
@@ -513,7 +523,9 @@ export default function Faceit(): JSX.Element {
             .filter((memberElo: number) => Number.isFinite(memberElo) && memberElo > 0);
 
           if (partyElos.length > 0 && baseQueueElo) {
-            const totalElo = baseQueueElo + partyElos.reduce((sum: number, memberElo: number) => sum + memberElo, 0);
+            const totalElo =
+              baseQueueElo +
+              partyElos.reduce((sum: number, memberElo: number) => sum + memberElo, 0);
             queueElo = Math.round(totalElo / (partyElos.length + 1));
             const highestPartyElo = Math.max(...partyElos);
             maxPartyEloDelta = Math.max(0, Math.round(highestPartyElo - baseQueueElo));
@@ -526,31 +538,33 @@ export default function Faceit(): JSX.Element {
         });
       } catch (e: any) {
         const msg = String(e?.message ?? e);
-        if (msg.includes("FACEIT_BLOCKED_LIVE_MATCHDAY_USER")) {
-          setQueueError("League match is live. Finish your match before queueing FACEIT.");
-        } else if (msg.includes("FACEIT_BLOCKED_MATCHDAY_USER_TODAY")) {
-          setQueueError(
-            "Matchday scheduled today. You can only play 2 FACEIT matches to warm up."
-          );
-        } else if (msg.includes("FACEIT_BLOCKED_DAILY_LIMIT")) {
-          setQueueError("Daily FACEIT limit reached.");
-        } else if (msg.includes("FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS")) {
-          setQueueError("Not enough similarly skilled players in your region right now.");
+        if (msg.includes('FACEIT_BLOCKED_LIVE_MATCHDAY_USER')) {
+          setQueueError('League match is live. Finish your match before queueing FACEIT.');
+        } else if (msg.includes('FACEIT_BLOCKED_MATCHDAY_USER_TODAY')) {
+          setQueueError('Matchday scheduled today. You can only play 2 FACEIT matches to warm up.');
+        } else if (msg.includes('FACEIT_BLOCKED_DAILY_LIMIT')) {
+          setQueueError('Daily FACEIT limit reached.');
+        } else if (msg.includes('FACEIT_NOT_ENOUGH_SIMILAR_SKILL_PLAYERS')) {
+          setQueueError('Not enough similarly skilled players in your region right now.');
         } else {
-          setQueueError("Unable to queue FACEIT match.");
+          setQueueError('Unable to queue FACEIT match.');
         }
         refreshProfile();
         return;
       }
       const applyPartyToTeams = async (room: any) => {
         try {
-          const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
-          const resolvedSaveId = currentSaveId ?? (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
-          const saveScopedKey = resolvedSaveId ? `faceit-save-${resolvedSaveId}:party-members` : null;
+          const cachedSaveId = Number(localStorage.getItem('liga-active-save-id') || 0);
+          const resolvedSaveId =
+            currentSaveId ??
+            (Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null);
+          const saveScopedKey = resolvedSaveId
+            ? `faceit-save-${resolvedSaveId}:party-members`
+            : null;
 
           const storedParty =
             (saveScopedKey ? localStorage.getItem(saveScopedKey) : null) ||
-            localStorage.getItem("faceit-party-members");
+            localStorage.getItem('faceit-party-members');
           const parsed = await hydrateStoredPartyMembers(storedParty);
           if (!Array.isArray(parsed) || parsed.length === 0) return room;
 
@@ -563,22 +577,26 @@ export default function Faceit(): JSX.Element {
             ? room.teamB.findIndex((player: MatchPlayer) => player.id === userId)
             : -1;
 
-          const userOnTeamAByFlag = room.teamA.findIndex((player: MatchPlayer) => player.userControlled);
-          const userOnTeamBByFlag = room.teamB.findIndex((player: MatchPlayer) => player.userControlled);
+          const userOnTeamAByFlag = room.teamA.findIndex(
+            (player: MatchPlayer) => player.userControlled,
+          );
+          const userOnTeamBByFlag = room.teamB.findIndex(
+            (player: MatchPlayer) => player.userControlled,
+          );
 
           const isUserTeamA = userOnTeamAById !== -1 || userOnTeamAByFlag !== -1;
           const isUserTeamB = userOnTeamBById !== -1 || userOnTeamBByFlag !== -1;
 
           if (!isUserTeamA && !isUserTeamB) return room;
 
-          const teamKey = isUserTeamA ? "teamA" : "teamB";
-          const enemyKey = isUserTeamA ? "teamB" : "teamA";
+          const teamKey = isUserTeamA ? 'teamA' : 'teamB';
+          const enemyKey = isUserTeamA ? 'teamB' : 'teamA';
 
           const userTeam = [...room[teamKey]] as MatchPlayer[];
           const enemyTeam = [...room[enemyKey]] as MatchPlayer[];
 
           const userIdx = userTeam.findIndex(
-            (player: MatchPlayer) => player.id === userId || player.userControlled
+            (player: MatchPlayer) => player.id === userId || player.userControlled,
           );
           if (userIdx === -1) return room;
 
@@ -589,7 +607,7 @@ export default function Faceit(): JSX.Element {
               const existing = [...userTeam, ...enemyTeam].find(
                 (player) =>
                   player.id === member.id ||
-                  player.name.toLowerCase() === String(member.name).toLowerCase()
+                  player.name.toLowerCase() === String(member.name).toLowerCase(),
               );
               return {
                 ...member,
@@ -606,28 +624,30 @@ export default function Faceit(): JSX.Element {
             partyIdSet.has(player.id) || partyNameSet.has(player.name.toLowerCase());
 
           const basePool = [...userTeam, ...enemyTeam].filter(
-            (player) => !(player.id === userId || player.userControlled) && !playerInParty(player)
+            (player) => !(player.id === userId || player.userControlled) && !playerInParty(player),
           );
 
           const partyQueueId = `PARTY-${userTeam[userIdx].id}-${normalizedParty
             .map((member) => member.id)
-            .join("-")}`;
+            .join('-')}`;
 
           const lockedUser = {
             ...userTeam[userIdx],
             queueId: partyQueueId,
-            queueType: "TEAM" as const,
+            queueType: 'TEAM' as const,
           };
 
           const maxPartyInUserTeam = Math.min(normalizedParty.length, userTeam.length - 1);
           const selectedParty = normalizedParty.slice(0, maxPartyInUserTeam).map((member) => ({
             ...member,
             queueId: partyQueueId,
-            queueType: "TEAM" as const,
+            queueType: 'TEAM' as const,
           }));
 
           const takeFromPool = (preferAwper: boolean): MatchPlayer | null => {
-            const preferredIndex = basePool.findIndex((candidate) => isAwperRole(candidate.role) === preferAwper);
+            const preferredIndex = basePool.findIndex(
+              (candidate) => isAwperRole(candidate.role) === preferAwper,
+            );
             if (preferredIndex !== -1) {
               const [picked] = basePool.splice(preferredIndex, 1);
               return picked ?? null;
@@ -637,7 +657,8 @@ export default function Faceit(): JSX.Element {
             return fallback ?? null;
           };
 
-          const countAwpers = (team: MatchPlayer[]) => team.filter((player) => isAwperRole(player.role)).length;
+          const countAwpers = (team: MatchPlayer[]) =>
+            team.filter((player) => isAwperRole(player.role)).length;
 
           const rebuiltUserTeam: MatchPlayer[] = [lockedUser, ...selectedParty];
           while (rebuiltUserTeam.length < userTeam.length && basePool.length > 0) {
@@ -653,7 +674,10 @@ export default function Faceit(): JSX.Element {
             if (next) rebuiltEnemyTeam.push(next);
           }
 
-          if (rebuiltUserTeam.length !== userTeam.length || rebuiltEnemyTeam.length !== enemyTeam.length) {
+          if (
+            rebuiltUserTeam.length !== userTeam.length ||
+            rebuiltEnemyTeam.length !== enemyTeam.length
+          ) {
             return room;
           }
 
@@ -669,13 +693,12 @@ export default function Faceit(): JSX.Element {
 
       const shuffledTeamA = shuffle(res.teamA);
       const shuffledTeamB = shuffle(res.teamB);
-      const partyAdjusted = await applyPartyToTeams({ ...res, teamA: shuffledTeamA, teamB: shuffledTeamB });
-      dispatch(
-        faceitRoomSet(
-          partyAdjusted,
-          null
-        )
-      );
+      const partyAdjusted = await applyPartyToTeams({
+        ...res,
+        teamA: shuffledTeamA,
+        teamB: shuffledTeamB,
+      });
+      dispatch(faceitRoomSet(partyAdjusted, null));
       setShowMatchRoom(true);
       playMatchFoundTune();
     } finally {
@@ -698,17 +721,17 @@ export default function Faceit(): JSX.Element {
   const currentMatch = showMatchRoom && activeMatch ? activeMatch : null;
 
   return (
-    <div className="w-full h-full bg-[#0b0b0b] text-white relative">
+    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#0b0b0b] text-white">
       {/* SCOREBOARD OVERLAY */}
       {viewMatchId && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50 p-8">
-          <div className="bg-[#0f0f0f] w-full h-full rounded-lg border border-[#ffffff20] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
+          <div className="h-full w-full overflow-y-auto rounded-lg border border-[#ffffff20] bg-[#0f0f0f] p-6">
+            <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-bold">Match #{viewMatchId}</h2>
 
               <button
                 data-interaction-sound="back"
-                className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600"
+                className="rounded bg-neutral-700 px-3 py-1 hover:bg-neutral-600"
                 onClick={() => setViewMatchId(null)}
               >
                 Close
@@ -766,8 +789,11 @@ export default function Faceit(): JSX.Element {
             currentTeamCountryId={state.profile?.team?.countryId ?? null}
             countryFederationById={Object.fromEntries(
               (state.continents as any[]).flatMap((continent: any) =>
-                (continent.countries ?? []).map((country: any) => [country.id, continent.federationId])
-              )
+                (continent.countries ?? []).map((country: any) => [
+                  country.id,
+                  continent.federationId,
+                ]),
+              ),
             )}
             currentDate={state.profile?.date ?? new Date()}
           />
@@ -786,12 +812,10 @@ export default function Faceit(): JSX.Element {
             activeMatch={activeMatch}
             reopenMatchRoom={() => setShowMatchRoom(true)}
             gameSlug={gameSlug}
-
             daily={daily}
             canQueue={canQueue}
             queueBlockMessage={queueBlockMessage}
             queueError={queueError}
-
           />
         </>
       )}
@@ -843,7 +867,7 @@ export function FaceitHeader({
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
   const [friends, setFriends] = useState<MatchPlayer[]>([]);
   const [pendingRequests, setPendingRequests] = useState<number[]>([]);
-  const [friendsTab, setFriendsTab] = useState<"suggestions">("suggestions");
+  const [friendsTab, setFriendsTab] = useState<'suggestions'>('suggestions');
   const friendsButtonRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [friendsHydrated, setFriendsHydrated] = useState(false);
@@ -861,15 +885,20 @@ export function FaceitHeader({
   });
   const [partyMembers, setPartyMembers] = useState<MatchPlayer[]>([]);
   const [partyHydrated, setPartyHydrated] = useState(false);
-  const [dailyFriendStatus, setDailyFriendStatus] = useState<Record<number, { online: boolean; accepts: boolean }>>({});
+  const [dailyFriendStatus, setDailyFriendStatus] = useState<
+    Record<number, { online: boolean; accepts: boolean }>
+  >({});
   const [partyLeaveCountdown, setPartyLeaveCountdown] = useState<Record<number, number>>({});
   const [declinedSuggestionIds, setDeclinedSuggestionIds] = useState<number[]>([]);
   const previousActiveMatchIdRef = useRef<string | null>(null);
   const previousDayKeyRef = useRef<string | null>(null);
   const [lastPugTeammates, setLastPugTeammates] = useState<MatchPlayer[]>([]);
   const [latestTrackedPugId, setLatestTrackedPugId] = useState<string | null>(null);
-  const [lastSuggestionMatchPerformance, setLastSuggestionMatchPerformance] = useState<LastSuggestionMatchPerformance | null>(null);
-  const [dbPlayerSnapshotById, setDbPlayerSnapshotById] = useState<Map<number, MatchPlayer>>(new Map());
+  const [lastSuggestionMatchPerformance, setLastSuggestionMatchPerformance] =
+    useState<LastSuggestionMatchPerformance | null>(null);
+  const [dbPlayerSnapshotById, setDbPlayerSnapshotById] = useState<Map<number, MatchPlayer>>(
+    new Map(),
+  );
   const safeCurrentDate = React.useMemo(() => {
     const parsed = currentDate ? new Date(currentDate) : new Date();
     if (Number.isNaN(parsed.getTime())) {
@@ -879,12 +908,18 @@ export function FaceitHeader({
   }, [currentDate]);
   const dayKey = safeCurrentDate.toISOString().slice(0, 10);
   const partyLocked = !!activeMatch;
-  const storagePrefix = React.useMemo(() => `faceit-save-${currentSaveId ?? "default"}`, [currentSaveId]);
-  const storageKey = React.useCallback((suffix: string) => `${storagePrefix}:${suffix}`, [storagePrefix]);
+  const storagePrefix = React.useMemo(
+    () => `faceit-save-${currentSaveId ?? 'default'}`,
+    [currentSaveId],
+  );
+  const storageKey = React.useCallback(
+    (suffix: string) => `${storagePrefix}:${suffix}`,
+    [storagePrefix],
+  );
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(storageKey("friends"));
+      const stored = localStorage.getItem(storageKey('friends'));
       if (!stored) return;
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
@@ -899,12 +934,12 @@ export function FaceitHeader({
 
   useEffect(() => {
     if (!friendsHydrated) return;
-    localStorage.setItem(storageKey("friends"), JSON.stringify(friends));
+    localStorage.setItem(storageKey('friends'), JSON.stringify(friends));
   }, [friends, friendsHydrated, storageKey]);
 
   useEffect(() => {
     try {
-      const storedParty = localStorage.getItem(storageKey("party-members"));
+      const storedParty = localStorage.getItem(storageKey('party-members'));
       if (storedParty) {
         const parsed = JSON.parse(storedParty);
         if (Array.isArray(parsed)) {
@@ -912,15 +947,15 @@ export function FaceitHeader({
         }
       }
 
-      const storedCountdown = localStorage.getItem(storageKey("party-leave-countdown"));
+      const storedCountdown = localStorage.getItem(storageKey('party-leave-countdown'));
       if (storedCountdown) {
         const parsedCountdown = JSON.parse(storedCountdown);
-        if (parsedCountdown && typeof parsedCountdown === "object") {
+        if (parsedCountdown && typeof parsedCountdown === 'object') {
           setPartyLeaveCountdown(parsedCountdown);
         }
       }
 
-      const storedPartyDayKey = localStorage.getItem(storageKey("party-day-key"));
+      const storedPartyDayKey = localStorage.getItem(storageKey('party-day-key'));
       if (storedPartyDayKey && storedPartyDayKey !== dayKey) {
         setPartyMembers([]);
         setPartyLeaveCountdown({});
@@ -935,17 +970,17 @@ export function FaceitHeader({
 
   useEffect(() => {
     if (!partyHydrated) return;
-    localStorage.setItem(storageKey("party-members"), JSON.stringify(partyMembers));
+    localStorage.setItem(storageKey('party-members'), JSON.stringify(partyMembers));
   }, [partyMembers, partyHydrated, storageKey]);
 
   useEffect(() => {
     if (!partyHydrated) return;
-    localStorage.setItem(storageKey("party-leave-countdown"), JSON.stringify(partyLeaveCountdown));
+    localStorage.setItem(storageKey('party-leave-countdown'), JSON.stringify(partyLeaveCountdown));
   }, [partyLeaveCountdown, partyHydrated, storageKey]);
 
   useEffect(() => {
     try {
-      const storedDeclined = localStorage.getItem(storageKey("declined-suggestions"));
+      const storedDeclined = localStorage.getItem(storageKey('declined-suggestions'));
       if (!storedDeclined) return;
       const parsed = JSON.parse(storedDeclined);
       if (Array.isArray(parsed)) {
@@ -958,7 +993,7 @@ export function FaceitHeader({
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(storageKey("last-pug-teammates"));
+      const stored = localStorage.getItem(storageKey('last-pug-teammates'));
       if (!stored) return;
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
@@ -969,7 +1004,7 @@ export function FaceitHeader({
     }
 
     try {
-      const storedPugId = localStorage.getItem(storageKey("last-pug-id"));
+      const storedPugId = localStorage.getItem(storageKey('last-pug-id'));
       setLatestTrackedPugId(storedPugId || null);
     } catch {
       setLatestTrackedPugId(null);
@@ -991,8 +1026,8 @@ export function FaceitHeader({
     setLastPugTeammates(teammates);
     setLatestTrackedPugId(activeMatch.fakeRoomId);
     setDeclinedSuggestionIds([]);
-    localStorage.setItem(storageKey("last-pug-teammates"), JSON.stringify(teammates));
-    localStorage.setItem(storageKey("last-pug-id"), activeMatch.fakeRoomId);
+    localStorage.setItem(storageKey('last-pug-teammates'), JSON.stringify(teammates));
+    localStorage.setItem(storageKey('last-pug-id'), activeMatch.fakeRoomId);
   }, [activeMatch, currentPlayerId, latestTrackedPugId, storageKey]);
 
   useEffect(() => {
@@ -1034,7 +1069,7 @@ export function FaceitHeader({
   }, [dayKey, dailyFriendStatus, friendsHydrated, storageKey]);
 
   useEffect(() => {
-    localStorage.setItem(storageKey("declined-suggestions"), JSON.stringify(declinedSuggestionIds));
+    localStorage.setItem(storageKey('declined-suggestions'), JSON.stringify(declinedSuggestionIds));
   }, [declinedSuggestionIds, storageKey]);
 
   useEffect(() => {
@@ -1077,14 +1112,14 @@ export function FaceitHeader({
     };
 
     syncDropdownPosition();
-    window.addEventListener("resize", syncDropdownPosition);
-    window.addEventListener("scroll", syncDropdownPosition, true);
-    document.addEventListener("mousedown", onDocumentClick);
+    window.addEventListener('resize', syncDropdownPosition);
+    window.addEventListener('scroll', syncDropdownPosition, true);
+    document.addEventListener('mousedown', onDocumentClick);
 
     return () => {
-      window.removeEventListener("resize", syncDropdownPosition);
-      window.removeEventListener("scroll", syncDropdownPosition, true);
-      document.removeEventListener("mousedown", onDocumentClick);
+      window.removeEventListener('resize', syncDropdownPosition);
+      window.removeEventListener('scroll', syncDropdownPosition, true);
+      document.removeEventListener('mousedown', onDocumentClick);
     };
   }, [friendsDropdownOpen, partyDropdownOpen]);
 
@@ -1101,7 +1136,7 @@ export function FaceitHeader({
     }
 
     previousDayKeyRef.current = dayKey;
-    localStorage.setItem(storageKey("party-day-key"), dayKey);
+    localStorage.setItem(storageKey('party-day-key'), dayKey);
   }, [dayKey, partyHydrated, storageKey]);
 
   useEffect(() => {
@@ -1171,7 +1206,7 @@ export function FaceitHeader({
     previousActiveMatchIdRef.current = currentActiveMatchId;
   }, [activeMatch, partyMembers, partyLeaveCountdown]);
 
-  const resolvePlayerLevel = (player: Pick<MatchPlayer, "level" | "elo">) => {
+  const resolvePlayerLevel = (player: Pick<MatchPlayer, 'level' | 'elo'>) => {
     if (player.level >= 1 && player.level <= 10) return player.level;
 
     const eloValue = Number(player.elo || 0);
@@ -1183,64 +1218,77 @@ export function FaceitHeader({
     return eloValue > LEVEL_RANGES[10][0] ? 10 : 1;
   };
 
-  const computeLastSuggestionMatchPerformance = React.useCallback(async (matchId: string, playerId: number) => {
-    const matchData = await api.faceit.getMatchData(matchId);
-    if (!matchData?.match) return null;
+  const computeLastSuggestionMatchPerformance = React.useCallback(
+    async (matchId: string, playerId: number) => {
+      const matchData = await api.faceit.getMatchData(matchId);
+      if (!matchData?.match) return null;
 
-    const players = Array.isArray(matchData.players) ? matchData.players : [];
-    const events = Array.isArray(matchData.events) ? matchData.events : [];
-    const match = matchData.match;
+      const players = Array.isArray(matchData.players) ? matchData.players : [];
+      const events = Array.isArray(matchData.events) ? matchData.events : [];
+      const match = matchData.match;
 
-    let teammateIds = new Set<number>();
-    let opponentIds = new Set<number>();
+      let teammateIds = new Set<number>();
+      let opponentIds = new Set<number>();
 
-    try {
-      if (match.faceitTeammates) {
-        teammateIds = new Set((JSON.parse(match.faceitTeammates) as Array<{ id: number }>).map((p) => p.id));
+      try {
+        if (match.faceitTeammates) {
+          teammateIds = new Set(
+            (JSON.parse(match.faceitTeammates) as Array<{ id: number }>).map((p) => p.id),
+          );
+        }
+        if (match.faceitOpponents) {
+          opponentIds = new Set(
+            (JSON.parse(match.faceitOpponents) as Array<{ id: number }>).map((p) => p.id),
+          );
+        }
+      } catch {
+        teammateIds = new Set<number>();
+        opponentIds = new Set<number>();
       }
-      if (match.faceitOpponents) {
-        opponentIds = new Set((JSON.parse(match.faceitOpponents) as Array<{ id: number }>).map((p) => p.id));
+
+      const stats: MatchPlayerStat[] = players.map((player: { id: number }) => {
+        const kills = events.filter(
+          (event: any) => event.type === 'playerkilled' && event.attackerId === player.id,
+        ).length;
+        const deaths = events.filter(
+          (event: any) => event.type === 'playerkilled' && event.victimId === player.id,
+        ).length;
+        const kdRatio = deaths > 0 ? kills / deaths : kills;
+        return { id: player.id, kills, deaths, kdRatio };
+      });
+
+      const userStat = stats.find((entry: MatchPlayerStat) => entry.id === playerId);
+      if (!userStat) return null;
+
+      let userTeamStats = teammateIds.has(playerId)
+        ? stats.filter((entry: MatchPlayerStat) => teammateIds.has(entry.id))
+        : opponentIds.has(playerId)
+          ? stats.filter((entry: MatchPlayerStat) => opponentIds.has(entry.id))
+          : [];
+
+      if (!userTeamStats.length) {
+        const midpoint = Math.ceil(stats.length / 2);
+        const firstHalf = stats.slice(0, midpoint);
+        const secondHalf = stats.slice(midpoint);
+        userTeamStats = firstHalf.some((entry: MatchPlayerStat) => entry.id === playerId)
+          ? firstHalf
+          : secondHalf;
       }
-    } catch {
-      teammateIds = new Set<number>();
-      opponentIds = new Set<number>();
-    }
 
-    const stats: MatchPlayerStat[] = players.map((player: { id: number }) => {
-      const kills = events.filter((event: any) => event.type === "playerkilled" && event.attackerId === player.id).length;
-      const deaths = events.filter((event: any) => event.type === "playerkilled" && event.victimId === player.id).length;
-      const kdRatio = deaths > 0 ? kills / deaths : kills;
-      return { id: player.id, kills, deaths, kdRatio };
-    });
+      const topFragger = [...userTeamStats].sort((a, b) => {
+        if (b.kills !== a.kills) return b.kills - a.kills;
+        return b.kdRatio - a.kdRatio;
+      })[0];
 
-    const userStat = stats.find((entry: MatchPlayerStat) => entry.id === playerId);
-    if (!userStat) return null;
-
-    let userTeamStats = teammateIds.has(playerId)
-      ? stats.filter((entry: MatchPlayerStat) => teammateIds.has(entry.id))
-      : opponentIds.has(playerId)
-        ? stats.filter((entry: MatchPlayerStat) => opponentIds.has(entry.id))
-        : [];
-
-    if (!userTeamStats.length) {
-      const midpoint = Math.ceil(stats.length / 2);
-      const firstHalf = stats.slice(0, midpoint);
-      const secondHalf = stats.slice(midpoint);
-      userTeamStats = firstHalf.some((entry: MatchPlayerStat) => entry.id === playerId) ? firstHalf : secondHalf;
-    }
-
-    const topFragger = [...userTeamStats].sort((a, b) => {
-      if (b.kills !== a.kills) return b.kills - a.kills;
-      return b.kdRatio - a.kdRatio;
-    })[0];
-
-    return {
-      matchId,
-      playerId,
-      kdRatio: userStat.kdRatio,
-      isTopFragger: topFragger?.id === playerId,
-    } satisfies LastSuggestionMatchPerformance;
-  }, []);
+      return {
+        matchId,
+        playerId,
+        kdRatio: userStat.kdRatio,
+        isTopFragger: topFragger?.id === playerId,
+      } satisfies LastSuggestionMatchPerformance;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (activeMatch || !latestTrackedPugId || !currentPlayerId) return;
@@ -1273,28 +1321,40 @@ export function FaceitHeader({
   }, [activeMatch, latestTrackedPugId, currentPlayerId, computeLastSuggestionMatchPerformance]);
 
   const userHadGreatLastSuggestionMatch = React.useMemo(() => {
-    if (!lastSuggestionMatchPerformance || lastSuggestionMatchPerformance.playerId !== currentPlayerId) {
+    if (
+      !lastSuggestionMatchPerformance ||
+      lastSuggestionMatchPerformance.playerId !== currentPlayerId
+    ) {
       return false;
     }
 
-    return lastSuggestionMatchPerformance.kdRatio > 2 && lastSuggestionMatchPerformance.isTopFragger;
+    return (
+      lastSuggestionMatchPerformance.kdRatio > 2 && lastSuggestionMatchPerformance.isTopFragger
+    );
   }, [lastSuggestionMatchPerformance, currentPlayerId]);
 
   const suggestions = React.useMemo(() => {
     const completedPugTeammates = activeMatch ? [] : lastPugTeammates;
     const combined = [...profileTeammates, ...completedPugTeammates];
     const deduped = combined.filter(
-      (teammate, index, arr) => arr.findIndex((candidate) => candidate.id === teammate.id) === index
+      (teammate, index, arr) =>
+        arr.findIndex((candidate) => candidate.id === teammate.id) === index,
     );
 
     return deduped.filter(
       (teammate) =>
         teammate.id !== currentPlayerId &&
         !friends.some((friend) => friend.id === teammate.id) &&
-        !declinedSuggestionIds.includes(teammate.id)
+        !declinedSuggestionIds.includes(teammate.id),
     );
-  }, [profileTeammates, activeMatch, lastPugTeammates, currentPlayerId, friends, declinedSuggestionIds]);
-
+  }, [
+    profileTeammates,
+    activeMatch,
+    lastPugTeammates,
+    currentPlayerId,
+    friends,
+    declinedSuggestionIds,
+  ]);
 
   const snapshotRefreshKey = React.useMemo(() => {
     const ids = new Set<number>();
@@ -1304,12 +1364,14 @@ export function FaceitHeader({
       }
     }
 
-    return Array.from(ids).sort((a, b) => a - b).join(",");
+    return Array.from(ids)
+      .sort((a, b) => a - b)
+      .join(',');
   }, [friends, partyMembers, profileTeammates, lastPugTeammates]);
 
   useEffect(() => {
     const ids = snapshotRefreshKey
-      .split(",")
+      .split(',')
       .map((entry) => Number(entry))
       .filter((id) => Number.isFinite(id) && id > 0);
 
@@ -1382,7 +1444,14 @@ export function FaceitHeader({
       });
     }
     return map;
-  }, [profileTeammates, lastPugTeammates, activeMatch, friends, partyMembers, dbPlayerSnapshotById]);
+  }, [
+    profileTeammates,
+    lastPugTeammates,
+    activeMatch,
+    friends,
+    partyMembers,
+    dbPlayerSnapshotById,
+  ]);
 
   useEffect(() => {
     setFriends((prev) => {
@@ -1445,9 +1514,8 @@ export function FaceitHeader({
     });
   }, [knownPlayersById]);
 
-
   const resolveFederationId = React.useCallback(
-    (player: Pick<MatchPlayer, "teamId" | "teamCountryId" | "countryId">) => {
+    (player: Pick<MatchPlayer, 'teamId' | 'teamCountryId' | 'countryId'>) => {
       // Team assignment takes precedence over nationality.
       if (player.teamId) {
         if (!player.teamCountryId) return null;
@@ -1457,7 +1525,7 @@ export function FaceitHeader({
       // For teamless players, FACEIT compatibility follows federation (not country).
       return countryFederationById[player.countryId] ?? null;
     },
-    [countryFederationById]
+    [countryFederationById],
   );
 
   const userFederationId = React.useMemo(() => {
@@ -1518,7 +1586,7 @@ export function FaceitHeader({
 
   const inviteFriendToParty = async (friend: MatchPlayer) => {
     if (partyLocked) {
-      toast.error("Party changes are locked during an active match.");
+      toast.error('Party changes are locked during an active match.');
       return;
     }
 
@@ -1526,11 +1594,13 @@ export function FaceitHeader({
     const resolvedFriend = await hydrateFriendRegionInfo(friend);
 
     setFriends((prev) =>
-      prev.map((entry) => (entry.id === resolvedFriend.id ? { ...entry, ...resolvedFriend } : entry))
+      prev.map((entry) =>
+        entry.id === resolvedFriend.id ? { ...entry, ...resolvedFriend } : entry,
+      ),
     );
 
     if (isAwperRole(resolvedFriend.role) && awperSlotTaken) {
-      toast.error("AWPer slot is already taken in your party/lobby.");
+      toast.error('AWPer slot is already taken in your party/lobby.');
       return;
     }
 
@@ -1553,7 +1623,7 @@ export function FaceitHeader({
     setPartyMembers((prev) => {
       if (prev.some((member) => member.id === resolvedFriend.id)) return prev;
       if (prev.length >= 4) {
-        toast.error("Party is full (you + 4 friends max).");
+        toast.error('Party is full (you + 4 friends max).');
         return prev;
       }
       toast.success(`${resolvedFriend.name} joined your party.`);
@@ -1580,44 +1650,52 @@ export function FaceitHeader({
     if (partyLocked) return;
     if (pendingRequests.includes(teammate.id)) return;
     if (friends.length >= 30) {
-      toast.error("Friend list is full (30 max).");
+      toast.error('Friend list is full (30 max).');
       return;
     }
 
     setPendingRequests((prev) => [...prev, teammate.id]);
     toast(`Sent friend request to ${teammate.name}`);
 
-    window.setTimeout(() => {
-      setPendingRequests((prev) => prev.filter((id) => id !== teammate.id));
+    window.setTimeout(
+      () => {
+        setPendingRequests((prev) => prev.filter((id) => id !== teammate.id));
 
-      const isCurrentLeagueTeammate = Boolean(currentTeamId && teammate.teamId === currentTeamId);
-      const teammateIsFromLastPlayedMatch = lastPugTeammates.some((player) => player.id === teammate.id);
-      const shouldBoostAcceptance = teammateIsFromLastPlayedMatch && userHadGreatLastSuggestionMatch;
-      const declineThreshold = shouldBoostAcceptance ? 0.25 : 0.6;
-      const declined = isCurrentLeagueTeammate ? false : Math.random() < declineThreshold;
-      if (declined) {
-        toast.error(`${teammate.name} declined your friend request.`);
-        setDeclinedSuggestionIds((prev) => (prev.includes(teammate.id) ? prev : [...prev, teammate.id]));
-        return;
-      }
+        const isCurrentLeagueTeammate = Boolean(currentTeamId && teammate.teamId === currentTeamId);
+        const teammateIsFromLastPlayedMatch = lastPugTeammates.some(
+          (player) => player.id === teammate.id,
+        );
+        const shouldBoostAcceptance =
+          teammateIsFromLastPlayedMatch && userHadGreatLastSuggestionMatch;
+        const declineThreshold = shouldBoostAcceptance ? 0.25 : 0.6;
+        const declined = isCurrentLeagueTeammate ? false : Math.random() < declineThreshold;
+        if (declined) {
+          toast.error(`${teammate.name} declined your friend request.`);
+          setDeclinedSuggestionIds((prev) =>
+            prev.includes(teammate.id) ? prev : [...prev, teammate.id],
+          );
+          return;
+        }
 
-      let accepted = false;
-      setFriends((prev) => {
-        if (prev.some((friend) => friend.id === teammate.id) || prev.length >= 30) return prev;
-        accepted = true;
-        return [...prev, teammate];
-      });
-      if (accepted) {
-        toast.success(`${teammate.name} accepted your request!`);
-      }
-    }, 1500 + Math.round(Math.random() * 1500));
+        let accepted = false;
+        setFriends((prev) => {
+          if (prev.some((friend) => friend.id === teammate.id) || prev.length >= 30) return prev;
+          accepted = true;
+          return [...prev, teammate];
+        });
+        if (accepted) {
+          toast.success(`${teammate.name} accepted your request!`);
+        }
+      },
+      1500 + Math.round(Math.random() * 1500),
+    );
   };
 
   return (
-    <div className="w-full bg-[#0f0f0f] border-b border-[#ff7300]/60 py-4 shadow-lg flex items-center justify-between">
-      <img src={faceitLogo} className="h-10 ml-4 select-none" />
+    <div className="flex w-full items-center justify-between border-b border-[#ff7300]/60 bg-[#0f0f0f] py-4 shadow-lg">
+      <img src={faceitLogo} className="ml-4 h-10 select-none" />
 
-      <div className="relative isolate flex items-center gap-3 mr-6 px-4 py-2 rounded-md bg-[#0b0b0b]/70 border border-[#ffffff15] shadow-lg shadow-black/40 backdrop-blur-sm">
+      <div className="relative isolate mr-6 flex items-center gap-3 rounded-md border border-[#ffffff15] bg-[#0b0b0b]/70 px-4 py-2 shadow-lg shadow-black/40 backdrop-blur-sm">
         {partyMembers.length === 0 ? (
           <button
             ref={partyButtonRef}
@@ -1627,7 +1705,7 @@ export function FaceitHeader({
               setFriendsDropdownOpen(false);
             }}
             disabled={partyLocked}
-            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
+            className="flex h-10 items-center gap-2 rounded border border-[#ffffff25] bg-[#111] px-3 text-sm font-semibold tracking-wide uppercase hover:bg-[#1a1a1a] disabled:opacity-40"
           >
             <FaUsers className="text-[#d4d4d4]" />
             Create Party
@@ -1641,18 +1719,18 @@ export function FaceitHeader({
               setFriendsDropdownOpen(false);
             }}
             disabled={partyLocked}
-            className="h-10 px-2 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 flex items-center gap-1"
+            className="flex h-10 items-center gap-1 rounded border border-[#ffffff25] bg-[#111] px-2 hover:bg-[#1a1a1a] disabled:opacity-40"
             title="Open party"
           >
-            <div className="w-6 h-6 rounded bg-[#1a1a1a] border border-[#ffffff20] flex items-center justify-center text-[#ff7300] text-xs font-bold">
+            <div className="flex h-6 w-6 items-center justify-center rounded border border-[#ffffff20] bg-[#1a1a1a] text-xs font-bold text-[#ff7300]">
               P
             </div>
             {[0, 1, 2, 3].map((slot) => {
               const member = partyMembers[slot];
               return (
                 <React.Fragment key={`party-slot-bar-${slot}`}>
-                  <div className="w-6 h-6 rounded bg-[#101010] border border-[#ffffff15] text-neutral-500 flex items-center justify-center text-xs">
-                    {member ? member.name.slice(0, 1).toUpperCase() : "+"}
+                  <div className="flex h-6 w-6 items-center justify-center rounded border border-[#ffffff15] bg-[#101010] text-xs text-neutral-500">
+                    {member ? member.name.slice(0, 1).toUpperCase() : '+'}
                   </div>
                 </React.Fragment>
               );
@@ -1670,15 +1748,13 @@ export function FaceitHeader({
               setPartyDropdownOpen(false);
             }}
             disabled={partyLocked}
-            className="h-10 px-3 rounded border border-[#ffffff25] bg-[#111] hover:bg-[#1a1a1a] disabled:opacity-40 text-sm uppercase tracking-wide font-semibold flex items-center gap-2"
+            className="flex h-10 items-center gap-2 rounded border border-[#ffffff25] bg-[#111] px-3 text-sm font-semibold tracking-wide uppercase hover:bg-[#1a1a1a] disabled:opacity-40"
           >
             <FaUserFriends className="text-[#d4d4d4]" />
             Friends
             <span className="text-[#7cd75c]">{friends.length}</span>
             <FaChevronDown className="text-xs opacity-70" />
           </button>
-
-
         </div>
 
         {friendsDropdownOpen &&
@@ -1686,11 +1762,11 @@ export function FaceitHeader({
             <div
               ref={dropdownRef}
               style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
-              className="fixed rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl z-[9999]"
+              className="fixed z-[9999] rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl"
             >
-              <div className="text-sm font-semibold mb-2">Friends</div>
+              <div className="mb-2 text-sm font-semibold">Friends</div>
 
-              <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+              <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                 {friends.length === 0 ? (
                   <div className="text-xs text-neutral-400">No friends yet.</div>
                 ) : (
@@ -1710,7 +1786,7 @@ export function FaceitHeader({
                           type="button"
                           onClick={() => removeFriend(friend.id)}
                           disabled={partyLocked}
-                          className="text-[10px] uppercase tracking-wide text-neutral-400 hover:text-white disabled:opacity-40"
+                          className="text-[10px] tracking-wide text-neutral-400 uppercase hover:text-white disabled:opacity-40"
                         >
                           Remove
                         </button>
@@ -1721,14 +1797,14 @@ export function FaceitHeader({
               </div>
 
               <div className="mt-3 border-t border-[#ffffff10] pt-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => setFriendsTab("suggestions")}
-                    className={`text-xs uppercase px-2 py-1 rounded border ${
-                      friendsTab === "suggestions"
-                        ? "border-[#ff7300] text-[#ff7300]"
-                        : "border-[#ffffff20] text-neutral-400"
+                    onClick={() => setFriendsTab('suggestions')}
+                    className={`rounded border px-2 py-1 text-xs uppercase ${
+                      friendsTab === 'suggestions'
+                        ? 'border-[#ff7300] text-[#ff7300]'
+                        : 'border-[#ffffff20] text-neutral-400'
                     }`}
                   >
                     Suggestions
@@ -1736,10 +1812,12 @@ export function FaceitHeader({
                   <span className="text-[10px] text-neutral-500">{friends.length}/30</span>
                 </div>
 
-                {friendsTab === "suggestions" && (
-                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {friendsTab === 'suggestions' && (
+                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                     {suggestions.length === 0 ? (
-                      <div className="text-xs text-neutral-500">No teammate suggestions right now.</div>
+                      <div className="text-xs text-neutral-500">
+                        No teammate suggestions right now.
+                      </div>
                     ) : (
                       suggestions.map((teammate) => {
                         const requestPending = pendingRequests.includes(teammate.id);
@@ -1764,10 +1842,10 @@ export function FaceitHeader({
                               type="button"
                               onClick={() => sendFriendRequest(teammate)}
                               disabled={requestPending || atLimit || partyLocked}
-                              className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40 flex items-center gap-1"
+                              className="flex items-center gap-1 rounded border border-[#ffffff20] px-2 py-1 text-xs disabled:opacity-40"
                             >
                               <FaUserPlus />
-                              {requestPending ? "Pending" : atLimit ? "Full" : "Add"}
+                              {requestPending ? 'Pending' : atLimit ? 'Full' : 'Add'}
                             </button>
                           </div>
                         );
@@ -1782,22 +1860,22 @@ export function FaceitHeader({
 
         <img src={LEVEL_IMAGES[level]} className="h-10 w-10" />
 
-        <div className="flex flex-col w-56">
+        <div className="flex w-56 flex-col">
           <div className="text-xl font-bold">{elo}</div>
 
-          <div className="w-full h-2 bg-neutral-700 rounded-full overflow-hidden">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-700">
             <div
               className="h-full bg-[#ff7300]"
               style={{ width: `${Math.min(100, Math.max(0, displayPct))}%` }}
             />
           </div>
 
-          <div className="flex justify-between text-xs opacity-80 mt-1">
+          <div className="mt-1 flex justify-between text-xs opacity-80">
             <span>{low}</span>
-            <span className="text-center w-full">
-              {level === 10 ? "MAX LEVEL" : `-${elo - low}/+${high - elo}`}
+            <span className="w-full text-center">
+              {level === 10 ? 'MAX LEVEL' : `-${elo - low}/+${high - elo}`}
             </span>
-            <span>{level === 10 ? "∞" : high}</span>
+            <span>{level === 10 ? '∞' : high}</span>
           </div>
         </div>
 
@@ -1806,12 +1884,14 @@ export function FaceitHeader({
             <div
               ref={partyDropdownRef}
               style={{ top: partyPos.top, left: partyPos.left, width: partyPos.width }}
-              className="fixed rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl z-[9999]"
+              className="fixed z-[9999] rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl"
             >
-              <div className="text-sm font-semibold mb-2">Party</div>
+              <div className="mb-2 text-sm font-semibold">Party</div>
 
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded bg-[#1a1a1a] border border-[#ffffff20] flex items-center justify-center text-[#ff7300]">P</div>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded border border-[#ffffff20] bg-[#1a1a1a] text-[#ff7300]">
+                  P
+                </div>
                 {[0, 1, 2, 3].map((slot) => {
                   const member = partyMembers[slot];
                   return member ? (
@@ -1821,14 +1901,14 @@ export function FaceitHeader({
                       title={`Remove ${member.name}`}
                       onClick={() => removeFromParty(member.id)}
                       disabled={partyLocked}
-                      className="w-8 h-8 rounded bg-[#1a1a1a] border border-[#ffffff20] text-xs disabled:opacity-40"
+                      className="h-8 w-8 rounded border border-[#ffffff20] bg-[#1a1a1a] text-xs disabled:opacity-40"
                     >
                       {member.name.slice(0, 1).toUpperCase()}
                     </button>
                   ) : (
                     <div
                       key={`empty-${slot}`}
-                      className="w-8 h-8 rounded bg-[#101010] border border-[#ffffff15] text-neutral-500 flex items-center justify-center"
+                      className="flex h-8 w-8 items-center justify-center rounded border border-[#ffffff15] bg-[#101010] text-neutral-500"
                     >
                       +
                     </div>
@@ -1836,17 +1916,22 @@ export function FaceitHeader({
                 })}
               </div>
 
-              <div className="text-xs text-neutral-400 mb-2">Invite friends ({partyMembers.length}/4)</div>
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              <div className="mb-2 text-xs text-neutral-400">
+                Invite friends ({partyMembers.length}/4)
+              </div>
+              <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
                 {friends.length === 0 ? (
-                  <div className="text-xs text-neutral-500">Add friends first to build a party.</div>
+                  <div className="text-xs text-neutral-500">
+                    Add friends first to build a party.
+                  </div>
                 ) : (
                   friends.map((friend) => {
                     const status = dailyFriendStatus[friend.id];
                     const inParty = partyMembers.some((member) => member.id === friend.id);
                     const partyFull = partyMembers.length >= 4;
                     const awperBlocked = isAwperRole(friend.role) && awperSlotTaken;
-                    const canInvite = Boolean(status?.online) && !inParty && !partyFull && !awperBlocked;
+                    const canInvite =
+                      Boolean(status?.online) && !inParty && !partyFull && !awperBlocked;
                     return (
                       <div
                         key={`party-invite-${friend.id}`}
@@ -1865,9 +1950,15 @@ export function FaceitHeader({
                           type="button"
                           onClick={() => inviteFriendToParty(friend)}
                           disabled={!canInvite || partyLocked}
-                          className="text-xs rounded px-2 py-1 border border-[#ffffff20] disabled:opacity-40"
+                          className="rounded border border-[#ffffff20] px-2 py-1 text-xs disabled:opacity-40"
                         >
-                          {inParty ? "In party" : awperBlocked ? "AWPer blocked" : status?.online ? "Invite" : "Offline"}
+                          {inParty
+                            ? 'In party'
+                            : awperBlocked
+                              ? 'AWPer blocked'
+                              : status?.online
+                                ? 'Invite'
+                                : 'Offline'}
                         </button>
                       </div>
                     );
@@ -1934,135 +2025,137 @@ function NormalFaceitBody({
   const kills = lifetime ? lifetime.kills : 0;
   const deaths = lifetime ? lifetime.deaths : 0;
   const hsPercent = lifetime ? Math.round(lifetime.hsPercent) : 0;
-  const kdRatio = lifetime ? lifetime.kdRatio.toFixed(2) : "—";
-  const winRate = lifetime ? Math.round(lifetime.winRate) : "—";
-  const matchesPlayed = lifetime ? lifetime.matchesPlayed : "—";
+  const kdRatio = lifetime ? lifetime.kdRatio.toFixed(2) : '—';
+  const winRate = lifetime ? Math.round(lifetime.winRate) : '—';
+  const matchesPlayed = lifetime ? lifetime.matchesPlayed : '—';
   const gameEnum = gameSlug as Constants.Game;
 
   // LAST 20 GAMES
   const lastKills = last20 ? last20.kills : 0;
   const lastDeaths = last20 ? last20.deaths : 0;
   const lastHsPercent = last20 ? Math.round(last20.hsPercent) : 0;
-  const lastKdRatio = last20 ? last20.kdRatio.toFixed(2) : "—";
-  const lastWinRate = last20 ? Math.round(last20.winRate) : "—";
+  const lastKdRatio = last20 ? last20.kdRatio.toFixed(2) : '—';
+  const lastWinRate = last20 ? Math.round(last20.winRate) : '—';
   const lastAverageKills =
-    last20 && last20.matchesPlayed > 0 ? Math.floor(last20.kills / last20.matchesPlayed) : "—";
+    last20 && last20.matchesPlayed > 0 ? Math.floor(last20.kills / last20.matchesPlayed) : '—';
 
   return (
-    <div className="grid grid-cols-3 gap-6 p-6 h-[calc(100vh-160px)]">
+    <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)] gap-6 p-6">
       {/* ------------------------------------------------------------------- */}
       {/* STATISTICS */}
       {/* ------------------------------------------------------------------- */}
-      <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] flex flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
         {/* TOP HEADER — STATISTICS */}
-        <div className="bg-[#0c0c0c] py-3 flex justify-center items-center border-b border-[#ff7300]/40">
+        <div className="flex items-center justify-center border-b border-[#ff7300]/40 bg-[#0c0c0c] py-3">
           <h2 className="text-lg font-bold">STATISTICS</h2>
         </div>
 
-        {/* ALL TIME CARD */}
-        <div className="mx-6 mt-4 mb-2 bg-neutral-900/40 rounded-lg p-4 text-center border border-[#ffffff10]">
-          <h1 className="text-lg font-bold tracking-wide">ALL TIME</h1>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* ALL TIME CARD */}
+          <div className="mx-6 mt-4 mb-2 rounded-lg border border-[#ffffff10] bg-neutral-900/40 p-4 text-center">
+            <h1 className="text-lg font-bold tracking-wide">ALL TIME</h1>
+          </div>
+
+          {/* GRID ALL-TIME */}
+          <div className="grid grid-cols-3 grid-rows-2 gap-4 px-4 pb-4">
+            {/* KILLS */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={killsIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{kills}</div>
+              <div className="mt-1 text-xs opacity-60">Kills</div>
+            </div>
+
+            {/* DEATHS */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={deathsIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{deaths}</div>
+              <div className="mt-1 text-xs opacity-60">Deaths</div>
+            </div>
+
+            {/* HS% */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={headshotIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{hsPercent}%</div>
+              <div className="mt-1 text-xs opacity-60">HS%</div>
+            </div>
+
+            {/* K/D */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{kdRatio}</div>
+              <div className="mt-1 text-xs opacity-60">K/D</div>
+            </div>
+
+            {/* WIN RATE */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{winRate}%</div>
+              <div className="mt-1 text-xs opacity-60">Win Rate</div>
+            </div>
+
+            {/* MATCHES PLAYED */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{matchesPlayed}</div>
+              <div className="mt-1 text-xs opacity-60">Matches</div>
+            </div>
+          </div>
+
+          {/* LAST 20 GAMES HEADER */}
+          <div className="mx-6 mt-2 mb-2 rounded-lg border border-[#ffffff10] bg-neutral-900/40 p-4 text-center">
+            <h1 className="text-lg font-bold tracking-wide">LAST 20 GAMES</h1>
+          </div>
+
+          {/* GRID LAST 20 */}
+          <div className="grid grid-cols-3 grid-rows-2 gap-4 px-4 pb-6">
+            {/* KILLS */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={killsIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{lastKills}</div>
+              <div className="mt-1 text-xs opacity-60">Kills</div>
+            </div>
+
+            {/* DEATHS */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={deathsIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{lastDeaths}</div>
+              <div className="mt-1 text-xs opacity-60">Deaths</div>
+            </div>
+
+            {/* HS% */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <img src={headshotIcon} className="mb-2 h-10 w-10 opacity-90" />
+              <div className="text-lg font-bold">{lastHsPercent}%</div>
+              <div className="mt-1 text-xs opacity-60">HS%</div>
+            </div>
+
+            {/* K/D */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{lastKdRatio}</div>
+              <div className="mt-1 text-xs opacity-60">K/D</div>
+            </div>
+
+            {/* WIN RATE */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{lastWinRate}%</div>
+              <div className="mt-1 text-xs opacity-60">Win Rate</div>
+            </div>
+
+            {/* AVERAGE KILLS */}
+            <div className="flex h-28 flex-col items-center justify-center rounded-lg bg-neutral-900/40 p-3">
+              <div className="text-xl font-bold">{lastAverageKills}</div>
+              <div className="mt-1 text-xs opacity-60">Avg Kills</div>
+            </div>
+          </div>
         </div>
 
-        {/* GRID ALL-TIME */}
-        <div className="grid grid-cols-3 grid-rows-2 gap-4 px-4 pb-4">
-          {/* KILLS */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={killsIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{kills}</div>
-            <div className="text-xs opacity-60 mt-1">Kills</div>
-          </div>
-
-          {/* DEATHS */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={deathsIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{deaths}</div>
-            <div className="text-xs opacity-60 mt-1">Deaths</div>
-          </div>
-
-          {/* HS% */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={headshotIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{hsPercent}%</div>
-            <div className="text-xs opacity-60 mt-1">HS%</div>
-          </div>
-
-          {/* K/D */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{kdRatio}</div>
-            <div className="text-xs opacity-60 mt-1">K/D</div>
-          </div>
-
-          {/* WIN RATE */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{winRate}%</div>
-            <div className="text-xs opacity-60 mt-1">Win Rate</div>
-          </div>
-
-          {/* MATCHES PLAYED */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{matchesPlayed}</div>
-            <div className="text-xs opacity-60 mt-1">Matches</div>
-          </div>
-        </div>
-
-        {/* LAST 20 GAMES HEADER */}
-        <div className="mx-6 mt-2 mb-2 bg-neutral-900/40 rounded-lg p-4 text-center border border-[#ffffff10]">
-          <h1 className="text-lg font-bold tracking-wide">LAST 20 GAMES</h1>
-        </div>
-
-        {/* GRID LAST 20 */}
-        <div className="grid grid-cols-3 grid-rows-2 gap-4 px-4 pb-6">
-          {/* KILLS */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={killsIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{lastKills}</div>
-            <div className="text-xs opacity-60 mt-1">Kills</div>
-          </div>
-
-          {/* DEATHS */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={deathsIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{lastDeaths}</div>
-            <div className="text-xs opacity-60 mt-1">Deaths</div>
-          </div>
-
-          {/* HS% */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <img src={headshotIcon} className="w-10 h-10 mb-2 opacity-90" />
-            <div className="text-lg font-bold">{lastHsPercent}%</div>
-            <div className="text-xs opacity-60 mt-1">HS%</div>
-          </div>
-
-          {/* K/D */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{lastKdRatio}</div>
-            <div className="text-xs opacity-60 mt-1">K/D</div>
-          </div>
-
-          {/* WIN RATE */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{lastWinRate}%</div>
-            <div className="text-xs opacity-60 mt-1">Win Rate</div>
-          </div>
-
-          {/* AVERAGE KILLS */}
-          <div className="bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center p-3 h-28">
-            <div className="text-xl font-bold">{lastAverageKills}</div>
-            <div className="text-xs opacity-60 mt-1">Avg Kills</div>
-          </div>
-        </div>
-
-        <div className="px-4 pb-4 mt-auto">
+        <div className="shrink-0 border-t border-[#ffffff10] px-4 py-4">
           <button
             onClick={() =>
-              navigate("/faceit/detailed-statistics", {
+              navigate('/faceit/detailed-statistics', {
                 state: {
                   fromFaceitDetailedStatisticsButton: true,
                 },
               })
             }
-            className="relative w-full flex items-center justify-center rounded-md border border-[#ffffff20] px-3 py-2 text-sm font-semibold hover:border-[#ff7300]/70 hover:bg-neutral-800/70 transition"
+            className="relative flex w-full items-center justify-center rounded-md border border-[#ffffff20] px-3 py-2 text-sm font-semibold transition hover:border-[#ff7300]/70 hover:bg-neutral-800/70"
           >
             <span className="text-white">DETAILED STATISTICS</span>
             <span className="absolute right-3 text-neutral-300">→</span>
@@ -2073,8 +2166,8 @@ function NormalFaceitBody({
       {/* ------------------------------------------------------------------- */}
       {/* MATCHMAKING BUTTON */}
       {/* ------------------------------------------------------------------- */}
-      <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] flex flex-col overflow-hidden">
-        <div className="w-full bg-[#0c0c0c] py-3 flex justify-center items-center border-b border-[#ff7300]/40">
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
+        <div className="flex w-full items-center justify-center border-b border-[#ff7300]/40 bg-[#0c0c0c] py-3">
           <h2 className="text-lg font-bold">MATCHMAKING</h2>
         </div>
 
@@ -2083,7 +2176,7 @@ function NormalFaceitBody({
             {activeMatch ? (
               <button
                 onClick={reopenMatchRoom}
-                className="w-56 py-5 text-xl rounded text-white shadow-lg bg-orange-600 hover:bg-orange-700 text-center"
+                className="w-56 rounded bg-orange-600 py-5 text-center text-xl text-white shadow-lg hover:bg-orange-700"
               >
                 GO TO MATCH
               </button>
@@ -2092,27 +2185,21 @@ function NormalFaceitBody({
                 <button
                   disabled={!canQueue && !queueing}
                   onClick={!queueing && canQueue ? startQueue : undefined}
-                  className={`
-        w-56 py-5 text-xl rounded text-white shadow-lg transition-all text-center
-        ${queueing ? "bg-orange-600 cursor-default" : ""}
-        ${!queueing && canQueue ? "bg-orange-600 hover:bg-orange-700" : ""}
-        ${!queueing && !canQueue ? "bg-neutral-600 cursor-not-allowed opacity-70" : ""}
-      `}
+                  className={`w-56 rounded py-5 text-center text-xl text-white shadow-lg transition-all ${queueing ? 'cursor-default bg-orange-600' : ''} ${!queueing && canQueue ? 'bg-orange-600 hover:bg-orange-700' : ''} ${!queueing && !canQueue ? 'cursor-not-allowed bg-neutral-600 opacity-70' : ''} `}
                 >
                   {queueing
                     ? `SEARCHING... ${queueTimer}s`
                     : !canQueue
                       ? daily?.hasLiveUserMatchday
-                        ? "MATCH LIVE"
-                        : "LIMIT REACHED"
-                      : "FIND MATCH"}
+                        ? 'MATCH LIVE'
+                        : 'LIMIT REACHED'
+                      : 'FIND MATCH'}
                 </button>
                 {queueing && (
                   <button
                     data-interaction-sound="back"
                     onClick={cancelQueue}
-                    className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center
-          rounded-full bg-red-600 hover:bg-red-700 text-white text-sm shadow-md"
+                    className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-sm text-white shadow-md hover:bg-red-700"
                   >
                     ×
                   </button>
@@ -2123,11 +2210,9 @@ function NormalFaceitBody({
                   </div>
                 )}
                 {queueError ? (
-                  <div className="mt-2 text-center text-xs text-red-400 px-6">
-                    {queueError}
-                  </div>
+                  <div className="mt-2 px-6 text-center text-xs text-red-400">{queueError}</div>
                 ) : queueBlockMessage ? (
-                  <div className="mt-2 text-center text-xs text-neutral-300 px-6">
+                  <div className="mt-2 px-6 text-center text-xs text-neutral-300">
                     {queueBlockMessage}
                   </div>
                 ) : null}
@@ -2135,9 +2220,11 @@ function NormalFaceitBody({
             )}
           </div>
 
-          <div className="bg-neutral-900/40 rounded-lg border border-[#ffffff10] overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#ffffff10] bg-[#0c0c0c]/60">
-              <h3 className="text-sm font-bold tracking-wide text-center">{leaderboardRegionTitle}</h3>
+          <div className="overflow-hidden rounded-lg border border-[#ffffff10] bg-neutral-900/40">
+            <div className="border-b border-[#ffffff10] bg-[#0c0c0c]/60 px-4 py-3">
+              <h3 className="text-center text-sm font-bold tracking-wide">
+                {leaderboardRegionTitle}
+              </h3>
             </div>
 
             <div className="max-h-[460px] overflow-y-auto">
@@ -2150,27 +2237,24 @@ function NormalFaceitBody({
                     return (
                       <div
                         key={player.playerId}
-                        className="flex items-center justify-between px-4 py-1.5 bg-neutral-900/20"
+                        className="flex items-center justify-between bg-neutral-900/20 px-4 py-1.5"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-xs text-neutral-300 w-6">#{player.rank}</span>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="w-6 text-xs text-neutral-300">#{player.rank}</span>
                           <img
                             src={LEVEL_IMAGES[player.faceitLevel] || LEVEL_IMAGES[1]}
-                            className="w-6 h-6"
+                            className="h-6 w-6"
                           />
                           {player.countryCode ? (
                             <span className={`fp ${player.countryCode}`} />
                           ) : (
                             <span className="w-4" />
                           )}
-                          <span className="text-sm font-semibold truncate">{player.nickname}</span>
+                          <span className="truncate text-sm font-semibold">{player.nickname}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           {rankBadge ? (
-                            <img
-                              src={rankBadge}
-                              className="w-17 h-11"
-                            />
+                            <img src={rankBadge} className="h-11 w-17" />
                           ) : (
                             <div className="w-17" />
                           )}
@@ -2180,25 +2264,21 @@ function NormalFaceitBody({
                     );
                   })}
 
-                  <div className="px-4 py-3 bg-neutral-900/20">
-                      <button
-                        onClick={() =>
-                          navigate("/faceit/rankings", {
-                            state: {
-                              fromFaceitRankingsButton: true,
-                              leaderboardRegionTitle,
-                            },
-                          })
-                        }
-                        className="relative w-full flex items-center justify-center rounded-md border border-[#ffffff20] px-3 py-2 text-sm font-semibold hover:border-[#ff7300]/70 hover:bg-neutral-800/70 transition"
-                      >
-                        <span className="text-white">
-                          OPEN FULL RANKINGS
-                        </span>
-                        <span className="absolute right-3 text-neutral-300">
-                          →
-                        </span>
-                      </button>
+                  <div className="bg-neutral-900/20 px-4 py-3">
+                    <button
+                      onClick={() =>
+                        navigate('/faceit/rankings', {
+                          state: {
+                            fromFaceitRankingsButton: true,
+                            leaderboardRegionTitle,
+                          },
+                        })
+                      }
+                      className="relative flex w-full items-center justify-center rounded-md border border-[#ffffff20] px-3 py-2 text-sm font-semibold transition hover:border-[#ff7300]/70 hover:bg-neutral-800/70"
+                    >
+                      <span className="text-white">OPEN FULL RANKINGS</span>
+                      <span className="absolute right-3 text-neutral-300">→</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -2210,17 +2290,15 @@ function NormalFaceitBody({
       {/* ------------------------------------------------------------------- */}
       {/* RECENT MATCHES */}
       {/* ------------------------------------------------------------------- */}
-      <div className="bg-[#0f0f0f] rounded-lg border border-[#ffffff15] flex flex-col overflow-hidden">
-        <div className="w-full bg-[#0c0c0c] py-3 flex justify-center items-center border-b border-[#ff7300]/40">
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#ffffff15] bg-[#0f0f0f]">
+        <div className="flex w-full items-center justify-center border-b border-[#ff7300]/40 bg-[#0c0c0c] py-3">
           <h2 className="text-lg font-bold">RECENT MATCHES</h2>
         </div>
 
-        <div className="p-6 overflow-y-auto">
-          {recent.length === 0 && (
-            <div className="opacity-50">No matches yet.</div>
-          )}
+        <div className="min-h-0 flex-1 overflow-y-scroll p-6">
+          {recent.length === 0 && <div className="opacity-50">No matches yet.</div>}
 
-          <div className="space-y-3 mt-2">
+          <div className="mt-2 space-y-3">
             {recent.map((m) => {
               const label = Util.convertMapPool(m.map, gameEnum);
               const imgSrc = Util.convertMapPool(m.map, gameEnum, true);
@@ -2228,83 +2306,60 @@ function NormalFaceitBody({
 
               const eloClass =
                 m.eloDelta == null
-                  ? "text-neutral-200"
+                  ? 'text-neutral-200'
                   : m.eloDelta > 0
-                    ? "text-green-400"
+                    ? 'text-green-400'
                     : m.eloDelta < 0
-                      ? "text-red-400"
-                      : "text-neutral-200";
+                      ? 'text-red-400'
+                      : 'text-neutral-200';
 
-              const resultLabel =
-                m.yourTeamWon === null
-                  ? "N/A"
-                  : m.yourTeamWon
-                    ? "WIN"
-                    : "LOSS";
+              const resultLabel = m.yourTeamWon === null ? 'N/A' : m.yourTeamWon ? 'WIN' : 'LOSS';
 
               const resultClass =
                 m.yourTeamWon === null
-                  ? "bg-neutral-600/30 text-neutral-200"
+                  ? 'bg-neutral-600/30 text-neutral-200'
                   : m.yourTeamWon
-                    ? "bg-green-500/15 text-green-400"
-                    : "bg-red-500/15 text-red-400";
+                    ? 'bg-green-500/15 text-green-400'
+                    : 'bg-red-500/15 text-red-400';
 
               return (
-                <button
-                  key={m.id}
-                  onClick={() => onOpenRecent(m.id)}
-                  className="w-full text-left"
-                >
-                  <div className="flex bg-neutral-900/40 rounded-lg border border-[#ffffff15] overflow-hidden hover:border-[#ff7300]/60 hover:bg-neutral-800/60 transition h-20">
+                <button key={m.id} onClick={() => onOpenRecent(m.id)} className="w-full text-left">
+                  <div className="flex h-20 overflow-hidden rounded-lg border border-[#ffffff15] bg-neutral-900/40 transition hover:border-[#ff7300]/60 hover:bg-neutral-800/60">
                     {/* MAP IMAGE */}
-                    <div className="w-28 h-full shrink-0">
-                      {imgSrc && (
-                        <Image
-                          src={imgSrc}
-                          className="h-full w-full object-cover"
-                        />
-                      )}
+                    <div className="h-full w-28 shrink-0">
+                      {imgSrc && <Image src={imgSrc} className="h-full w-full object-cover" />}
                     </div>
 
                     {/* TEXT CONTENT */}
-                    <div className="relative flex-1 px-3 py-2 flex items-center justify-between gap-3">
+                    <div className="relative flex flex-1 items-center justify-between gap-3 px-3 py-2">
                       <div className="flex flex-col">
                         <span
-                          className={`
-                            font-bold 
-                            text-lg 
-                            ${m.yourTeamWon === true ? "text-green-400" : ""}
-                            ${m.yourTeamWon === false ? "text-red-400" : ""}
-                            ${m.yourTeamWon === null ? "text-neutral-200" : ""}
-                          `}
+                          className={`text-lg font-bold ${m.yourTeamWon === true ? 'text-green-400' : ''} ${m.yourTeamWon === false ? 'text-red-400' : ''} ${m.yourTeamWon === null ? 'text-neutral-200' : ''} `}
                         >
                           {m.scoreA != null && m.scoreB != null
                             ? `${m.scoreA} - ${m.scoreB}`
-                            : (label || m.map)}
+                            : label || m.map}
                         </span>
 
                         <span className="text-xs opacity-70">{m.map}</span>
 
                         {m.eloDelta != null && (
-                          <span className={`text-xs mt-1 ${eloClass}`}>
-                            Elo: {m.eloDelta > 0 ? "+" : ""}
+                          <span className={`mt-1 text-xs ${eloClass}`}>
+                            Elo: {m.eloDelta > 0 ? '+' : ''}
                             {m.eloDelta}
                           </span>
                         )}
                       </div>
 
-
                       {formattedMatchDate && (
-                        <span className="absolute right-3 top-2 text-[10px] leading-none text-neutral-500">
+                        <span className="absolute top-2 right-3 text-[10px] leading-none text-neutral-500">
                           {formattedMatchDate}
                         </span>
                       )}
 
                       {/* RESULT PILL */}
                       <div className="flex items-center">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold ${resultClass}`}
-                        >
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${resultClass}`}>
                           {resultLabel}
                         </span>
                       </div>
