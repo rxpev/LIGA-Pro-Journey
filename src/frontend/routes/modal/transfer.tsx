@@ -495,7 +495,7 @@ export default function TransferModal() {
         })}
       </section>
 
-      <section className="flex-1 overflow-y-scroll">
+      <section className="flex-1 overflow-y-auto">
         <table className="table-pin-rows table table-fixed">
           <thead>
             <tr>
