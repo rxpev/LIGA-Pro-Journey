@@ -79,6 +79,8 @@ const pool = [] as Array<{
   path: string;
   records: Record<string, unknown>;
 }>;
+const migratedDatabasePaths = new Set<string>();
+const maintainedDatabasePaths = new Set<string>();
 
 /**
  * Unique identifier for the active database.
@@ -467,18 +469,35 @@ export default class DatabaseClient {
     // update the active db id
     activeId = id;
 
-    await DatabaseClient.enableExclusiveSaveLock(pool[id].client, id);
-    await DatabaseClient.repairCountryMetadata(pool[id].client);
-    await syncLeagueSchedule(pool[id].client as unknown as PrismaClient);
-    await backfillCompetitionLocations(pool[id].client as unknown as PrismaClient);
-    await DatabaseClient.syncTeamCompetitionFederations(pool[id].client, id);
-    await DatabaseClient.recalculateAllTeamCountryIdentities(pool[id].client);
-    await DatabaseClient.normalizeCareerStintStarterValues(pool[id].client);
+    try {
+      await DatabaseClient.enableExclusiveSaveLock(pool[id].client, id);
 
-    if (saveMeta.created && id !== 0) {
-      await DatabaseClient.ensureInitialCareerStints(pool[id].client);
+      if (maintainedDatabasePaths.has(saveMeta.path)) {
+        DatabaseClient.log.debug(
+          'Database %s already maintained in this session. Skipping post-connect maintenance.',
+          saveMeta.path,
+        );
+        return pool[id].client;
+      }
+
+      await DatabaseClient.repairCountryMetadata(pool[id].client);
+      await syncLeagueSchedule(pool[id].client as unknown as PrismaClient);
+      await backfillCompetitionLocations(pool[id].client as unknown as PrismaClient);
+      await DatabaseClient.syncTeamCompetitionFederations(pool[id].client, id);
+      await DatabaseClient.recalculateAllTeamCountryIdentities(pool[id].client);
+      await DatabaseClient.normalizeCareerStintStarterValues(pool[id].client);
+
+      if (saveMeta.created && id !== 0) {
+        await DatabaseClient.ensureInitialCareerStints(pool[id].client);
+      }
+      await DatabaseClient.reconcileActiveCareerStints(pool[id].client);
+      maintainedDatabasePaths.add(saveMeta.path);
+    } catch (error) {
+      await pool[id].client.$disconnect().catch(() => Promise.resolve());
+      delete pool[id];
+      activeId = 0;
+      throw error;
     }
-    await DatabaseClient.reconcileActiveCareerStints(pool[id].client);
 
     return pool[id].client;
   }
@@ -956,6 +975,14 @@ export default class DatabaseClient {
       return Promise.resolve(false);
     }
 
+    if (migratedDatabasePaths.has(targetDBPath)) {
+      DatabaseClient.log.debug(
+        'Database %s already migrated in this session. Skipping migration scan.',
+        targetDBPath,
+      );
+      return Promise.resolve(false);
+    }
+
     // connect to the database directly through sqlite3 in order
     // to get the list of migrations that have been executed
     const cnx = new sqlite3.Database(targetDBPath, () =>
@@ -993,8 +1020,15 @@ export default class DatabaseClient {
         'No migration files found in %s. Skipping migration.',
         migrationsBasePath,
       );
-      cnx.close();
-      return Promise.resolve(false);
+      return new Promise((resolve) =>
+        cnx.close((error) => {
+          if (!error) {
+            migratedDatabasePaths.add(targetDBPath);
+          }
+
+          resolve(false);
+        }),
+      );
     }
 
     // filter out anything that isn’t a folder named like "20241109123456_some_migration"
@@ -1008,8 +1042,15 @@ export default class DatabaseClient {
         'No valid migration folders found in %s. Skipping migration.',
         migrationsBasePath,
       );
-      cnx.close();
-      return Promise.resolve(false);
+      return new Promise((resolve) =>
+        cnx.close((error) => {
+          if (!error) {
+            migratedDatabasePaths.add(targetDBPath);
+          }
+
+          resolve(false);
+        }),
+      );
     }
 
     // sort only valid folders
@@ -1067,7 +1108,15 @@ export default class DatabaseClient {
     }
 
     // close the connection
-    return new Promise((resolve) => cnx.close(resolve));
+    return new Promise((resolve) =>
+      cnx.close((error) => {
+        if (!error) {
+          migratedDatabasePaths.add(targetDBPath);
+        }
+
+        resolve(!error);
+      }),
+    );
   }
 
   /**

@@ -20,6 +20,7 @@ export enum EventIdentifier {
   PLAYER_KILLED = 'playerkilled',
   ROUND_OVER = 'roundover',
   SAY = 'say',
+  SERVER_LOG_CLOSED = 'serverlogclosed',
 }
 
 /** @interface */
@@ -90,6 +91,7 @@ export interface ScorebotEvents {
   [EventIdentifier.PLAYER_KILLED]: (payload: EventPayloadPlayerKilled) => void;
   [EventIdentifier.ROUND_OVER]: (payload: EventPayloadRoundOver) => void;
   [EventIdentifier.SAY]: (payload: string) => void;
+  [EventIdentifier.SERVER_LOG_CLOSED]: () => void;
 }
 
 /** @constant */
@@ -117,6 +119,7 @@ export const RegexTypes = {
     /Team "(TERRORIST|CT)" triggered "(.+)"(?:.+)\(.+"(\d+)"\)(?:.+)\(.+"(\d+)"\)/,
   ),
   SAY_REGEX: new RegExp(/(?:.)+(?:say|say_team)(?:.)+"(.*)"/),
+  SERVER_LOG_CLOSED_REGEX: new RegExp(/Log file closed/),
   TIMESTAMP_REGEX: new RegExp(/^L.+(?<hours>\d{2}):(?<minutes>\d{2}):(?<seconds>\d{2})/),
 };
 
@@ -142,7 +145,11 @@ export class Watcher extends events.EventEmitter {
     super();
     this.file = file;
     this.log = log.scope('scorebot');
-    this.tail = new Tail.Watcher(file, { encoding: 'utf8' });
+    this.tail = new Tail.Watcher(file, {
+      encoding: 'utf8',
+      pollFileIntervalMs: 250,
+      pollFailureRetryMs: 100,
+    });
     this.tail.on(Tail.EventIdentifier.TAIL_ERROR, this.log.error);
     this.tail.on(Tail.EventIdentifier.ERROR, this.log.error);
     this.tail.on(Tail.EventIdentifier.CLOSE, () => this.log.info('Shutdown.'));
@@ -164,6 +171,11 @@ export class Watcher extends events.EventEmitter {
       timestamp.setHours(Number(hours));
       timestamp.setMinutes(Number(minutes));
       timestamp.setSeconds(Number(seconds));
+    }
+
+    if (RegexTypes.SERVER_LOG_CLOSED_REGEX.test(line)) {
+      this.emit(EventIdentifier.SERVER_LOG_CLOSED);
+      return;
     }
 
     // look for SAY events

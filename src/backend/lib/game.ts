@@ -1813,7 +1813,7 @@ End\n
         this.log.info('Detected CS:GO client exit.');
         await this.cleanup();
       }
-    }, 2_000);
+    }, 500);
     this.clientProcessMonitor.unref?.();
   }
 
@@ -2244,6 +2244,18 @@ End\n
         }
 
         settled = true;
+        const error = new Error('The match was abandoned.') as NodeJS.ErrnoException;
+        error.code = Constants.ErrorCode.EABANDONED;
+        reject(error);
+      });
+
+      this.scorebot.on(Scorebot.EventIdentifier.SERVER_LOG_CLOSED, () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        this.cleanup().catch((cleanupError) => this.log.warn(cleanupError));
         const error = new Error('The match was abandoned.') as NodeJS.ErrnoException;
         error.code = Constants.ErrorCode.EABANDONED;
         reject(error);

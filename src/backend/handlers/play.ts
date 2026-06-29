@@ -323,9 +323,23 @@ export default function () {
           })),
         };
       } finally {
+        const cleanupStartedAt = Date.now();
         await DatabaseClient.disconnect();
-        await fs.promises.unlink(exhibitionSavePath).catch(() => Promise.resolve());
+        log.debug(
+          'Exhibition cleanup: disconnected temporary database in %dms.',
+          Date.now() - cleanupStartedAt,
+        );
+
+        const reconnectStartedAt = Date.now();
         await DatabaseClient.connect(previousSaveId);
+        log.debug(
+          'Exhibition cleanup: reconnected previous database in %dms.',
+          Date.now() - reconnectStartedAt,
+        );
+
+        fs.promises.unlink(exhibitionSavePath).catch((error) => {
+          log.warn('Could not remove temporary exhibition save %s: %s', exhibitionSavePath, error);
+        });
       }
 
       if (postgamePayload) {
