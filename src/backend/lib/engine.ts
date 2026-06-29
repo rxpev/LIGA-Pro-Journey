@@ -175,63 +175,66 @@ export class Runtime {
     performance.clearMarks();
     performance.clearMeasures();
 
-    // run the loop
-    for (let tick = 0; tick < max; tick++) {
-      // start benchmarking
-      const perfMarkname = String(tick);
-      performance.mark(perfMarkname);
+    try {
+      // run the loop
+      for (let tick = 0; tick < max; tick++) {
+        // start benchmarking
+        const perfMarkname = String(tick);
+        performance.mark(perfMarkname);
 
-      // the `onTickStart` middleware will refresh
-      // the data object on every tick
-      await onTickStart.callback();
+        // the `onTickStart` middleware will refresh
+        // the data object on every tick
+        await onTickStart.callback();
 
-      // run generic middleware sequentially to keep calendar side-effects deterministic
-      // (multiple same-day competition starts can otherwise race each other).
-      const genericResults = [] as unknown[];
-      for (const item of this.input) {
-        genericResults.push(await this.runGenericMiddleware(item));
+        // run generic middleware sequentially to keep calendar side-effects deterministic
+        // (multiple same-day competition starts can otherwise race each other).
+        const genericResults = [] as unknown[];
+        for (const item of this.input) {
+          genericResults.push(await this.runGenericMiddleware(item));
+        }
+
+        // run tick middleware after generic handlers complete
+        const tickResults = await Promise.all(this.middleware.onTick.map((m) => m.callback(this.input)));
+        const results = [...genericResults, ...tickResults];
+
+        // check if any middleware returned falsy
+        const terminate = !ignoreTermSignal && flatten(results).findIndex((r) => r === false) > -1;
+
+        // run the end tick middleware and bump our tick count
+        if (this.middleware.onTickEnd) {
+          performance.measure(perfMarkname, perfMarkname);
+          await Promise.all(
+            this.middleware.onTickEnd.map((item) =>
+              item.callback(this.input, terminate ? LoopStatus.TERMINATED : LoopStatus.RUNNING),
+            ),
+          );
+        }
+
+        if (this.abortController.signal.aborted) {
+          this.log.warn('Engine stop signal detected!');
+        }
+
+        // run end-loop middleware if we've reached our max iterations
+        // or any middleware sent a termination signal
+        if (tick >= max - 1 || terminate || this.abortController.signal.aborted) {
+          // output benchmark timings
+          const entries = performance.getEntriesByType('measure');
+          const total = entries.map((entry) => entry.duration).reduce((a, b) => a + b);
+          const avg = total / entries.length;
+          this.log.info('Total Loops: %d', tick + 1);
+          this.log.info('Total Loop Time: %dms', Math.floor(total));
+          this.log.info('Average Loop Time: %dms', Math.floor(avg));
+
+          // run end-loop middleware, if any, then bail
+          await (onLoopFinish?.callback(this.input) || Promise.resolve());
+          break;
+        }
       }
-
-      // run tick middleware after generic handlers complete
-      const tickResults = await Promise.all(this.middleware.onTick.map((m) => m.callback(this.input)));
-      const results = [...genericResults, ...tickResults];
-
-      // check if any middleware returned falsy
-      const terminate = !ignoreTermSignal && flatten(results).findIndex((r) => r === false) > -1;
-
-      // run the end tick middleware and bump our tick count
-      if (this.middleware.onTickEnd) {
-        performance.measure(perfMarkname, perfMarkname);
-        await Promise.all(
-          this.middleware.onTickEnd.map((item) =>
-            item.callback(this.input, terminate ? LoopStatus.TERMINATED : LoopStatus.RUNNING),
-          ),
-        );
-      }
-
-      if (this.abortController.signal.aborted) {
-        this.log.warn('Engine stop signal detected!');
-      }
-
-      // run end-loop middleware if we've reached our max iterations
-      // or any middleware sent a termination signal
-      if (tick >= max - 1 || terminate || this.abortController.signal.aborted) {
-        // output benchmark timings
-        const entries = performance.getEntriesByType('measure');
-        const total = entries.map((entry) => entry.duration).reduce((a, b) => a + b);
-        const avg = total / entries.length;
-        this.log.info('Total Loops: %d', tick + 1);
-        this.log.info('Total Loop Time: %dms', Math.floor(total));
-        this.log.info('Average Loop Time: %dms', Math.floor(avg));
-
-        // run end-loop middleware, if any, then bail
-        await (onLoopFinish?.callback(this.input) || Promise.resolve());
-        break;
-      }
+    } finally {
+      // clean up, even when a calendar callback throws
+      this.abortController = null;
     }
 
-    // clean up
-    this.abortController = null;
     return Promise.resolve();
   }
 

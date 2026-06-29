@@ -8164,6 +8164,20 @@ export async function onTransferParse(entry: Calendar) {
   await recalculateTeamCountryIdentity(transfer.from.id);
   await recalculateTeamCountryIdentity(transfer.to.id);
 
+  await DatabaseClient.prisma.calendar.deleteMany({
+    where: {
+      completed: false,
+      payload: String(transfer.target.id),
+      type: {
+        in: [
+          Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
+          Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
+          Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
+        ],
+      },
+      date: { gte: profile.date.toISOString() },
+    },
+  });
   await DatabaseClient.prisma.calendar.create({
     data: {
       type: Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,

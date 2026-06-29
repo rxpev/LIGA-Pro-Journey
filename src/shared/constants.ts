@@ -570,6 +570,11 @@ const MajorHostingLocations: CompetitionHostingLocation[] = [
   { city: 'Copenhagen', countryCode: 'DK' },
   { city: 'London', countryCode: 'UK' },
   { city: 'Antwerp', countryCode: 'NL' },
+  { city: 'Astana', countryCode: 'KZ' },
+  { city: 'Istanbul', countryCode: 'TR' },
+  { city: 'Kyiv', countryCode: 'UA' },
+  { city: 'Prague', countryCode: 'CZ' },
+  { city: 'Singapore', countryCode: 'SG' },
 ];
 
 export const MajorHostingOrganizers: CompetitionOrganizer[] = [
@@ -610,6 +615,16 @@ export const MajorHostingOrganizers: CompetitionOrganizer[] = [
     locations: [
       { city: 'Shanghai', countryCode: 'CN' },
       { city: 'Beijing', countryCode: 'CN' },
+    ],
+  },
+  {
+    name: 'StarLadder',
+    locations: [
+      { city: 'Astana', countryCode: 'KZ' },
+      { city: 'Istanbul', countryCode: 'TR' },
+      { city: 'Kyiv', countryCode: 'UA' },
+      { city: 'Prague', countryCode: 'CZ' },
+      { city: 'Singapore', countryCode: 'SG' },
     ],
   },
 ];

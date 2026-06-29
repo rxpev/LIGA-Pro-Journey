@@ -9,6 +9,7 @@ import {
   DatabaseClient,
   disconnectActiveDatabaseWithIntegrity,
   Engine,
+  sealActiveSaveIntegrity,
   WindowManager,
   Worldgen,
 } from '@liga/backend/lib';
@@ -631,6 +632,9 @@ export default function () {
       }
 
       await Engine.Runtime.Instance.start(days);
+    } catch (error) {
+      await sealActiveSaveIntegrity();
+      throw error;
     } finally {
       mainWindow.off('close', disableClose);
       WindowManager.enableMenu(Constants.WindowIdentifier.Main);

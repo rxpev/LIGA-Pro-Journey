@@ -773,6 +773,8 @@ export function getCompetitionLogo(
       IEM: { folder: 'IEM', prefix: 'iem' },
       PerfectWorld: { folder: 'PW', prefix: 'pw' },
       PGL: { folder: 'PGL', prefix: 'pgl' },
+      StarLadder: { folder: 'SL', prefix: 'sl' },
+      Starladder: { folder: 'SL', prefix: 'sl' },
     };
     const organizerKey = options.organizer.replace(/\s+/g, '');
     const config = organizerLogoConfig[organizerKey];
