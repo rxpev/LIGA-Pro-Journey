@@ -373,6 +373,24 @@ export default function () {
       },
       include: Eagers.match.include,
     });
+    const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
+      where: {
+        profileId: profile.id,
+        matchType: 'FACEIT_PUG',
+        status: {
+          in: [
+            Constants.MatchStatus.READY,
+            Constants.MatchStatus.WAITING,
+            Constants.MatchStatus.PLAYING,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+
+    if (activeFaceitMatch) {
+      throw new Error('PLAY_BLOCKED_LIVE_FACEIT_MATCH');
+    }
 
     const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
     let minimizedForClientLaunch = false;

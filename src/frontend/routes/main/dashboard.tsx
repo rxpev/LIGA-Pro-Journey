@@ -148,6 +148,10 @@ export default function () {
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
   const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
   const [dismissedPlayErrorAt, setDismissedPlayErrorAt] = React.useState(0);
+  const [activeFaceitMatch, setActiveFaceitMatch] = React.useState<{
+    id: number;
+    status: number;
+  } | null>(null);
   const soundedPlayErrorAt = React.useRef(0);
 
   const toDashboardTeamTierLabel = (
@@ -226,6 +230,37 @@ export default function () {
 
     setSettings(Util.loadSettings(state.profile.settings));
   }, [state.profile]);
+
+  React.useEffect(() => {
+    if (!state.profile) {
+      setActiveFaceitMatch(null);
+      return;
+    }
+
+    let disposed = false;
+    const refreshActiveFaceitMatch = () => {
+      api.faceit
+        .activeMatch()
+        .then((match) => {
+          if (!disposed) {
+            setActiveFaceitMatch(match);
+          }
+        })
+        .catch(() => {
+          if (!disposed) {
+            setActiveFaceitMatch(null);
+          }
+        });
+    };
+
+    refreshActiveFaceitMatch();
+    const interval = setInterval(refreshActiveFaceitMatch, 2000);
+
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+    };
+  }, [state.profile?.id, state.playing]);
 
   // reset one-time warning after switching profiles/saves
   React.useEffect(() => {
@@ -353,6 +388,10 @@ export default function () {
   const playErrorPromptVisible =
     !!playError && !!state.playError && dismissedPlayErrorAt !== state.playError.at;
   const playErrorIsInvalidGamePath = playError?.code === Constants.ErrorCode.EINVAL;
+  const isActiveFaceitMatchroom =
+    activeFaceitMatch?.status === Constants.MatchStatus.READY ||
+    activeFaceitMatch?.status === Constants.MatchStatus.WAITING ||
+    activeFaceitMatch?.status === Constants.MatchStatus.PLAYING;
 
   React.useEffect(() => {
     if (
@@ -807,7 +846,8 @@ export default function () {
 
                 // the suffix is either the current position
                 // or their league tier if it's a cup
-                const disabled = state.working || !isMatchday || isBenched;
+                const disabled =
+                  state.working || !isMatchday || isBenched || isActiveFaceitMatchroom;
                 const spotlightCompetitors = spotlight.competitors.filter(
                   (competitor) => !!competitor?.team,
                 );
@@ -974,6 +1014,10 @@ export default function () {
                           className="btn btn-primary join-item btn-wide"
                           disabled={disabled}
                           onClick={() => {
+                            if (isActiveFaceitMatchroom) {
+                              return;
+                            }
+
                             const hasMapInProgress = spotlightGames.some(
                               (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
                             );

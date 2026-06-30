@@ -99,13 +99,16 @@ type MatchPlayer = {
 };
 
 type MatchRoomData = {
-  fakeRoomId: string;
+  matchId: string;
+  fakeRoomId?: string;
   teamA: MatchPlayer[];
   teamB: MatchPlayer[];
   expectedWinA: number;
   expectedWinB: number;
   eloGain: number;
   eloLoss: number;
+  selectedMap?: string;
+  persistedMatchId?: number;
 };
 
 export type LeaderboardPlayer = {
@@ -170,6 +173,9 @@ const formatRecentMatchDate = (value?: string | Date | null) => {
     year: '2-digit',
   }).format(parsed);
 };
+
+const getMatchRoomClientId = (room?: MatchRoomData | null) =>
+  room?.fakeRoomId ?? room?.matchId ?? null;
 
 // ---------------------------------------------------------------------------
 // MAIN COMPONENT
@@ -340,12 +346,17 @@ export default function Faceit(): JSX.Element {
   useEffect(() => {
     (async () => {
       try {
+        const pending = await api.faceit.pendingMatchRoom();
+        if (pending?.room) {
+          dispatch(faceitRoomSet(pending.room, pending.matchId));
+          setShowMatchRoom(true);
+        }
         await refreshProfile();
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     api.database
@@ -691,14 +702,18 @@ export default function Faceit(): JSX.Element {
         }
       };
 
-      const shuffledTeamA = shuffle(res.teamA);
-      const shuffledTeamB = shuffle(res.teamB);
-      const partyAdjusted = await applyPartyToTeams({
-        ...res,
-        teamA: shuffledTeamA,
-        teamB: shuffledTeamB,
-      });
-      dispatch(faceitRoomSet(partyAdjusted, null));
+      const queuedRoom = res.matchId ? res.room : res.room ?? res;
+      const partyAdjusted = res.matchId
+        ? queuedRoom
+        : await applyPartyToTeams({
+            ...queuedRoom,
+            teamA: shuffle(queuedRoom.teamA),
+            teamB: shuffle(queuedRoom.teamB),
+          });
+      const persisted = res.matchId
+        ? { room: partyAdjusted, matchId: res.matchId }
+        : await api.faceit.persistMatchRoom(partyAdjusted);
+      dispatch(faceitRoomSet(persisted.room, persisted.matchId));
       setShowMatchRoom(true);
       playMatchFoundTune();
     } finally {
@@ -1018,16 +1033,17 @@ export function FaceitHeader({
     const inTeamB = activeMatch.teamB.some((player) => player.id === currentPlayerId);
     if (!inTeamA && !inTeamB) return;
 
-    if (latestTrackedPugId === activeMatch.fakeRoomId) return;
+    const activeMatchId = getMatchRoomClientId(activeMatch);
+    if (!activeMatchId || latestTrackedPugId === activeMatchId) return;
 
     const yourTeam = inTeamA ? activeMatch.teamA : activeMatch.teamB;
     const teammates = yourTeam.filter((player) => player.id !== currentPlayerId);
 
     setLastPugTeammates(teammates);
-    setLatestTrackedPugId(activeMatch.fakeRoomId);
+    setLatestTrackedPugId(activeMatchId);
     setDeclinedSuggestionIds([]);
     localStorage.setItem(storageKey('last-pug-teammates'), JSON.stringify(teammates));
-    localStorage.setItem(storageKey('last-pug-id'), activeMatch.fakeRoomId);
+    localStorage.setItem(storageKey('last-pug-id'), activeMatchId);
   }, [activeMatch, currentPlayerId, latestTrackedPugId, storageKey]);
 
   useEffect(() => {
@@ -1166,7 +1182,7 @@ export function FaceitHeader({
 
   useEffect(() => {
     const previousActiveMatchId = previousActiveMatchIdRef.current;
-    const currentActiveMatchId = activeMatch?.fakeRoomId ?? null;
+    const currentActiveMatchId = getMatchRoomClientId(activeMatch);
 
     if (previousActiveMatchId && !currentActiveMatchId && partyMembers.length > 0) {
       const leavingIds: number[] = [];
@@ -1414,7 +1430,7 @@ export function FaceitHeader({
     return () => {
       disposed = true;
     };
-  }, [snapshotRefreshKey, activeMatch?.fakeRoomId]);
+  }, [snapshotRefreshKey, activeMatch?.fakeRoomId, activeMatch?.matchId]);
 
   const knownPlayersById = React.useMemo(() => {
     const all = [

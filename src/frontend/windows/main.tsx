@@ -350,9 +350,8 @@ function Root() {
 
   // setup the theme
   useTheme();
-  const isFaceitMatchActive = !!state.faceitMatchRoom && !state.faceitMatchCompleted;
   const careerMusic = useLoopingAudio('transferroom.wav', {
-    enabled: !!state.profile && !state.playing && !isFaceitMatchActive,
+    enabled: !!state.profile && !state.playing,
     fadeDuration: 1200,
     fadeInDuration: 1200,
   });

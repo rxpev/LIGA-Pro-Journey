@@ -208,7 +208,25 @@ export default {
         daily?: DailyState | null;
       }>,
     queue: (payload?: { queueElo?: number; maxPartyEloDelta?: number }) =>
-      ipcRenderer.invoke('faceit:queuePug', payload) as Promise<any>,
+      ipcRenderer.invoke('faceit:queuePug', payload) as Promise<{
+        room: any;
+        matchId: number | null;
+      }>,
+    pendingMatchRoom: () =>
+      ipcRenderer.invoke('faceit:getPendingMatchRoom') as Promise<{
+        room: any;
+        matchId: number;
+      } | null>,
+    activeMatch: () =>
+      ipcRenderer.invoke('faceit:getActiveMatch') as Promise<{
+        id: number;
+        status: number;
+      } | null>,
+    persistMatchRoom: (room: any) =>
+      ipcRenderer.invoke('faceit:persistMatchRoom', room) as Promise<{
+        room: any;
+        matchId: number;
+      }>,
     leaderboard: (
       page = 1,
       perPage = 50,
@@ -248,6 +266,7 @@ export default {
       eloGain: number;
       eloLoss: number;
       selectedMap?: string;
+      persistedMatchId?: number;
     }) => ipcRenderer.invoke('faceit:startMatch', room),
     getMatchData: (id: number | string) => ipcRenderer.invoke('faceit:getMatchData', id),
     last20Stats: () =>

@@ -42,6 +42,7 @@ export type MatchRoom = {
   eloGain: number;
   eloLoss: number;
   selectedMap?: string;
+  persistedMatchId?: number;
 };
 
 function getLocalDayRange(d: Date) {
@@ -274,6 +275,107 @@ function buildFaceitPseudoMatch(profile: any, room: MatchRoom, dbMatchId: number
 
     _count: { events: 0 },
   } as any;
+}
+
+async function findPendingFaceitMatchRoom(prisma: any, profileId: number) {
+  const pendingMatch = await prisma.match.findFirst({
+    where: {
+      profileId,
+      matchType: 'FACEIT_PUG',
+      status: Constants.MatchStatus.READY,
+      faceitEloDelta: null,
+      faceitRating: null,
+      faceitIsWin: null,
+    },
+    orderBy: { id: 'desc' },
+    select: { id: true, payload: true },
+  });
+
+  if (!pendingMatch?.payload) {
+    return null;
+  }
+
+  try {
+    const room = JSON.parse(pendingMatch.payload);
+    if (!room?.teamA || !room?.teamB) {
+      return null;
+    }
+
+    return {
+      matchId: pendingMatch.id,
+      room: {
+        ...room,
+        persistedMatchId: pendingMatch.id,
+      },
+    };
+  } catch (error) {
+    log.warn('Failed to parse pending FACEIT match room payload', error);
+    return null;
+  }
+}
+
+async function findActiveFaceitMatch(prisma: any, profileId: number) {
+  return prisma.match.findFirst({
+    where: {
+      profileId,
+      matchType: 'FACEIT_PUG',
+      status: {
+        in: [
+          Constants.MatchStatus.READY,
+          Constants.MatchStatus.WAITING,
+          Constants.MatchStatus.PLAYING,
+        ],
+      },
+    },
+    orderBy: { id: 'desc' },
+    select: { id: true, status: true },
+  });
+}
+
+async function createPendingFaceitMatchRoom(prisma: any, profile: any, room: MatchRoom) {
+  const existing = await findPendingFaceitMatchRoom(prisma, profile.id);
+  if (existing) {
+    const persistedRoom = {
+      ...room,
+      persistedMatchId: existing.matchId,
+    };
+
+    await prisma.match.update({
+      where: { id: existing.matchId },
+      data: {
+        payload: JSON.stringify(persistedRoom),
+      },
+    });
+
+    return {
+      matchId: existing.matchId,
+      room: persistedRoom,
+    };
+  }
+
+  const match = await prisma.match.create({
+    data: {
+      matchType: 'FACEIT_PUG',
+      payload: JSON.stringify(room),
+      profileId: profile.id,
+      date: profile.date.toISOString(),
+      status: Constants.MatchStatus.READY,
+      competitors: {
+        create: [
+          { teamId: 1, seed: 0, score: 0, result: null },
+          { teamId: 2, seed: 1, score: 0, result: null },
+        ],
+      },
+    },
+  });
+
+  return {
+    matchId: match.id,
+    room: {
+      ...room,
+      persistedMatchId: match.id,
+    },
+  };
 }
 
 async function getDetailedFaceitStats(prisma: any, profile: any) {
@@ -627,6 +729,11 @@ export default function registerFaceitHandlers() {
           throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
         }
 
+        const pending = await findPendingFaceitMatchRoom(prisma, profile.id);
+        if (pending) {
+          return pending;
+        }
+
         if (daily.playedToday >= daily.maxToday) {
           throw new Error(
             daily.hasPendingUserMatchday
@@ -655,13 +762,55 @@ export default function registerFaceitHandlers() {
 
         const room = await FaceitMatchmaker.createMatchRoom(prisma, user);
 
-        return room;
+        return { room, matchId: null };
       } catch (err) {
         log.error(err);
         throw err;
       }
     },
   );
+
+  ipcMain.handle('faceit:getPendingMatchRoom', async () => {
+    try {
+      await DatabaseClient.connect();
+      const prisma = DatabaseClient.prisma;
+      const profile = await prisma.profile.findFirst();
+      if (!profile) throw new Error('No active profile found');
+
+      return findPendingFaceitMatchRoom(prisma, profile.id);
+    } catch (err) {
+      log.error(err);
+      throw err;
+    }
+  });
+
+  ipcMain.handle('faceit:getActiveMatch', async () => {
+    try {
+      await DatabaseClient.connect();
+      const prisma = DatabaseClient.prisma;
+      const profile = await prisma.profile.findFirst();
+      if (!profile) throw new Error('No active profile found');
+
+      return findActiveFaceitMatch(prisma, profile.id);
+    } catch (err) {
+      log.error(err);
+      throw err;
+    }
+  });
+
+  ipcMain.handle('faceit:persistMatchRoom', async (_, room: MatchRoom) => {
+    try {
+      await DatabaseClient.connect();
+      const prisma = DatabaseClient.prisma;
+      const profile = await prisma.profile.findFirst();
+      if (!profile) throw new Error('No active profile found');
+
+      return createPendingFaceitMatchRoom(prisma, profile, room);
+    } catch (err) {
+      log.error(err);
+      throw err;
+    }
+  });
 
   // ------------------------------------------------------
   // START FACEIT MATCH
@@ -707,38 +856,73 @@ export default function registerFaceitHandlers() {
       settings.matchRules.mapOverride = selectedMap;
       profile.settings = JSON.stringify(settings);
 
-      const dbMatch = await prisma.match.create({
+      const requestedMatchId = Number(room.persistedMatchId);
+      const pendingMatch = Number.isInteger(requestedMatchId)
+        ? await prisma.match.findFirst({
+            where: {
+              id: requestedMatchId,
+              profileId: profile.id,
+              matchType: 'FACEIT_PUG',
+              status: Constants.MatchStatus.READY,
+            },
+            include: { games: true },
+          })
+        : null;
+
+      const dbMatch =
+        pendingMatch ||
+        (await prisma.match.create({
+          data: {
+            matchType: 'FACEIT_PUG',
+            payload: JSON.stringify(room),
+            profileId: profile.id,
+            date: profile.date.toISOString(),
+            status: Constants.MatchStatus.READY,
+            competitors: {
+              create: [
+                { teamId: 1, seed: 0, score: 0, result: null },
+                { teamId: 2, seed: 1, score: 0, result: null },
+              ],
+            },
+          },
+          include: { games: true },
+        }));
+
+      const realMatchId = dbMatch.id;
+
+      await prisma.match.update({
+        where: { id: realMatchId },
         data: {
-          matchType: 'FACEIT_PUG',
-          payload: JSON.stringify(room),
-          profileId: profile.id,
+          payload: JSON.stringify({
+            ...room,
+            selectedMap,
+            persistedMatchId: realMatchId,
+          }),
           date: profile.date.toISOString(),
-          status: Constants.MatchStatus.READY,
-          competitors: {
-            create: [
-              { teamId: 1, seed: 0, score: 0, result: null },
-              { teamId: 2, seed: 1, score: 0, result: null },
-            ],
-          },
-          games: {
-            create: [
-              {
-                num: 1,
-                map: selectedMap,
-                status: Constants.MatchStatus.READY,
-                teams: {
-                  create: [
-                    { teamId: 1, seed: 0, score: 0, result: null },
-                    { teamId: 2, seed: 1, score: 0, result: null },
-                  ],
-                },
-              },
-            ],
-          },
         },
       });
 
-      const realMatchId = dbMatch.id;
+      if (!dbMatch.games?.length) {
+        await prisma.game.create({
+          data: {
+            matchId: realMatchId,
+            num: 1,
+            map: selectedMap,
+            status: Constants.MatchStatus.READY,
+            teams: {
+              create: [
+                { teamId: 1, seed: 0, score: 0, result: null },
+                { teamId: 2, seed: 1, score: 0, result: null },
+              ],
+            },
+          },
+        });
+      } else {
+        await prisma.game.updateMany({
+          where: { matchId: realMatchId },
+          data: { map: selectedMap },
+        });
+      }
 
       const match = buildFaceitPseudoMatch(profile, room, realMatchId);
       match.games[0].map = selectedMap;
@@ -747,7 +931,28 @@ export default function registerFaceitHandlers() {
       game.onProgress((status) => {
         event.sender.send(Constants.IPCRoute.PLAY_PROGRESS, { status });
       });
-      await game.start();
+      await prisma.match.update({
+        where: { id: realMatchId },
+        data: { status: Constants.MatchStatus.PLAYING },
+      });
+      await prisma.game.updateMany({
+        where: { matchId: realMatchId, status: { not: Constants.MatchStatus.COMPLETED } },
+        data: { status: Constants.MatchStatus.PLAYING },
+      });
+
+      try {
+        await game.start();
+      } catch (error) {
+        await prisma.match.update({
+          where: { id: realMatchId },
+          data: { status: Constants.MatchStatus.READY },
+        });
+        await prisma.game.updateMany({
+          where: { matchId: realMatchId, status: Constants.MatchStatus.PLAYING },
+          data: { status: Constants.MatchStatus.READY },
+        });
+        throw error;
+      }
 
       const sides = game.getFaceitSides();
       await prisma.match.update({
@@ -755,6 +960,8 @@ export default function registerFaceitHandlers() {
         data: {
           payload: JSON.stringify({
             ...room,
+            selectedMap,
+            persistedMatchId: realMatchId,
             sides,
           }),
         },

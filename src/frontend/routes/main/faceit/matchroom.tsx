@@ -46,6 +46,13 @@ export interface MatchRoomData {
   expectedWinB: number;
   eloGain: number;
   eloLoss: number;
+  selectedMap?: string;
+  persistedMatchId?: number;
+  veto?: {
+    history: VetoAction[];
+    completed: boolean;
+    deciderMap: string | null;
+  };
 }
 
 export interface MatchRoomProps {
@@ -294,6 +301,22 @@ export default function MatchRoom({
   const vetoComplete = vetoState.completed;
   const deciderMap = vetoState.deciderMap;
 
+  useEffect(() => {
+    const persistedVeto = room.veto;
+    if (!persistedVeto) {
+      dispatch(faceitVetoClear());
+      return;
+    }
+
+    dispatch(
+      faceitVetoSet(
+        persistedVeto.history || [],
+        !!persistedVeto.completed,
+        persistedVeto.deciderMap ?? null,
+      ),
+    );
+  }, [dispatch, room.matchId, room.persistedMatchId]);
+
   // Remaining maps = not banned/decided yet
   const remainingMaps = useMemo(
     () =>
@@ -316,18 +339,35 @@ export default function MatchRoom({
   }, [vetoComplete, remainingMaps.length, bansCount]);
 
   // Helper to write veto state into Redux
-  const updateVeto = (
+  const updateVeto = React.useCallback((
     history: VetoAction[],
     deciderOverride: string | null = deciderMap
   ) => {
+    const nextVeto = {
+      history,
+      completed: !!deciderOverride,
+      deciderMap: deciderOverride,
+    };
+    const nextRoom = {
+      ...room,
+      persistedMatchId: storedMatchId ?? room.persistedMatchId,
+      selectedMap: deciderOverride ?? room.selectedMap,
+      veto: nextVeto,
+    };
+
     dispatch(
       faceitVetoSet(
-        history,
-        !!deciderOverride,
-        deciderOverride
+        nextVeto.history,
+        nextVeto.completed,
+        nextVeto.deciderMap
       )
     );
-  };
+    dispatch(faceitRoomSet(nextRoom, nextRoom.persistedMatchId));
+
+    api.faceit.persistMatchRoom(nextRoom).catch((error) => {
+      console.error("FACEIT veto: failed to persist veto state", error);
+    });
+  }, [deciderMap, dispatch, room, storedMatchId]);
 
   // ------------------------------
   // USER BAN HANDLER (TEAM A, only if user is captain)
@@ -521,12 +561,33 @@ export default function MatchRoom({
       const result: { matchId: number } = await api.faceit.startMatch({
         ...room,
         selectedMap: deciderMap,
+        persistedMatchId: storedMatchId ?? room.persistedMatchId,
+        veto: {
+          history: vetoHistory,
+          completed: vetoComplete,
+          deciderMap,
+        },
         // Make sure to send *shuffled* teams to backend so they match what we display.
         teamA: shuffledTeamA,
         teamB: shuffledTeamB,
       } as any);
 
-      dispatch(faceitRoomSet({ ...room, matchId: room.matchId }, result.matchId));
+      dispatch(
+        faceitRoomSet(
+          {
+            ...room,
+            selectedMap: deciderMap,
+            persistedMatchId: result.matchId,
+            matchId: room.matchId,
+            veto: {
+              history: vetoHistory,
+              completed: vetoComplete,
+              deciderMap,
+            },
+          },
+          result.matchId,
+        ),
+      );
 
       if (onEloUpdate) {
         await onEloUpdate();
