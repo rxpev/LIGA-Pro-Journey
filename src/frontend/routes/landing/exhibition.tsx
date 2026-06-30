@@ -32,6 +32,7 @@ import {
   FaCheck,
   FaExclamationTriangle,
   FaFolderOpen,
+  FaInfoCircle,
   FaLock,
   FaRandom,
   FaSpinner,
@@ -68,7 +69,6 @@ interface TeamSelectorProps {
 
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
-const DEATHMATCH_MAX_PLAYERS = 10;
 const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
   'PREPARING_MATCH',
   'COPYING_FILES',
@@ -80,6 +80,7 @@ const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
   'SAVING_RESULTS',
 ];
 const deathmatchGameTimeOptions = [10, 20, 30, 45, 60] as const;
+const deathmatchPlayerLimitOptions = [20, 18, 16, 14, 12, 10] as const;
 
 const deathmatchDifficulties: Array<{
   id: DeathmatchDifficulty;
@@ -450,6 +451,7 @@ function DeathmatchLineupColumn(props: {
   players: Array<DeathmatchSlot>;
   title: string;
 }) {
+  const compact = props.maxSlots > 5;
   const slots = props.players.slice(0, props.maxSlots).concat(
     Array.from({
       length: Math.max(0, props.maxSlots - props.players.length),
@@ -465,16 +467,22 @@ function DeathmatchLineupColumn(props: {
 
   return (
     <section className="bg-base-300/35 border-base-content/10 flex w-80 flex-col border shadow-2xl">
-      <header className="border-base-content/10 flex h-20 shrink-0 items-center justify-center gap-4 border-b px-5">
-        <Image src={props.icon} className="size-14" />
-        <span className="text-xl font-bold">{props.title}</span>
+      <header
+        className={cx(
+          'border-base-content/10 flex shrink-0 items-center justify-center gap-4 border-b px-5',
+          compact ? 'h-14' : 'h-20',
+        )}
+      >
+        <Image src={props.icon} className={compact ? 'size-10' : 'size-14'} />
+        <span className={cx('font-bold', compact ? 'text-lg' : 'text-xl')}>{props.title}</span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col">
         {slots.map((player, index) => (
           <article
             key={`${player.id}_${index}`}
             className={cx(
-              'border-base-content/10 flex h-[82px] items-center gap-4 border-b px-4',
+              'border-base-content/10 flex items-center border-b px-4',
+              compact ? 'h-[50px] gap-3' : 'h-[82px] gap-4',
               player.isUser && 'bg-primary/15 text-primary font-bold',
             )}
           >
@@ -483,12 +491,17 @@ function DeathmatchLineupColumn(props: {
             </span>
             <Image
               src={player.avatar || 'resources://avatars/empty.png'}
-              className="size-14 rounded object-cover"
+              className={cx('rounded object-cover', compact ? 'size-9' : 'size-14')}
             />
-            <span className="min-w-0 truncate text-lg">{player.name}</span>
+            <span className={cx('min-w-0 truncate', compact ? 'text-sm' : 'text-lg')}>
+              {player.name}
+            </span>
             <Image
               src={player.teamBlazon || props.icon}
-              className="ml-auto size-10 shrink-0 object-contain opacity-80"
+              className={cx(
+                'ml-auto shrink-0 object-contain opacity-80',
+                compact ? 'size-7' : 'size-10',
+              )}
             />
           </article>
         ))}
@@ -622,6 +635,7 @@ export default function () {
   const [deathmatchDifficulty, setDeathmatchDifficulty] =
     React.useState<DeathmatchDifficulty>('pro');
   const [deathmatchGameTime, setDeathmatchGameTime] = React.useState(10);
+  const [deathmatchPlayerLimit, setDeathmatchPlayerLimit] = React.useState(10);
   const [deathmatchHeadshotOnly, setDeathmatchHeadshotOnly] = React.useState(false);
   const [deathmatchPistolsOnly, setDeathmatchPistolsOnly] = React.useState(false);
   const [deathmatchForceBuy, setDeathmatchForceBuy] = React.useState(false);
@@ -679,7 +693,7 @@ export default function () {
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
   const isDeathmatchMode = selectedGameMode === 'deathmatch';
-  const deathmatchSlotsPerSide = DEATHMATCH_MAX_PLAYERS / 2;
+  const deathmatchSlotsPerSide = deathmatchPlayerLimit / 2;
   const selectedDeathmatchDifficulty = React.useMemo(
     () =>
       deathmatchDifficulties.find((difficulty) => difficulty.id === deathmatchDifficulty) ||
@@ -1724,6 +1738,35 @@ export default function () {
                 </article>
                 <article>
                   <header>
+                    <p className="inline-flex w-fit items-center gap-2">
+                      <span>Player Limit</span>
+                      <span
+                        className="tooltip tooltip-right text-base-content/60 !static !h-auto"
+                        data-tip="More players increase server load. Low-end systems may struggle with higher player counts."
+                      >
+                        <FaInfoCircle />
+                      </span>
+                    </p>
+                  </header>
+                  <aside>
+                    <select
+                      className="select w-full"
+                      value={deathmatchPlayerLimit}
+                      onChange={(event) => {
+                        audioClick();
+                        setDeathmatchPlayerLimit(Number(event.target.value));
+                      }}
+                    >
+                      {deathmatchPlayerLimitOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option} players
+                        </option>
+                      ))}
+                    </select>
+                  </aside>
+                </article>
+                <article>
+                  <header>
                     <p className="flex items-center gap-4 not-italic">
                       <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden border-r pr-4">
                         <img
@@ -1950,6 +1993,7 @@ export default function () {
                     mode: 'deathmatch',
                     deathmatch: {
                       gameTime: deathmatchGameTime,
+                      playerLimit: deathmatchPlayerLimit,
                       headshotOnly: deathmatchHeadshotOnly,
                       pistolsOnly: deathmatchPistolsOnly,
                       forceBuy: deathmatchForceBuy,

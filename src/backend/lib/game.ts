@@ -63,6 +63,8 @@ const LAN_TIER_SLUGS = new Set<string>([
 ]);
 
 const CSGO_TEAM_LOGOS_DIR = 'materials/panorama/images/tournaments/teams';
+const CSGO_BOT_STUFF_PLUGIN = 'addons/sourcemod/plugins/bot_stuff.smx';
+const CSGO_BOT_STUFF_DM_PLUGIN = 'addons/sourcemod/plugins/dm/bot_stuff.smx';
 
 /**
  * Custom error to throw when a process
@@ -544,8 +546,8 @@ export class Server {
         const forceSize =
           this.isDeathmatchCustomGame
             ? isUserTeam && !this.spectating
-              ? Constants.Application.SQUAD_MIN_LENGTH - 1
-              : Constants.Application.SQUAD_MIN_LENGTH
+              ? this.deathmatchPlayersPerSide - 1
+              : this.deathmatchPlayersPerSide
             : this.spectating
               ? Constants.Application.SQUAD_MIN_LENGTH
               : isUserTeam
@@ -613,6 +615,7 @@ export class Server {
       return {
         isDeathmatch: 0,
         gameTime: 0,
+        playerLimit: 10,
         headshotOnly: 0,
         pistolsOnly: 0,
         forceBuy: 0,
@@ -622,10 +625,17 @@ export class Server {
     return {
       isDeathmatch: 1,
       gameTime: deathmatch.gameTime,
+      playerLimit: deathmatch.playerLimit || 10,
       headshotOnly: +deathmatch.headshotOnly,
       pistolsOnly: +deathmatch.pistolsOnly,
       forceBuy: +deathmatch.forceBuy,
     };
+  }
+
+  private get deathmatchPlayersPerSide() {
+    const playerLimit = this.deathmatchServerSettings.playerLimit;
+
+    return Math.max(1, Math.floor(playerLimit / 2));
   }
 
   private get presenceMatchType(): DiscordPresence.LiveMatchType {
@@ -1897,7 +1907,7 @@ End\n
       '+sv_maxrate',
       '0',
       '-maxplayers_override',
-      '10',
+      this.deathmatchServerSettings.playerLimit.toString(),
       '-game',
       'csgo',
       '+game_type',
@@ -1982,12 +1992,18 @@ End\n
       to,
       true,
       this.settings.general.game === Constants.Game.CSGO
-        ? [`${CSGO_TEAM_LOGOS_DIR}/**`, this.botConfigFile]
+        ? [
+          `${CSGO_TEAM_LOGOS_DIR}/**`,
+          this.botConfigFile,
+          CSGO_BOT_STUFF_PLUGIN,
+          CSGO_BOT_STUFF_DM_PLUGIN,
+        ]
         : [],
     );
 
     // CS:GO client + server both require steam.inf from plugin package.
     if (this.settings.general.game === Constants.Game.CSGO) {
+      await this.copySelectedBotStuffPlugin(from, to);
       await this.copyCSGOTeamLogosToClient(from);
       await this.copySteamInfForCSGO(from);
     }
@@ -2000,6 +2016,49 @@ End\n
     await this.generateScoreboardConfig();
 
     this.log.info('Server preparation complete.');
+  }
+
+
+  /**
+   * Selects the BetterBotsPlus plugin variant for the active mode.
+   *
+   * @param from Source plugins/csgo directory.
+   * @param to Target server csgo directory.
+   * @function
+   */
+  private async copySelectedBotStuffPlugin(from: string, to: string) {
+    const sourceRelativePath = this.isDeathmatchCustomGame
+      ? CSGO_BOT_STUFF_DM_PLUGIN
+      : CSGO_BOT_STUFF_PLUGIN;
+    const source = path.join(from, sourceRelativePath);
+    const target = path.join(to, CSGO_BOT_STUFF_PLUGIN);
+    const targetBak = `${target}.bak`;
+
+    try {
+      await fs.promises.access(source, fs.constants.F_OK);
+    } catch (_) {
+      const error = new Error('Selected bot_stuff plugin is missing') as NodeJS.ErrnoException;
+      error.code = Constants.ErrorCode.EINVAL;
+      error.path = source;
+      throw error;
+    }
+
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    try {
+      await fs.promises.access(target, fs.constants.F_OK);
+      await fs.promises.access(targetBak, fs.constants.F_OK);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).path === targetBak) {
+        await fs.promises.copyFile(target, targetBak);
+      }
+    }
+
+    await fs.promises.copyFile(source, target);
+    this.log.info(
+      `Copied bot_stuff plugin for ${
+        this.isDeathmatchCustomGame ? 'deathmatch' : 'standard'
+      } mode: ${source} -> ${target}`,
+    );
   }
 
 

@@ -34,6 +34,7 @@ export type CustomGameOptions = {
   mode: 'classic' | 'deathmatch';
   deathmatch?: {
     gameTime: number;
+    playerLimit: number;
     headshotOnly: boolean;
     pistolsOnly: boolean;
     forceBuy: boolean;

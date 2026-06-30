@@ -128,7 +128,14 @@ export default function () {
           ),
         );
         let selectedUserPlayerId: number | null = null;
-        const maxRosterSize = Constants.Application.SQUAD_MIN_LENGTH;
+        const deathmatchPlayerLimit =
+          customGameOptions.mode === 'deathmatch'
+            ? customGameOptions.deathmatch?.playerLimit
+            : undefined;
+        const maxRosterSize =
+          deathmatchPlayerLimit && deathmatchPlayerLimit > 0
+            ? Math.floor(deathmatchPlayerLimit / 2)
+            : Constants.Application.SQUAD_MIN_LENGTH;
 
         const applyRosterOverride = async (
           team: TeamWithPlayers | null,
