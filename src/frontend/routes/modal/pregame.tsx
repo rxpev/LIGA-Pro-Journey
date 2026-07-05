@@ -32,6 +32,14 @@ const VETO_BADGE_STYLES = {
   [Constants.MapVetoAction.PICK]: 'badge-success',
 };
 
+function getDecidedVetoMaps(vetoes: Array<MatchVetoEntry>) {
+  return vetoes.filter((entry) =>
+    [Constants.MapVetoAction.DECIDER, Constants.MapVetoAction.PICK].includes(
+      entry.type as Constants.MapVetoAction,
+    ),
+  );
+}
+
 function getOrdinalDay(day: number) {
   if (day >= 11 && day <= 13) {
     return `${day}th`;
@@ -228,21 +236,20 @@ function PregameVetoSummary(props: {
   settings: typeof Constants.Settings;
   vetoes: Array<MatchVetoEntry>;
 }) {
+  const vetoMapList = React.useMemo(() => getDecidedVetoMaps(props.vetoes), [props.vetoes]);
+  const mapsDecided = vetoMapList.length >= props.match.games.length;
   const decidedMaps = React.useMemo(
     () =>
-      props.match.games.map((game) => ({
-        game,
-        veto: props.vetoes.find(
-          (entry) =>
-            entry.map === game.map &&
-            [Constants.MapVetoAction.DECIDER, Constants.MapVetoAction.PICK].includes(
-              entry.type as Constants.MapVetoAction,
-            ),
-        ),
-      })),
-    [props.match.games, props.vetoes],
+      props.match.games.map((game, idx) => {
+        const veto = mapsDecided ? vetoMapList[idx] : undefined;
+
+        return {
+          game: veto ? { ...game, map: veto.map } : game,
+          veto,
+        };
+      }),
+    [mapsDecided, props.match.games, vetoMapList],
   );
-  const mapsDecided = decidedMaps.some(({ veto }) => !!veto);
 
   return (
     <section className="border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-b p-2">
@@ -503,6 +510,12 @@ export default function () {
 
   // grab basic match info
   const game = React.useMemo(() => match && match.games[0], [match]);
+  const vetoMapList = React.useMemo(() => getDecidedVetoMaps(vetoes), [vetoes]);
+  const mapListDecided = !!match && vetoMapList.length >= match.games.length;
+  const pregameGame = React.useMemo(
+    () => (game && mapListDecided && vetoMapList[0] ? { ...game, map: vetoMapList[0].map } : game),
+    [game, mapListDecided, vetoMapList],
+  );
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
 
   React.useEffect(() => {
@@ -555,7 +568,7 @@ export default function () {
             </li>
           )}
           {match.games.length === 1 && (
-            <li>{Util.convertMapPool(game.map, settingsAll.general.game)}</li>
+            <li>{Util.convertMapPool(pregameGame.map, settingsAll.general.game)}</li>
           )}
         </ul>
       </header>
