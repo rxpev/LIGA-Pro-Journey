@@ -1,11 +1,17 @@
 import log from 'electron-log';
 import DatabaseClient from '@liga/backend/lib/database-client';
 import { sealSaveIntegrity } from '@liga/backend/lib/save-integrity';
+import { isSaveIntegrityDevModeEnabled } from '@liga/backend/lib/save-integrity-dev-mode';
 
 const integrityLog = log.scope('save-integrity');
 
 export async function sealActiveSaveIntegrity() {
   if (!DatabaseClient.connected || DatabaseClient.id === 0) {
+    return;
+  }
+
+  if (isSaveIntegrityDevModeEnabled()) {
+    integrityLog.warn('Save integrity development mode is enabled; skipping seal for %s.', DatabaseClient.path);
     return;
   }
 

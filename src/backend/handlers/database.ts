@@ -13,6 +13,7 @@ import {
   removeLegacySaveIntegrity,
   verifySaveIntegrity,
 } from "@liga/backend/lib/save-integrity";
+import { isSaveIntegrityDevModeEnabled } from "@liga/backend/lib/save-integrity-dev-mode";
 
 export default function registerDatabaseHandlers() {
   // CONNECT
@@ -46,26 +47,34 @@ export default function registerDatabaseHandlers() {
     }
 
     if ((parseInt(id) || 0) !== 0) {
-      const saveIntegrity = await verifySaveIntegrity(prisma as any, DatabaseClient.path);
+      const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
 
-      if (!saveIntegrity.valid) {
-        log.warn(
-          'Blocked save load because save integrity failed: actual=%s expected=%s',
-          saveIntegrity.actualDigest,
-          saveIntegrity.expectedDigest,
-        );
-
-        await DatabaseClient.disconnect();
-        await DatabaseClient.connect(0);
-
-        return {
-          blocked: true,
-          reason: 'SAVE_TAMPERED',
-        };
+      if (saveIntegrityDevMode) {
+        log.warn('Save integrity development mode is enabled; skipping verification for %s.', DatabaseClient.path);
       }
 
-      if (saveIntegrity.initialized) {
-        log.info('Initialized save integrity seal for %s.', DatabaseClient.path);
+      if (!saveIntegrityDevMode) {
+        const saveIntegrity = await verifySaveIntegrity(prisma as any, DatabaseClient.path);
+
+        if (!saveIntegrity.valid) {
+          log.warn(
+            'Blocked save load because save integrity failed: actual=%s expected=%s',
+            saveIntegrity.actualDigest,
+            saveIntegrity.expectedDigest,
+          );
+
+          await DatabaseClient.disconnect();
+          await DatabaseClient.connect(0);
+
+          return {
+            blocked: true,
+            reason: 'SAVE_TAMPERED',
+          };
+        }
+
+        if (saveIntegrity.initialized) {
+          log.info('Initialized save integrity seal for %s.', DatabaseClient.path);
+        }
       }
 
       await removeLegacySaveIntegrity(DatabaseClient.path);
