@@ -191,6 +191,10 @@ function buildQueuePositionLookup(team: MatchPlayer[]) {
   return positionByPlayerId;
 }
 
+function getAbandonedNoticeKey(room: MatchRoomData, storedMatchId: number | null): string {
+  return `liga-faceit-abandoned-notice:${storedMatchId ?? room.persistedMatchId ?? room.matchId}`;
+}
+
 // ------------------------------
 // COMPONENT
 // ------------------------------
@@ -522,12 +526,18 @@ export default function MatchRoom({
       return;
     }
 
+    const abandonedNoticeKey = getAbandonedNoticeKey(room, storedMatchId);
+    if (sessionStorage.getItem(abandonedNoticeKey) === "1") {
+      return;
+    }
+
+    sessionStorage.setItem(abandonedNoticeKey, "1");
     audioNegativeAlert();
     setFaceitPlayError({
       code: Constants.ErrorCode.EABANDONED,
       message: launchError?.message || "The match was abandoned.",
     } as NodeJS.ErrnoException);
-  }, [audioNegativeAlert, settingsAll]);
+  }, [audioNegativeAlert, room, settingsAll, storedMatchId]);
 
   const handleStartMatch = async () => {
     if (!deciderMap || isConnectCooldown) return;

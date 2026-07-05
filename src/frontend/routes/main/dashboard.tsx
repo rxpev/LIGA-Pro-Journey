@@ -9,7 +9,7 @@ import { addDays, differenceInDays, format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { calendarAdvance, play } from '@liga/frontend/redux/actions';
+import { calendarAdvance, play, playErrorUpdate } from '@liga/frontend/redux/actions';
 import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
@@ -147,7 +147,6 @@ export default function () {
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
   const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
-  const [dismissedPlayErrorAt, setDismissedPlayErrorAt] = React.useState(0);
   const [activeFaceitMatch, setActiveFaceitMatch] = React.useState<{
     id: number;
     status: number;
@@ -385,8 +384,7 @@ export default function () {
       return null;
     }
   }, [state.playError?.status]);
-  const playErrorPromptVisible =
-    !!playError && !!state.playError && dismissedPlayErrorAt !== state.playError.at;
+  const playErrorPromptVisible = !!playError && !!state.playError;
   const playErrorIsInvalidGamePath = playError?.code === Constants.ErrorCode.EINVAL;
   const isActiveFaceitMatchroom =
     activeFaceitMatch?.status === Constants.MatchStatus.READY ||
@@ -1305,7 +1303,7 @@ export default function () {
                 type="button"
                 data-interaction-sound="back"
                 className="btn"
-                onClick={() => setDismissedPlayErrorAt(state.playError?.at || 0)}
+                onClick={() => dispatch(playErrorUpdate(null))}
               >
                 OK
               </button>
@@ -1314,7 +1312,7 @@ export default function () {
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
-                    setDismissedPlayErrorAt(state.playError?.at || 0);
+                    dispatch(playErrorUpdate(null));
                     api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                       target: '/settings',
                     });

@@ -4,9 +4,7 @@
     "\\src",
     "\\src\\backend",
     "\\src\\frontend",
-    "\\src\\frontend\\redux",
-    "\\src\\frontend\\routes"
+    "\\src\\locale"
   ],
-  "SelectedNode": "\\src\\frontend\\redux\\actions.ts",
   "PreviewInSolutionExplorer": false
 }
