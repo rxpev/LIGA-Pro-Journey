@@ -291,12 +291,12 @@ export default function () {
   }
 
   return (
-    <section className="flex flex-col overflow-y-hidden!">
-      <article className="flex h-2/5 flex-col">
+    <section className="flex h-full min-h-0 flex-col overflow-y-hidden!">
+      <article className="flex h-2/5 min-h-0 flex-col overflow-hidden">
         <header className="heading prose max-w-none border-t-0!">
           <h2>{t('main.teams.honors')}</h2>
         </header>
-        <aside className="grid h-0 flex-grow grid-cols-8 place-content-center place-items-baseline gap-4">
+        <aside className="grid h-0 flex-grow grid-cols-8 content-start place-items-baseline gap-4 overflow-y-auto p-4">
           {!Object.keys(honors).length && (
             <footer className="col-span-8 flex h-full w-full flex-col items-center justify-center text-center">
               <p>{t('main.teams.noHonorsTitle')}</p>
