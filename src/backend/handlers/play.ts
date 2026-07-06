@@ -17,6 +17,7 @@ import {
   ArenaMode,
   Game,
   Scorebot,
+  sealActiveSaveIntegrity,
   Simulator,
   WindowManager,
   Worldgen,
@@ -716,6 +717,7 @@ export default function () {
 
     // check if user won any awards
     await Worldgen.sendUserAward(match.competition);
+    await sealActiveSaveIntegrity();
 
     // restore window and open the play modal
     mainWindow.restore();

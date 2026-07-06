@@ -14,6 +14,11 @@ interface RoleLocationState {
   role?: PlayerCareerRole;
 }
 
+type DatabaseConnectResult = {
+  blocked?: boolean;
+  reason?: 'FACEIT_ELO_TAMPERED' | 'SAVE_TAMPERED';
+};
+
 /**
  * Exports this module.
  *
@@ -47,7 +52,18 @@ export default function Save() {
 
       try {
         setStatus(t('shared.connectingToDatabase'));
-        await api.database.connect(String(newSaveId));
+        const connectResult = await api.database.connect(String(newSaveId)) as DatabaseConnectResult | undefined;
+
+        if (connectResult?.blocked) {
+          audioNegativeAlert();
+          await api.saves.delete(newSaveId).catch(() => Promise.resolve());
+          setStatus(
+            connectResult.reason === 'FACEIT_ELO_TAMPERED'
+              ? 'FACEIT integrity check failed while creating this save.'
+              : 'Save integrity check failed while creating this save.',
+          );
+          return;
+        }
 
         // Create PLAYER profile instead of manager
         setStatus(t('landing.create.statusSaving'));
@@ -68,6 +84,7 @@ export default function Save() {
         api.window.close(Constants.WindowIdentifier.Landing);
       } catch (err) {
         console.error(err);
+        await api.saves.delete(newSaveId).catch(() => Promise.resolve());
         setStatus('Error creating save.');
       }
     };

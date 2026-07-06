@@ -1,4 +1,4 @@
-import { DatabaseClient } from "@liga/backend/lib";
+import { DatabaseClient, sealActiveSaveIntegrity } from "@liga/backend/lib";
 import { Constants, Util } from "@liga/shared";
 import * as XpEconomy from "@liga/backend/lib/xp-economy";
 
@@ -262,6 +262,7 @@ export async function saveFaceitResult(
   });
 
   await XpEconomy.seedUserXp({ profileId: profile.id, teamlessOnly: true });
+  await sealActiveSaveIntegrity();
 
   return true;
 }
