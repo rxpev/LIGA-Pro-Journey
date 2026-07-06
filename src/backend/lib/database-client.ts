@@ -67,6 +67,13 @@ interface SaveSchemaProbe {
   hasProfileSimulateNpcMatchStatsColumn: boolean;
 }
 
+type RootSaveBaselineSnapshot = {
+  profiles: Array<Record<string, unknown>>;
+  players: Array<Record<string, unknown>>;
+  careerStints: Array<Record<string, unknown>>;
+  teammateSeasonXp: Array<Record<string, unknown>>;
+};
+
 /** @type {PrismaClientExtended} */
 type PrismaClientExtended = ReturnType<(typeof DatabaseClient)['clientExtensions']>;
 
@@ -452,6 +459,11 @@ export default class DatabaseClient {
 
     // run database migrations
     await DatabaseClient.migrate(id);
+
+    if (id === 0) {
+      await DatabaseClient.ensureRootSaveMatchesTemplate(saveMeta.path);
+      await DatabaseClient.migrate(id);
+    }
 
     // initialize the new client
     const prisma = new PrismaClient({
@@ -856,6 +868,215 @@ export default class DatabaseClient {
     });
   }
 
+  private static getSqlite<T>(
+    cnx: sqlite3.Database,
+    query: string,
+    params: unknown[] = [],
+  ): Promise<T | undefined> {
+    return new Promise<T | undefined>((resolve, reject) => {
+      cnx.get(query, params, (error, row: T) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(row);
+      });
+    });
+  }
+
+  private static normalizeSqliteValue(value: unknown): unknown {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    return value;
+  }
+
+  private static normalizeSqliteRow(row: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [key, DatabaseClient.normalizeSqliteValue(value)]),
+    );
+  }
+
+  private static async getRootSaveBaselineSnapshot(savePath: string): Promise<RootSaveBaselineSnapshot> {
+    const cnx = await new Promise<sqlite3.Database>((resolve) => {
+      const db = new sqlite3.Database(savePath, () => resolve(db));
+    });
+
+    try {
+      const [profiles, players, careerStints, teammateSeasonXp] = await Promise.all([
+        DatabaseClient.allSqlite<Record<string, unknown>>(
+          cnx,
+          `
+          SELECT
+            id,
+            date,
+            faceitElo,
+            playerId,
+            season,
+            simulateNpcMatchStats,
+            teamId
+          FROM "Profile"
+          ORDER BY id ASC
+          `,
+        ),
+        DatabaseClient.allSqlite<Record<string, unknown>>(
+          cnx,
+          `
+          SELECT
+            id,
+            age,
+            contractEnd,
+            cost,
+            countryId,
+            elo,
+            lastOfferAt,
+            prestige,
+            starter,
+            teamId,
+            transferListed,
+            userControlled,
+            wages,
+            xp
+          FROM "Player"
+          ORDER BY id ASC
+          `,
+        ),
+        DatabaseClient.allSqlite<Record<string, unknown>>(
+          cnx,
+          `
+          SELECT
+            id,
+            endedAt,
+            playerId,
+            startedAt,
+            starter,
+            teamId,
+            tier
+          FROM "CareerStint"
+          ORDER BY id ASC
+          `,
+        ),
+        DatabaseClient.allSqlite<Record<string, unknown>>(
+          cnx,
+          `
+          SELECT
+            id,
+            baselineXp,
+            playerId,
+            profileId,
+            season
+          FROM "UserTeammateSeasonXp"
+          ORDER BY id ASC
+          `,
+        ).catch((error): Array<Record<string, unknown>> => {
+          if ((error as NodeJS.ErrnoException).message?.includes('no such table')) {
+            return [];
+          }
+
+          throw error;
+        }),
+      ]);
+
+      return {
+        profiles: profiles.map(DatabaseClient.normalizeSqliteRow),
+        players: players.map(DatabaseClient.normalizeSqliteRow),
+        careerStints: careerStints.map(DatabaseClient.normalizeSqliteRow),
+        teammateSeasonXp: teammateSeasonXp.map(DatabaseClient.normalizeSqliteRow),
+      };
+    } finally {
+      await new Promise<void>((resolve) => cnx.close(() => resolve()));
+    }
+  }
+
+  private static async getRootSaveSettings(savePath: string): Promise<string | null> {
+    const cnx = await new Promise<sqlite3.Database>((resolve) => {
+      const db = new sqlite3.Database(savePath, () => resolve(db));
+    });
+
+    try {
+      const row = await DatabaseClient.getSqlite<{ settings: string | null }>(
+        cnx,
+        `SELECT "settings" FROM "Profile" ORDER BY id ASC LIMIT 1`,
+      );
+      return row?.settings ?? null;
+    } finally {
+      await new Promise<void>((resolve) => cnx.close(() => resolve()));
+    }
+  }
+
+  private static async setRootSaveSettings(savePath: string, settings: string): Promise<void> {
+    const cnx = await new Promise<sqlite3.Database>((resolve) => {
+      const db = new sqlite3.Database(savePath, () => resolve(db));
+    });
+
+    try {
+      await DatabaseClient.runSqlite(
+        cnx,
+        `UPDATE "Profile" SET "settings" = ? WHERE "id" = (SELECT "id" FROM "Profile" ORDER BY id ASC LIMIT 1)`,
+        [settings],
+      );
+    } finally {
+      await new Promise<void>((resolve) => cnx.close(() => resolve()));
+    }
+  }
+
+  private static async removeSqliteSidecars(savePath: string): Promise<void> {
+    await Promise.all([
+      fs.promises.unlink(`${savePath}-wal`).catch(() => Promise.resolve()),
+      fs.promises.unlink(`${savePath}-shm`).catch(() => Promise.resolve()),
+    ]);
+  }
+
+  private static async repairRootSaveFromTemplate(rootSavePath: string): Promise<void> {
+    const localRootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
+    const settings = await DatabaseClient.getRootSaveSettings(rootSavePath)
+      .catch((): string | null => null);
+
+    await DatabaseClient.removeSqliteSidecars(rootSavePath);
+    await fs.promises.copyFile(localRootSavePath, rootSavePath);
+
+    if (settings && DatabaseClient.isValidSettingsJson(settings)) {
+      await DatabaseClient.setRootSaveSettings(rootSavePath, settings);
+    }
+
+    migratedDatabasePaths.delete(rootSavePath);
+    maintainedDatabasePaths.delete(rootSavePath);
+  }
+
+  private static async ensureRootSaveMatchesTemplate(rootSavePath: string): Promise<void> {
+    const localRootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
+
+    if (path.normalize(rootSavePath) === path.normalize(localRootSavePath)) {
+      return;
+    }
+
+    const [rootSnapshot, templateSnapshot] = await Promise.all([
+      DatabaseClient.getRootSaveBaselineSnapshot(rootSavePath),
+      DatabaseClient.getRootSaveBaselineSnapshot(localRootSavePath),
+    ]);
+
+    if (JSON.stringify(rootSnapshot) === JSON.stringify(templateSnapshot)) {
+      return;
+    }
+
+    DatabaseClient.log.warn(
+      'Root save %s differs from the packaged baseline in protected fields. Rebuilding root save.',
+      rootSavePath,
+    );
+    await DatabaseClient.repairRootSaveFromTemplate(rootSavePath);
+  }
+
+  private static isValidSettingsJson(settings: string): boolean {
+    try {
+      JSON.parse(settings);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   private static async ensureRuntimeSchemaCompatibility(
     cnx: sqlite3.Database,
     targetDBPath: string,
@@ -1013,6 +1234,12 @@ export default class DatabaseClient {
 
     // make a copy of the root save
     try {
+      if (id !== 0) {
+        await DatabaseClient.migrate(0);
+        await DatabaseClient.ensureRootSaveMatchesTemplate(rootSavePath);
+        await DatabaseClient.migrate(0);
+      }
+
       await fs.promises.copyFile(rootSavePath, newSavePath);
       return Promise.resolve({ path: newSavePath, created: true });
     } catch (error) {
