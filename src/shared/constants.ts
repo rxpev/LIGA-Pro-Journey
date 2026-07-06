@@ -32,6 +32,9 @@ export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
 
 export type CustomGameOptions = {
   mode: 'classic' | 'deathmatch';
+  classic?: {
+    igl?: boolean;
+  };
   deathmatch?: {
     gameTime: number;
     playerLimit: number;

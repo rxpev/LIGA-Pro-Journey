@@ -19,6 +19,7 @@ import comingSoonModeImage from '@liga/frontend/assets/customgames/comingsoon.pn
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
 import deathmatchModeImage from '@liga/frontend/assets/customgames/deathmatch.png';
 import headshotOnlyIcon from '@liga/frontend/assets/customgames/headshot.png';
+import iglModeIcon from '@liga/frontend/assets/customgames/igl.png';
 import m4a1sIcon from '@liga/frontend/assets/weapons/2D/m4a1_silencer.svg';
 import mp9Icon from '@liga/frontend/assets/weapons/2D/mp9.svg';
 import spectatingIcon from '@liga/frontend/assets/customgames/spectating.png';
@@ -81,6 +82,10 @@ const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
 ];
 const deathmatchGameTimeOptions = [10, 20, 30, 45, 60] as const;
 const deathmatchPlayerLimitOptions = [20, 18, 16, 14, 12, 10] as const;
+
+function isAwperRole(role?: string | null) {
+  return role === Constants.UserRole.AWPER || role === Constants.PlayerRole.SNIPER;
+}
 
 const deathmatchDifficulties: Array<{
   id: DeathmatchDifficulty;
@@ -679,6 +684,7 @@ export default function () {
   >({});
   const [isUserCT, setIsUserCT] = React.useState(false);
   const [spectating, setSpectating] = React.useState(false);
+  const [iglMode, setIglMode] = React.useState(false);
   const [arenaModeStatus, setArenaModeStatus] = React.useState<Awaited<
     ReturnType<typeof api.app.arenaModeStatus>
   > | null>(null);
@@ -692,6 +698,7 @@ export default function () {
   const navigate = useNavigate();
   const t = useTranslation('windows');
   const previousHomeTeamId = React.useRef<number>();
+  const iglRemovedHomePlayerId = React.useRef<number | null>(null);
   const isDeathmatchMode = selectedGameMode === 'deathmatch';
   const deathmatchSlotsPerSide = deathmatchPlayerLimit / 2;
   const selectedDeathmatchDifficulty = React.useMemo(
@@ -1069,10 +1076,7 @@ export default function () {
 
       if (injectYou && lineup.length) {
         const awperIdx = team.players.findIndex(
-          (player) =>
-            lineup.includes(player.id) &&
-            (player.role === Constants.UserRole.AWPER ||
-              player.role === Constants.PlayerRole.SNIPER),
+          (player) => lineup.includes(player.id) && isAwperRole(player.role),
         );
         const replacementIdx = awperIdx >= 0 ? awperIdx : 0;
         lineup[replacementIdx] = -1;
@@ -1097,6 +1101,8 @@ export default function () {
     }
 
     previousHomeTeamId.current = homeTeam.id;
+    iglRemovedHomePlayerId.current = null;
+    setIglMode(false);
     setHomeRoster(getDefaultRoster(homeTeam, !spectating));
   }, [homeTeam, getDefaultRoster, spectating]);
 
@@ -1133,9 +1139,7 @@ export default function () {
       const defaultRoster = getDefaultRoster(team);
       const awperIdx = defaultRoster.findIndex((playerId) => {
         const player = team.players.find((entry) => entry.id === playerId);
-        return (
-          player?.role === Constants.UserRole.AWPER || player?.role === Constants.PlayerRole.SNIPER
-        );
+        return isAwperRole(player?.role);
       });
       const replacementIdx = awperIdx >= 0 ? awperIdx : 0;
       const nextRoster = [...roster];
@@ -1153,6 +1157,15 @@ export default function () {
 
   const onSpectatingToggle = (checked: boolean) => {
     setSpectating(checked);
+    if (checked) {
+      setIglMode(false);
+      iglRemovedHomePlayerId.current = null;
+      const modified = cloneDeep(settings);
+      modified.gameSettings.isUSP = false;
+      modified.gameSettings.isM4A1 = false;
+      modified.gameSettings.isCZ = false;
+      setSettings(modified);
+    }
 
     if (!homeTeam) {
       return;
@@ -1161,6 +1174,75 @@ export default function () {
     setHomeRoster((prev) =>
       checked ? getRosterWithoutYou(homeTeam, prev) : getRosterWithYou(homeTeam, prev),
     );
+  };
+
+  const onWeaponSettingsToggle = (
+    path: (typeof weaponSettings)[number]['path'],
+    checked: boolean,
+  ) => {
+    if (checked && spectating) {
+      onSpectatingToggle(false);
+    }
+
+    onToggleSettingsUpdate(path, checked);
+  };
+
+  const onIglModeToggle = (checked: boolean) => {
+    (checked ? audioClick : audioRelease)();
+    setIglMode(checked);
+
+    if (!homeTeam) {
+      return;
+    }
+
+    if (checked && spectating) {
+      setSpectating(false);
+    }
+
+    setHomeRoster((prev) => {
+      const rosterWithYou = checked ? getRosterWithYou(homeTeam, prev) : prev;
+      const nextRoster = [...rosterWithYou];
+      const awper = homeTeam.players.find((player) => isAwperRole(player.role));
+
+      if (checked) {
+        if (!awper || nextRoster.includes(awper.id)) {
+          return nextRoster;
+        }
+
+        const replaceableRosterEntry = nextRoster
+          .map((playerId, index) => ({
+            index,
+            player: homeTeam.players.find((player) => player.id === playerId),
+          }))
+          .filter((entry) => entry.player && !isAwperRole(entry.player.role))
+          .sort((a, b) => (a.player?.xp || 0) - (b.player?.xp || 0))[0];
+        const replacementIndex =
+          replaceableRosterEntry?.index ??
+          nextRoster.findIndex((playerId) => playerId !== -1 && playerId !== null);
+
+        if (replacementIndex < 0) {
+          return nextRoster;
+        }
+
+        iglRemovedHomePlayerId.current = nextRoster[replacementIndex] || null;
+        nextRoster[replacementIndex] = awper.id;
+        return nextRoster;
+      }
+
+      const removedPlayerId = iglRemovedHomePlayerId.current;
+      iglRemovedHomePlayerId.current = null;
+
+      if (!removedPlayerId || !awper) {
+        return getRosterWithYou(homeTeam, nextRoster);
+      }
+
+      const awperIndex = nextRoster.findIndex((playerId) => playerId === awper.id);
+      if (awperIndex >= 0 && !nextRoster.includes(removedPlayerId)) {
+        nextRoster[awperIndex] = removedPlayerId;
+      }
+
+      return getRosterWithYou(homeTeam, nextRoster);
+    });
   };
 
   const currentEditingTeam = editingTeamId === homeTeam?.id ? homeTeam : awayTeam;
@@ -1195,9 +1277,7 @@ export default function () {
       if (playerId === -1 && currentEditingTeam?.players?.length) {
         const base =
           currentEditingTeam.players.find(
-            (player) =>
-              player.role === Constants.UserRole.AWPER ||
-              player.role === Constants.PlayerRole.SNIPER,
+            (player) => isAwperRole(player.role),
           ) || currentEditingTeam.players[0];
 
         return {
@@ -1883,12 +1963,37 @@ export default function () {
                         className="toggle"
                         checked={settings.gameSettings[weapon.setting]}
                         onChange={(event) =>
-                          onToggleSettingsUpdate(weapon.path, event.target.checked)
+                          onWeaponSettingsToggle(weapon.path, event.target.checked)
                         }
                       />
                     </aside>
                   </article>
                 ))}
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                        <img
+                          alt=""
+                          className="h-14 w-14 object-contain"
+                          draggable={false}
+                          src={iglModeIcon}
+                        />
+                      </span>
+                      <span>IGL Mode</span>
+                    </p>
+                    <p>Control the strategies and defaults for your team.</p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={iglMode}
+                      onChange={(event) => onIglModeToggle(event.target.checked)}
+                    />
+                  </aside>
+                </article>
                 <article className={cx(!arenaModeInstalled && 'opacity-50')}>
                   <header>
                     <p className="flex items-center gap-4 not-italic">
@@ -2037,6 +2142,9 @@ export default function () {
                 spectating,
                 {
                   mode: 'classic',
+                  classic: {
+                    igl: iglMode,
+                  },
                 },
               ),
             );

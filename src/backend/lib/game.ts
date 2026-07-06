@@ -1159,19 +1159,26 @@ End\n
     });
 
     const isCustomGame = this.match.competition.tier.slug === Constants.TierSlug.EXHIBITION_FRIENDLY;
+    const isCustomGameIglMode =
+      isCustomGame &&
+      this.customGameOptions?.mode === 'classic' &&
+      Boolean(this.customGameOptions.classic?.igl);
     const userCompetitor = this.competitors.find((competitor) => competitor.teamId === this.profile.teamId);
     const teamHasAwper = !!userCompetitor?.team?.players?.some(
       (player) =>
         player.role === Constants.UserRole.AWPER || player.role === Constants.PlayerRole.SNIPER,
     );
     const isUserAwper = user?.role === Constants.UserRole.AWPER;
-    const shouldForceAwpForCustomGame = isCustomGame && !teamHasAwper;
-    const isAWP = !this.spectating && (isUserAwper || shouldForceAwpForCustomGame) ? 1 : 0;
-    const isM4A1 = this.settings.gameSettings?.isM4A1 ? 1 : 0;
-    const isUSP = this.settings.gameSettings?.isUSP ? 1 : 0;
-    const isCZ = this.settings.gameSettings?.isCZ ? 1 : 0;
+    const shouldForceAwpForCustomGame = isCustomGame && !isCustomGameIglMode && !teamHasAwper;
+    const isAWP =
+      !this.spectating && !isCustomGameIglMode && (isUserAwper || shouldForceAwpForCustomGame)
+        ? 1
+        : 0;
+    const isM4A1 = !this.spectating && this.settings.gameSettings?.isM4A1 ? 1 : 0;
+    const isUSP = !this.spectating && this.settings.gameSettings?.isUSP ? 1 : 0;
+    const isCZ = !this.spectating && this.settings.gameSettings?.isCZ ? 1 : 0;
     const userIsIGL = !this.spectating && user?.role === Constants.UserRole.IGL;
-    const isIGL = !this.isFaceit && userIsIGL ? 1 : 0;
+    const isIGL = !this.isFaceit && (userIsIGL || isCustomGameIglMode) ? 1 : 0;
     const bot_defer_to_human_items = isIGL;
     const isLan = this.getIsLanMatch() ? 1 : 0;
     const deathmatchSettings = this.deathmatchServerSettings;
@@ -1421,6 +1428,11 @@ End\n
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isLan', isLan);
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isCZ', isCZ);
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isIGL', isIGL);
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'bot_defer_to_human_items',
+      bot_defer_to_human_items,
+    );
     serverCfgRendered = upsertConVar(
       serverCfgRendered,
       'isDeathmatch',
