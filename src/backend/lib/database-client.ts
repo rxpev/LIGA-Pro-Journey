@@ -64,6 +64,7 @@ interface SaveSchemaProbe {
   hasCompetitionFederationColumn: boolean;
   hasMigrationsTable: boolean;
   hasProfileTable: boolean;
+  hasProfileSimulateNpcMatchStatsColumn: boolean;
 }
 
 /** @type {PrismaClientExtended} */
@@ -821,6 +822,62 @@ export default class DatabaseClient {
     }
   }
 
+  private static runSqlite(
+    cnx: sqlite3.Database,
+    query: string,
+    params: unknown[] = [],
+  ) {
+    return new Promise<void>((resolve, reject) => {
+      cnx.run(query, params, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+
+  private static allSqlite<T>(
+    cnx: sqlite3.Database,
+    query: string,
+    params: unknown[] = [],
+  ) {
+    return new Promise<T[]>((resolve, reject) => {
+      cnx.all(query, params, (error, rows: T[]) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(rows ?? []);
+      });
+    });
+  }
+
+  private static async ensureRuntimeSchemaCompatibility(
+    cnx: sqlite3.Database,
+    targetDBPath: string,
+  ) {
+    const profileColumns = await DatabaseClient.allSqlite<{ name: string }>(
+      cnx,
+      `PRAGMA table_info("Profile")`,
+    );
+
+    if (!profileColumns.some((column) => column.name === 'simulateNpcMatchStats')) {
+      DatabaseClient.log.warn(
+        'Profile.simulateNpcMatchStats is missing from %s after migrations. Applying compatibility repair.',
+        targetDBPath,
+      );
+
+      await DatabaseClient.runSqlite(
+        cnx,
+        `ALTER TABLE "Profile" ADD COLUMN "simulateNpcMatchStats" BOOLEAN NOT NULL DEFAULT false`,
+      );
+    }
+  }
+
   /**
    * Removes a cached client for a save id and disconnects it if needed.
    *
@@ -924,6 +981,13 @@ export default class DatabaseClient {
       const schema = await DatabaseClient.probeSaveSchema(newSavePath);
 
       if (schema.hasMigrationsTable && schema.hasProfileTable) {
+        if (!schema.hasProfileSimulateNpcMatchStatsColumn) {
+          DatabaseClient.log.warn(
+            'Save %s is missing Profile.simulateNpcMatchStats. Migration repair will run before connect.',
+            newSavePath,
+          );
+        }
+
         return Promise.resolve({ path: newSavePath, created: false });
       }
 
@@ -988,19 +1052,17 @@ export default class DatabaseClient {
     const cnx = new sqlite3.Database(targetDBPath, () =>
       DatabaseClient.log.debug('Migrating database %s...', targetDBPath),
     );
-    const migrationsExisting = await new Promise<Array<PrismaMigration>>((resolve) =>
-      cnx.all('SELECT * FROM _prisma_migrations', (error, rows: Array<PrismaMigration>) => {
-        if (error) {
-          DatabaseClient.log.warn(
-            'Failed to read _prisma_migrations for %s. Treating as no applied migrations.',
-            targetDBPath,
-          );
-          return resolve([]);
-        }
-
-        resolve(rows ?? []);
-      }),
-    );
+    const migrationsExisting = await DatabaseClient.allSqlite<PrismaMigration>(
+      cnx,
+      'SELECT * FROM _prisma_migrations',
+    ).catch((error): Array<PrismaMigration> => {
+      DatabaseClient.log.warn(
+        'Failed to read _prisma_migrations for %s. Treating as no applied migrations.',
+        targetDBPath,
+      );
+      DatabaseClient.log.warn(error);
+      return [];
+    });
 
     // load up migration files
     const migrationsBasePath = path.join(path.dirname(DatabaseClient.localBasePath), 'migrations');
@@ -1084,28 +1146,37 @@ export default class DatabaseClient {
       // run this migration
       DatabaseClient.log.debug('Applying migration `%s`...', migration.name);
 
-      await new Promise((resolve) => {
-        cnx.serialize(() => {
-          cnx.run('BEGIN TRANSACTION');
-          queries.forEach((query) => cnx.run(query));
-          cnx.run(
-            `
-            INSERT INTO _prisma_migrations (id,checksum,finished_at,migration_name,started_at)
-            VALUES (?,?,?,?,?)
-            `,
-            [
-              crypto.randomUUID(),
-              crypto.createHash('sha256').update(file, 'utf8').digest('hex'),
-              Date.now(),
-              migration.name,
-              Date.now(),
-            ],
-          );
-          cnx.run('COMMIT');
-          resolve(true);
-        });
-      });
+      try {
+        await DatabaseClient.runSqlite(cnx, 'BEGIN TRANSACTION');
+
+        for (const query of queries) {
+          await DatabaseClient.runSqlite(cnx, query);
+        }
+
+        await DatabaseClient.runSqlite(
+          cnx,
+          `
+          INSERT INTO _prisma_migrations (id,checksum,finished_at,migration_name,started_at)
+          VALUES (?,?,?,?,?)
+          `,
+          [
+            crypto.randomUUID(),
+            crypto.createHash('sha256').update(file, 'utf8').digest('hex'),
+            Date.now(),
+            migration.name,
+            Date.now(),
+          ],
+        );
+        await DatabaseClient.runSqlite(cnx, 'COMMIT');
+      } catch (error) {
+        await DatabaseClient.runSqlite(cnx, 'ROLLBACK').catch(() => Promise.resolve());
+        DatabaseClient.log.error('Failed to apply migration `%s` to %s.', migration.name, targetDBPath);
+        DatabaseClient.log.error(error);
+        throw error;
+      }
     }
+
+    await DatabaseClient.ensureRuntimeSchemaCompatibility(cnx, targetDBPath);
 
     // close the connection
     return new Promise((resolve) =>
@@ -1292,11 +1363,31 @@ export default class DatabaseClient {
           ),
         )
         : false;
+      const hasProfileSimulateNpcMatchStatsColumn = tables.includes('Profile')
+        ? await new Promise<boolean>((resolve) =>
+          cnx.all(
+            `PRAGMA table_info("Profile")`,
+            (error, rows: Array<{ name: string }>) => {
+              if (error) {
+                DatabaseClient.log.warn(
+                  'Failed probing Profile columns for %s: %s',
+                  savePath,
+                  error,
+                );
+                return resolve(false);
+              }
+
+              resolve((rows ?? []).some((row) => row.name === 'simulateNpcMatchStats'));
+            },
+          ),
+        )
+        : false;
 
       return {
         hasCompetitionFederationColumn,
         hasMigrationsTable: tables.includes('_prisma_migrations'),
         hasProfileTable: tables.includes('Profile'),
+        hasProfileSimulateNpcMatchStatsColumn,
       };
     } finally {
       await new Promise<void>((resolve) => cnx.close(() => resolve()));
