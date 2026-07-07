@@ -19,7 +19,7 @@ import { spawn, ChildProcessWithoutNullStreams, exec as execSync } from 'node:ch
 import { app } from 'electron';
 import { glob } from 'glob';
 import { Prisma, Profile } from '@prisma/client';
-import { compact, flatten, random, startCase, uniq } from 'lodash';
+import { compact, flatten, random, uniq } from 'lodash';
 import { Constants, Bot, Chance, Util, Eagers, Dedent, is } from '@liga/shared';
 import DatabaseClient from "./database-client";
 import { CSGO_BOTPROFILE_TEMPLATE } from './csgo-botprofile-template';
@@ -65,6 +65,63 @@ const LAN_TIER_SLUGS = new Set<string>([
 const CSGO_TEAM_LOGOS_DIR = 'materials/panorama/images/tournaments/teams';
 const CSGO_BOT_STUFF_PLUGIN = 'addons/sourcemod/plugins/bot_stuff.smx';
 const CSGO_BOT_STUFF_DM_PLUGIN = 'addons/sourcemod/plugins/dm/bot_stuff.smx';
+
+const WORLD_SERVER_HOSTNAME_BY_TIER: Partial<Record<Constants.TierSlug, string>> = {
+  [Constants.TierSlug.BLAST_FINALS]: 'BLAST Finals',
+  [Constants.TierSlug.CCT_GLOBAL_FINALS]: 'CCT Global Finals',
+  [Constants.TierSlug.ESL_CHALLENGER]: 'ESL Challenger Group Stage',
+  [Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS]: 'ESL Challenger Playoffs',
+  [Constants.TierSlug.IEM_COLOGNE_GROUP_A]: 'IEM Cologne Group Stage',
+  [Constants.TierSlug.IEM_COLOGNE_GROUP_B]: 'IEM Cologne Group Stage',
+  [Constants.TierSlug.IEM_COLOGNE_PLAYOFFS]: 'IEM Cologne Playoffs',
+  [Constants.TierSlug.IEM_KRAKOW_GROUP_A]: 'IEM Krakow Group Stage',
+  [Constants.TierSlug.IEM_KRAKOW_GROUP_B]: 'IEM Krakow Group Stage',
+  [Constants.TierSlug.IEM_KRAKOW_PLAYOFFS]: 'IEM Krakow Playoffs',
+  [Constants.TierSlug.LEAGUE_PRO]: 'ESL Pro League',
+  [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: 'ESL Pro League Playoffs',
+};
+
+const REGIONAL_SERVER_HOSTNAME_BY_TIER: Partial<Record<Constants.TierSlug, string>> = {
+  [Constants.TierSlug.CCT_OCE_PLAYOFFS]: 'CCT Series Playoffs',
+  [Constants.TierSlug.CCT_OCE_SERIES]: 'CCT Series',
+  [Constants.TierSlug.CCT_SERIES]: 'CCT Series',
+  [Constants.TierSlug.CCT_SERIES_PLAYOFFS]: 'CCT Series Playoffs',
+  [Constants.TierSlug.ESEA_CASH_CUP]: 'ESEA Cash Cup',
+  [Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER]: 'IEM Cologne Open Qualifier',
+  [Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER]: 'IEM Krakow Open Qualifier',
+  [Constants.TierSlug.LEAGUE_OPEN]: 'ESEA Open',
+  [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: 'ESEA Open Playoffs',
+  [Constants.TierSlug.LEAGUE_INTERMEDIATE]: 'ESEA Intermediate',
+  [Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 'ESEA Intermediate Playoffs',
+  [Constants.TierSlug.LEAGUE_MAIN]: 'ESEA Main',
+  [Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS]: 'ESEA Main Playoffs',
+  [Constants.TierSlug.LEAGUE_ADVANCED]: 'ESEA Advanced',
+  [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 'ESEA Advanced Playoffs',
+  [Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
+  [Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
+  [Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
+  [Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
+  [Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
+  [Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
+  [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1]: 'RMR Open Qualifier #1',
+  [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2]: 'RMR Open Qualifier #2',
+  [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3]: 'RMR Open Qualifier #3',
+  [Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4]: 'RMR Open Qualifier #4',
+};
+
+const RMR_SERVER_HOSTNAME_BY_TIER: Partial<Record<Constants.TierSlug, string>> = {
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_A]: 'Europe RMR A',
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_B]: 'Europe RMR B',
+  [Constants.TierSlug.MAJOR_ASIA_RMR]: 'Asia RMR',
+  [Constants.TierSlug.MAJOR_AMERICAS_RMR]: 'Americas RMR',
+};
+
+const SERVER_HOSTNAME_REGION_BY_FEDERATION: Partial<Record<Constants.FederationSlug, string>> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 'Europe',
+  [Constants.FederationSlug.ESPORTS_ASIA]: 'Asia',
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 'Americas',
+  [Constants.FederationSlug.ESPORTS_OCE]: 'Oceania',
+};
 
 /**
  * Custom error to throw when a process
@@ -581,10 +638,50 @@ export class Server {
 
     const { federation, tier } = this.match.competition;
     if (tier.slug === Constants.TierSlug.EXHIBITION_FRIENDLY) {
-      return 'LIGA: Pro Journey | Custom Games';
+      return this.isDeathmatchCustomGame
+        ? 'Custom Games - Deathmatch'
+        : 'Custom Games - Classic 5v5';
     }
-    const idiomaticTierName = Constants.IdiomaticTier[tier.slug];
-    return `${tier.league.name}: ${startCase(federation.slug)} | ${idiomaticTierName}`;
+
+    const tierSlug = tier.slug as Constants.TierSlug;
+    const federationSlug = federation.slug as Constants.FederationSlug;
+    const worldHostname = WORLD_SERVER_HOSTNAME_BY_TIER[tierSlug];
+
+    if (worldHostname && federationSlug === Constants.FederationSlug.ESPORTS_WORLD) {
+      return worldHostname;
+    }
+
+    if (Util.isMajorStageTier(tierSlug)) {
+      const city = Util.getCompetitionHostingLocationCity(this.match.competition.location);
+      return [
+        this.match.competition.organizer || 'LIGA',
+        city,
+        Constants.IdiomaticTier[tierSlug],
+      ]
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    const rmrHostname = RMR_SERVER_HOSTNAME_BY_TIER[tierSlug];
+    if (rmrHostname) {
+      return rmrHostname;
+    }
+
+    if (
+      tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1 ||
+      tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2
+    ) {
+      return Constants.IdiomaticTier[tierSlug];
+    }
+
+    const regionalHostname = REGIONAL_SERVER_HOSTNAME_BY_TIER[tierSlug];
+    const region = SERVER_HOSTNAME_REGION_BY_FEDERATION[federationSlug];
+
+    if (regionalHostname && region) {
+      return `${regionalHostname} ${region}`;
+    }
+
+    return Util.getCompetitionDisplayName(tier.league.name, tierSlug);
   }
 
   /**
@@ -1404,7 +1501,7 @@ End\n
         deathmatch_force_buy: deathmatchSettings.forceBuy,
         humanteam,
 
-        match_stat: this.match.competition.tier.name,
+        match_stat: isCustomGame ? 'Custom Games' : this.match.competition.tier.name,
         teamflag_t: teamBranding.teamflag_t,
         teamflag_ct: teamBranding.teamflag_ct,
         shortname_t: teamBranding.shortname_t,
