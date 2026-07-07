@@ -14,10 +14,7 @@ import { Plugins } from '@liga/backend/lib';
  */
 export default function () {
   ipcMain.on(Constants.IPCRoute.PLUGINS_START, (event) => {
-    // start checking for updates
-    // @todo: do not hardcode the url
     const plugins = new Plugins.Manager('https://github.com/rxpev/LIGA-Plugins.git');
-    plugins.checkForUpdates();
 
     // register plugin manager event handlers
     plugins.on(Plugins.EventIdentifier.CHECKING, () =>
@@ -39,5 +36,9 @@ export default function () {
     plugins.on(Plugins.EventIdentifier.INSTALL, () =>
       event.reply(Constants.IPCRoute.PLUGINS_INSTALLING),
     );
+
+    // start checking for updates after all replies are wired up
+    // @todo: do not hardcode the url
+    plugins.checkForUpdates();
   });
 }

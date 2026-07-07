@@ -140,7 +140,6 @@ function Index() {
       () =>
         new Promise((resolve) => {
           setStatus(UpdaterStatus.Checking);
-          api.updater.start();
           api.ipc.on(Constants.IPCRoute.UPDATER_NO_UPDATE, () =>
             resolve(setStatus(UpdaterStatus.NoUpdates)),
           );
@@ -150,6 +149,7 @@ function Index() {
           api.ipc.on(Constants.IPCRoute.UPDATER_FINISHED, () =>
             resolve(setStatus(UpdaterStatus.Finished)),
           );
+          api.updater.start();
         }),
     );
   }, [status]);
@@ -174,7 +174,6 @@ function Index() {
     Util.sleep(FAUX_TIMEOUT).then(
       () =>
         new Promise((resolve) => {
-          api.plugins.start();
           api.ipc.on(Constants.IPCRoute.PLUGINS_CHECKING, () => setStatus(PluginStatus.Checking));
           api.ipc.on(Constants.IPCRoute.PLUGINS_NO_UPDATE, () =>
             resolve(setStatus(PluginStatus.NoUpdates)),
@@ -192,6 +191,7 @@ function Index() {
           api.ipc.on(Constants.IPCRoute.PLUGINS_ERROR, () =>
             resolve(setStatus(PluginStatus.Error)),
           );
+          api.plugins.start();
         }),
     );
   }, [status]);

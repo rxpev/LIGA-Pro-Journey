@@ -40,10 +40,6 @@ export default function () {
         `${process.platform}-${process.arch}/${app.getVersion()}`,
     });
 
-    // start checking for updates
-    log.info('Checking for updates: %s', autoUpdater.getFeedURL());
-    autoUpdater.checkForUpdates();
-
     // register the auto updater event handlers
     autoUpdater.on('checking-for-update', () => event.reply(Constants.IPCRoute.UPDATER_CHECKING));
     autoUpdater.on('update-not-available', () => event.reply(Constants.IPCRoute.UPDATER_NO_UPDATE));
@@ -55,5 +51,9 @@ export default function () {
       log.error(message);
       event.reply(Constants.IPCRoute.UPDATER_NO_UPDATE);
     });
+
+    // start checking for updates after all replies are wired up
+    log.info('Checking for updates: %s', autoUpdater.getFeedURL());
+    autoUpdater.checkForUpdates();
   });
 }
