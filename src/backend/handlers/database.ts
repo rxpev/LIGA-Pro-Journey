@@ -23,28 +23,9 @@ export default function registerDatabaseHandlers() {
 
     const prisma = await DatabaseClient.connect(parseInt(id) || 0);
 
-    const profile = await prisma.profile.findFirst();
+    let profile = await prisma.profile.findFirst();
 
     if (!profile) return;
-
-    const faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
-
-    if (!faceitEloIntegrity.valid) {
-      log.warn(
-        'Blocked save load because FACEIT ELO integrity failed: actual=%d expected=%d invalidDeltaMatchIds=%j',
-        faceitEloIntegrity.actualElo,
-        faceitEloIntegrity.expectedElo,
-        faceitEloIntegrity.invalidDeltaMatchIds,
-      );
-
-      await DatabaseClient.disconnect();
-      await DatabaseClient.connect(0);
-
-      return {
-        blocked: true,
-        reason: 'FACEIT_ELO_TAMPERED',
-      };
-    }
 
     if ((parseInt(id) || 0) !== 0) {
       const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
@@ -58,18 +39,19 @@ export default function registerDatabaseHandlers() {
 
         if (!saveIntegrity.valid) {
           log.warn(
-            'Blocked save load because save integrity failed: actual=%s expected=%s',
+            'Could not restore save integrity after verification failed: actual=%s expected=%s',
             saveIntegrity.actualDigest,
             saveIntegrity.expectedDigest,
           );
+        }
 
-          await DatabaseClient.disconnect();
-          await DatabaseClient.connect(0);
-
-          return {
-            blocked: true,
-            reason: 'SAVE_TAMPERED',
-          };
+        if (saveIntegrity.restored) {
+          log.warn(
+            'Restored protected save data from the last integrity seal for %s.',
+            DatabaseClient.path,
+          );
+          profile = await prisma.profile.findFirst();
+          if (!profile) return;
         }
 
         if (saveIntegrity.initialized) {
@@ -78,6 +60,17 @@ export default function registerDatabaseHandlers() {
       }
 
       await removeLegacySaveIntegrity(DatabaseClient.path);
+    }
+
+    const faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
+
+    if (!faceitEloIntegrity.valid) {
+      log.warn(
+        'FACEIT ELO integrity still differs after save integrity verification: actual=%d expected=%d invalidDeltaMatchIds=%j',
+        faceitEloIntegrity.actualElo,
+        faceitEloIntegrity.expectedElo,
+        faceitEloIntegrity.invalidDeltaMatchIds,
+      );
     }
 
     // Load profile settings
