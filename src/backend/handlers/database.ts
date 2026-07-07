@@ -66,11 +66,19 @@ export default function registerDatabaseHandlers() {
 
     if (!faceitEloIntegrity.valid) {
       log.warn(
-        'FACEIT ELO integrity still differs after save integrity verification: actual=%d expected=%d invalidDeltaMatchIds=%j',
+        'Blocked save load because FACEIT ELO integrity failed: actual=%d expected=%d invalidDeltaMatchIds=%j',
         faceitEloIntegrity.actualElo,
         faceitEloIntegrity.expectedElo,
         faceitEloIntegrity.invalidDeltaMatchIds,
       );
+
+      await DatabaseClient.disconnect();
+      await DatabaseClient.connect(0);
+
+      return {
+        blocked: true,
+        reason: 'FACEIT_ELO_TAMPERED',
+      };
     }
 
     // Load profile settings

@@ -4,9 +4,10 @@
  * @module
  */
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Constants } from '@liga/shared';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTranslation } from '@liga/frontend/hooks';
+import { FaExclamationTriangle } from 'react-icons/fa';
 
 /**
  * Exports this module.
@@ -16,15 +17,34 @@ import { useTranslation } from '@liga/frontend/hooks';
 export default function () {
   const t = useTranslation('windows');
   const { id } = useParams();
+  const navigate = useNavigate();
   const [status, setStatus] = React.useState('');
+  const [faceitLockout, setFaceitLockout] = React.useState(false);
+  const audioNegativeAlert = useAudio('negative-alert.wav');
+  const audioRelease = useAudio('button-release.wav');
 
   React.useEffect(() => {
     Promise.resolve(setStatus(t('landing.connect.flushing')))
       .then(() => api.database.disconnect())
       .then(() => Promise.resolve(setStatus(t('shared.connectingToDatabase'))))
       .then(() => api.database.connect(id))
-      .then(() => Promise.resolve(setStatus(t('landing.connect.connected'))))
-      .then(() => {
+      .then(async (result) => {
+        if (result?.blocked && result.reason === 'FACEIT_ELO_TAMPERED') {
+          audioNegativeAlert();
+          setFaceitLockout(true);
+          return false;
+        }
+
+        return true;
+      })
+      .then((connected) => {
+        if (!connected) return false;
+
+        return Promise.resolve(setStatus(t('landing.connect.connected'))).then(() => true);
+      })
+      .then((connected) => {
+        if (!connected) return;
+
         api.window.open(Constants.WindowIdentifier.Main);
         api.window.close(Constants.WindowIdentifier.Landing);
       });
@@ -38,6 +58,31 @@ export default function () {
           <p>{status}</p>
         </header>
       </main>
+
+      {faceitLockout && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <div className="flex items-center gap-3">
+                <FaExclamationTriangle className="text-warning size-8 shrink-0" />
+                <p className="text-lg font-bold">FACEIT Integrity Check Failed</p>
+              </div>
+              <p>FACEIT ELO has been manually altered. Revert changes to continue.</p>
+            </header>
+            <footer className="flex justify-end">
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn btn-primary"
+                onMouseDown={audioRelease}
+                onClick={() => navigate('/', { replace: true })}
+              >
+                Main Menu
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
     </React.Fragment>
   );
 }
