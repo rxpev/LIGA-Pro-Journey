@@ -143,6 +143,9 @@ export default function () {
   const [transfers, setTransfers] = React.useState<
     Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>
   >([]);
+  const [standingMatches, setStandingMatches] = React.useState<
+    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
+  >([]);
 
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
@@ -417,6 +420,35 @@ export default function () {
     [spotlight, previous],
   );
 
+  // fetch stage matches for expandable standings rows
+  React.useEffect(() => {
+    setStandingMatches([]);
+
+    if (!standings?.competition.tier.groupSize) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    api.matches
+      .all({
+        include: Eagers.match.include,
+        orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        where: {
+          competitionId: standings.competition.id,
+        },
+      })
+      .then((matches) => {
+        if (isCurrent) {
+          setStandingMatches(matches);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [standings]);
+
   // grab user's team info
   const userTeam = React.useMemo(() => {
     if (!standings || !state.profile?.teamId) {
@@ -599,6 +631,8 @@ export default function () {
                         compact
                         highlight={state.profile.teamId}
                         competitors={userGroupCompetitors}
+                        matches={standingMatches}
+                        teamLink={(team) => `/teams?teamId=${team.id}`}
                         title={
                           standings.competition.tier.league.slug ===
                           Constants.LeagueSlug.ESPORTS_LEAGUE
