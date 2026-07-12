@@ -21,7 +21,7 @@ import { glob } from 'glob';
 import { Prisma, Profile } from '@prisma/client';
 import { compact, flatten, random, uniq } from 'lodash';
 import { Constants, Bot, Chance, Util, Eagers, Dedent, is } from '@liga/shared';
-import DatabaseClient from "./database-client";
+import DatabaseClient from './database-client';
 import { CSGO_BOTPROFILE_TEMPLATE } from './csgo-botprofile-template';
 
 /**
@@ -203,7 +203,6 @@ export async function discoverGamePath(enumId: string, steamPath?: string) {
   return Promise.resolve(library.path as string);
 }
 
-
 /**
  * Detects the CSGO dedicated server installation root.
  *
@@ -292,7 +291,6 @@ export async function discoverDedicatedServerPath(steamPath?: string) {
   throw Error('CSGO dedicated server not found!');
 }
 
-
 /**
  * Gets the specified game's executable.
  *
@@ -304,10 +302,9 @@ export function getGameExecutable(game: string, rootPath: string | null) {
   return path.join(
     rootPath || '',
     Constants.GameSettings.CSGO_BASEDIR,
-    Constants.GameSettings.CSGO_EXE
+    Constants.GameSettings.CSGO_EXE,
   );
 }
-
 
 /**
  * Gets the specified game's log file.
@@ -344,13 +341,13 @@ export async function getGameLogFile(
     }
   }
 
-  log.debug(
-    `[getGameLogFile] game=${game}, rootPath=${rootPath}, basePath=${basePath || 'N/A'}`,
-  );
+  log.debug(`[getGameLogFile] game=${game}, rootPath=${rootPath}, basePath=${basePath || 'N/A'}`);
 
   // bail early if no logs path exists
   if (!basePath) {
-    log.warn(`[getGameLogFile] logs path does not exist for any candidate: ${basePaths.join(' | ')}`);
+    log.warn(
+      `[getGameLogFile] logs path does not exist for any candidate: ${basePaths.join(' | ')}`,
+    );
     return '';
   }
 
@@ -369,9 +366,7 @@ export async function getGameLogFile(
   const candidatesByPort = preferredPort
     ? byMtime.filter((file) => new RegExp(`_${preferredPort}_`).test(file.name))
     : [];
-  const candidates = candidatesByPort.length
-    ? candidatesByPort
-    : (byMtime.length ? byMtime : files);
+  const candidates = candidatesByPort.length ? candidatesByPort : byMtime.length ? byMtime : files;
 
   const full = candidates[0].fullpath();
   log.debug(
@@ -379,7 +374,6 @@ export async function getGameLogFile(
   );
   return full;
 }
-
 
 async function isLikelyClosedLogFile(filePath: string) {
   try {
@@ -447,8 +441,8 @@ export class Server {
   // FACEIT fields
   private isFaceit: boolean;
   private faceitRoom: any;
-  private faceitSides?: Record<number, "t" | "ct">;
-  private faceitUserSide?: "t" | "ct";
+  private faceitSides?: Record<number, 't' | 'ct'>;
+  private faceitUserSide?: 't' | 'ct';
   private sideTeamIds?: { t: number; ct: number };
   private clientLaunchedViaSteam: boolean;
   public faceitUserServerId: string | null;
@@ -477,9 +471,9 @@ export class Server {
   public scorebotEvents: Array<{
     type: Scorebot.EventIdentifier;
     payload:
-    | Scorebot.EventPayloadPlayerAssisted
-    | Scorebot.EventPayloadPlayerKilled
-    | Scorebot.EventPayloadRoundOver;
+      | Scorebot.EventPayloadPlayerAssisted
+      | Scorebot.EventPayloadPlayerKilled
+      | Scorebot.EventPayloadRoundOver;
   }>;
 
   /**
@@ -506,7 +500,9 @@ export class Server {
     this.match = match;
 
     if (Array.isArray((match as any).games)) {
-      this.matchGame = match.games.find((game: any) => game.status !== Constants.MatchStatus.COMPLETED);
+      this.matchGame = match.games.find(
+        (game: any) => game.status !== Constants.MatchStatus.COMPLETED,
+      );
     } else {
       this.matchGame = null as any;
     }
@@ -568,9 +564,7 @@ export class Server {
           name: teamAName,
           slug: teamAName.toLowerCase().replace(/\s+/g, '-'),
           country: { code: 'EU' } as any,
-          players: cleanTeamA.map(
-            this.toServerPlayerFromMatchPlayer.bind(this),
-          ),
+          players: cleanTeamA.map(this.toServerPlayerFromMatchPlayer.bind(this)),
         },
       };
 
@@ -581,17 +575,13 @@ export class Server {
           name: teamBName,
           slug: teamBName.toLowerCase().replace(/\s+/g, '-'),
           country: { code: 'EU' } as any,
-          players: cleanTeamB.map(
-            this.toServerPlayerFromMatchPlayer.bind(this),
-          ),
+          players: cleanTeamB.map(this.toServerPlayerFromMatchPlayer.bind(this)),
         },
       };
 
       // Randomize which logical team (1/2) starts T / CT once for this match
       const teamAStartsT = Math.random() < 0.5;
-      this.faceitSides = teamAStartsT
-        ? { 1: 't', 2: 'ct' }
-        : { 1: 'ct', 2: 't' };
+      this.faceitSides = teamAStartsT ? { 1: 't', 2: 'ct' } : { 1: 'ct', 2: 't' };
 
       this.faceitUserSide = this.faceitSides[userTeamId];
 
@@ -600,26 +590,22 @@ export class Server {
       this.competitors = match.competitors.map((competitor) => {
         const isUserTeam = competitor.teamId === this.profile.teamId;
 
-        const forceSize =
-          this.isDeathmatchCustomGame
-            ? isUserTeam && !this.spectating
+        let forceSize = Constants.Application.SQUAD_MIN_LENGTH;
+
+        if (this.isDeathmatchCustomGame) {
+          forceSize =
+            isUserTeam && !this.spectating
               ? this.deathmatchPlayersPerSide - 1
-              : this.deathmatchPlayersPerSide
-            : this.spectating
-              ? Constants.Application.SQUAD_MIN_LENGTH
-              : isUserTeam
-                ? Constants.Application.SQUAD_MIN_LENGTH - 1
-                : Constants.Application.SQUAD_MIN_LENGTH;
+              : this.deathmatchPlayersPerSide;
+        } else if (!this.isChaosCustomGame && !this.spectating && isUserTeam) {
+          forceSize = Constants.Application.SQUAD_MIN_LENGTH - 1;
+        }
+
         return {
           ...competitor,
           team: {
             ...competitor.team,
-            players: Util.getSquad(
-              competitor.team,
-              this.profile,
-              false,
-              forceSize,
-            ),
+            players: Util.getSquad(competitor.team, this.profile, false, forceSize),
           },
         };
       });
@@ -638,9 +624,15 @@ export class Server {
 
     const { federation, tier } = this.match.competition;
     if (tier.slug === Constants.TierSlug.EXHIBITION_FRIENDLY) {
-      return this.isDeathmatchCustomGame
-        ? 'Custom Games - Deathmatch'
-        : 'Custom Games - Classic 5v5';
+      if (this.isDeathmatchCustomGame) {
+        return 'Custom Games - Deathmatch';
+      }
+
+      if (this.isChaosCustomGame) {
+        return 'Custom Games - Chaos';
+      }
+
+      return 'Custom Games - Classic 5v5';
     }
 
     const tierSlug = tier.slug as Constants.TierSlug;
@@ -653,11 +645,7 @@ export class Server {
 
     if (Util.isMajorStageTier(tierSlug)) {
       const city = Util.getCompetitionHostingLocationCity(this.match.competition.location);
-      return [
-        this.match.competition.organizer || 'LIGA',
-        city,
-        Constants.IdiomaticTier[tierSlug],
-      ]
+      return [this.match.competition.organizer || 'LIGA', city, Constants.IdiomaticTier[tierSlug]]
         .filter(Boolean)
         .join(' ');
     }
@@ -703,6 +691,10 @@ export class Server {
 
   private get isDeathmatchCustomGame() {
     return this.customGameOptions?.mode === 'deathmatch';
+  }
+
+  private get isChaosCustomGame() {
+    return this.customGameOptions?.mode === 'chaos';
   }
 
   private get deathmatchServerSettings() {
@@ -795,8 +787,10 @@ export class Server {
 
   private updateLiveDiscordPresence(): void {
     const isDeathmatch = this.isDeathmatchCustomGame;
+    const isChaos = this.isChaosCustomGame;
 
     DiscordPresence.update({
+      chaos: isChaos,
       deathmatch: isDeathmatch,
       map: this.map,
       mode: DiscordPresence.PresenceMode.LIVE_MATCH,
@@ -804,7 +798,7 @@ export class Server {
       score: isDeathmatch ? undefined : this.livePresenceOrderedScore,
       spectating: this.spectating,
       teams:
-        isDeathmatch || this.presenceMatchType === 'faceit'
+        isDeathmatch || isChaos || this.presenceMatchType === 'faceit'
           ? undefined
           : this.livePresenceTeamNames,
     }).catch((error) => this.log.debug('Discord Rich Presence live match update failed', error));
@@ -838,23 +832,16 @@ export class Server {
       const roundsOvertime = this.livePresenceRounds - maxRounds;
       const overtimeRound = ((roundsOvertime - 1) % maxRoundsOvertime) + 1;
 
-      if (
-        overtimeRound === maxRoundsOvertime / 2 ||
-        overtimeRound === maxRoundsOvertime
-      ) {
+      if (overtimeRound === maxRoundsOvertime / 2 || overtimeRound === maxRoundsOvertime) {
         this.livePresenceHalf += 1;
       }
-    } else if (
-      this.livePresenceRounds === maxRounds / 2 ||
-      this.livePresenceRounds === maxRounds
-    ) {
+    } else if (this.livePresenceRounds === maxRounds / 2 || this.livePresenceRounds === maxRounds) {
       this.livePresenceHalf += 1;
     }
 
     this.livePresenceRounds += 1;
     this.updateLiveDiscordPresence();
   }
-
 
   /**
    * Determines whether overtime is allowed.
@@ -951,11 +938,12 @@ export class Server {
       this.log.warn(error);
     }
 
-    const restorePath = this.settings.general.game === Constants.Game.CSGO
-      ? path.join(this.getDedicatedServerRoot(), this.gameDir)
-      : (this.settings.general.gamePath
-        ? path.join(this.settings.general.gamePath, this.baseDir, this.gameDir)
-        : '');
+    const restorePath =
+      this.settings.general.game === Constants.Game.CSGO
+        ? path.join(this.getDedicatedServerRoot(), this.gameDir)
+        : this.settings.general.gamePath
+          ? path.join(this.settings.general.gamePath, this.baseDir, this.gameDir)
+          : '';
 
     if (!restorePath) {
       this.log.warn('Skipping file restore because no restore path is configured');
@@ -967,7 +955,9 @@ export class Server {
       return await FileManager.restore(restorePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code === 'EBUSY') {
-        this.log.warn(`Restore skipped due to locked files (server still using plugins): ${restorePath}`);
+        this.log.warn(
+          `Restore skipped due to locked files (server still using plugins): ${restorePath}`,
+        );
         return;
       }
 
@@ -976,12 +966,11 @@ export class Server {
   }
 
   /**
- * Generates the bot profile config (botprofile.db).
- *
- * @function
- */
+   * Generates the bot profile config (botprofile.db).
+   *
+   * @function
+   */
   private async generateBotConfig() {
-
     const baseDir = path.join(this.getDedicatedServerRoot(), this.gameDir);
     const original = path.join(baseDir, this.botConfigFile); // e.g. "botprofile.db"
     const [home, away] = this.competitors;
@@ -1008,9 +997,7 @@ export class Server {
    * Generates a single bot profile block (used in botprofile.db)
    * Includes LookAngle tuning values based on difficulty template.
    */
-  private generateBotDifficulty(
-    player: Server['competitors'][number]['team']['players'][number],
-  ) {
+  private generateBotDifficulty(player: Server['competitors'][number]['team']['players'][number]) {
     const xp = new Bot.Exp(player);
     const template = xp.getBotTemplate();
     const difficulty = template.name;
@@ -1146,9 +1133,7 @@ End\n
     const exportFile = path.join(exportDir, 'bot_templates.json');
     await fs.promises.writeFile(exportFile, JSON.stringify(exportData, null, 2), 'utf8');
 
-    console.log(
-      ` Exported ${Object.keys(exportData).length} bot templates to ${exportFile}`,
-    );
+    console.log(` Exported ${Object.keys(exportData).length} bot templates to ${exportFile}`);
   }
 
   /**
@@ -1226,26 +1211,22 @@ End\n
     );
     const template = await fs.promises.readFile(original, 'utf16le');
     const content = template
-      .replace(
-        /"SFUI_bot_decorated_name"[\s]+"BOT %s1"/g,
-        '"SFUI_bot_decorated_name" "%s1"',
-      )
-      .replace(
-        /"SFUI_scoreboard_lbl_bot"[\s]+"BOT"/g,
-        '"SFUI_scoreboard_lbl_bot" "5"',
-      );
+      .replace(/"SFUI_bot_decorated_name"[\s]+"BOT %s1"/g, '"SFUI_bot_decorated_name" "%s1"')
+      .replace(/"SFUI_scoreboard_lbl_bot"[\s]+"BOT"/g, '"SFUI_scoreboard_lbl_bot" "5"');
     return fs.promises.writeFile(original, content, 'utf16le');
   }
 
   /**
-  * Generates the server configuration file and the bot command file (liga-bots.cfg).
-  *
-  * @function
-  */
+   * Generates the server configuration file and the bot command file (liga-bots.cfg).
+   *
+   * @function
+   */
   private async generateServerConfig() {
     const dedicatedDir = this.getDedicatedServerRoot();
     if (!this.settings.general.dedicatedServerPath) {
-      this.log.warn(`No dedicatedServerPath set, using fallback for cfg generation: ${dedicatedDir}`);
+      this.log.warn(
+        `No dedicatedServerPath set, using fallback for cfg generation: ${dedicatedDir}`,
+      );
     }
 
     const prisma = DatabaseClient.prisma;
@@ -1255,22 +1236,27 @@ End\n
       select: { role: true },
     });
 
-    const isCustomGame = this.match.competition.tier.slug === Constants.TierSlug.EXHIBITION_FRIENDLY;
+    const isCustomGame =
+      this.match.competition.tier.slug === Constants.TierSlug.EXHIBITION_FRIENDLY;
     const isCustomGameIglMode =
-      isCustomGame &&
-      this.customGameOptions?.mode === 'classic' &&
-      Boolean(this.customGameOptions.classic?.igl);
-    const userCompetitor = this.competitors.find((competitor) => competitor.teamId === this.profile.teamId);
+      isCustomGame && !this.isDeathmatchCustomGame && Boolean(this.customGameOptions?.classic?.igl);
+    const userCompetitor = this.competitors.find(
+      (competitor) => competitor.teamId === this.profile.teamId,
+    );
     const teamHasAwper = !!userCompetitor?.team?.players?.some(
       (player) =>
         player.role === Constants.UserRole.AWPER || player.role === Constants.PlayerRole.SNIPER,
     );
     const isUserAwper = user?.role === Constants.UserRole.AWPER;
     const shouldForceAwpForCustomGame = isCustomGame && !isCustomGameIglMode && !teamHasAwper;
-    const isAWP =
-      !this.spectating && !isCustomGameIglMode && (isUserAwper || shouldForceAwpForCustomGame)
-        ? 1
-        : 0;
+    const chaosForceUserAwp = this.isChaosCustomGame
+      ? Boolean(this.customGameOptions?.chaos?.forceUserAwp)
+      : undefined;
+    const shouldEnableAwp =
+      chaosForceUserAwp !== undefined
+        ? chaosForceUserAwp
+        : !this.spectating && !isCustomGameIglMode && (isUserAwper || shouldForceAwpForCustomGame);
+    const isAWP = shouldEnableAwp ? 1 : 0;
     const isM4A1 = !this.spectating && this.settings.gameSettings?.isM4A1 ? 1 : 0;
     const isUSP = !this.spectating && this.settings.gameSettings?.isUSP ? 1 : 0;
     const isCZ = !this.spectating && this.settings.gameSettings?.isCZ ? 1 : 0;
@@ -1279,6 +1265,7 @@ End\n
     const bot_defer_to_human_items = isIGL;
     const isLan = this.getIsLanMatch() ? 1 : 0;
     const deathmatchSettings = this.deathmatchServerSettings;
+    const isChaos = !this.isFaceit && this.isChaosCustomGame ? 1 : 0;
 
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
@@ -1305,12 +1292,8 @@ End\n
     let ctTeam = away;
 
     if (this.isFaceit && this.faceitSides) {
-      const maybeT = this.competitors.find(
-        (c: any) => this.faceitSides?.[c.teamId] === 't',
-      );
-      const maybeCT = this.competitors.find(
-        (c: any) => this.faceitSides?.[c.teamId] === 'ct',
-      );
+      const maybeT = this.competitors.find((c: any) => this.faceitSides?.[c.teamId] === 't');
+      const maybeCT = this.competitors.find((c: any) => this.faceitSides?.[c.teamId] === 'ct');
 
       if (maybeT) tTeam = maybeT;
       if (maybeCT) ctTeam = maybeCT;
@@ -1367,23 +1350,20 @@ End\n
       ct: ctTeam.teamId,
     };
 
-    const humanteam =
-      this.spectating
-        ? 'any'
-        : this.profile.teamId === tTeam.teamId
-          ? 'T'
-          : this.profile.teamId === ctTeam.teamId
-            ? 'CT'
-            : 'any';
+    const humanteam = this.spectating
+      ? 'any'
+      : this.profile.teamId === tTeam.teamId
+        ? 'T'
+        : this.profile.teamId === ctTeam.teamId
+          ? 'CT'
+          : 'any';
 
     let tStats: any;
     let ctStats: any;
 
     if (!this.isFaceit) {
       [tStats, ctStats] = [
-        this.match.competition.competitors.find(
-          (competitor) => competitor.teamId === tTeam.teamId,
-        ),
+        this.match.competition.competitors.find((competitor) => competitor.teamId === tTeam.teamId),
         this.match.competition.competitors.find(
           (competitor) => competitor.teamId === ctTeam.teamId,
         ),
@@ -1417,10 +1397,13 @@ End\n
 
     const shortnameT = await resolveTeamBlazonName(tTeam.team, tTeam.team.slug);
     const shortnameCT = await resolveTeamBlazonName(ctTeam.team, ctTeam.team.slug);
-    const teamBranding = this.isDeathmatchCustomGame || this.isFaceit
+    const shouldUseDefaultTeamLogos =
+      this.isDeathmatchCustomGame || this.isFaceit || this.isChaosCustomGame;
+    const teamBranding = shouldUseDefaultTeamLogos
       ? {
-          teamname_t: this.isFaceit ? tTeam.team.name : 'Terrorist',
-          teamname_ct: this.isFaceit ? ctTeam.team.name : 'Counter Terrorist',
+          teamname_t: this.isFaceit || this.isChaosCustomGame ? tTeam.team.name : 'Terrorist',
+          teamname_ct:
+            this.isFaceit || this.isChaosCustomGame ? ctTeam.team.name : 'Counter Terrorist',
           teamflag_t: '',
           teamflag_ct: '',
           shortname_t: '',
@@ -1437,78 +1420,76 @@ End\n
 
     const serverCfgData = this.isFaceit
       ? {
-        demo: true,
-        hostname: this.hostname,
-        maxrounds: this.settings.matchRules.maxRounds,
-        ot: +this.overtime,
-        rcon_password: Constants.GameSettings.RCON_PASSWORD,
-        teamname_t: teamBranding.teamname_t,
-        teamname_ct: teamBranding.teamname_ct,
-        gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
-        spectating: +this.spectating,
-        damage_prints: 0,
-        isAWP,
-        isM4A1,
-        isUSP,
-        isCZ,
-        isFaceit: 1,
-        isLan,
-        isIGL,
-        bot_defer_to_human_items,
-        isDeathmatch: deathmatchSettings.isDeathmatch,
-        deathmatch_game_time: deathmatchSettings.gameTime,
-        deathmatch_headshot_only: deathmatchSettings.headshotOnly,
-        deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
-        deathmatch_force_buy: deathmatchSettings.forceBuy,
+          demo: true,
+          hostname: this.hostname,
+          maxrounds: this.settings.matchRules.maxRounds,
+          ot: +this.overtime,
+          rcon_password: Constants.GameSettings.RCON_PASSWORD,
+          teamname_t: teamBranding.teamname_t,
+          teamname_ct: teamBranding.teamname_ct,
+          gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
+          spectating: +this.spectating,
+          damage_prints: 0,
+          isAWP,
+          isM4A1,
+          isUSP,
+          isCZ,
+          isFaceit: 1,
+          isLan,
+          isIGL,
+          isChaos,
+          bot_defer_to_human_items,
+          isDeathmatch: deathmatchSettings.isDeathmatch,
+          deathmatch_game_time: deathmatchSettings.gameTime,
+          deathmatch_headshot_only: deathmatchSettings.headshotOnly,
+          deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
+          deathmatch_force_buy: deathmatchSettings.forceBuy,
 
-        match_stat: 'FACEIT PUG',
-        teamflag_t: teamBranding.teamflag_t,
-        teamflag_ct: teamBranding.teamflag_ct,
-        shortname_t: teamBranding.shortname_t,
-        shortname_ct: teamBranding.shortname_ct,
-        stat_t: '',
-        stat_ct: '',
-        humanteam:
-          this.faceitUserSide === 't'
-            ? 'T'
-            : this.faceitUserSide === 'ct'
-              ? 'CT'
-              : 'any',
-      }
+          match_stat: 'FACEIT PUG',
+          teamflag_t: teamBranding.teamflag_t,
+          teamflag_ct: teamBranding.teamflag_ct,
+          shortname_t: teamBranding.shortname_t,
+          shortname_ct: teamBranding.shortname_ct,
+          stat_t: '',
+          stat_ct: '',
+          humanteam:
+            this.faceitUserSide === 't' ? 'T' : this.faceitUserSide === 'ct' ? 'CT' : 'any',
+        }
       : {
-        demo: true,
-        hostname: this.hostname,
-        maxrounds: this.settings.matchRules.maxRounds,
-        ot: +this.overtime,
-        rcon_password: Constants.GameSettings.RCON_PASSWORD,
-        teamname_t: teamBranding.teamname_t,
-        teamname_ct: teamBranding.teamname_ct,
-        gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
-        spectating: +this.spectating,
-        damage_prints: 0,
-        isAWP,
-        isM4A1,
-        isUSP,
-        isCZ,
-        isFaceit: 0,
-        isLan,
-        isIGL,
-        bot_defer_to_human_items,
-        isDeathmatch: deathmatchSettings.isDeathmatch,
-        deathmatch_game_time: deathmatchSettings.gameTime,
-        deathmatch_headshot_only: deathmatchSettings.headshotOnly,
-        deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
-        deathmatch_force_buy: deathmatchSettings.forceBuy,
-        humanteam,
+          demo: true,
+          hostname: this.hostname,
+          maxrounds: this.settings.matchRules.maxRounds,
+          ot: +this.overtime,
+          rcon_password: Constants.GameSettings.RCON_PASSWORD,
+          teamname_t: teamBranding.teamname_t,
+          teamname_ct: teamBranding.teamname_ct,
+          gameover_delay: Constants.GameSettings.SERVER_CVAR_GAMEOVER_DELAY,
+          spectating: +this.spectating,
+          damage_prints: 0,
+          isAWP,
+          isM4A1,
+          isUSP,
+          isCZ,
+          isFaceit: 0,
+          isLan,
+          isIGL,
+          isChaos,
+          bot_defer_to_human_items,
+          isDeathmatch: deathmatchSettings.isDeathmatch,
+          deathmatch_game_time: deathmatchSettings.gameTime,
+          deathmatch_headshot_only: deathmatchSettings.headshotOnly,
+          deathmatch_pistols_only: deathmatchSettings.pistolsOnly,
+          deathmatch_force_buy: deathmatchSettings.forceBuy,
+          humanteam,
 
-        match_stat: isCustomGame ? 'Custom Games' : this.match.competition.tier.name,
-        teamflag_t: teamBranding.teamflag_t,
-        teamflag_ct: teamBranding.teamflag_ct,
-        shortname_t: teamBranding.shortname_t,
-        shortname_ct: teamBranding.shortname_ct,
-        stat_t: tStats?.position ? Util.toOrdinalSuffix(tStats.position) : '',
-        stat_ct: ctStats?.position ? Util.toOrdinalSuffix(ctStats.position) : '',
-      };
+          match_stat: isCustomGame ? 'Custom Games' : this.match.competition.tier.name,
+          teamflag_t: teamBranding.teamflag_t,
+          teamflag_ct: teamBranding.teamflag_ct,
+          shortname_t: teamBranding.shortname_t,
+          shortname_ct: teamBranding.shortname_ct,
+          stat_t: tStats?.position ? Util.toOrdinalSuffix(tStats.position) : '',
+          stat_ct: ctStats?.position ? Util.toOrdinalSuffix(ctStats.position) : '',
+        };
 
     let serverCfgRendered = Sqrl.render(serverTemplate, serverCfgData, {
       autoEscape: false,
@@ -1525,6 +1506,7 @@ End\n
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isLan', isLan);
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isCZ', isCZ);
     serverCfgRendered = upsertConVar(serverCfgRendered, 'isIGL', isIGL);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'isChaos', isChaos);
     serverCfgRendered = upsertConVar(
       serverCfgRendered,
       'bot_defer_to_human_items',
@@ -1597,11 +1579,7 @@ End\n
       ),
     );
 
-    const botCmdRendered = Sqrl.render(
-      botCmdTemplate,
-      { bots },
-      { autoEscape: false },
-    );
+    const botCmdRendered = Sqrl.render(botCmdTemplate, { bots }, { autoEscape: false });
 
     await fs.promises.writeFile(botCmdPath, botCmdRendered, 'utf8');
     this.log.info(`Generated ${this.botCommandFile} at: ${botCmdPath}`);
@@ -1623,7 +1601,10 @@ End\n
 
   private async resolveCSGOTeamLogoName(blazonName: string) {
     const normalized = blazonName.replace(/[^a-z0-9]/gi, '').toLowerCase();
-    const words = blazonName.toLowerCase().split(/[^a-z0-9]+/g).filter(Boolean);
+    const words = blazonName
+      .toLowerCase()
+      .split(/[^a-z0-9]+/g)
+      .filter(Boolean);
     const candidates = compact([blazonName.toLowerCase(), normalized.slice(0, 7)]);
     const academyIndex = words.indexOf('academy');
 
@@ -1712,9 +1693,7 @@ End\n
       });
     });
 
-    const [localAddress] = uniq(allAddresses.sort()).filter(
-      (IP) => IP !== '127.0.0.1',
-    );
+    const [localAddress] = uniq(allAddresses.sort()).filter((IP) => IP !== '127.0.0.1');
     return localAddress;
   }
 
@@ -1726,8 +1705,7 @@ End\n
    * @function
    */
   private async getTeamLogo(uri: string, useBase64 = true) {
-    const { protocol, filePath } =
-      /^(?<protocol>.+):\/\/(?<filePath>.+)/g.exec(uri).groups;
+    const { protocol, filePath } = /^(?<protocol>.+):\/\/(?<filePath>.+)/g.exec(uri).groups;
 
     if (!protocol || !filePath) {
       return '';
@@ -1747,12 +1725,7 @@ End\n
       case 'uploads':
         logoPath =
           process.env['NODE_ENV'] === 'cli'
-            ? path.join(
-              process.env.APPDATA as string,
-              'LIGA Pro Journey',
-              protocol,
-              filePath,
-            )
+            ? path.join(process.env.APPDATA as string, 'LIGA Pro Journey', protocol, filePath)
             : path.join(app.getPath('userData'), protocol, filePath);
         break;
     }
@@ -1771,7 +1744,6 @@ End\n
 
     return logoPath;
   }
-
 
   /**
    * Triggers a one-time delayed steam://connect attempt after the
@@ -1803,7 +1775,9 @@ End\n
 
     setTimeout(() => {
       if (gameClientProcess?.exitCode !== null) {
-        this.log.warn('Skipping delayed steam://connect because client process has already exited.');
+        this.log.warn(
+          'Skipping delayed steam://connect because client process has already exited.',
+        );
         return;
       }
 
@@ -1842,20 +1816,19 @@ End\n
       this.clientLaunchedViaSteam = true;
       gameClientProcess = spawn(
         'open',
-        [
-          `steam://rungameid/${Constants.GameSettings.CSGO_APPID}//'${defaultArgs.join(
-            ' ',
-          )}'`,
-        ],
+        [`steam://rungameid/${Constants.GameSettings.CSGO_APPID}//'${defaultArgs.join(' ')}'`],
         { shell: true },
       );
     } else {
-      const resolvedSteamPath = this.settings.general.steamPath || await discoverSteamPath();
+      const resolvedSteamPath = this.settings.general.steamPath || (await discoverSteamPath());
       let gameLibrary = this.settings.general.gamePath;
 
       if (!gameLibrary) {
         try {
-          gameLibrary = await discoverGamePath(this.settings.general.game, resolvedSteamPath || undefined);
+          gameLibrary = await discoverGamePath(
+            this.settings.general.game,
+            resolvedSteamPath || undefined,
+          );
           this.settings.general.gamePath = gameLibrary;
         } catch (_) {
           // fallback to Steam launch below
@@ -1867,11 +1840,7 @@ End\n
 
         try {
           await fs.promises.access(gameExecutable, fs.constants.F_OK);
-          gameClientProcess = spawn(
-            gameExecutable,
-            launchArgs,
-            { cwd: gameInstallPath },
-          );
+          gameClientProcess = spawn(gameExecutable, launchArgs, { cwd: gameInstallPath });
         } catch (_) {
           this.log.warn(`CS:GO executable not found at: ${gameExecutable}`);
         }
@@ -1899,7 +1868,9 @@ End\n
       }
 
       if (!gameClientProcess) {
-        throw new Error('Unable to launch CS:GO client. Neither csgo.exe nor steam.exe could be started.');
+        throw new Error(
+          'Unable to launch CS:GO client. Neither csgo.exe nor steam.exe could be started.',
+        );
       }
     }
 
@@ -1936,8 +1907,6 @@ End\n
     this.clientProcessMonitor.unref?.();
   }
 
-
-
   /**
    * Waits for the server to create a fresh log file newer than the
    * provided timestamp.
@@ -1955,14 +1924,10 @@ End\n
     for (let logsRetryNum = 0; logsRetryNum < maxAttempts; logsRetryNum++) {
       this.log.debug('Waiting for new server log file (attempt #%d)...', logsRetryNum + 1);
 
-      const logFilePath = await getGameLogFile(
-        this.settings.general.game,
-        logRoot,
-        {
-          preferredPort: Constants.GameSettings.RCON_PORT,
-          minMtimeMs: markerTime.getTime(),
-        },
-      );
+      const logFilePath = await getGameLogFile(this.settings.general.game, logRoot, {
+        preferredPort: Constants.GameSettings.RCON_PORT,
+        minMtimeMs: markerTime.getTime(),
+      });
 
       if (!logFilePath) {
         await Util.sleep(retryIntervalMs);
@@ -1988,9 +1953,7 @@ End\n
       return logFilePath;
     }
 
-    throw new Error(
-      `Could not find log file or one that is newer than ${markerTime.toString()}.`,
-    );
+    throw new Error(`Could not find log file or one that is newer than ${markerTime.toString()}.`);
   }
 
   private launchServerCSGO() {
@@ -2041,22 +2004,11 @@ End\n
       'csgo',
     )}" && ${srcdsCommand}`;
 
-    spawn(
-      'cmd.exe',
-      [
-        '/c',
-        'start',
-        '""',
-        'cmd',
-        '/c',
-        cmdString,
-      ],
-      {
-        detached: true,
-        windowsHide: false,
-        shell: true,
-      },
-    );
+    spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/c', cmdString], {
+      detached: true,
+      windowsHide: false,
+      shell: true,
+    });
   }
 
   /**
@@ -2090,9 +2042,7 @@ End\n
 
     // find and extract zip files
     const zipFiles = await glob('**/*.zip', { cwd: from });
-    await Promise.all(
-      zipFiles.map((file) => FileManager.extract(path.join(from, file), to)),
-    );
+    await Promise.all(zipFiles.map((file) => FileManager.extract(path.join(from, file), to)));
 
     // copy plain files
     await FileManager.copy(
@@ -2102,11 +2052,11 @@ End\n
       true,
       this.settings.general.game === Constants.Game.CSGO
         ? [
-          `${CSGO_TEAM_LOGOS_DIR}/**`,
-          this.botConfigFile,
-          CSGO_BOT_STUFF_PLUGIN,
-          CSGO_BOT_STUFF_DM_PLUGIN,
-        ]
+            `${CSGO_TEAM_LOGOS_DIR}/**`,
+            this.botConfigFile,
+            CSGO_BOT_STUFF_PLUGIN,
+            CSGO_BOT_STUFF_DM_PLUGIN,
+          ]
         : [],
     );
 
@@ -2126,7 +2076,6 @@ End\n
 
     this.log.info('Server preparation complete.');
   }
-
 
   /**
    * Selects the BetterBotsPlus plugin variant for the active mode.
@@ -2169,7 +2118,6 @@ End\n
       } mode: ${source} -> ${target}`,
     );
   }
-
 
   /**
    * Copies CS:GO team logo SVGs into the client install so
@@ -2273,13 +2221,18 @@ End\n
       }
     }
 
-    if (this.settings.general.game === Constants.Game.CSGO && !this.settings.general.dedicatedServerPath) {
+    if (
+      this.settings.general.game === Constants.Game.CSGO &&
+      !this.settings.general.dedicatedServerPath
+    ) {
       try {
         this.settings.general.dedicatedServerPath = await discoverDedicatedServerPath(
           this.settings.general.steamPath || undefined,
         );
       } catch (_) {
-        this.log.warn(`Falling back to default dedicated server path: ${this.getDedicatedServerRoot()}`);
+        this.log.warn(
+          `Falling back to default dedicated server path: ${this.getDedicatedServerRoot()}`,
+        );
       }
     }
 
@@ -2290,7 +2243,9 @@ End\n
           this.settings.general.steamPath || undefined,
         );
       } catch (_) {
-        this.log.warn('Unable to auto-detect gamePath for CS:GO client launch; Steam fallback will be used.');
+        this.log.warn(
+          'Unable to auto-detect gamePath for CS:GO client launch; Steam fallback will be used.',
+        );
       }
     }
 
@@ -2298,7 +2253,7 @@ End\n
     await this.notifyProgress('COPYING_FILES');
     await this.prepare();
 
-    // 2) Launch server 
+    // 2) Launch server
     await this.notifyProgress('STARTING_SERVER');
     this.launchServerCSGO();
 
@@ -2325,9 +2280,9 @@ End\n
     // 4) Resolve active server log file before issuing +connect
     const logRoot =
       this.settings.general.game === Constants.Game.CSGO
-        // Prefer dedicated server logs for CS:GO score parsing and
-        // fallback to game path if needed.
-        ? (this.settings.general.dedicatedServerPath || this.settings.general.gamePath)
+        ? // Prefer dedicated server logs for CS:GO score parsing and
+          // fallback to game path if needed.
+          this.settings.general.dedicatedServerPath || this.settings.general.gamePath
         : this.settings.general.gamePath;
 
     await this.notifyProgress('WAITING_FOR_SERVER');
@@ -2442,8 +2397,7 @@ End\n
 
           const totalRoundsPlayed = payload.score.reduce((a, b) => a + b, 0);
           if (totalRoundsPlayed > this.settings.matchRules.maxRounds) {
-            const totalRoundsOvertime =
-              totalRoundsPlayed - this.settings.matchRules.maxRounds;
+            const totalRoundsOvertime = totalRoundsPlayed - this.settings.matchRules.maxRounds;
             const overtimeCount = Math.ceil(
               totalRoundsOvertime / this.settings.matchRules.maxRoundsOvertime,
             );
@@ -2457,8 +2411,7 @@ End\n
         if (gameClientProcess && !gameClientProcess.killed) {
           try {
             gameClientProcess.kill();
-          } catch (e) {
-          }
+          } catch (e) {}
         }
         this.log.info('Final result: %O', payload);
         this.result = payload;

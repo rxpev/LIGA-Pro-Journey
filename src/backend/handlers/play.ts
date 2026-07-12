@@ -151,10 +151,7 @@ export default function () {
             return team;
           }
 
-          const uniquePlayerIds = [...new Set(override.playerIds)].slice(
-            0,
-            maxRosterSize,
-          );
+          const uniquePlayerIds = [...new Set(override.playerIds)].slice(0, maxRosterSize);
           const includesYou = !spectating && team.id === teamId && uniquePlayerIds.includes(-1);
           const rosterIds = uniquePlayerIds.filter((playerId) => playerId !== -1);
           const teamPlayerMap = new Map(team.players.map((player) => [player.id, player]));
@@ -168,15 +165,20 @@ export default function () {
           const forcedPlayers = rosterIds
             .map((playerId) => teamPlayerMap.get(playerId) || externalPlayerMap.get(playerId))
             .filter((player): player is (typeof team.players)[number] => Boolean(player));
-          const fallbackPlayers = team.players
-            .filter((player) => !rosterIds.includes(player.id))
-            .slice(0, Math.max(0, maxRosterSize - forcedPlayers.length));
-          let lineup = [...forcedPlayers, ...fallbackPlayers].slice(
-            0,
-            maxRosterSize,
-          );
+          const fallbackPlayers =
+            customGameOptions.mode === 'chaos'
+              ? []
+              : team.players
+                  .filter((player) => !rosterIds.includes(player.id))
+                  .slice(0, Math.max(0, maxRosterSize - forcedPlayers.length));
+          let lineup = [...forcedPlayers, ...fallbackPlayers].slice(0, maxRosterSize);
 
-          if (!spectating && team.id === teamId) {
+          if (!spectating && team.id === teamId && customGameOptions.mode === 'chaos') {
+            selectedUserPlayerId =
+              team.players.find((player) => !rosterIds.includes(player.id))?.id ||
+              team.players[0]?.id ||
+              null;
+          } else if (!spectating && team.id === teamId) {
             const awperIdx = lineup.findIndex(
               (player) =>
                 player.role === Constants.UserRole.AWPER ||
@@ -192,10 +194,7 @@ export default function () {
               selectedUserPlayerId = controlPlayer.id;
 
               if (!lineup.some((player) => player.id === controlPlayer.id)) {
-                lineup = [...lineup, controlPlayer].slice(
-                  0,
-                  maxRosterSize,
-                );
+                lineup = [...lineup, controlPlayer].slice(0, maxRosterSize);
               }
             } else if (lineup.length > 0 && !selectedUserPlayerId) {
               selectedUserPlayerId = lineup[sourceIdx].id;
@@ -217,6 +216,14 @@ export default function () {
 
         if (!home || !away) {
           throw new Error('Could not resolve exhibition teams.');
+        }
+
+        if (customGameOptions.mode === 'chaos') {
+          [home, away].forEach((team) => {
+            const isUserTeam = team.id === teamId;
+            team.name = isUserTeam ? 'Your Team' : 'Enemy Team';
+            team.slug = isUserTeam ? 'chaos-your-team' : 'chaos-enemy-team';
+          });
         }
 
         const homeIds = new Set(home.players.map((player) => player.id));

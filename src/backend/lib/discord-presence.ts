@@ -16,6 +16,7 @@ export type LiveMatchType = 'league' | 'faceit' | 'custom';
 
 export type PresenceUpdate = {
   mode: PresenceMode;
+  chaos?: boolean;
   date?: string | null;
   deathmatch?: boolean;
   map?: string | null;
@@ -50,6 +51,10 @@ function truncatePresenceText(text: string): string {
 function getMatchLabel(update: PresenceUpdate): string {
   if (update.deathmatch) {
     return 'Deathmatch';
+  }
+
+  if (update.chaos) {
+    return 'Chaos Mode';
   }
 
   return update.matchType === 'faceit'

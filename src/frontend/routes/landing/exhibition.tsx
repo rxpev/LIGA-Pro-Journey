@@ -14,8 +14,8 @@ import { useAudio, useLoopingAudio, useTranslation } from '@liga/frontend/hooks'
 import { Image } from '@liga/frontend/components';
 import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import arenaModeIcon from '@liga/frontend/assets/customgames/arenamode.png';
+import chaosModeImage from '@liga/frontend/assets/customgames/chaos.png';
 import classicModeImage from '@liga/frontend/assets/customgames/classic.png';
-import comingSoonModeImage from '@liga/frontend/assets/customgames/comingsoon.png';
 import cz75AutoIcon from '@liga/frontend/assets/weapons/2D/cz75a.svg';
 import deathmatchModeImage from '@liga/frontend/assets/customgames/deathmatch.png';
 import headshotOnlyIcon from '@liga/frontend/assets/customgames/headshot.png';
@@ -45,7 +45,7 @@ type ExhibitionPlayer = Awaited<
   ReturnType<typeof api.play.exhibitionPlayers<typeof Eagers.player>>
 >[number];
 type ProfileData = Awaited<ReturnType<typeof api.profiles.current<typeof Eagers.profile>>>;
-type CustomGameMode = 'classic' | 'deathmatch';
+type CustomGameMode = 'classic' | 'deathmatch' | 'chaos';
 type DeathmatchDifficulty = 'pro' | 'hard' | 'medium' | 'easy';
 type MapPoolEntry = Awaited<ReturnType<typeof api.mapPool.find>>[number];
 type DeathmatchSlot = {
@@ -56,6 +56,7 @@ type DeathmatchSlot = {
   teamBlazon?: string | null;
   isUser?: boolean;
 };
+type ChaosRosterPlayer = (TeamData['players'][number] & { isUser?: boolean }) | null;
 
 /** @interface */
 interface TeamSelectorProps {
@@ -70,6 +71,7 @@ interface TeamSelectorProps {
 
 const EXHIBITION_HOME_TEAM_STORAGE_KEY = 'exhibitionHomeTeamId';
 const EXHIBITION_AWAY_TEAM_STORAGE_KEY = 'exhibitionAwayTeamId';
+const NO_TEAM_BLAZON = 'resources://blazonry/noteam.svg';
 const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
   'PREPARING_MATCH',
   'COPYING_FILES',
@@ -117,6 +119,7 @@ const deathmatchDifficulties: Array<{
     maxXp: 24,
   },
 ];
+const chaosProMinXp = deathmatchDifficulties[0].minXp;
 
 const weaponSettings = [
   {
@@ -346,7 +349,7 @@ function TeamSelector(props: TeamSelectorProps) {
   }, [team]);
 
   return (
-    <section className="flex flex-1 flex-col items-center gap-24 pt-24">
+    <section className="flex flex-1 flex-col items-center gap-24 pt-44">
       {!team && (
         <article className="center h-48 w-auto">
           <span className="loading loading-spinner loading-lg" />
@@ -515,6 +518,99 @@ function DeathmatchLineupColumn(props: {
   );
 }
 
+function ChaosRosterColumn(props: {
+  onEditRoster: () => void;
+  onShuffleRoster: () => void;
+  players: Array<ChaosRosterPlayer>;
+  title: string;
+}) {
+  const slots = props.players.slice(0, Constants.Application.SQUAD_MIN_LENGTH).concat(
+    Array.from({
+      length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - props.players.length),
+    }).map((): null => null),
+  );
+  const getPlayerTeamBlazon = (player: ChaosRosterPlayer) => {
+    if (!player) {
+      return NO_TEAM_BLAZON;
+    }
+
+    if (player.isUser) {
+      return (player as any).team?.blazon || NO_TEAM_BLAZON;
+    }
+
+    return (player as any).team?.blazon || NO_TEAM_BLAZON;
+  };
+  const getPlayerNameClassName = (name?: string) => {
+    const length = name?.length || 0;
+
+    if (length > 16) {
+      return 'text-[7px]';
+    }
+
+    if (length > 13) {
+      return 'text-[8px]';
+    }
+
+    if (length > 10) {
+      return 'text-[9px]';
+    }
+
+    if (length > 8) {
+      return 'text-[10px]';
+    }
+
+    return 'text-[11px]';
+  };
+
+  return (
+    <section className="flex min-w-0 flex-col items-center justify-center gap-5">
+      <h2 className="text-2xl font-black">{props.title}</h2>
+      <section className="grid w-full grid-cols-5 gap-4">
+        {slots.map((player, index) => (
+          <article
+            key={`${player?.id || 'empty'}_${index}`}
+            className={cx(
+              'border-base-content/10 bg-base-300/25 flex h-52 min-w-0 flex-col items-center justify-center gap-3 border p-4 text-center shadow-xl',
+              player?.isUser && 'border-primary/40 bg-primary/15 text-primary font-bold',
+            )}
+          >
+            <Image
+              src={player?.avatar || 'resources://avatars/empty.png'}
+              className="size-24 rounded-md object-cover"
+            />
+            <span
+              className={cx(
+                'w-full overflow-visible leading-tight font-semibold whitespace-nowrap',
+                getPlayerNameClassName(player?.name),
+              )}
+              title={player?.name || 'Empty'}
+            >
+              {player?.name || 'Empty'}
+            </span>
+            <Image
+              src={getPlayerTeamBlazon(player)}
+              className="h-8 max-w-16 object-contain opacity-80"
+            />
+          </article>
+        ))}
+      </section>
+      <section className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-outline btn-sm gap-2"
+          onClick={props.onShuffleRoster}
+        >
+          <FaRandom />
+          Shuffle Roster
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={props.onEditRoster}>
+          Edit Roster
+        </button>
+      </section>
+    </section>
+  );
+}
+
 function SelectedMapPanel(props: {
   buttonClassName: string;
   game: Constants.Game;
@@ -556,6 +652,19 @@ function SelectedMapPanel(props: {
         <span className="truncate">{mapLabel}</span>
       </button>
     </section>
+  );
+}
+
+function CustomGameModeHeader(props: { description?: string; title: string }) {
+  return (
+    <header className="absolute top-8 left-60 z-10 max-w-xl">
+      <h1 className="text-6xl font-black">{props.title}</h1>
+      {!!props.description && (
+        <p className="text-base-content/70 mt-2 max-w-sm text-sm leading-relaxed">
+          {props.description}
+        </p>
+      )}
+    </header>
   );
 }
 
@@ -657,7 +766,11 @@ export default function () {
   const [awayTeam, setAwayTeam] = React.useState<TeamData>();
   const [homeRoster, setHomeRoster] = React.useState<Array<number | null>>([]);
   const [awayRoster, setAwayRoster] = React.useState<Array<number | null>>([]);
+  const [chaosHomeRoster, setChaosHomeRoster] = React.useState<Array<number | null>>([]);
+  const [chaosAwayRoster, setChaosAwayRoster] = React.useState<Array<number | null>>([]);
   const [editingTeamId, setEditingTeamId] = React.useState<number | null>(null);
+  const [editingRosterMode, setEditingRosterMode] = React.useState<CustomGameMode>('classic');
+  const [editingChaosSide, setEditingChaosSide] = React.useState<'home' | 'away' | null>(null);
   const [replacementSlot, setReplacementSlot] = React.useState(0);
   const [rosterContextMenu, setRosterContextMenu] = React.useState<{
     index: number;
@@ -700,6 +813,15 @@ export default function () {
   const previousHomeTeamId = React.useRef<number>();
   const iglRemovedHomePlayerId = React.useRef<number | null>(null);
   const isDeathmatchMode = selectedGameMode === 'deathmatch';
+  const isChaosMode = selectedGameMode === 'chaos';
+  const selectedGameModeTitle =
+    selectedGameMode === 'deathmatch'
+      ? 'Deathmatch'
+      : selectedGameMode === 'chaos'
+        ? 'Chaos'
+        : 'Classic 5v5';
+  const chaosModeDescription =
+    'Every player gets an effect randomly assigned each round, dive into the chaos!';
   const deathmatchSlotsPerSide = deathmatchPlayerLimit / 2;
   const selectedDeathmatchDifficulty = React.useMemo(
     () =>
@@ -783,12 +905,49 @@ export default function () {
   }, []);
 
   React.useEffect(() => {
-    if (!isDeathmatchMode || allPlayersPool.length) {
+    if ((!isDeathmatchMode && !isChaosMode) || allPlayersPool.length) {
       return;
     }
 
     api.play.exhibitionPlayers<typeof Eagers.player>(Eagers.player).then(setAllPlayersPool);
-  }, [allPlayersPool.length, isDeathmatchMode]);
+  }, [allPlayersPool.length, isChaosMode, isDeathmatchMode]);
+
+  React.useEffect(() => {
+    if (!isChaosMode || (homeTeam && awayTeam && homeTeam.id !== awayTeam.id)) {
+      return;
+    }
+
+    api.play.exhibitionTeams<typeof Eagers.team>({ ...Eagers.team }).then((candidateTeams) => {
+      const selectableTeams = candidateTeams.filter((candidateTeam) => {
+        const federationSlug = candidateTeam.country?.continent?.federation?.slug;
+        const tierSlug = Constants.Prestige[candidateTeam.tier];
+
+        return (
+          federationSlug &&
+          federationSlug !== Constants.FederationSlug.ESPORTS_WORLD &&
+          tierSlug &&
+          Util.isLeagueTierEnabledForFederation(
+            tierSlug,
+            federationSlug as Constants.FederationSlug,
+          )
+        );
+      });
+      const nextHomeTeam = sample(selectableTeams);
+      const nextAwayTeam = sample(
+        selectableTeams.filter((candidateTeam) => candidateTeam.id !== nextHomeTeam?.id),
+      );
+
+      if (nextHomeTeam) {
+        setHomeTeam(nextHomeTeam);
+        setHomeTeamId(nextHomeTeam.id);
+      }
+
+      if (nextAwayTeam) {
+        setAwayTeam(nextAwayTeam);
+        setAwayTeamId(nextAwayTeam.id);
+      }
+    });
+  }, [awayTeam, homeTeam, isChaosMode]);
 
   React.useEffect(() => {
     if (!isDeathmatchMode || !allPlayersPool.length) {
@@ -950,31 +1109,39 @@ export default function () {
       deathmatchTPlayers.length &&
       deathmatchCTPlayers.length,
   );
+  const hasCompleteRoster = (roster: Array<number | null>) =>
+    roster
+      .slice(0, Constants.Application.SQUAD_MIN_LENGTH)
+      .filter((playerId) => Number.isInteger(playerId)).length ===
+    Constants.Application.SQUAD_MIN_LENGTH;
 
-  const handleLaunchError = React.useCallback(async (error?: unknown) => {
-    const launchError = error as NodeJS.ErrnoException;
-    const status =
-      launchError?.code === Constants.ErrorCode.EABANDONED
-        ? null
-        : await api.app.status(settings);
-    const parsed = JSON.parse(status || false) as NodeJS.ErrnoException | false;
-    setAppStatus(parsed || undefined);
+  const handleLaunchError = React.useCallback(
+    async (error?: unknown) => {
+      const launchError = error as NodeJS.ErrnoException;
+      const status =
+        launchError?.code === Constants.ErrorCode.EABANDONED
+          ? null
+          : await api.app.status(settings);
+      const parsed = JSON.parse(status || false) as NodeJS.ErrnoException | false;
+      setAppStatus(parsed || undefined);
 
-    if (parsed && parsed.code === Constants.ErrorCode.EINVAL) {
-      if (lastInvalidGamePathError.current !== status) {
-        lastInvalidGamePathError.current = status;
-        audioNegativeAlert();
+      if (parsed && parsed.code === Constants.ErrorCode.EINVAL) {
+        if (lastInvalidGamePathError.current !== status) {
+          lastInvalidGamePathError.current = status;
+          audioNegativeAlert();
+        }
+        setCustomGamePlayError(parsed);
+        return;
       }
-      setCustomGamePlayError(parsed);
-      return;
-    }
 
-    audioNegativeAlert();
-    setCustomGamePlayError({
-      code: Constants.ErrorCode.EABANDONED,
-      message: launchError?.message || 'The match was abandoned.',
-    } as NodeJS.ErrnoException);
-  }, [audioNegativeAlert, settings]);
+      audioNegativeAlert();
+      setCustomGamePlayError({
+        code: Constants.ErrorCode.EABANDONED,
+        message: launchError?.message || 'The match was abandoned.',
+      } as NodeJS.ErrnoException);
+    },
+    [audioNegativeAlert, settings],
+  );
 
   const runCustomGameLaunch = React.useCallback(
     async (launch: () => Promise<unknown>) => {
@@ -1090,6 +1257,60 @@ export default function () {
     },
     [],
   );
+  const buildChaosRoster = React.useCallback(
+    (
+      options: { blockedIds?: Array<number | null>; enemy?: boolean; includeUser?: boolean } = {},
+    ): Array<number | null> => {
+      if (!allPlayersPool.length) {
+        return [];
+      }
+
+      const blockedIds = new Set(
+        (options.blockedIds || []).filter((playerId): playerId is number =>
+          Number.isInteger(playerId),
+        ),
+      );
+      const candidates = allPlayersPool.filter(
+        (player) =>
+          !blockedIds.has(player.id) && !player.transferListed && (player.xp || 0) >= chaosProMinXp,
+      );
+      const shuffled = shuffleDeathmatchPlayers(candidates);
+      const awpers = shuffled.filter((player) => isAwperRole(player.role));
+      const riflers = shuffled.filter((player) => !isAwperRole(player.role));
+      const lineup = options.enemy
+        ? [awpers[0], ...riflers].filter(Boolean)
+        : options.includeUser
+          ? [-1, ...riflers.map((player) => player.id)]
+          : riflers.map((player) => player.id);
+
+      return lineup
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH)
+        .map((player) => (typeof player === 'number' ? player : player.id))
+        .concat(
+          Array.from({
+            length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - lineup.length),
+          }).map((): null => null),
+        )
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH);
+    },
+    [allPlayersPool],
+  );
+  const shuffleChaosHomeRoster = React.useCallback(() => {
+    setChaosHomeRoster(buildChaosRoster({ blockedIds: chaosAwayRoster, includeUser: true }));
+  }, [buildChaosRoster, chaosAwayRoster]);
+  const shuffleChaosAwayRoster = React.useCallback(() => {
+    setChaosAwayRoster(buildChaosRoster({ blockedIds: chaosHomeRoster, enemy: true }));
+  }, [buildChaosRoster, chaosHomeRoster]);
+  const shuffleChaosRosters = React.useCallback(() => {
+    const nextChaosHomeRoster = buildChaosRoster({ includeUser: true });
+    const nextChaosAwayRoster = buildChaosRoster({
+      blockedIds: nextChaosHomeRoster,
+      enemy: true,
+    });
+
+    setChaosHomeRoster(nextChaosHomeRoster);
+    setChaosAwayRoster(nextChaosAwayRoster);
+  }, [buildChaosRoster]);
 
   React.useEffect(() => {
     if (!homeTeam) {
@@ -1103,16 +1324,26 @@ export default function () {
     previousHomeTeamId.current = homeTeam.id;
     iglRemovedHomePlayerId.current = null;
     setIglMode(false);
-    setHomeRoster(getDefaultRoster(homeTeam, !spectating));
-  }, [homeTeam, getDefaultRoster, spectating]);
+    if (!isChaosMode) {
+      setHomeRoster(getDefaultRoster(homeTeam, !spectating));
+    }
+  }, [homeTeam, getDefaultRoster, isChaosMode, spectating]);
 
   React.useEffect(() => {
-    if (!awayTeam) {
+    if (!awayTeam || isChaosMode) {
       return;
     }
 
     setAwayRoster(getDefaultRoster(awayTeam));
-  }, [awayTeam, getDefaultRoster]);
+  }, [awayTeam, getDefaultRoster, isChaosMode]);
+
+  React.useEffect(() => {
+    if (!isChaosMode || !allPlayersPool.length || hasCompleteRoster(chaosHomeRoster)) {
+      return;
+    }
+
+    shuffleChaosRosters();
+  }, [allPlayersPool.length, chaosHomeRoster, isChaosMode, shuffleChaosRosters]);
 
   const getRosterWithoutYou = React.useCallback(
     (team: TeamData, roster: Array<number | null>) => {
@@ -1245,8 +1476,30 @@ export default function () {
     });
   };
 
-  const currentEditingTeam = editingTeamId === homeTeam?.id ? homeTeam : awayTeam;
-  const currentEditingRoster = editingTeamId === homeTeam?.id ? homeRoster : awayRoster;
+  const isEditingChaos = editingRosterMode === 'chaos';
+  const isEditingHomeRoster = isEditingChaos
+    ? editingChaosSide === 'home'
+    : editingTeamId === homeTeam?.id;
+  const currentEditingTeam = isEditingHomeRoster ? homeTeam : awayTeam;
+  const currentEditingRosterLabel = isEditingChaos
+    ? isEditingHomeRoster
+      ? 'Your Team'
+      : 'Enemy Team'
+    : currentEditingTeam?.name;
+  const currentEditingRoster = isEditingChaos
+    ? isEditingHomeRoster
+      ? chaosHomeRoster
+      : chaosAwayRoster
+    : isEditingHomeRoster
+      ? homeRoster
+      : awayRoster;
+  const otherEditingRoster = isEditingChaos
+    ? isEditingHomeRoster
+      ? chaosAwayRoster
+      : chaosHomeRoster
+    : isEditingHomeRoster
+      ? awayRoster
+      : homeRoster;
   const filteredPlayerPool = React.useMemo(
     () =>
       playerPool.filter((player) =>
@@ -1268,6 +1521,77 @@ export default function () {
 
     return lookup;
   }, [allPlayersPool, currentEditingTeam, playerPool, replacementCache]);
+  const allRosterPlayerLookup = React.useMemo(() => {
+    const lookup = new Map<number, TeamData['players'][number]>();
+
+    homeTeam?.players?.forEach((player) => lookup.set(player.id, player));
+    awayTeam?.players?.forEach((player) => lookup.set(player.id, player));
+    playerPool.forEach((player) => lookup.set(player.id, player as TeamData['players'][number]));
+    allPlayersPool.forEach((player) =>
+      lookup.set(player.id, player as TeamData['players'][number]),
+    );
+    Object.values(replacementCache).forEach((player) =>
+      lookup.set(player.id, player as TeamData['players'][number]),
+    );
+
+    return lookup;
+  }, [allPlayersPool, awayTeam?.players, homeTeam?.players, playerPool, replacementCache]);
+  const getRosterPlayers = React.useCallback(
+    (team: TeamData | undefined, roster: Array<number | null>): Array<ChaosRosterPlayer> =>
+      roster
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH)
+        .map((playerId) => {
+          if (!Number.isInteger(playerId)) {
+            return null;
+          }
+
+          if (playerId === -1) {
+            const player = currentProfile?.player;
+
+            return {
+              ...(player || {}),
+              id: -1,
+              name: 'YOU',
+              avatar: player?.avatar || 'resources://avatars/empty.png',
+              team: currentProfile?.team,
+              isUser: true,
+            } as ChaosRosterPlayer;
+          }
+
+          return (
+            allRosterPlayerLookup.get(playerId) ||
+            team?.players.find((p) => p.id === playerId) ||
+            null
+          );
+        })
+        .concat(
+          Array.from({
+            length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - roster.length),
+          }).map((): null => null),
+        )
+        .slice(0, Constants.Application.SQUAD_MIN_LENGTH),
+    [allRosterPlayerLookup, currentProfile?.player, currentProfile?.team],
+  );
+  const homeRosterPlayers = React.useMemo(
+    () => getRosterPlayers(homeTeam, chaosHomeRoster),
+    [chaosHomeRoster, getRosterPlayers, homeTeam],
+  );
+  const awayRosterPlayers = React.useMemo(
+    () => getRosterPlayers(awayTeam, chaosAwayRoster),
+    [awayTeam, chaosAwayRoster, getRosterPlayers],
+  );
+  const chaosHomeHasAwper = React.useMemo(
+    () => homeRosterPlayers.some((player) => !player?.isUser && isAwperRole(player?.role)),
+    [homeRosterPlayers],
+  );
+  const canLaunchChaos = Boolean(
+    homeTeamId &&
+      awayTeamId &&
+      homeTeamId !== awayTeamId &&
+      hasCompleteRoster(chaosHomeRoster) &&
+      hasCompleteRoster(chaosAwayRoster) &&
+      awayRosterPlayers.filter((player) => isAwperRole(player?.role)).length === 1,
+  );
   const currentRosterPlayers = currentEditingRoster
     .map((playerId) => {
       if (!Number.isInteger(playerId)) {
@@ -1276,9 +1600,8 @@ export default function () {
 
       if (playerId === -1 && currentEditingTeam?.players?.length) {
         const base =
-          currentEditingTeam.players.find(
-            (player) => isAwperRole(player.role),
-          ) || currentEditingTeam.players[0];
+          currentEditingTeam.players.find((player) => isAwperRole(player.role)) ||
+          currentEditingTeam.players[0];
 
         return {
           ...base,
@@ -1293,8 +1616,26 @@ export default function () {
     })
     .map((player) => player || null);
 
-  const openRosterEditor = (team: TeamData) => {
+  const openClassicRosterEditor = (team: TeamData) => {
     setEditingTeamId(team.id);
+    setEditingRosterMode('classic');
+    setEditingChaosSide(null);
+    setReplacementSlot(0);
+    setRosterContextMenu(null);
+    setPlayerSearch('');
+    const federationId = team.country.continent.federation.id;
+    setReplacementFederationId(federationId);
+  };
+
+  const openChaosRosterEditor = (side: 'home' | 'away') => {
+    const team = side === 'home' ? homeTeam : awayTeam;
+    if (!team) {
+      return;
+    }
+
+    setEditingTeamId(team.id);
+    setEditingRosterMode('chaos');
+    setEditingChaosSide(side);
     setReplacementSlot(0);
     setRosterContextMenu(null);
     setPlayerSearch('');
@@ -1342,10 +1683,10 @@ export default function () {
       [incomingPlayerId]: incomingPlayer,
     }));
 
-    const activeRoster = editingTeamId === homeTeam?.id ? homeRoster : awayRoster;
-    const otherRoster = editingTeamId === homeTeam?.id ? awayRoster : homeRoster;
+    const activeRoster = currentEditingRoster;
+    const otherRoster = otherEditingRoster;
     const slotPlayerId = activeRoster[replacementSlot];
-    if (editingTeamId === homeTeam?.id && slotPlayerId === -1) {
+    if (isEditingHomeRoster && slotPlayerId === -1) {
       return;
     }
     const duplicateInMatch =
@@ -1365,6 +1706,31 @@ export default function () {
         : next.findIndex((slot) => !Number.isInteger(slot));
       const effectiveSlot = targetSlot >= 0 ? targetSlot : replacementSlot;
       next[effectiveSlot] = incomingPlayerId;
+
+      if (isEditingChaos && !isEditingHomeRoster) {
+        const awperSlots = next
+          .map((playerId, index) => ({
+            index,
+            player:
+              playerId === incomingPlayerId
+                ? incomingPlayer
+                : Number.isInteger(playerId)
+                  ? allRosterPlayerLookup.get(playerId)
+                  : null,
+          }))
+          .filter((entry) => isAwperRole(entry.player?.role));
+
+        if (!awperSlots.length) {
+          return prev;
+        }
+
+        awperSlots
+          .filter((entry) => entry.index !== effectiveSlot)
+          .forEach((entry) => {
+            next[entry.index] = null;
+          });
+      }
+
       return next.slice(0, Constants.Application.SQUAD_MIN_LENGTH).concat(
         Array.from({
           length: Math.max(0, Constants.Application.SQUAD_MIN_LENGTH - next.length),
@@ -1372,7 +1738,17 @@ export default function () {
       );
     };
 
-    if (editingTeamId === homeTeam?.id) {
+    if (isEditingChaos && isEditingHomeRoster) {
+      setChaosHomeRoster(updateRoster);
+      return;
+    }
+
+    if (isEditingChaos) {
+      setChaosAwayRoster(updateRoster);
+      return;
+    }
+
+    if (isEditingHomeRoster) {
       setHomeRoster(updateRoster);
       return;
     }
@@ -1387,7 +1763,11 @@ export default function () {
       return next;
     };
 
-    if (editingTeamId === homeTeam?.id) {
+    if (isEditingChaos && isEditingHomeRoster) {
+      setChaosHomeRoster(updateRoster);
+    } else if (isEditingChaos) {
+      setChaosAwayRoster(updateRoster);
+    } else if (isEditingHomeRoster) {
       setHomeRoster(updateRoster);
     } else {
       setAwayRoster(updateRoster);
@@ -1401,10 +1781,9 @@ export default function () {
       return;
     }
 
-    const isHomeTeam = editingTeamId === homeTeam?.id;
-    const activeRoster = isHomeTeam ? homeRoster : awayRoster;
-    const otherRoster = isHomeTeam ? awayRoster : homeRoster;
-    const lockedYouSlotIndex = isHomeTeam
+    const activeRoster = currentEditingRoster;
+    const otherRoster = otherEditingRoster;
+    const lockedYouSlotIndex = isEditingHomeRoster
       ? activeRoster.findIndex((playerId) => playerId === -1)
       : -1;
 
@@ -1421,7 +1800,13 @@ export default function () {
       ),
     );
     const candidatePool = (allPlayers.length ? allPlayers : currentEditingTeam?.players || [])
-      .filter((player) => !blockedPlayerIds.has(player.id))
+      .filter((player) => {
+        if (blockedPlayerIds.has(player.id)) {
+          return false;
+        }
+
+        return true;
+      })
       .map((player) => player.id);
 
     const uniqueCandidatePool = Array.from(new Set(candidatePool));
@@ -1455,7 +1840,49 @@ export default function () {
       candidateIndex += 1;
     }
 
-    if (isHomeTeam) {
+    if (isEditingChaos && !isEditingHomeRoster) {
+      const awperSlots = nextRoster
+        .map((playerId, index) => {
+          const player = Number.isInteger(playerId)
+            ? allPlayers.find((entry) => entry.id === playerId)
+            : null;
+
+          return { index, player };
+        })
+        .filter((entry) => isAwperRole(entry.player?.role));
+      awperSlots.slice(1).forEach((entry) => {
+        nextRoster[entry.index] = null;
+      });
+
+      const hasAwperAfterTrim = nextRoster.some((playerId) => {
+        const player = Number.isInteger(playerId)
+          ? allPlayers.find((entry) => entry.id === playerId)
+          : null;
+        return isAwperRole(player?.role);
+      });
+
+      if (!hasAwperAfterTrim) {
+        const awper = allPlayers.find(
+          (player) => !blockedPlayerIds.has(player.id) && isAwperRole(player.role),
+        );
+
+        if (awper) {
+          nextRoster[0] = awper.id;
+        }
+      }
+    }
+
+    if (isEditingChaos && isEditingHomeRoster) {
+      setChaosHomeRoster(nextRoster);
+      return;
+    }
+
+    if (isEditingChaos) {
+      setChaosAwayRoster(nextRoster);
+      return;
+    }
+
+    if (isEditingHomeRoster) {
       setHomeRoster(nextRoster);
       return;
     }
@@ -1469,6 +1896,10 @@ export default function () {
         className="absolute top-5 left-5 z-10 size-5 cursor-pointer"
         onClick={() => navigate('/')}
         onMouseDown={audioRelease}
+      />
+      <CustomGameModeHeader
+        title={selectedGameModeTitle}
+        description={isChaosMode ? chaosModeDescription : undefined}
       />
       <nav className="border-base-content/10 bg-base-300/35 absolute inset-y-0 left-0 flex w-56 flex-col gap-3 overflow-y-auto border-r px-5 pt-28 pb-5 shadow-2xl">
         <button
@@ -1513,22 +1944,19 @@ export default function () {
         </button>
         <button
           type="button"
-          className="border-base-content/10 bg-base-300/35 overflow-hidden rounded-md border text-left opacity-50 shadow-lg"
-          aria-disabled
-          onMouseDown={audioNegativeAlert}
+          className={cx(
+            'border-base-content/20 bg-base-300/35 overflow-hidden rounded-md border text-left shadow-lg transition',
+            selectedGameMode === 'chaos'
+              ? 'border-primary bg-base-200/80 shadow-primary/20'
+              : 'hover:border-base-content/40',
+          )}
+          onMouseDown={() => {
+            audioClick();
+            setSelectedGameMode('chaos');
+          }}
         >
-          <figure className="relative h-28 w-full overflow-hidden">
-            <img
-              alt=""
-              className="h-full w-full object-cover blur-[1px] grayscale"
-              draggable={false}
-              src={comingSoonModeImage}
-            />
-            <span className="bg-base-300/75 absolute inset-0 grid place-items-center">
-              <FaLock className="size-8" />
-            </span>
-          </figure>
-          <span className="block px-4 py-3 text-base font-semibold">Coming Soon</span>
+          <img alt="" className="h-28 w-full object-cover" draggable={false} src={chaosModeImage} />
+          <span className="block px-4 py-3 text-base font-semibold">Chaos</span>
         </button>
         {[
           { label: '?', image: mysteryModeImage1 },
@@ -1558,7 +1986,56 @@ export default function () {
           </button>
         ))}
       </nav>
-      {!isDeathmatchMode && (
+      {isChaosMode && (
+        <section className="flex min-w-0 flex-1 flex-col justify-center gap-8 px-8 py-8">
+          <section className="grid min-w-0 grid-cols-2 gap-16">
+            <ChaosRosterColumn
+              title="Your Team"
+              players={homeRosterPlayers}
+              onShuffleRoster={shuffleChaosHomeRoster}
+              onEditRoster={() => openChaosRosterEditor('home')}
+            />
+            <ChaosRosterColumn
+              title="Enemy Team"
+              players={awayRosterPlayers}
+              onShuffleRoster={shuffleChaosAwayRoster}
+              onEditRoster={() => openChaosRosterEditor('away')}
+            />
+          </section>
+          <section className="mt-8 grid grid-cols-2 gap-24">
+            <section className="center min-h-56 gap-4 text-center">
+              <p className="text-base">
+                <em>Pick your starting side</em>
+              </p>
+              <label className="swap swap-flip [&_article]:center [&_article]:gap-5 [&_article_img]:size-40 [&_article_svg]:size-8">
+                <input
+                  type="checkbox"
+                  checked={isUserCT}
+                  onChange={(event) => setIsUserCT(event.target.checked)}
+                />
+                <article className="swap-off">
+                  <Image src="resources://avatars/t.png" />
+                  <FaCaretLeft />
+                </article>
+                <article className="swap-on">
+                  <Image src="resources://avatars/ct.png" />
+                  <FaCaretRight />
+                </article>
+              </label>
+            </section>
+            <SelectedMapPanel
+              buttonClassName="h-14 w-80 text-base"
+              game={settings.general.game}
+              imageClassName="h-36 w-80"
+              selectedMap={selectedMap}
+              wrapperClassName="min-h-56 justify-center justify-self-center"
+              onOpen={() => setMapSelectionModalVisible(true)}
+              onPress={audioClick}
+            />
+          </section>
+        </section>
+      )}
+      {!isDeathmatchMode && !isChaosMode && (
         <React.Fragment>
           <TeamSelector
             excludedTeamId={awayTeamId}
@@ -1567,9 +2044,9 @@ export default function () {
             initialTeamId={homeTeamId}
             onChange={setHomeTeamId}
             onTeamUpdate={setHomeTeam}
-            onEditRoster={openRosterEditor}
+            onEditRoster={openClassicRosterEditor}
           />
-          <section className="center w-24 gap-4 text-center">
+          <section className="center w-24 gap-4 pt-28 text-center">
             <p>
               <em>
                 {spectating && homeTeam
@@ -1609,7 +2086,7 @@ export default function () {
             initialTeamId={awayTeamId}
             onChange={setAwayTeamId}
             onTeamUpdate={setAwayTeam}
-            onEditRoster={openRosterEditor}
+            onEditRoster={openClassicRosterEditor}
           />
         </React.Fragment>
       )}
@@ -1969,97 +2446,107 @@ export default function () {
                     </aside>
                   </article>
                 ))}
-                <article>
-                  <header>
-                    <p className="flex items-center gap-4 not-italic">
-                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
-                        <img
-                          alt=""
-                          className="h-14 w-14 object-contain"
-                          draggable={false}
-                          src={iglModeIcon}
+                {!isChaosMode && (
+                  <React.Fragment>
+                    <article>
+                      <header>
+                        <p className="flex items-center gap-4 not-italic">
+                          <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                            <img
+                              alt=""
+                              className="h-14 w-14 object-contain"
+                              draggable={false}
+                              src={iglModeIcon}
+                            />
+                          </span>
+                          <span>IGL Mode</span>
+                        </p>
+                        <p>Control the strategies and defaults for your team.</p>
+                      </header>
+                      <aside>
+                        <input
+                          type="checkbox"
+                          data-interaction-sound="none"
+                          className="toggle"
+                          checked={iglMode}
+                          onChange={(event) => onIglModeToggle(event.target.checked)}
                         />
-                      </span>
-                      <span>IGL Mode</span>
-                    </p>
-                    <p>Control the strategies and defaults for your team.</p>
-                  </header>
-                  <aside>
-                    <input
-                      type="checkbox"
-                      data-interaction-sound="none"
-                      className="toggle"
-                      checked={iglMode}
-                      onChange={(event) => onIglModeToggle(event.target.checked)}
-                    />
-                  </aside>
-                </article>
-                <article className={cx(!arenaModeInstalled && 'opacity-50')}>
-                  <header>
-                    <p className="flex items-center gap-4 not-italic">
-                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
-                        <img
-                          alt=""
-                          className="h-14 w-14 object-contain"
-                          draggable={false}
-                          src={arenaModeIcon}
+                      </aside>
+                    </article>
+                    <article className={cx(!arenaModeInstalled && 'opacity-50')}>
+                      <header>
+                        <p className="flex items-center gap-4 not-italic">
+                          <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                            <img
+                              alt=""
+                              className="h-14 w-14 object-contain"
+                              draggable={false}
+                              src={arenaModeIcon}
+                            />
+                          </span>
+                          <span>Arena Mode</span>
+                        </p>
+                        <p>Adds crowd noise and arena bass to your custom match.</p>
+                        {!arenaModeInstalled && (
+                          <p className="text-error">
+                            Arena Mode isn't installed. Install it from Game Settings.
+                          </p>
+                        )}
+                      </header>
+                      <aside>
+                        <input
+                          type="checkbox"
+                          aria-disabled={!arenaModeInstalled}
+                          data-interaction-sound="none"
+                          className="toggle"
+                          checked={arenaModeInstalled && settings.arenaMode.enabled}
+                          onChange={(event) => onArenaModeToggle(event.target.checked)}
                         />
-                      </span>
-                      <span>Arena Mode</span>
-                    </p>
-                    <p>Adds crowd noise and arena bass to your custom match.</p>
-                    {!arenaModeInstalled && (
-                      <p className="text-error">
-                        Arena Mode isn't installed. Install it from Game Settings.
-                      </p>
-                    )}
-                  </header>
-                  <aside>
-                    <input
-                      type="checkbox"
-                      aria-disabled={!arenaModeInstalled}
-                      data-interaction-sound="none"
-                      className="toggle"
-                      checked={arenaModeInstalled && settings.arenaMode.enabled}
-                      onChange={(event) => onArenaModeToggle(event.target.checked)}
-                    />
-                  </aside>
-                </article>
-                <article>
-                  <header>
-                    <p className="flex items-center gap-4 not-italic">
-                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
-                        <img
-                          alt=""
-                          className="h-14 w-14 object-contain"
-                          draggable={false}
-                          src={spectatingIcon}
+                      </aside>
+                    </article>
+                    <article>
+                      <header>
+                        <p className="flex items-center gap-4 not-italic">
+                          <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                            <img
+                              alt=""
+                              className="h-14 w-14 object-contain"
+                              draggable={false}
+                              src={spectatingIcon}
+                            />
+                          </span>
+                          <span>Spectate Match</span>
+                        </p>
+                        <p>Spectate the match.</p>
+                      </header>
+                      <aside>
+                        <input
+                          type="checkbox"
+                          data-interaction-sound="none"
+                          className="toggle"
+                          checked={spectating}
+                          onChange={(event) => {
+                            (event.target.checked ? audioClick : audioRelease)();
+                            onSpectatingToggle(event.target.checked);
+                          }}
                         />
-                      </span>
-                      <span>Spectate Match</span>
-                    </p>
-                    <p>Spectate the match.</p>
-                  </header>
-                  <aside>
-                    <input
-                      type="checkbox"
-                      data-interaction-sound="none"
-                      className="toggle"
-                      checked={spectating}
-                      onChange={(event) => {
-                        (event.target.checked ? audioClick : audioRelease)();
-                        onSpectatingToggle(event.target.checked);
-                      }}
-                    />
-                  </aside>
-                </article>
+                      </aside>
+                    </article>
+                  </React.Fragment>
+                )}
               </React.Fragment>
             )}
           </fieldset>
         </form>
         <button
           className="btn btn-xl btn-block btn-primary"
-          disabled={isDeathmatchMode ? !canLaunchDeathmatch : hasDuplicateTeams}
+          disabled={
+            isDeathmatchMode
+              ? !canLaunchDeathmatch
+              : isChaosMode
+                ? !canLaunchChaos
+                : hasDuplicateTeams
+          }
           onMouseDown={audioClick}
           onClick={() => {
             if (isDeathmatchMode) {
@@ -2114,6 +2601,48 @@ export default function () {
 
             const orderedTeamIds = isUserCT ? [awayTeamId, homeTeamId] : [homeTeamId, awayTeamId];
 
+            if (isChaosMode) {
+              if (!canLaunchChaos) {
+                audioNegativeAlert();
+                return;
+              }
+
+              return runCustomGameLaunch(() =>
+                api.play.exhibition(
+                  {
+                    ...settings,
+                    arenaMode: {
+                      ...settings.arenaMode,
+                      enabled: false,
+                    },
+                  },
+                  orderedTeamIds,
+                  homeTeamId,
+                  [
+                    {
+                      teamId: homeTeamId,
+                      playerIds: chaosHomeRoster.filter((playerId): playerId is number =>
+                        Number.isInteger(playerId),
+                      ),
+                    },
+                    {
+                      teamId: awayTeamId,
+                      playerIds: chaosAwayRoster.filter((playerId): playerId is number =>
+                        Number.isInteger(playerId),
+                      ),
+                    },
+                  ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
+                  false,
+                  {
+                    mode: 'chaos',
+                    chaos: {
+                      forceUserAwp: !chaosHomeHasAwper,
+                    },
+                  },
+                ),
+              );
+            }
+
             return runCustomGameLaunch(() =>
               api.play.exhibition(
                 {
@@ -2141,7 +2670,7 @@ export default function () {
                 ].filter((entry) => Number.isInteger(entry.teamId) && entry.playerIds.length),
                 spectating,
                 {
-                  mode: 'classic',
+                  mode: selectedGameMode,
                   classic: {
                     igl: iglMode,
                   },
@@ -2150,14 +2679,14 @@ export default function () {
             );
           }}
         >
-          {spectating ? 'Spectate' : t('main.dashboard.play')}
+          {spectating && !isChaosMode ? 'Spectate' : t('main.dashboard.play')}
         </button>
       </section>
       {editingTeamId && (
         <aside className="bg-base-content/60 center fixed inset-0 z-50 p-6">
           <section className="bg-base-200 h-[620px] w-full max-w-5xl rounded-xl p-4">
             <header className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Edit Roster - {currentEditingTeam?.name}</h2>
+              <h2 className="text-lg font-semibold">Edit Roster - {currentEditingRosterLabel}</h2>
               <button type="button" className="btn btn-sm" onClick={() => setEditingTeamId(null)}>
                 Close
               </button>
@@ -2379,13 +2908,10 @@ export default function () {
               </p>
               {customGamePlayError.code === Constants.ErrorCode.EINVAL &&
                 !!customGamePlayError.path && (
-                <p
-                  className="bg-base-200 truncate p-2 text-sm"
-                  title={customGamePlayError.path}
-                >
-                  {customGamePlayError.path}
-                </p>
-              )}
+                  <p className="bg-base-200 truncate p-2 text-sm" title={customGamePlayError.path}>
+                    {customGamePlayError.path}
+                  </p>
+                )}
             </header>
             <footer className="flex justify-end gap-2">
               <button

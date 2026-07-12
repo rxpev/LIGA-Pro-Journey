@@ -31,9 +31,12 @@ export enum Application {
 export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
 
 export type CustomGameOptions = {
-  mode: 'classic' | 'deathmatch';
+  mode: 'classic' | 'deathmatch' | 'chaos';
   classic?: {
     igl?: boolean;
+  };
+  chaos?: {
+    forceUserAwp?: boolean;
   };
   deathmatch?: {
     gameTime: number;
@@ -1258,7 +1261,7 @@ export const Settings = {
     fullscreen: true,
     discordPresence: true,
     locale: null as LocaleIdentifier,
-    volume: 0.50,
+    volume: 0.5,
     musicVolume: 0.25,
     faceitMatchFoundTune: 'whoosh_whip.wav' as string | null,
   },
