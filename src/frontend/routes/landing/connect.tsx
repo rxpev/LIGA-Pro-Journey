@@ -35,6 +35,11 @@ export default function () {
           return false;
         }
 
+        const saveId = Number(id);
+        if (Number.isFinite(saveId) && saveId > 0) {
+          localStorage.setItem('liga-active-save-id', String(saveId));
+        }
+
         return true;
       })
       .then((connected) => {

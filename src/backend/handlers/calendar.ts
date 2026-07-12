@@ -7,6 +7,7 @@ import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay
 import { Prisma, Calendar } from '@prisma/client';
 import {
   DatabaseClient,
+  cleanupStaleFaceitMatchRooms,
   disconnectActiveDatabaseWithIntegrity,
   Engine,
   sealActiveSaveIntegrity,
@@ -529,14 +530,23 @@ export default function () {
   );
 
   // IPC: start calendar simulation.
-  ipcMain.handle(Constants.IPCRoute.CALENDAR_START, async (_, max?: number) => {
+  ipcMain.handle(Constants.IPCRoute.CALENDAR_START, async (_, max?: number, saveId?: number | null) => {
     const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
     mainWindow.on('close', disableClose);
     WindowManager.disableMenu(Constants.WindowIdentifier.Main);
 
     try {
+      const normalizedSaveId = Number(saveId);
+      if (Number.isFinite(normalizedSaveId) && normalizedSaveId > 0) {
+        await DatabaseClient.connect(normalizedSaveId);
+      } else {
+        await DatabaseClient.connect();
+      }
+
       const profile = await DatabaseClient.prisma.profile.findFirst();
       const settings = Util.loadSettings(profile.settings);
+
+      await cleanupStaleFaceitMatchRooms(DatabaseClient.prisma, profile);
 
       const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
         where: {

@@ -116,7 +116,8 @@ export default {
       >,
     requestMainMenu: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_REQUEST_MAIN_MENU),
     sim: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_SIM),
-    start: (max?: number) => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_START, max),
+    start: (max?: number, saveId?: number | null) =>
+      ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_START, max, saveId),
     stop: () => ipcRenderer.invoke(Constants.IPCRoute.CALENDAR_STOP),
   },
   competitions: {

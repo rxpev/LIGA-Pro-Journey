@@ -97,7 +97,17 @@ export function calendarAdvance(days?: number) {
   return async (dispatch: AppDispatch) => {
     dispatch(workingUpdate(true));
     try {
-      await api.calendar.start(days);
+      const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
+      await api.calendar.start(
+        days,
+        Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null,
+      );
+    } catch (error) {
+      if (String((error as Error)?.message ?? error).includes("CALENDAR_BLOCKED_FACEIT_MATCHROOM")) {
+        return;
+      }
+
+      throw error;
     } finally {
       dispatch(workingUpdate(false));
     }

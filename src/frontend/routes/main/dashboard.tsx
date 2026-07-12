@@ -151,6 +151,7 @@ export default function () {
     id: number;
     status: number;
   } | null>(null);
+  const [activeFaceitMatchChecked, setActiveFaceitMatchChecked] = React.useState(false);
   const soundedPlayErrorAt = React.useRef(0);
 
   const toDashboardTeamTierLabel = (
@@ -233,21 +234,25 @@ export default function () {
   React.useEffect(() => {
     if (!state.profile) {
       setActiveFaceitMatch(null);
+      setActiveFaceitMatchChecked(false);
       return;
     }
 
     let disposed = false;
+    setActiveFaceitMatchChecked(false);
     const refreshActiveFaceitMatch = () => {
       api.faceit
         .activeMatch()
         .then((match) => {
           if (!disposed) {
             setActiveFaceitMatch(match);
+            setActiveFaceitMatchChecked(true);
           }
         })
         .catch(() => {
           if (!disposed) {
             setActiveFaceitMatch(null);
+            setActiveFaceitMatchChecked(true);
           }
         });
     };
@@ -390,6 +395,8 @@ export default function () {
     activeFaceitMatch?.status === Constants.MatchStatus.READY ||
     activeFaceitMatch?.status === Constants.MatchStatus.WAITING ||
     activeFaceitMatch?.status === Constants.MatchStatus.PLAYING;
+  const isCalendarFaceitBlocked =
+    !activeFaceitMatchChecked || isFaceitMatchroomLocked || isActiveFaceitMatchroom;
 
   React.useEffect(() => {
     if (
@@ -713,11 +720,11 @@ export default function () {
                 disabled={
                   !state.profile ||
                   state.working ||
-                  isFaceitMatchroomLocked ||
+                  isCalendarFaceitBlocked ||
                   (isMatchday && !isBenched)
                 }
                 onClick={async () => {
-                  if (state.working || !state.profile || isFaceitMatchroomLocked) {
+                  if (state.working || !state.profile || isCalendarFaceitBlocked) {
                     return;
                   }
 

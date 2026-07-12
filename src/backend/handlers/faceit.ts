@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DatabaseClient, Worldgen } from '@liga/backend/lib';
+import { cleanupStaleFaceitMatchRooms, DatabaseClient, Worldgen } from '@liga/backend/lib';
 import log from 'electron-log';
 import { levelFromElo } from '@liga/backend/lib/levels';
 import { FaceitMatchmaker } from '@liga/backend/lib/matchmaker';
@@ -724,6 +724,8 @@ export default function registerFaceitHandlers() {
 
         if (!profile) throw new Error('No active profile found');
 
+        await cleanupStaleFaceitMatchRooms(prisma, profile);
+
         const daily = await getFaceitDailyState(prisma, profile);
         if (daily.hasLiveUserMatchday) {
           throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
@@ -777,6 +779,8 @@ export default function registerFaceitHandlers() {
       const profile = await prisma.profile.findFirst();
       if (!profile) throw new Error('No active profile found');
 
+      await cleanupStaleFaceitMatchRooms(prisma, profile);
+
       return findPendingFaceitMatchRoom(prisma, profile.id);
     } catch (err) {
       log.error(err);
@@ -791,6 +795,8 @@ export default function registerFaceitHandlers() {
       const profile = await prisma.profile.findFirst();
       if (!profile) throw new Error('No active profile found');
 
+      await cleanupStaleFaceitMatchRooms(prisma, profile);
+
       return findActiveFaceitMatch(prisma, profile.id);
     } catch (err) {
       log.error(err);
@@ -804,6 +810,8 @@ export default function registerFaceitHandlers() {
       const prisma = DatabaseClient.prisma;
       const profile = await prisma.profile.findFirst();
       if (!profile) throw new Error('No active profile found');
+
+      await cleanupStaleFaceitMatchRooms(prisma, profile);
 
       return createPendingFaceitMatchRoom(prisma, profile, room);
     } catch (err) {
@@ -825,6 +833,8 @@ export default function registerFaceitHandlers() {
       });
 
       if (!profile) throw new Error('No active profile found');
+
+      await cleanupStaleFaceitMatchRooms(prisma, profile);
 
       const settings = profile.settings ? JSON.parse(profile.settings) : Constants.Settings;
 
