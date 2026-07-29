@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import log from 'electron-log';
 import Logo from '@liga/frontend/assets/icon.png';
 import Background from '@liga/frontend/assets/splash.png';
 import { Constants, Util } from '@liga/shared';
@@ -31,6 +32,7 @@ enum DedicatedServerStatus {
 enum DatabaseStatus {
   Connecting = 'Connecting to database...',
   Connected = 'Connected.',
+  Error = 'Could not connect to database.',
 }
 
 /**
@@ -224,7 +226,7 @@ function Index() {
           return;
         }
 
-        const settings = JSON.parse(profile.settings) as typeof Constants.Settings;
+        const settings = Util.loadSettings(profile.settings);
 
         if (settings.general.dedicatedServerPath === dedicatedServerPath) {
           return;
@@ -245,6 +247,10 @@ function Index() {
       .then(() => {
         api.window.open(Constants.WindowIdentifier.Landing);
         api.window.close(Constants.WindowIdentifier.Splash);
+      })
+      .catch((error) => {
+        log.error('Splash database startup failed', error);
+        setStatus(DatabaseStatus.Error);
       });
   }, [status, dedicatedServerPath]);
 

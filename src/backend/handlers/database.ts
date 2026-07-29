@@ -6,7 +6,7 @@
 import log from "electron-log";
 import { ipcMain } from "electron";
 import { Prisma } from "@prisma/client";
-import { DatabaseClient, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
+import { DatabaseClient, DiscordPresence, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
 import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
 import {
@@ -18,16 +18,21 @@ import { isSaveIntegrityDevModeEnabled } from "@liga/backend/lib/save-integrity-
 export default function registerDatabaseHandlers() {
   // CONNECT
   ipcMain.handle(Constants.IPCRoute.DATABASE_CONNECT, async (_, id?: string) => {
+    const databaseId = parseInt(id) || 0;
+    log.debug('Database connect requested for save %d.', databaseId);
 
     await Util.sleep(200);
 
-    const prisma = await DatabaseClient.connect(parseInt(id) || 0);
+    const prisma = await DatabaseClient.connect(databaseId);
 
     let profile = await prisma.profile.findFirst();
 
-    if (!profile) return;
+    if (!profile) {
+      log.warn('Database connect for save %d finished without a profile.', databaseId);
+      return;
+    }
 
-    if ((parseInt(id) || 0) !== 0) {
+    if (databaseId !== 0) {
       const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
 
       if (saveIntegrityDevMode) {
@@ -85,11 +90,17 @@ export default function registerDatabaseHandlers() {
     const settings = Util.loadSettings(profile.settings);
     log.transports.console.level = settings.general.logLevel as log.LogLevel;
     log.transports.file.level = settings.general.logLevel as log.LogLevel;
+    void DiscordPresence.setEnabled(settings.general.discordPresence).catch((error) =>
+      log.debug('Discord Rich Presence startup failed', error),
+    );
 
-    return prisma.profile.update({
+    const updatedProfile = await prisma.profile.update({
       where: { id: profile.id },
       data: { updatedAt: new Date().toISOString() },
     });
+
+    log.debug('Database connect finished for save %d.', databaseId);
+    return updatedProfile;
   });
 
   // DISCONNECT
