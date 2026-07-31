@@ -174,10 +174,26 @@ export default function () {
           let lineup = [...forcedPlayers, ...fallbackPlayers].slice(0, maxRosterSize);
 
           if (!spectating && team.id === teamId && customGameOptions.mode === 'chaos') {
-            selectedUserPlayerId =
+            const controlPlayer =
               team.players.find((player) => !rosterIds.includes(player.id))?.id ||
               team.players[0]?.id ||
               null;
+            selectedUserPlayerId = controlPlayer;
+
+            if (includesYou && controlPlayer) {
+              const userPlayer = team.players.find((player) => player.id === controlPlayer);
+
+              if (userPlayer) {
+                lineup = uniquePlayerIds
+                  .map((playerId) =>
+                    playerId === -1
+                      ? userPlayer
+                      : teamPlayerMap.get(playerId) || externalPlayerMap.get(playerId),
+                  )
+                  .filter((player): player is (typeof team.players)[number] => Boolean(player))
+                  .slice(0, maxRosterSize);
+              }
+            }
           } else if (!spectating && team.id === teamId) {
             const awperIdx = lineup.findIndex(
               (player) =>
@@ -319,7 +335,7 @@ export default function () {
           teams: [home, away].map((team) => ({
             id: team.id,
             name: team.name,
-            blazon: team.blazon,
+            blazon: customGameOptions.mode === 'chaos' ? null : team.blazon,
             score: scoreByTeamId[team.id] ?? 0,
             players: team.players.map((player) => ({
               id: player.id,

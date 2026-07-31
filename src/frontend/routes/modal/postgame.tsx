@@ -980,6 +980,8 @@ function DeathmatchPostgame(props: { payload: ExhibitionPostgamePayload }) {
 function ExhibitionPostgame(props: { payload: ExhibitionPostgamePayload }) {
   const t = useTranslation('windows');
   const [home, away] = props.payload.teams;
+  const showHomeBlazon = Boolean(home.blazon);
+  const showAwayBlazon = Boolean(away.blazon);
 
   if (props.payload.mode === 'deathmatch') {
     return <DeathmatchPostgame payload={props.payload} />;
@@ -1003,8 +1005,13 @@ function ExhibitionPostgame(props: { payload: ExhibitionPostgamePayload }) {
           />
         </figure>
         <header className="card-body grid grid-cols-3 place-items-center p-0">
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
-            {!!home.blazon && <img src={home.blazon} className="size-8" />}
+          <article
+            className={cx(
+              'grid w-full place-items-center font-black',
+              showHomeBlazon ? 'grid-cols-2' : 'grid-cols-1',
+            )}
+          >
+            {showHomeBlazon && <img src={home.blazon} className="size-8" />}
             <p>{home.name}</p>
           </article>
           <article className="grid grid-cols-3 place-items-center text-4xl font-bold">
@@ -1026,9 +1033,14 @@ function ExhibitionPostgame(props: { payload: ExhibitionPostgamePayload }) {
               {away.score}
             </p>
           </article>
-          <article className="grid w-full grid-cols-2 place-items-center font-black">
+          <article
+            className={cx(
+              'grid w-full place-items-center font-black',
+              showAwayBlazon ? 'grid-cols-2' : 'grid-cols-1',
+            )}
+          >
             <p>{away.name}</p>
-            {!!away.blazon && <img src={away.blazon} className="size-8" />}
+            {showAwayBlazon && <img src={away.blazon} className="size-8" />}
           </article>
         </header>
       </section>
