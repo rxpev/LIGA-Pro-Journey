@@ -19,49 +19,68 @@ export async function cleanupStaleFaceitMatchRooms(prisma: any, profile: any) {
     return 0;
   }
 
-  const staleBefore = getProfileDayStart(profile.date);
-  const staleMatches = await prisma.match.findMany({
+  const profileDayStart = getProfileDayStart(profile.date);
+  const activeMatches = await prisma.match.findMany({
     where: {
       profileId: profile.id,
       matchType: 'FACEIT_PUG',
       status: { in: ACTIVE_FACEIT_STATUSES },
-      date: { lt: staleBefore },
       faceitEloDelta: null,
       faceitRating: null,
       faceitIsWin: null,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      status: true,
+      date: true,
+      _count: {
+        select: {
+          events: true,
+        },
+      },
+    },
   });
 
-  const matchIds = staleMatches.map((match: { id: number }) => match.id);
-  if (!matchIds.length) {
+  const abandonedMatches = activeMatches.filter(
+    (match: { date: Date; status: Constants.MatchStatus; _count?: { events?: number } }) =>
+      match.status === Constants.MatchStatus.PLAYING &&
+      Number(match._count?.events ?? 0) === 0,
+  );
+  const staleMatches = activeMatches.filter(
+    (match: { date: Date; status: Constants.MatchStatus }) =>
+      getProfileDayStart(match.date).getTime() < profileDayStart.getTime(),
+  );
+  const recoverMatchIds = Array.from(
+    new Set([...abandonedMatches, ...staleMatches].map((match: { id: number }) => match.id)),
+  );
+
+  if (!recoverMatchIds.length) {
     return 0;
   }
 
-  const games = await prisma.game.findMany({
-    where: { matchId: { in: matchIds } },
-    select: { id: true },
-  });
-  const gameIds = games.map((game: { id: number }) => game.id);
-
   await prisma.$transaction([
-    prisma.matchPlayerGameStat.deleteMany({ where: { matchId: { in: matchIds } } }),
-    prisma.matchEvent.deleteMany({ where: { matchId: { in: matchIds } } }),
-    prisma.matchVeto.deleteMany({ where: { matchId: { in: matchIds } } }),
-    ...(gameIds.length
-      ? [prisma.gameToTeam.deleteMany({ where: { gameId: { in: gameIds } } })]
-      : []),
-    prisma.game.deleteMany({ where: { matchId: { in: matchIds } } }),
-    prisma.matchToTeam.deleteMany({ where: { matchId: { in: matchIds } } }),
-    prisma.match.deleteMany({ where: { id: { in: matchIds } } }),
+    prisma.match.updateMany({
+      where: { id: { in: recoverMatchIds } },
+      data: {
+        status: Constants.MatchStatus.READY,
+        date: profileDayStart.toISOString(),
+      },
+    }),
+    prisma.game.updateMany({
+      where: {
+        matchId: { in: recoverMatchIds },
+        status: { not: Constants.MatchStatus.COMPLETED },
+      },
+      data: { status: Constants.MatchStatus.READY },
+    }),
   ]);
 
   log.info(
-    'Cleaned up %d stale FACEIT matchroom(s) before %s: %s',
-    matchIds.length,
-    staleBefore.toISOString(),
-    matchIds.join(', '),
+    'Recovered %d abandoned/stale FACEIT matchroom(s) for %s: %s',
+    recoverMatchIds.length,
+    profileDayStart.toISOString(),
+    recoverMatchIds.join(', '),
   );
 
-  return matchIds.length;
+  return recoverMatchIds.length;
 }

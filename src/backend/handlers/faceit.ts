@@ -736,6 +736,11 @@ export default function registerFaceitHandlers() {
           return pending;
         }
 
+        const active = await findActiveFaceitMatch(prisma, profile.id);
+        if (active) {
+          throw new Error('FACEIT_BLOCKED_ACTIVE_MATCH');
+        }
+
         if (daily.playedToday >= daily.maxToday) {
           throw new Error(
             daily.hasPendingUserMatchday
@@ -838,19 +843,6 @@ export default function registerFaceitHandlers() {
 
       const settings = profile.settings ? JSON.parse(profile.settings) : Constants.Settings;
 
-      const daily = await getFaceitDailyState(prisma, profile);
-      if (daily.hasLiveUserMatchday) {
-        throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
-      }
-
-      if (daily.playedToday >= daily.maxToday) {
-        throw new Error(
-          daily.hasPendingUserMatchday
-            ? 'FACEIT_BLOCKED_MATCHDAY_USER_TODAY'
-            : 'FACEIT_BLOCKED_DAILY_LIMIT',
-        );
-      }
-
       const mapPool = await prisma.mapPool.findMany({
         where: {
           gameVersion: { slug: settings.general.game },
@@ -867,6 +859,18 @@ export default function registerFaceitHandlers() {
       profile.settings = JSON.stringify(settings);
 
       const requestedMatchId = Number(room.persistedMatchId);
+      const activeMatch = await findActiveFaceitMatch(prisma, profile.id);
+      if (
+        activeMatch &&
+        (!Number.isInteger(requestedMatchId) || activeMatch.id !== requestedMatchId)
+      ) {
+        throw new Error('FACEIT_BLOCKED_ACTIVE_MATCH');
+      }
+
+      if (activeMatch && activeMatch.status !== Constants.MatchStatus.READY) {
+        throw new Error('FACEIT_BLOCKED_ACTIVE_MATCH');
+      }
+
       const pendingMatch = Number.isInteger(requestedMatchId)
         ? await prisma.match.findFirst({
             where: {
@@ -878,6 +882,19 @@ export default function registerFaceitHandlers() {
             include: { games: true },
           })
         : null;
+
+      const daily = await getFaceitDailyState(prisma, profile);
+      if (daily.hasLiveUserMatchday) {
+        throw new Error('FACEIT_BLOCKED_LIVE_MATCHDAY_USER');
+      }
+
+      if (!pendingMatch && daily.playedToday >= daily.maxToday) {
+        throw new Error(
+          daily.hasPendingUserMatchday
+            ? 'FACEIT_BLOCKED_MATCHDAY_USER_TODAY'
+            : 'FACEIT_BLOCKED_DAILY_LIMIT',
+        );
+      }
 
       const dbMatch =
         pendingMatch ||

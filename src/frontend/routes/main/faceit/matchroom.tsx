@@ -613,6 +613,15 @@ export default function MatchRoom({
       }
 
       setFaceitPlayingStatus(null);
+      const message = String((error as Error)?.message ?? error);
+      if (message.includes('FACEIT_BLOCKED_ACTIVE_MATCH')) {
+        audioNegativeAlert();
+        setFaceitPlayError({
+          message: 'Finish your active FACEIT match before starting another one.',
+        } as NodeJS.ErrnoException);
+        return;
+      }
+
       await handleLaunchError(error);
     } finally {
       removeProgressListener();

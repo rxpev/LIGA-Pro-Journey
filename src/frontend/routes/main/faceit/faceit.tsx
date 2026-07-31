@@ -551,6 +551,8 @@ export default function Faceit(): JSX.Element {
         const msg = String(e?.message ?? e);
         if (msg.includes('FACEIT_BLOCKED_LIVE_MATCHDAY_USER')) {
           setQueueError('League match is live. Finish your match before queueing FACEIT.');
+        } else if (msg.includes('FACEIT_BLOCKED_ACTIVE_MATCH')) {
+          setQueueError('Finish your active FACEIT match before queueing again.');
         } else if (msg.includes('FACEIT_BLOCKED_MATCHDAY_USER_TODAY')) {
           setQueueError('Matchday scheduled today. You can only play 2 FACEIT matches to warm up.');
         } else if (msg.includes('FACEIT_BLOCKED_DAILY_LIMIT')) {
