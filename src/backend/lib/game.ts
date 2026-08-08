@@ -1266,6 +1266,16 @@ End\n
     const isLan = this.getIsLanMatch() ? 1 : 0;
     const deathmatchSettings = this.deathmatchServerSettings;
     const isChaos = !this.isFaceit && this.isChaosCustomGame ? 1 : 0;
+    const customServerSettings =
+      isCustomGame && this.customGameOptions?.mode !== 'deathmatch'
+        ? this.customGameOptions?.serverSettings
+        : undefined;
+    const maxRounds = customServerSettings?.mpMaxRounds || this.settings.matchRules.maxRounds;
+    const startMoney = customServerSettings?.mpStartMoney ?? 800;
+    const freezeTime = customServerSettings?.mpFreezeTime ?? 8;
+    const overtimeEnable = (customServerSettings?.mpOvertimeEnable ?? true) ? 1 : 0;
+    const svCheats = customServerSettings?.svCheats ? 1 : 0;
+    const hasCustomServerSettings = customServerSettings ? 1 : 0;
 
     // ------------------------------
     // 1) SERVER.CFG TEMPLATE + PATH
@@ -1422,7 +1432,7 @@ End\n
       ? {
           demo: true,
           hostname: this.hostname,
-          maxrounds: this.settings.matchRules.maxRounds,
+          maxrounds: maxRounds,
           ot: +this.overtime,
           rcon_password: Constants.GameSettings.RCON_PASSWORD,
           teamname_t: teamBranding.teamname_t,
@@ -1458,7 +1468,7 @@ End\n
       : {
           demo: true,
           hostname: this.hostname,
-          maxrounds: this.settings.matchRules.maxRounds,
+          maxrounds: maxRounds,
           ot: +this.overtime,
           rcon_password: Constants.GameSettings.RCON_PASSWORD,
           teamname_t: teamBranding.teamname_t,
@@ -1537,6 +1547,33 @@ End\n
       'deathmatch_force_buy',
       deathmatchSettings.forceBuy,
     );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'liga_custom_game_server_settings',
+      hasCustomServerSettings,
+    );
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'liga_custom_game_mp_maxrounds', maxRounds);
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'liga_custom_game_mp_startmoney',
+      startMoney,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'liga_custom_game_mp_freezetime',
+      freezeTime,
+    );
+    serverCfgRendered = upsertConVar(
+      serverCfgRendered,
+      'liga_custom_game_mp_overtime_enable',
+      overtimeEnable,
+    );
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'liga_custom_game_sv_cheats', svCheats);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'mp_maxrounds', maxRounds);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'mp_startmoney', startMoney);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'mp_freezetime', freezeTime);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'mp_overtime_enable', overtimeEnable);
+    serverCfgRendered = upsertConVar(serverCfgRendered, 'sv_cheats', svCheats);
 
     await fs.promises.writeFile(serverCfgPath, serverCfgRendered, 'utf8');
     this.log.info(`Generated server.cfg at: ${serverCfgPath}`);

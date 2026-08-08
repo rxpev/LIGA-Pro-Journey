@@ -36,6 +36,8 @@ import {
   FaInfoCircle,
   FaLock,
   FaRandom,
+  FaChevronRight,
+  FaSlidersH,
   FaSpinner,
   FaTimes,
 } from 'react-icons/fa';
@@ -84,6 +86,8 @@ const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
 ];
 const deathmatchGameTimeOptions = [10, 20, 30, 45, 60] as const;
 const deathmatchPlayerLimitOptions = [20, 18, 16, 14, 12, 10] as const;
+const classicServerMaxRoundsOptions = [30, 24, 12, 4] as const;
+const classicServerFreezeTimeOptions = [8, 15] as const;
 
 function isAwperRole(role?: string | null) {
   return role === Constants.UserRole.AWPER || role === Constants.PlayerRole.SNIPER;
@@ -655,19 +659,6 @@ function SelectedMapPanel(props: {
   );
 }
 
-function CustomGameModeHeader(props: { description?: string; title: string }) {
-  return (
-    <header className="absolute top-8 left-60 z-10 max-w-xl">
-      <h1 className="text-6xl font-black">{props.title}</h1>
-      {!!props.description && (
-        <p className="text-base-content/70 mt-2 max-w-sm text-sm leading-relaxed">
-          {props.description}
-        </p>
-      )}
-    </header>
-  );
-}
-
 function MapSelectionModal(props: {
   game: Constants.Game;
   mapPool: Array<MapPoolEntry>;
@@ -753,6 +744,14 @@ export default function () {
   const [deathmatchHeadshotOnly, setDeathmatchHeadshotOnly] = React.useState(false);
   const [deathmatchPistolsOnly, setDeathmatchPistolsOnly] = React.useState(false);
   const [deathmatchForceBuy, setDeathmatchForceBuy] = React.useState(false);
+  const [classicServerMaxRounds, setClassicServerMaxRounds] =
+    React.useState<(typeof classicServerMaxRoundsOptions)[number]>(24);
+  const [classicServerStartMoney, setClassicServerStartMoney] = React.useState(800);
+  const [classicServerFreezeTime, setClassicServerFreezeTime] =
+    React.useState<(typeof classicServerFreezeTimeOptions)[number]>(8);
+  const [classicServerOvertimeEnable, setClassicServerOvertimeEnable] = React.useState(true);
+  const [classicServerSvCheats, setClassicServerSvCheats] = React.useState(false);
+  const [serverSettingsModalVisible, setServerSettingsModalVisible] = React.useState(false);
   const [currentProfile, setCurrentProfile] = React.useState<ProfileData | null>(null);
   const [deathmatchTPlayers, setDeathmatchTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
   const [deathmatchCTPlayers, setDeathmatchCTPlayers] = React.useState<Array<DeathmatchSlot>>([]);
@@ -814,14 +813,6 @@ export default function () {
   const iglRemovedHomePlayerId = React.useRef<number | null>(null);
   const isDeathmatchMode = selectedGameMode === 'deathmatch';
   const isChaosMode = selectedGameMode === 'chaos';
-  const selectedGameModeTitle =
-    selectedGameMode === 'deathmatch'
-      ? 'Deathmatch'
-      : selectedGameMode === 'chaos'
-        ? 'Chaos'
-        : 'Classic 5v5';
-  const chaosModeDescription =
-    'Every player gets an effect randomly assigned each round, dive into the chaos!';
   const deathmatchSlotsPerSide = deathmatchPlayerLimit / 2;
   const selectedDeathmatchDifficulty = React.useMemo(
     () =>
@@ -1897,10 +1888,6 @@ export default function () {
         onClick={() => navigate('/')}
         onMouseDown={audioRelease}
       />
-      <CustomGameModeHeader
-        title={selectedGameModeTitle}
-        description={isChaosMode ? chaosModeDescription : undefined}
-      />
       <nav className="border-base-content/10 bg-base-300/35 absolute inset-y-0 left-0 flex w-56 flex-col gap-3 overflow-y-auto border-r px-5 pt-28 pb-5 shadow-2xl">
         <button
           type="button"
@@ -2534,6 +2521,28 @@ export default function () {
                     </article>
                   </React.Fragment>
                 )}
+                <article>
+                  <header>
+                    <p className="flex items-center gap-4 not-italic">
+                      <span className="border-base-content/20 flex h-14 w-24 shrink-0 items-center justify-center overflow-visible border-r pr-4">
+                        <FaSlidersH className="size-10 text-white" />
+                      </span>
+                      <span>Server Settings</span>
+                    </p>
+                    <p>Configure custom match server convars.</p>
+                  </header>
+                  <aside className="justify-end">
+                    <button
+                      type="button"
+                      className="btn border-base-content/40 bg-base-300 hover:bg-base-200 h-6 min-h-0 w-10 rounded-full border p-0 shadow-md"
+                      aria-label="Open server settings"
+                      onMouseDown={audioClick}
+                      onClick={() => setServerSettingsModalVisible(true)}
+                    >
+                      <FaChevronRight className="size-3" />
+                    </button>
+                  </aside>
+                </article>
               </React.Fragment>
             )}
           </fieldset>
@@ -2635,6 +2644,13 @@ export default function () {
                   false,
                   {
                     mode: 'chaos',
+                    serverSettings: {
+                      mpMaxRounds: classicServerMaxRounds,
+                      mpStartMoney: classicServerStartMoney,
+                      mpFreezeTime: classicServerFreezeTime,
+                      mpOvertimeEnable: classicServerOvertimeEnable,
+                      svCheats: classicServerSvCheats,
+                    },
                     chaos: {
                       forceUserAwp: !chaosHomeHasAwper,
                     },
@@ -2671,6 +2687,13 @@ export default function () {
                 spectating,
                 {
                   mode: selectedGameMode,
+                  serverSettings: {
+                    mpMaxRounds: classicServerMaxRounds,
+                    mpStartMoney: classicServerStartMoney,
+                    mpFreezeTime: classicServerFreezeTime,
+                    mpOvertimeEnable: classicServerOvertimeEnable,
+                    svCheats: classicServerSvCheats,
+                  },
                   classic: {
                     igl: iglMode,
                   },
@@ -2829,6 +2852,130 @@ export default function () {
             setMapSelectionModalVisible(false);
           }}
         />
+      )}
+      {serverSettingsModalVisible && (
+        <aside
+          className="center fixed inset-0 z-50 bg-black/70 p-6 backdrop-blur-sm"
+          onMouseDown={() => setServerSettingsModalVisible(false)}
+        >
+          <section
+            className="bg-base-200 w-full max-w-xl rounded-xl p-4 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Server Settings</h2>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                aria-label="Close server settings"
+                onMouseDown={audioRelease}
+                onClick={() => setServerSettingsModalVisible(false)}
+              >
+                <FaTimes />
+              </button>
+            </header>
+            <section className="form-ios form-ios-col-2">
+              <fieldset>
+                <article>
+                  <header>
+                    <p>Max Rounds</p>
+                  </header>
+                  <aside>
+                    <select
+                      className="select w-full"
+                      value={classicServerMaxRounds}
+                      onChange={(event) => {
+                        audioClick();
+                        setClassicServerMaxRounds(
+                          Number(event.target.value) as typeof classicServerMaxRounds,
+                        );
+                      }}
+                    >
+                      {classicServerMaxRoundsOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p>Startmoney</p>
+                  </header>
+                  <aside>
+                    <input
+                      type="number"
+                      className="input w-full"
+                      min={0}
+                      value={classicServerStartMoney}
+                      onChange={(event) =>
+                        setClassicServerStartMoney(Math.max(0, Number(event.target.value) || 0))
+                      }
+                    />
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p>Freezetime</p>
+                  </header>
+                  <aside>
+                    <select
+                      className="select w-full"
+                      value={classicServerFreezeTime}
+                      onChange={(event) => {
+                        audioClick();
+                        setClassicServerFreezeTime(
+                          Number(event.target.value) as typeof classicServerFreezeTime,
+                        );
+                      }}
+                    >
+                      {classicServerFreezeTimeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p>Overtime</p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={classicServerOvertimeEnable}
+                      onChange={(event) => {
+                        (event.target.checked ? audioClick : audioRelease)();
+                        setClassicServerOvertimeEnable(event.target.checked);
+                      }}
+                    />
+                  </aside>
+                </article>
+                <article>
+                  <header>
+                    <p>Cheats</p>
+                  </header>
+                  <aside>
+                    <input
+                      type="checkbox"
+                      data-interaction-sound="none"
+                      className="toggle"
+                      checked={classicServerSvCheats}
+                      onChange={(event) => {
+                        (event.target.checked ? audioClick : audioRelease)();
+                        setClassicServerSvCheats(event.target.checked);
+                      }}
+                    />
+                  </aside>
+                </article>
+              </fieldset>
+            </section>
+          </section>
+        </aside>
       )}
       {!!customGamePlayingStatus && (
         <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">

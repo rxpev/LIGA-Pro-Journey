@@ -32,6 +32,13 @@ export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
 
 export type CustomGameOptions = {
   mode: 'classic' | 'deathmatch' | 'chaos';
+  serverSettings?: {
+    mpMaxRounds: 30 | 24 | 12 | 4;
+    mpStartMoney: number;
+    mpFreezeTime: 8 | 15;
+    mpOvertimeEnable: boolean;
+    svCheats: boolean;
+  };
   classic?: {
     igl?: boolean;
   };
