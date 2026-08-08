@@ -85,6 +85,13 @@ type CompetitionGroupKey =
   | 'ESEA_MAIN'
   | 'ESEA_INTERMEDIATE'
   | 'ESEA_OPEN'
+  | 'CCT_SERIES'
+  | 'CCT_OCEANIA_SERIES'
+  | 'CCT_GLOBAL_FINALS'
+  | 'IEM_COLOGNE'
+  | 'IEM_COLOGNE_QUALIFIERS'
+  | 'IEM_KRAKOW'
+  | 'IEM_KRAKOW_QUALIFIERS'
   | 'RMR_EUROPE'
   | 'RMR_QUALIFIERS_EUROPE'
   | 'RMR_QUALIFIERS_AMERICAS'
@@ -103,6 +110,13 @@ const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   ESEA_MAIN: 'ESEA Main (Groups + Playoffs)',
   ESEA_INTERMEDIATE: 'ESEA Intermediate (Groups + Playoffs)',
   ESEA_OPEN: 'ESEA Open (Groups + Playoffs)',
+  CCT_SERIES: 'CCT Series (Groups + Playoffs)',
+  CCT_OCEANIA_SERIES: 'CCT Oceania Series (Groups + Playoffs)',
+  CCT_GLOBAL_FINALS: 'CCT Global Finals',
+  IEM_COLOGNE: 'IEM Cologne (Groups + Playoffs)',
+  IEM_COLOGNE_QUALIFIERS: 'IEM Cologne Qualifiers',
+  IEM_KRAKOW: 'IEM Krakow (Groups + Playoffs)',
+  IEM_KRAKOW_QUALIFIERS: 'IEM Krakow Qualifiers',
   RMR_EUROPE: 'RMR (Europe A + B)',
   RMR_QUALIFIERS_EUROPE: 'RMR Qualifiers (Europe)',
   RMR_QUALIFIERS_AMERICAS: 'RMR Qualifiers (Americas)',
@@ -118,6 +132,13 @@ const CompetitionGroupOrder: CompetitionGroupKey[] = [
   'ESEA_MAIN',
   'ESEA_INTERMEDIATE',
   'ESEA_OPEN',
+  'CCT_SERIES',
+  'CCT_OCEANIA_SERIES',
+  'CCT_GLOBAL_FINALS',
+  'IEM_COLOGNE',
+  'IEM_COLOGNE_QUALIFIERS',
+  'IEM_KRAKOW',
+  'IEM_KRAKOW_QUALIFIERS',
   'RMR_EUROPE',
   'RMR_QUALIFIERS_EUROPE',
   'RMR_QUALIFIERS_AMERICAS',
@@ -309,6 +330,42 @@ function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
     return 'ESEA_OPEN';
   }
 
+  if (tierSlug === 'cct:series' || tierSlug === 'cct:series:playoffs') {
+    return 'CCT_SERIES';
+  }
+
+  if (tierSlug === 'cct:oceania:series' || tierSlug === 'cct:oceania:playoffs') {
+    return 'CCT_OCEANIA_SERIES';
+  }
+
+  if (tierSlug === 'cct:global-finals') {
+    return 'CCT_GLOBAL_FINALS';
+  }
+
+  if (
+    tierSlug === 'iem:cologne:group-a' ||
+    tierSlug === 'iem:cologne:group-b' ||
+    tierSlug === 'iem:cologne:playoffs'
+  ) {
+    return 'IEM_COLOGNE';
+  }
+
+  if (tierSlug === 'iem:cologne:open-qualifier') {
+    return 'IEM_COLOGNE_QUALIFIERS';
+  }
+
+  if (
+    tierSlug === 'iem:krakow:group-a' ||
+    tierSlug === 'iem:krakow:group-b' ||
+    tierSlug === 'iem:krakow:playoffs'
+  ) {
+    return 'IEM_KRAKOW';
+  }
+
+  if (tierSlug === 'iem:krakow:open-qualifier') {
+    return 'IEM_KRAKOW_QUALIFIERS';
+  }
+
   if (tierSlug.includes('major:europe:rmr:a') || tierSlug.includes('major:europe:rmr:b')) {
     return 'RMR_EUROPE';
   }
@@ -367,6 +424,35 @@ function getCompetitionGroupTierWhere(group: string) {
       break;
     case 'ESEA_OPEN':
       tierSlugs.push(Constants.TierSlug.LEAGUE_OPEN, Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS);
+      break;
+    case 'CCT_SERIES':
+      tierSlugs.push(Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_SERIES_PLAYOFFS);
+      break;
+    case 'CCT_OCEANIA_SERIES':
+      tierSlugs.push(Constants.TierSlug.CCT_OCE_SERIES, Constants.TierSlug.CCT_OCE_PLAYOFFS);
+      break;
+    case 'CCT_GLOBAL_FINALS':
+      tierSlugs.push(Constants.TierSlug.CCT_GLOBAL_FINALS);
+      break;
+    case 'IEM_COLOGNE':
+      tierSlugs.push(
+        Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+        Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+        Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+      );
+      break;
+    case 'IEM_COLOGNE_QUALIFIERS':
+      tierSlugs.push(Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER);
+      break;
+    case 'IEM_KRAKOW':
+      tierSlugs.push(
+        Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+        Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+        Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+      );
+      break;
+    case 'IEM_KRAKOW_QUALIFIERS':
+      tierSlugs.push(Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER);
       break;
     default:
       break;
