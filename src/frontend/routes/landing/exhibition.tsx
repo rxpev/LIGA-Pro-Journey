@@ -149,6 +149,42 @@ const weaponSettings = [
   },
 ] as const;
 
+const customGameModeInfo: Record<CustomGameMode, { title: string; description: string }> = {
+  classic: {
+    title: 'Classic 5v5',
+    description:
+      'Pick two teams, choose a map, and play a normal 5v5 your way. Jump in, call as IGL, or watch from the sidelines.',
+  },
+  deathmatch: {
+    title: 'Deathmatch',
+    description: 'Fast warmup rounds with bigger lineups, a timer, and optional weapon twists.',
+  },
+  chaos: {
+    title: 'Chaos',
+    description:
+      'Every round gives each player a random effect, from 1 HP to heavy armor, enemy swaps, and fake lag.',
+  },
+};
+
+function ModeInfoBox(props: { mode: CustomGameMode; className?: string }) {
+  const info = customGameModeInfo[props.mode];
+
+  return (
+    <aside
+      className={cx(
+        'border-base-content/10 bg-base-300/45 text-base-content/80 flex items-start gap-3 rounded-md border px-4 py-3 text-left shadow-lg backdrop-blur-sm',
+        props.className,
+      )}
+    >
+      <FaInfoCircle className="text-primary mt-0.5 size-4 shrink-0" />
+      <span className="min-w-0">
+        <strong className="text-base-content block text-sm font-black">{info.title}</strong>
+        <span className="block text-xs leading-relaxed">{info.description}</span>
+      </span>
+    </aside>
+  );
+}
+
 function getStoredTeamId(key: string) {
   const value = Number(window.sessionStorage.getItem(key));
   return Number.isInteger(value) && value > 0 ? value : undefined;
@@ -1974,7 +2010,11 @@ export default function () {
         ))}
       </nav>
       {isChaosMode && (
-        <section className="flex min-w-0 flex-1 flex-col justify-center gap-8 px-8 py-8">
+        <section className="relative flex min-w-0 flex-1 flex-col justify-center gap-8 px-8 py-8">
+          <ModeInfoBox
+            mode="chaos"
+            className="absolute top-8 left-1/2 z-10 w-[min(42rem,calc(100%-4rem))] -translate-x-1/2"
+          />
           <section className="grid min-w-0 grid-cols-2 gap-16">
             <ChaosRosterColumn
               title="Your Team"
@@ -2023,7 +2063,11 @@ export default function () {
         </section>
       )}
       {!isDeathmatchMode && !isChaosMode && (
-        <React.Fragment>
+        <section className="relative flex min-w-0 flex-1">
+          <ModeInfoBox
+            mode="classic"
+            className="absolute top-8 left-1/2 z-10 w-[min(42rem,calc(100%-4rem))] -translate-x-1/2"
+          />
           <TeamSelector
             excludedTeamId={awayTeamId}
             initialFederationId={1}
@@ -2075,57 +2119,63 @@ export default function () {
             onTeamUpdate={setAwayTeam}
             onEditRoster={openClassicRosterEditor}
           />
-        </React.Fragment>
+        </section>
       )}
       {isDeathmatchMode && (
-        <section className="flex flex-1 items-center justify-center gap-10 px-8">
-          <DeathmatchLineupColumn
-            icon="resources://avatars/t.png"
-            maxSlots={deathmatchSlotsPerSide}
-            title="T Side"
-            players={deathmatchTPlayers}
+        <section className="relative flex min-w-0 flex-1 flex-col justify-center gap-8 px-8">
+          <ModeInfoBox
+            mode="deathmatch"
+            className="absolute top-8 left-1/2 z-10 w-[min(42rem,calc(100%-4rem))] -translate-x-1/2"
           />
-          <section className="center w-80 gap-5 text-center">
-            <details className="dropdown h-16 w-80">
-              <summary className="btn border-primary/60 bg-primary/20 text-primary hover:bg-primary/30 h-full w-full rounded-md border text-xl font-black shadow-lg">
-                {selectedDeathmatchDifficulty.label}
-              </summary>
-              <ul className="dropdown-content bg-base-200 border-base-content/10 rounded-box z-20 mt-1 flex w-80 flex-col gap-1 border p-1 shadow-2xl">
-                {deathmatchDifficulties.map((difficulty) => (
-                  <li key={difficulty.id} className="w-full">
-                    <button
-                      type="button"
-                      className={cx(
-                        'hover:bg-base-300 w-full rounded px-4 py-4 text-center text-lg font-bold',
-                        deathmatchDifficulty === difficulty.id && 'bg-primary/20 text-primary',
-                      )}
-                      onClick={() => {
-                        audioClick();
-                        setDeathmatchDifficulty(difficulty.id);
-                      }}
-                    >
-                      {difficulty.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </details>
-            <SelectedMapPanel
-              buttonClassName="h-16 w-80 text-base"
-              game={settings.general.game}
-              imageClassName="h-52 w-80"
-              selectedMap={selectedMap}
-              wrapperClassName=""
-              onOpen={() => setMapSelectionModalVisible(true)}
-              onPress={audioClick}
+          <section className="flex items-center justify-center gap-10">
+            <DeathmatchLineupColumn
+              icon="resources://avatars/t.png"
+              maxSlots={deathmatchSlotsPerSide}
+              title="T Side"
+              players={deathmatchTPlayers}
+            />
+            <section className="center w-80 gap-5 text-center">
+              <details className="dropdown h-16 w-80">
+                <summary className="btn border-primary/60 bg-primary/20 text-primary hover:bg-primary/30 h-full w-full rounded-md border text-xl font-black shadow-lg">
+                  {selectedDeathmatchDifficulty.label}
+                </summary>
+                <ul className="dropdown-content bg-base-200 border-base-content/10 rounded-box z-20 mt-1 flex w-80 flex-col gap-1 border p-1 shadow-2xl">
+                  {deathmatchDifficulties.map((difficulty) => (
+                    <li key={difficulty.id} className="w-full">
+                      <button
+                        type="button"
+                        className={cx(
+                          'hover:bg-base-300 w-full rounded px-4 py-4 text-center text-lg font-bold',
+                          deathmatchDifficulty === difficulty.id && 'bg-primary/20 text-primary',
+                        )}
+                        onClick={() => {
+                          audioClick();
+                          setDeathmatchDifficulty(difficulty.id);
+                        }}
+                      >
+                        {difficulty.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              <SelectedMapPanel
+                buttonClassName="h-16 w-80 text-base"
+                game={settings.general.game}
+                imageClassName="h-52 w-80"
+                selectedMap={selectedMap}
+                wrapperClassName=""
+                onOpen={() => setMapSelectionModalVisible(true)}
+                onPress={audioClick}
+              />
+            </section>
+            <DeathmatchLineupColumn
+              icon="resources://avatars/ct.png"
+              maxSlots={deathmatchSlotsPerSide}
+              title="CT Side"
+              players={deathmatchCTPlayers}
             />
           </section>
-          <DeathmatchLineupColumn
-            icon="resources://avatars/ct.png"
-            maxSlots={deathmatchSlotsPerSide}
-            title="CT Side"
-            players={deathmatchCTPlayers}
-          />
         </section>
       )}
       <section
