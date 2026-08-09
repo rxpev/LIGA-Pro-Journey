@@ -48,6 +48,7 @@ export default function Save() {
       try {
         setStatus(t('shared.connectingToDatabase'));
         await api.database.connect(String(newSaveId));
+        localStorage.setItem('liga-active-save-id', String(newSaveId));
 
         // Create PLAYER profile instead of manager
         setStatus(t('landing.create.statusSaving'));

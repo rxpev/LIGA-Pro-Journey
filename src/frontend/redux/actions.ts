@@ -98,9 +98,17 @@ export function calendarAdvance(days?: number) {
     dispatch(workingUpdate(true));
     try {
       const cachedSaveId = Number(localStorage.getItem("liga-active-save-id") || 0);
+      const currentSaveId = await api.database.current();
+      const saveId =
+        Number.isFinite(currentSaveId) && currentSaveId > 0 ? currentSaveId : cachedSaveId;
+
+      if (Number.isFinite(saveId) && saveId > 0) {
+        localStorage.setItem("liga-active-save-id", String(saveId));
+      }
+
       await api.calendar.start(
         days,
-        Number.isFinite(cachedSaveId) && cachedSaveId > 0 ? cachedSaveId : null,
+        Number.isFinite(saveId) && saveId > 0 ? saveId : null,
       );
     } catch (error) {
       if (String((error as Error)?.message ?? error).includes("CALENDAR_BLOCKED_FACEIT_MATCHROOM")) {

@@ -93,6 +93,10 @@ const routes = createMemoryRouter([
         element: <Routes.Main.Inbox />,
       },
       {
+        path: '/news',
+        element: <Routes.Main.News />,
+      },
+      {
         path: '/squad',
         element: <Routes.Main.Squad />,
       },
@@ -208,6 +212,7 @@ function Root() {
   const audioRelease = useAudio('button-release.wav');
   const audioNegativeAlert = useAudio('negative-alert.wav');
   const audioNotification = useAudio('notification.wav');
+  const [hasUnreadNews, setHasUnreadNews] = React.useState(false);
 
   React.useEffect(() => {
     const removeClosePromptListener = api.ipc.on(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, () => {
@@ -291,7 +296,20 @@ function Root() {
       .all(Eagers.continent)
       .then((continents) => dispatch(continentsUpdate(continents)));
     api.emails.all().then((emails) => dispatch(emailsUpdate(emails)));
+    api.news
+      .all({
+        take: 1,
+        where: {
+          read: false,
+        },
+      })
+      .then((items) => setHasUnreadNews(items.length > 0));
     api.profiles.current().then((profile) => dispatch(profileUpdate(profile)));
+    api.database.current().then((saveId) => {
+      if (Number.isFinite(saveId) && saveId > 0) {
+        localStorage.setItem('liga-active-save-id', String(saveId));
+      }
+    });
     api.app.status().then((resp) => dispatch(appStatusUpdate(resp)));
     api.app.locale().then((locale) => dispatch(localeUpdate(locale)));
     api.shortlist.all().then((shortlist) => dispatch(shortlistUpdate(shortlist)));
@@ -316,6 +334,17 @@ function Root() {
     // handle incoming shortlist updates
     api.ipc.on(Constants.IPCRoute.SHORTLIST_UPDATE, () =>
       api.shortlist.all().then((shortlist) => dispatch(shortlistUpdate(shortlist))),
+    );
+
+    api.ipc.on(Constants.IPCRoute.NEWS_ITEMS_UPDATED, () =>
+      api.news
+        .all({
+          take: 1,
+          where: {
+            read: false,
+          },
+        })
+        .then((items) => setHasUnreadNews(items.length > 0)),
     );
 
     // handle awards
@@ -384,6 +413,7 @@ function Root() {
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],
+    ['/news', 'News'],
     ['/faceit', 'FACEIT'],
     ['/squad', t('navigation.squadHub')],
     ['/stats', 'Statistics'],
@@ -420,6 +450,9 @@ function Root() {
                   {id.includes('inbox') && state.emails.some((email) => !email.read) && (
                     <span className="badge-xxs badge badge-info" />
                   )}
+                  {id.includes('news') && hasUnreadNews && (
+                    <span className="badge-xxs badge badge-info" />
+                  )}
                 </Link>
               </li>
             ))}
@@ -441,6 +474,9 @@ function Root() {
             >
               {name}
               {id.includes('inbox') && state.emails.some((email) => !email.read) && (
+                <span className="badge-xxs badge badge-info absolute top-2 right-2" />
+              )}
+              {id.includes('news') && hasUnreadNews && (
                 <span className="badge-xxs badge badge-info absolute top-2 right-2" />
               )}
             </button>
