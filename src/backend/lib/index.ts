@@ -7,6 +7,7 @@ export * as Firebase from './firebase';
 export * as Game from './game';
 export * as GitHub from './github';
 export * as Mods from './mods';
+export * as News from './news';
 export * as Ping from './ping';
 export * as Plugins from './plugins';
 export * as RCON from './rcon';

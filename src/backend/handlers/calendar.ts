@@ -10,6 +10,7 @@ import {
   cleanupStaleFaceitMatchRooms,
   disconnectActiveDatabaseWithIntegrity,
   Engine,
+  News,
   sealActiveSaveIntegrity,
   WindowManager,
   Worldgen,
@@ -211,6 +212,14 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   // through a direct roster-change recalculation hook this tick
   await Worldgen.recalculateAllTeamCountryIdentities();
 
+  let profile = await DatabaseClient.prisma.profile.findFirst();
+  const newsItems = await News.generateAutomaticItems(profile.date);
+  if (newsItems.length > 0) {
+    WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents.send(
+      Constants.IPCRoute.NEWS_ITEMS_UPDATED,
+    );
+  }
+
   // If stopped, do not advance day
   if (status === Engine.LoopStatus.TERMINATED) {
     Engine.Runtime.Instance.log.info('Stopping...');
@@ -218,7 +227,6 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   }
 
   // Advance day
-  let profile = await DatabaseClient.prisma.profile.findFirst();
   profile = await DatabaseClient.prisma.profile.update({
     where: { id: profile.id },
     data: { date: addDays(profile.date, 1).toISOString() },
@@ -530,68 +538,71 @@ export default function () {
   );
 
   // IPC: start calendar simulation.
-  ipcMain.handle(Constants.IPCRoute.CALENDAR_START, async (_, max?: number, saveId?: number | null) => {
-    const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
-    mainWindow.on('close', disableClose);
-    WindowManager.disableMenu(Constants.WindowIdentifier.Main);
+  ipcMain.handle(
+    Constants.IPCRoute.CALENDAR_START,
+    async (_, max?: number, saveId?: number | null) => {
+      const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
+      mainWindow.on('close', disableClose);
+      WindowManager.disableMenu(Constants.WindowIdentifier.Main);
 
-    try {
-      const normalizedSaveId = Number(saveId);
-      if (Number.isFinite(normalizedSaveId) && normalizedSaveId > 0) {
-        await DatabaseClient.connect(normalizedSaveId);
-      } else {
-        await DatabaseClient.connect();
-      }
+      try {
+        const normalizedSaveId = Number(saveId);
+        if (Number.isFinite(normalizedSaveId) && normalizedSaveId > 0) {
+          await DatabaseClient.connect(normalizedSaveId);
+        } else {
+          await DatabaseClient.connect();
+        }
 
-      const profile = await DatabaseClient.prisma.profile.findFirst();
-      const settings = Util.loadSettings(profile.settings);
+        const profile = await DatabaseClient.prisma.profile.findFirst();
+        const settings = Util.loadSettings(profile.settings);
 
-      await cleanupStaleFaceitMatchRooms(DatabaseClient.prisma, profile);
+        await cleanupStaleFaceitMatchRooms(DatabaseClient.prisma, profile);
 
-      const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
-        where: {
-          profileId: profile.id,
-          matchType: 'FACEIT_PUG',
-          status: {
-            in: [
-              Constants.MatchStatus.READY,
-              Constants.MatchStatus.WAITING,
-              Constants.MatchStatus.PLAYING,
-            ],
+        const activeFaceitMatch = await DatabaseClient.prisma.match.findFirst({
+          where: {
+            profileId: profile.id,
+            matchType: 'FACEIT_PUG',
+            status: {
+              in: [
+                Constants.MatchStatus.READY,
+                Constants.MatchStatus.WAITING,
+                Constants.MatchStatus.PLAYING,
+              ],
+            },
           },
-        },
-        select: { id: true },
-      });
+          select: { id: true },
+        });
 
-      if (activeFaceitMatch) {
-        throw new Error('CALENDAR_BLOCKED_FACEIT_MATCHROOM');
+        if (activeFaceitMatch) {
+          throw new Error('CALENDAR_BLOCKED_FACEIT_MATCHROOM');
+        }
+
+        // First-run logic for competitions remains unchanged.
+        if (!(await DatabaseClient.prisma.competition.count())) {
+          Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');
+
+          await Engine.Runtime.Instance.start(1, true);
+          return Promise.resolve();
+        }
+
+        let days = max;
+        if (!max) {
+          const from = profile.date;
+          const to = add(from, { [settings.calendar.unit]: settings.calendar.maxIterations });
+          days = differenceInDays(to, from);
+        }
+
+        await Engine.Runtime.Instance.start(days);
+      } catch (error) {
+        await sealActiveSaveIntegrity();
+        throw error;
+      } finally {
+        mainWindow.off('close', disableClose);
+        WindowManager.enableMenu(Constants.WindowIdentifier.Main);
       }
-
-      // First-run logic for competitions remains unchanged.
-      if (!(await DatabaseClient.prisma.competition.count())) {
-        Engine.Runtime.Instance.log.debug('First run detected. Advancing 1 day...');
-
-        await Engine.Runtime.Instance.start(1, true);
-        return Promise.resolve();
-      }
-
-      let days = max;
-      if (!max) {
-        const from = profile.date;
-        const to = add(from, { [settings.calendar.unit]: settings.calendar.maxIterations });
-        days = differenceInDays(to, from);
-      }
-
-      await Engine.Runtime.Instance.start(days);
-    } catch (error) {
-      await sealActiveSaveIntegrity();
-      throw error;
-    } finally {
-      mainWindow.off('close', disableClose);
-      WindowManager.enableMenu(Constants.WindowIdentifier.Main);
-    }
-    return Promise.resolve();
-  });
+      return Promise.resolve();
+    },
+  );
 
   // IPC: stop calendar.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_STOP, () => {

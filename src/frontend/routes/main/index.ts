@@ -11,9 +11,10 @@ import Players from './players';
 import Squad from './squad';
 import Stats from './stats';
 import Teams from './teams';
-import Faceit from "./faceit/faceit";
-import FaceitDetailedStatistics from "./faceit/detailed-statistics";
-import FaceitRankings from "./faceit/rankings";
+import Faceit from './faceit/faceit';
+import FaceitDetailedStatistics from './faceit/detailed-statistics';
+import FaceitRankings from './faceit/rankings';
+import News from './news';
 
 /**
  * Exports this module.
@@ -31,6 +32,7 @@ export default {
   Faceit,
   FaceitDetailedStatistics,
   FaceitRankings,
+  News,
 
   // composite routes
   Competitions,

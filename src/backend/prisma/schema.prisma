@@ -325,6 +325,26 @@ model MatchVeto {
   teamId  Int?
 }
 
+model NewsItem {
+  id          Int      @id @default(autoincrement())
+  type        String
+  topic       String
+  headline    String
+  summary     String
+  body        String
+  image       String?
+  priority    Int      @default(0)
+  read        Boolean  @default(false)
+  publishedAt DateTime
+  eventKey    String   @unique
+  payload     String?
+  createdAt   DateTime @default(now())
+
+  @@index([publishedAt, priority])
+  @@index([read, publishedAt])
+  @@index([topic, publishedAt])
+}
+
 model Persona {
   id   Int    @id @default(autoincrement())
   name String @unique

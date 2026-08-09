@@ -31,6 +31,7 @@ export { default as IPCTransferHandler } from './transfer';
 export { default as IPCIssuesHandler } from './issues';
 export { default as IPCPluginsHandler } from './plugins';
 export { default as IPCModsHandler } from './mods';
+export { default as IPCNewsHandler } from './news';
 export { default as IPCMapPool } from './map-pool';
 export { default as IPCShortlist } from './shortlist';
 export { default as IPCFaceitHandler } from './faceit';
@@ -166,7 +167,9 @@ export function IPCGenericHandler() {
         await fs.promises.access(gamePath, fs.constants.F_OK);
       } catch (error) {
         if (settings.general.gamePath) {
-          const invalidPathError = new Error('Game Library Path is set incorrectly') as NodeJS.ErrnoException;
+          const invalidPathError = new Error(
+            'Game Library Path is set incorrectly',
+          ) as NodeJS.ErrnoException;
           invalidPathError.code = Constants.ErrorCode.EINVAL;
           invalidPathError.path = settings.general.gamePath;
           throw invalidPathError;

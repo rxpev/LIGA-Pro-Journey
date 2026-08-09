@@ -70,15 +70,11 @@ function sortGlobalPlayerStats(
     }
 
     if (sort === 'team') {
-      return (
-        (a.team?.name || '').localeCompare(b.team?.name || '') || a.name.localeCompare(b.name)
-      );
+      return (a.team?.name || '').localeCompare(b.team?.name || '') || a.name.localeCompare(b.name);
     }
 
     return (
-      Number(b[sort] || 0) - Number(a[sort] || 0) ||
-      b.maps - a.maps ||
-      a.name.localeCompare(b.name)
+      Number(b[sort] || 0) - Number(a[sort] || 0) || b.maps - a.maps || a.name.localeCompare(b.name)
     );
   });
 
@@ -434,58 +430,61 @@ export default function () {
                 );
 
                 batchRows.forEach((row) => {
-                const candidate = playerById.get(row.playerId);
-                if (!candidate) {
-                  return;
-                }
+                  const candidate = playerById.get(row.playerId);
+                  if (!candidate) {
+                    return;
+                  }
 
-                const player =
-                  byPlayer.get(row.playerId) ||
-                  ({
-                    id: row.playerId,
-                    name: candidate.name,
-                    avatar: candidate.avatar,
-                    country:
-                      candidate.countryCode && candidate.countryName
-                        ? { code: candidate.countryCode, name: candidate.countryName }
+                  const player =
+                    byPlayer.get(row.playerId) ||
+                    ({
+                      id: row.playerId,
+                      name: candidate.name,
+                      avatar: candidate.avatar,
+                      country:
+                        candidate.countryCode && candidate.countryName
+                          ? { code: candidate.countryCode, name: candidate.countryName }
+                          : null,
+                      team: candidate.teamId
+                        ? {
+                            id: candidate.teamId,
+                            name: candidate.teamName || '',
+                            blazon: candidate.teamBlazon,
+                            tier: candidate.teamTier,
+                          }
                         : null,
-                    team: candidate.teamId
-                      ? {
-                          id: candidate.teamId,
-                          name: candidate.teamName || '',
-                          blazon: candidate.teamBlazon,
-                          tier: candidate.teamTier,
-                        }
-                      : null,
-                    rating: 0,
-                    kills: 0,
-                    deaths: 0,
-                    assists: 0,
-                    maps: 0,
-                    matchRatings: new Map<number, { count: number; sum: number }>(),
-                  } as GlobalPlayerStatsRow & {
-                    matchRatings: Map<number, { count: number; sum: number }>;
-                  });
+                      rating: 0,
+                      kills: 0,
+                      deaths: 0,
+                      assists: 0,
+                      maps: 0,
+                      matchRatings: new Map<number, { count: number; sum: number }>(),
+                    } as GlobalPlayerStatsRow & {
+                      matchRatings: Map<number, { count: number; sum: number }>;
+                    });
 
-                const kills = Number(row.kills);
-                const assists = Number(row.assists);
-                const deaths = Number(row.deaths);
-                const rating = Util.getPlayerRating(kills, deaths, assists);
+                  const kills = Number(row.kills);
+                  const assists = Number(row.assists);
+                  const deaths = Number(row.deaths);
+                  const rating = Util.getPlayerRating(kills, deaths, assists);
 
-                player.kills += kills;
-                player.assists += assists;
-                player.deaths += deaths;
-                player.maps += 1;
+                  player.kills += kills;
+                  player.assists += assists;
+                  player.deaths += deaths;
+                  player.maps += 1;
 
-                if (Number.isFinite(rating)) {
-                  const matchRating = player.matchRatings.get(row.matchId) || { count: 0, sum: 0 };
-                  matchRating.count += 1;
-                  matchRating.sum += rating;
-                  player.matchRatings.set(row.matchId, matchRating);
-                }
+                  if (Number.isFinite(rating)) {
+                    const matchRating = player.matchRatings.get(row.matchId) || {
+                      count: 0,
+                      sum: 0,
+                    };
+                    matchRating.count += 1;
+                    matchRating.sum += rating;
+                    player.matchRatings.set(row.matchId, matchRating);
+                  }
 
-                byPlayer.set(row.playerId, player);
-              });
+                  byPlayer.set(row.playerId, player);
+                });
               }
 
               const players = [...byPlayer.values()].map(({ matchRatings, ...player }) => {
@@ -569,6 +568,90 @@ export default function () {
         };
       })
       .filter(Boolean);
+  });
+  ipcMain.handle(Constants.IPCRoute.MATCHES_PLAYER_ALL_TIME_STATS, async (_, playerId: number) => {
+    if (!Number.isFinite(playerId)) {
+      return null;
+    }
+
+    await backfillMissingMatchPlayerGameStats();
+
+    const rows = await DatabaseClient.prisma.$queryRaw<
+      Array<{
+        assists: bigint | number;
+        deaths: bigint | number;
+        kills: bigint | number;
+        rounds: bigint | number | null;
+      }>
+    >`
+        SELECT
+          "MatchPlayerGameStat"."kills" AS "kills",
+          "MatchPlayerGameStat"."assists" AS "assists",
+          "MatchPlayerGameStat"."deaths" AS "deaths",
+          COALESCE(
+            (
+              SELECT SUM("GameToTeam"."score")
+              FROM "GameToTeam"
+              WHERE "GameToTeam"."gameId" = "Game"."id"
+            ),
+            "Match"."totalRounds"
+          ) AS "rounds"
+        FROM "MatchPlayerGameStat"
+        INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+        LEFT JOIN "Game" ON "Game"."id" = "MatchPlayerGameStat"."gameKey"
+        WHERE "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+          AND "Match"."competitionId" IS NOT NULL
+          AND "Match"."matchType" <> 'FACEIT_PUG'
+          AND "MatchPlayerGameStat"."playerId" = ${playerId}
+      `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const totals = rows.reduce<{
+      assists: number;
+      deaths: number;
+      kills: number;
+      ratingMaps: number;
+      ratingSum: number;
+      rounds: number;
+    }>(
+      (acc, row) => {
+        const assists = Number(row.assists);
+        const deaths = Number(row.deaths);
+        const kills = Number(row.kills);
+        const rounds = Number(row.rounds || 0);
+        const rating = Util.getPlayerRating(kills, deaths, assists);
+
+        acc.assists += assists;
+        acc.deaths += deaths;
+        acc.kills += kills;
+        acc.rounds += Number.isFinite(rounds) ? rounds : 0;
+        acc.ratingMaps += Number.isFinite(rating) ? 1 : 0;
+        acc.ratingSum += Number.isFinite(rating) ? rating : 0;
+
+        return acc;
+      },
+      {
+        assists: 0,
+        deaths: 0,
+        kills: 0,
+        ratingMaps: 0,
+        ratingSum: 0,
+        rounds: 0,
+      },
+    );
+
+    return {
+      assists: totals.assists,
+      deaths: totals.deaths,
+      dpr: totals.rounds ? totals.deaths / totals.rounds : null,
+      kills: totals.kills,
+      kpr: totals.rounds ? totals.kills / totals.rounds : null,
+      maps: rows.length,
+      rating: totals.ratingMaps ? totals.ratingSum / totals.ratingMaps : null,
+    };
   });
   ipcMain.handle(
     Constants.IPCRoute.MATCHES_RECENT_PLAYER_RATINGS,
@@ -692,7 +775,7 @@ export default function () {
             },
           ],
         },
-        orderBy: { date: "desc" },
+        orderBy: { date: 'desc' },
       });
     },
   );
@@ -718,7 +801,7 @@ export default function () {
             },
           ],
         },
-        orderBy: { date: "asc" },
+        orderBy: { date: 'asc' },
       });
     },
   );

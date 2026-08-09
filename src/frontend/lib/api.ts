@@ -60,8 +60,7 @@ export default {
       mode: 'career' | 'custom-games' | 'main-menu';
       date?: string | null;
       role?: string | null;
-    }) =>
-      ipcRenderer.invoke(Constants.IPCRoute.APP_PRESENCE_UPDATE, update) as Promise<void>,
+    }) => ipcRenderer.invoke(Constants.IPCRoute.APP_PRESENCE_UPDATE, update) as Promise<void>,
     quit: () => ipcRenderer.invoke(Constants.IPCRoute.APP_QUIT) as Promise<unknown>,
     arenaModeStatus: (settings?: typeof Constants.Settings) =>
       ipcRenderer.invoke(Constants.IPCRoute.APP_ARENA_MODE_STATUS, settings) as Promise<{
@@ -416,6 +415,16 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PLAYER_RATING_GAMES, playerId) as Promise<
         Array<{ date: Date | string; teamIds: number[]; rating: number }>
       >,
+    playerAllTimeStats: (playerId: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PLAYER_ALL_TIME_STATS, playerId) as Promise<{
+        assists: number;
+        deaths: number;
+        dpr: number | null;
+        kills: number;
+        kpr: number | null;
+        maps: number;
+        rating: number | null;
+      } | null>,
     previous: <T = typeof Eagers.match>(
       query: Prisma.MatchFindManyArgs,
       id: number,
@@ -440,6 +449,22 @@ export default {
     delete: () => ipcRenderer.invoke(Constants.IPCRoute.MODS_DELETE) as Promise<Array<void>>,
     download: (name: string) => ipcRenderer.send(Constants.IPCRoute.MODS_DOWNLOAD, name),
     installed: () => ipcRenderer.invoke(Constants.IPCRoute.MODS_GET_INSTALLED) as Promise<string>,
+  },
+  news: {
+    all: (query?: Prisma.NewsItemFindManyArgs) =>
+      ipcRenderer.invoke(Constants.IPCRoute.NEWS_ALL, query) as Promise<
+        Array<Prisma.NewsItemGetPayload<unknown>>
+      >,
+    clearTest: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.NEWS_CLEAR_TEST) as Promise<Prisma.BatchPayload>,
+    generateTest: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.NEWS_GENERATE_TEST) as Promise<
+        Array<Prisma.NewsItemGetPayload<unknown>>
+      >,
+    updateMany: (query: Prisma.NewsItemUpdateManyArgs) =>
+      ipcRenderer.invoke(Constants.IPCRoute.NEWS_UPDATE_MANY, query) as Promise<
+        Array<Prisma.NewsItemGetPayload<unknown>>
+      >,
   },
   play: {
     exhibitionFederations: <T = unknown>() =>

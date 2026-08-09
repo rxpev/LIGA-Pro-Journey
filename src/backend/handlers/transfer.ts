@@ -6,7 +6,7 @@
 import { ipcMain } from 'electron';
 import { Prisma } from '@prisma/client';
 import { Constants } from '@liga/shared';
-import { DatabaseClient, WindowManager, Worldgen } from '@liga/backend/lib';
+import { DatabaseClient, News, WindowManager, Worldgen } from '@liga/backend/lib';
 
 /**
  * Register the IPC event handlers.
@@ -14,7 +14,6 @@ import { DatabaseClient, WindowManager, Worldgen } from '@liga/backend/lib';
  * @function
  */
 export default function () {
-
   ipcMain.handle(Constants.IPCRoute.TRANSFER_ALL, async (_, query: Prisma.TransferFindManyArgs) => {
     const transfers = await DatabaseClient.prisma.transfer.findMany(query);
     return transfers;
@@ -24,9 +23,11 @@ export default function () {
     // All safety checks (profile, transfer.target == user player, etc.)
     // are handled inside acceptUserPlayerTransfer.
     await Worldgen.acceptTransferOffer(Number(id));
+    await News.generateAutomaticItems();
 
     // Let all windows refresh their transfer UIs.
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+    WindowManager.sendAll(Constants.IPCRoute.NEWS_ITEMS_UPDATED);
     return Promise.resolve();
   });
 
@@ -56,8 +57,8 @@ export default function () {
           },
           to: transferDetails.to
             ? {
-              id: transferDetails.to.connect?.id,
-            }
+                id: transferDetails.to.connect?.id,
+              }
             : undefined,
           target: {
             id: transferDetails.target.connect.id,
