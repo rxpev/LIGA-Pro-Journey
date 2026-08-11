@@ -500,10 +500,14 @@ export default class DatabaseClient {
       await DatabaseClient.recalculateAllTeamCountryIdentities(pool[id].client);
       await DatabaseClient.normalizeCareerStintStarterValues(pool[id].client);
 
-      if (saveMeta.created && id !== 0) {
+      if (id !== 0) {
+        await DatabaseClient.repairMissingPreTransferCareerStints(pool[id].client);
         await DatabaseClient.ensureInitialCareerStints(pool[id].client);
       }
       await DatabaseClient.reconcileActiveCareerStints(pool[id].client);
+      if (id !== 0) {
+        await DatabaseClient.repairShortCompletedMatchPlayerLinks(pool[id].client);
+      }
       maintainedDatabasePaths.add(saveMeta.path);
     } catch (error) {
       await pool[id].client.$disconnect().catch(() => Promise.resolve());
@@ -583,12 +587,144 @@ export default class DatabaseClient {
     DatabaseClient.log.info('Initialized %d player career stints for save bootstrap.', missingStints.length);
   }
 
+  private static async repairMissingPreTransferCareerStints(prisma: PrismaClientExtended) {
+    const initialStart = new Date(Constants.NewSaveSeasonStartDate);
+    const players = await prisma.player.findMany({
+      select: {
+        id: true,
+        careerStints: {
+          select: {
+            id: true,
+            playerId: true,
+            teamId: true,
+            startedAt: true,
+          },
+          orderBy: {
+            startedAt: 'asc',
+          },
+        },
+        transfers: {
+          where: {
+            status: {
+              in: [
+                Constants.TransferStatus.TEAM_ACCEPTED,
+                Constants.TransferStatus.PLAYER_ACCEPTED,
+              ],
+            },
+          },
+          select: {
+            id: true,
+            teamIdFrom: true,
+            teamIdTo: true,
+            to: {
+              select: {
+                tier: true,
+              },
+            },
+          },
+          orderBy: {
+            id: 'asc',
+          },
+        },
+      },
+    });
+    const tx: Prisma.PrismaPromise<unknown>[] = [];
+
+    for (const player of players) {
+      const firstStint = player.careerStints[0];
+
+      if (!firstStint || firstStint.startedAt <= initialStart || firstStint.teamId == null) {
+        continue;
+      }
+
+      const sourceTransfer = player.transfers
+        .filter(
+          (transfer) =>
+            transfer.teamIdFrom === firstStint.teamId &&
+            transfer.teamIdTo != null &&
+            transfer.teamIdTo !== firstStint.teamId,
+        )
+        .sort((a, b) => b.id - a.id)[0];
+
+      if (!sourceTransfer?.teamIdTo) {
+        continue;
+      }
+
+      tx.push(
+        prisma.careerStint.create({
+          data: {
+            playerId: player.id,
+            teamId: sourceTransfer.teamIdTo,
+            tier: sourceTransfer.to?.tier ?? null,
+            starter: true,
+            startedAt: initialStart,
+            endedAt: firstStint.startedAt,
+          },
+        }),
+      );
+    }
+
+    if (tx.length > 0) {
+      await prisma.$transaction(tx);
+      DatabaseClient.log.info('Repaired %d missing pre-transfer career stint(s).', tx.length);
+    }
+  }
+
   private static async normalizeCareerStintStarterValues(prisma: PrismaClientExtended) {
     await prisma.$executeRaw`
       UPDATE "CareerStint"
       SET "starter" = 1
       WHERE "starter" IS NULL
     `;
+  }
+
+  private static async repairShortCompletedMatchPlayerLinks(prisma: PrismaClientExtended) {
+    const inserted = await prisma.$executeRawUnsafe(`
+      INSERT OR IGNORE INTO "_MatchToPlayer" ("A", "B")
+      WITH "shortMatches" AS (
+        SELECT
+          "Match"."id",
+          "Match"."date"
+        FROM "Match"
+        LEFT JOIN "_MatchToPlayer" ON "_MatchToPlayer"."A" = "Match"."id"
+        WHERE "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+          AND "Match"."competitionId" IS NOT NULL
+          AND "Match"."matchType" <> 'FACEIT_PUG'
+        GROUP BY "Match"."id"
+        HAVING COUNT("_MatchToPlayer"."B") < ${Constants.Application.SQUAD_MIN_LENGTH * 2}
+      ),
+      "rankedPlayers" AS (
+        SELECT
+          "shortMatches"."id" AS "matchId",
+          "CareerStint"."playerId",
+          ROW_NUMBER() OVER (
+            PARTITION BY "shortMatches"."id", "MatchToTeam"."teamId"
+            ORDER BY
+              "CareerStint"."starter" DESC,
+              "Player"."xp" DESC,
+              "CareerStint"."startedAt" DESC,
+              "CareerStint"."playerId" ASC
+          ) AS "rank"
+        FROM "shortMatches"
+        INNER JOIN "MatchToTeam" ON "MatchToTeam"."matchId" = "shortMatches"."id"
+        INNER JOIN "CareerStint"
+          ON "CareerStint"."teamId" = "MatchToTeam"."teamId"
+          AND "CareerStint"."startedAt" <= "shortMatches"."date"
+          AND (
+            "CareerStint"."endedAt" IS NULL
+            OR "CareerStint"."endedAt" >= "shortMatches"."date"
+          )
+        INNER JOIN "Player" ON "Player"."id" = "CareerStint"."playerId"
+        WHERE "MatchToTeam"."teamId" IS NOT NULL
+      )
+      SELECT "matchId", "playerId"
+      FROM "rankedPlayers"
+      WHERE "rank" <= ${Constants.Application.SQUAD_MIN_LENGTH}
+    `);
+
+    if (inserted > 0) {
+      DatabaseClient.log.info('Repaired %d missing completed match player link(s).', inserted);
+    }
   }
 
   private static async reconcileActiveCareerStints(prisma: PrismaClientExtended) {

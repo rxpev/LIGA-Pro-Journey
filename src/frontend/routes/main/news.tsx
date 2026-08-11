@@ -40,6 +40,28 @@ type NewsComment = {
   message: string;
   score: number;
 };
+type MapUsageDatum = {
+  color?: string | null;
+  map?: string | null;
+  name?: string | null;
+  plays?: number | null;
+};
+
+const mapIconImagesContext = (require as any).context(
+  '../../assets/faceit',
+  false,
+  /^\.\/[a-z0-9]+\.png$/,
+);
+const mapIconImages = (mapIconImagesContext.keys() as string[]).reduce(
+  (acc: Record<string, string>, key: string) => {
+    const iconName = key.replace('./', '').replace(/\.png$/, '');
+    const loadedIcon = mapIconImagesContext(key);
+    acc[iconName] = typeof loadedIcon === 'string' ? loadedIcon : loadedIcon?.default || '';
+    return acc;
+  },
+  {},
+);
+
 type WelcomeGraphic = {
   aspectRatio?: string | null;
   avatar?: string | null;
@@ -70,6 +92,8 @@ type WelcomeGraphic = {
 type NewsPayload = Record<string, unknown> & {
   comments?: NewsComment[];
   flagCode?: string | null;
+  hideArticleImage?: boolean;
+  mapUsage?: MapUsageDatum[];
   matchId?: number | null;
   qualifiedTeams?: RelatedTeam[] & Array<{ flagCode?: string | null }>;
   relatedPlayers?: RelatedPlayer[];
@@ -772,7 +796,110 @@ function splitOpeningBlock(body: string) {
   };
 }
 
-function NewsBody(props: { body: string; headline: string }) {
+function MapPoolArticleImage(props: { icon: string; map: string }) {
+  const icon = mapIconImages[props.icon];
+
+  return (
+    <figure className="border-base-content/10 bg-base-200/70 relative my-4 overflow-hidden border">
+      <img
+        src={Util.convertMapPool(props.map, Constants.Game.CSGO, true)}
+        alt={Util.convertMapPool(props.map, Constants.Game.CSGO)}
+        className="h-64 w-full object-cover"
+      />
+      {!!icon && (
+        <span className="bg-base-100/90 border-base-content/10 absolute right-3 bottom-3 flex size-14 items-center justify-center border shadow-lg backdrop-blur">
+          <img src={icon} alt="" className="max-h-10 max-w-10 object-contain" aria-hidden="true" />
+        </span>
+      )}
+    </figure>
+  );
+}
+
+function MapUsageChart(props: { item?: NewsItem }) {
+  const payload = props.item ? parsePayload(props.item) : {};
+  const getColor = (map: string, name: string) => {
+    const key = map || name.toLocaleLowerCase().replace(/\s+/g, '');
+    const colors: Record<string, string> = {
+      ancient: '#aaa53a',
+      anubis: '#d46914',
+      cache: '#eea72a',
+      de_ancient: '#aaa53a',
+      de_anubis: '#d46914',
+      de_cache: '#eea72a',
+      de_dust2: '#3fac59',
+      de_inferno: '#2f9097',
+      de_mirage: '#2f7fbd',
+      de_nuke: '#38a06a',
+      de_overpass: '#85a83f',
+      de_train: '#c49a2c',
+      de_vertigo: '#e28c1c',
+      dustii: '#3fac59',
+      inferno: '#2f9097',
+      mirage: '#2f7fbd',
+      nuke: '#38a06a',
+      overpass: '#85a83f',
+      train: '#c49a2c',
+      vertigo: '#e28c1c',
+    };
+
+    return colors[key] || '#8ba3b8';
+  };
+  const rows = Array.isArray(payload.mapUsage)
+    ? payload.mapUsage
+        .map((row) => ({
+          color:
+            typeof row?.color === 'string'
+              ? row.color
+              : getColor(typeof row?.map === 'string' ? row.map : '', String(row?.name || '')),
+          map: typeof row?.map === 'string' ? row.map : '',
+          name:
+            typeof row?.name === 'string' ? row.name : typeof row?.map === 'string' ? row.map : '',
+          plays: Number.isFinite(Number(row?.plays)) ? Number(row?.plays) : 0,
+        }))
+        .filter((row) => row.name)
+        .sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name))
+    : [];
+  const maxPlays = Math.max(1, ...rows.map((row) => row.plays));
+
+  if (!rows.length) {
+    return null;
+  }
+
+  return (
+    <figure className="border-base-content/10 bg-base-100/70 my-4 border p-4">
+      <figcaption className="text-base-content/70 mb-3 text-xs font-black uppercase">
+        Last Season Map Plays
+      </figcaption>
+      <div className="grid h-52 grid-cols-7 items-end gap-2">
+        {rows.map((row) => (
+          <div key={row.name} className="flex h-full min-w-0 flex-col justify-end gap-2">
+            <span className="text-center text-xs font-black">{row.plays.toLocaleString()}</span>
+            <div
+              className="min-h-1"
+              style={{
+                backgroundColor: row.color,
+                height: `${(row.plays / maxPlays) * 100}%`,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-7 gap-2">
+        {rows.map((row) => (
+          <span
+            key={`${row.name}__label`}
+            className="truncate text-center text-[11px] leading-tight opacity-70"
+            title={row.name}
+          >
+            {row.name}
+          </span>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
+function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
   const lines = props.body
     .split(/\r?\n/)
     .filter((line, index) => !(index === 0 && line.trim() === `# ${props.headline}`));
@@ -876,6 +1003,8 @@ function NewsBody(props: { body: string; headline: string }) {
     },
     h1: () => null,
     strong: ({ children }) => <strong className="text-base-content font-black">{children}</strong>,
+    ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
+    li: ({ children }) => <li>{children}</li>,
   };
   const inlineMarkdownComponents: Components = {
     ...markdownComponents,
@@ -892,6 +1021,22 @@ function NewsBody(props: { body: string; headline: string }) {
         .filter((block) => block.trim())
         .map((block, index) => {
           const blockLines = block.split('\n');
+          const mapImage = block.match(/^::map-image\{map="([^"]+)" icon="([^"]+)"\}$/);
+
+          if (mapImage) {
+            return (
+              <MapPoolArticleImage
+                key={`${index}__map_image`}
+                map={mapImage[1]}
+                icon={mapImage[2]}
+              />
+            );
+          }
+
+          if (block.trim() === '::map-usage-chart') {
+            return <MapUsageChart key={`${index}__map_usage_chart`} item={props.item} />;
+          }
+
           const allFlagLines = blockLines.every((line) =>
             /^- :flag_([a-z0-9_]+):\s+(.+)$/i.test(line),
           );
@@ -1242,9 +1387,10 @@ export default function () {
       null,
     [filteredItems, items, selectedId],
   );
+  const selectedPayload = React.useMemo(() => (selected ? parsePayload(selected) : {}), [selected]);
   const selectedWelcomeGraphic = React.useMemo(
-    () => (selected ? asWelcomeGraphic(parsePayload(selected).welcomeGraphic) : null),
-    [selected],
+    () => (selected ? asWelcomeGraphic(selectedPayload.welcomeGraphic) : null),
+    [selected, selectedPayload],
   );
   const selectedWelcomeBody = React.useMemo(
     () => (selectedWelcomeGraphic && selected ? splitOpeningBlock(selected.body) : null),
@@ -1371,17 +1517,19 @@ export default function () {
           {selected && (
             <article className="border-base-content/10 bg-base-200/80 mx-auto max-w-5xl border shadow-lg">
               <header className="border-base-content/10 border-b px-7 py-6">
-                <div className="text-base-content/60 mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase">
-                  {selected.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
-                  <Flag code={getFlagCode(selected)} className="opacity-100" />
-                  <span>{getTopicLabel(selected)}</span>
-                  <span className="flex items-center gap-1">
-                    <FaClock />
-                    {fmtDate(toDate(selected.publishedAt))}
-                  </span>
+                <div className="mx-auto max-w-3xl">
+                  <div className="text-base-content/60 mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase">
+                    {selected.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
+                    <Flag code={getFlagCode(selected)} className="opacity-100" />
+                    <span>{getTopicLabel(selected)}</span>
+                    <span className="flex items-center gap-1">
+                      <FaClock />
+                      {fmtDate(toDate(selected.publishedAt))}
+                    </span>
+                  </div>
+                  <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
+                  <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
                 </div>
-                <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
-                <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
               </header>
               {selectedWelcomeGraphic ? (
                 <div className="px-7 py-6">
@@ -1391,6 +1539,7 @@ export default function () {
                         <NewsBody
                           body={selectedWelcomeBody.openingBlock}
                           headline={selected.headline}
+                          item={selected}
                         />
                       </div>
                     )}
@@ -1399,22 +1548,32 @@ export default function () {
                       <NewsBody
                         body={selectedWelcomeBody.remainingBody}
                         headline={selected.headline}
+                        item={selected}
                       />
                     )}
                     <MatchPanel item={selected} />
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-[9rem_1fr] gap-6 px-7 py-6">
-                  <aside className="pt-1">
-                    <img
-                      src={selected.image || 'resources://blazonry/noteam.svg'}
-                      className="bg-base-100 border-base-content/10 aspect-square w-full border object-contain p-3"
-                    />
-                  </aside>
+                <div
+                  className={cx(
+                    'grid gap-6 px-7 py-6',
+                    selectedPayload.hideArticleImage === true
+                      ? 'grid-cols-1'
+                      : 'grid-cols-[9rem_1fr]',
+                  )}
+                >
+                  {selectedPayload.hideArticleImage !== true && (
+                    <aside className="pt-1">
+                      <img
+                        src={selected.image || 'resources://blazonry/noteam.svg'}
+                        className="bg-base-100 border-base-content/10 aspect-square w-full border object-contain p-3"
+                      />
+                    </aside>
+                  )}
                   <section className="min-w-0">
-                    <div className="max-w-3xl">
-                      <NewsBody body={selected.body} headline={selected.headline} />
+                    <div className="mx-auto max-w-3xl">
+                      <NewsBody body={selected.body} headline={selected.headline} item={selected} />
                     </div>
                     <MatchPanel item={selected} />
                   </section>

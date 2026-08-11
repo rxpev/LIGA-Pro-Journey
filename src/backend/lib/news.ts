@@ -34,6 +34,13 @@ type MatchSeed = Awaited<ReturnType<typeof getRecentCompletedMatches>>[number];
 type TransferSeed = Awaited<ReturnType<typeof getCompletedTransfersForNews>>[number];
 
 type NewsCompetition = NonNullable<MatchSeed['competition']>;
+type MapPoolNewsEntry = {
+  id: number;
+  position: number | null;
+  gameMap: {
+    name: string;
+  };
+};
 
 function toFlagCode(code?: string | null) {
   const normalized = code?.toLocaleLowerCase();
@@ -382,6 +389,214 @@ function seededNumber(seed: number, salt: number) {
 
 function seededInt(seed: number, salt: number, min: number, max: number) {
   return min + Math.floor(seededNumber(seed, salt) * (max - min + 1));
+}
+
+function stylizeMapName(map: string) {
+  const explicitNames: Record<string, string> = {
+    de_ancient: 'Ancient',
+    de_anubis: 'Anubis',
+    de_cache: 'Cache',
+    de_cbble: 'Cobblestone',
+    de_cbble_cz: 'Cobblestone',
+    de_cpl_fire: 'Fire',
+    de_cpl_mill: 'Mill',
+    de_cpl_strike: 'Mirage',
+    de_czl_freight: 'Freight',
+    de_czl_karnak: 'Karnak',
+    de_czl_silo: 'Silo',
+    de_dust2: 'Dust II',
+    de_dust2_cz: 'Dust II',
+    de_inferno: 'Inferno',
+    de_inferno_cz: 'Inferno',
+    de_mirage: 'Mirage',
+    de_nuke: 'Nuke',
+    de_overpass: 'Overpass',
+    de_russka: 'Russka',
+    de_russka_cz: 'Russka',
+    de_train: 'Train',
+    de_tuscan: 'Tuscan',
+    de_vertigo: 'Vertigo',
+  };
+
+  return (
+    explicitNames[map] ||
+    map
+      .replace(/^de_/, '')
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  );
+}
+
+function formatNewsDate(date: Date) {
+  return `${format(date, 'MMMM')} ${Util.toOrdinalSuffix(format(date, 'd'))}`;
+}
+
+function formatDurationAsCompound(duration: string) {
+  const match = duration.match(/^(\d+) (days|weeks|months|years)$/);
+
+  if (!match) {
+    return duration;
+  }
+
+  return `${match[1]}-${match[2].slice(0, -1)}`;
+}
+
+function formatMapIconName(map: string) {
+  return map
+    .replace(/^de_/, '')
+    .replace(/_cz$/, '')
+    .replace(/^dust2$/, 'dust2')
+    .replace(/^cpl_strike$/, 'mirage')
+    .replace(/^cpl_mill$/, 'ancient')
+    .replace(/^cpl_fire$/, 'inferno')
+    .replace(/^cbble$/, 'cache');
+}
+
+function getMapChartColor(map: string) {
+  const colors: Record<string, string> = {
+    de_mirage: '#2f7fbd',
+    de_inferno: '#2f9097',
+    de_nuke: '#38a06a',
+    de_dust2: '#3fac59',
+    de_dust2_cz: '#3fac59',
+    de_overpass: '#85a83f',
+    de_ancient: '#aaa53a',
+    de_train: '#c49a2c',
+    de_cache: '#eea72a',
+    de_vertigo: '#e28c1c',
+    de_anubis: '#d46914',
+  };
+
+  return colors[map] || '#8ba3b8';
+}
+
+async function getMapSeasonUsage(lastSeason: number | null, removedMap: string) {
+  const games = await DatabaseClient.prisma.game.findMany({
+    select: {
+      map: true,
+    },
+    where: {
+      match: {
+        status: Constants.MatchStatus.COMPLETED,
+        ...(lastSeason
+          ? {
+              competition: {
+                season: lastSeason,
+              },
+            }
+          : {}),
+      },
+    },
+  });
+  const counts = games.reduce<Map<string, number>>((acc, game) => {
+    acc.set(game.map, (acc.get(game.map) || 0) + 1);
+    return acc;
+  }, new Map());
+  const rankedMaps = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const rankIndex = rankedMaps.findIndex(([map]) => map === removedMap);
+
+  return {
+    count: counts.get(removedMap) || 0,
+    rank: rankIndex >= 0 ? rankIndex + 1 : rankedMaps.length + 1,
+  };
+}
+
+async function getMapUsageCounts(lastSeason: number | null, maps: string[]) {
+  const games = await DatabaseClient.prisma.game.findMany({
+    select: {
+      map: true,
+    },
+    where: {
+      map: {
+        in: maps,
+      },
+      match: {
+        status: Constants.MatchStatus.COMPLETED,
+        ...(lastSeason
+          ? {
+              competition: {
+                season: lastSeason,
+              },
+            }
+          : {}),
+      },
+    },
+  });
+  const counts = games.reduce<Map<string, number>>((acc, game) => {
+    acc.set(game.map, (acc.get(game.map) || 0) + 1);
+    return acc;
+  }, new Map());
+
+  return maps
+    .map((map) => ({
+      color: getMapChartColor(map),
+      map,
+      name: stylizeMapName(map),
+      plays: counts.get(map) || 0,
+    }))
+    .sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name));
+}
+
+async function getMapLastPlayedYear(map: string, before: Date) {
+  const game = await DatabaseClient.prisma.game.findFirst({
+    select: {
+      match: {
+        select: {
+          date: true,
+        },
+      },
+    },
+    where: {
+      map,
+      match: {
+        date: {
+          lt: startOfDay(before),
+        },
+        status: Constants.MatchStatus.COMPLETED,
+      },
+    },
+    orderBy: {
+      match: {
+        date: 'desc',
+      },
+    },
+  });
+
+  return game?.match?.date ? new Date(game.match.date).getFullYear() : null;
+}
+
+async function getMapFirstPlayedInCurrentSpell(map: string, lastSeason: number | null) {
+  const game = await DatabaseClient.prisma.game.findFirst({
+    select: {
+      match: {
+        select: {
+          date: true,
+        },
+      },
+    },
+    where: {
+      map,
+      match: {
+        status: Constants.MatchStatus.COMPLETED,
+        ...(lastSeason
+          ? {
+              competition: {
+                season: lastSeason,
+              },
+            }
+          : {}),
+      },
+    },
+    orderBy: {
+      match: {
+        date: 'asc',
+      },
+    },
+  });
+
+  return game?.match?.date || null;
 }
 
 function isAwper(player?: { role?: string | null } | null) {
@@ -2029,6 +2244,222 @@ async function buildTransferDraft(
     },
     publishedAt: articleDate,
   };
+}
+
+export async function createMapPoolRotationItem(args: {
+  activeMaps: MapPoolNewsEntry[];
+  demotedMap: MapPoolNewsEntry;
+  gameVersionSlug: Constants.Game;
+  profileSeason?: number | null;
+  promotedMap: MapPoolNewsEntry;
+  publishedAt: Date;
+}) {
+  const promotedSlug = args.promotedMap.gameMap.name;
+  const demotedSlug = args.demotedMap.gameMap.name;
+  const promotedName = stylizeMapName(promotedSlug);
+  const demotedName = stylizeMapName(demotedSlug);
+  const seed = (args.profileSeason || 0) * 131 + args.promotedMap.id * 17 + args.demotedMap.id;
+  const articleDate = startOfDay(args.publishedAt);
+  const lastSeason = args.profileSeason ? Math.max(1, args.profileSeason - 1) : null;
+  const previousPlayedYear = await getMapLastPlayedYear(promotedSlug, articleDate);
+  const usage = await getMapSeasonUsage(lastSeason, demotedSlug);
+  const outgoingStartedAt = await getMapFirstPlayedInCurrentSpell(demotedSlug, lastSeason);
+  const outgoingDuration =
+    formatBenchDuration(outgoingStartedAt, articleDate) ||
+    (lastSeason ? `season ${lastSeason}` : 'the last season');
+  const returningDuration = previousPlayedYear
+    ? formatBenchDuration(new Date(previousPlayedYear, 0, 1), articleDate) || 'time'
+    : null;
+  const returningDurationCompound = returningDuration
+    ? formatDurationAsCompound(returningDuration)
+    : null;
+  const outgoingDurationCompound = formatDurationAsCompound(outgoingDuration);
+  const dateLabel = formatNewsDate(articleDate);
+  const finalPool = args.activeMaps
+    .slice()
+    .sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
+    .map((map) => ({
+      name: stylizeMapName(map.gameMap.name),
+      slug: map.gameMap.name,
+    }));
+  const previousPool = args.activeMaps
+    .filter((map) => map.id !== args.promotedMap.id)
+    .concat(args.demotedMap)
+    .sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
+    .map((map) => map.gameMap.name);
+  const mapUsage = await getMapUsageCounts(lastSeason, previousPool);
+  const fillMaps = (text: string, first = promotedName, second = demotedName) =>
+    text.replace(/MAP/g, () => {
+      const value = first;
+      first = second;
+      return value;
+    });
+  const headline = fillMaps(
+    pickVariant(
+      [
+        'MAP replaces MAP in the Active Duty map pool.',
+        'MAP takes the place of MAP in the Active Duty pool.',
+        'MAP enters the Active Duty pool in place of MAP.',
+        'MAP has replaced MAP in the Active Duty map pool.',
+        'MAP joins the Active Duty pool as MAP is removed.',
+        'MAP rotates into the Active Duty pool, replacing MAP.',
+        'MAP is added to the Active Duty pool at the expense of MAP.',
+        'MAP returns to the Active Duty pool in place of MAP.',
+        'MAP makes its way into the Active Duty pool as MAP drops out.',
+        'MAP swaps into the Active Duty pool for MAP.',
+        'MAP is introduced to the Active Duty pool, replacing MAP.',
+        "MAP takes over MAP's spot in the Active Duty map pool.",
+        'MAP moves into the Active Duty pool while MAP moves out.',
+        `${demotedName} is rotated out of the Active Duty pool in favor of ${promotedName}.`,
+        `${demotedName} makes way for ${promotedName} in the Active Duty pool.`,
+        'The Active Duty pool sees MAP replace MAP.',
+        'The latest map pool change brings MAP in for MAP.',
+        'MAP becomes part of the Active Duty pool, with MAP departing.',
+        'The Active Duty rotation sees MAP take the place of MAP.',
+        `${demotedName} is swapped out for ${promotedName} in the Active Duty map pool.`,
+      ],
+      seed,
+    ),
+  ).replace(/\./g, '');
+  const summary = pickVariant(
+    [
+      'Valve has once again made changes to the map pool following the end of the season.',
+      'Valve has opted for another map pool adjustment after the season came to a close.',
+      'The conclusion of the season has brought another map pool shake-up from Valve.',
+      'Valve is ringing in another map pool change following the end of the season.',
+      'Another season has ended, and Valve has responded with a fresh map pool update.',
+      'Valve has used the offseason to make another change to the Active Duty pool.',
+      'The map pool is changing again as Valve makes another post-season adjustment.',
+      "Valve has introduced another map pool change in the wake of the season's conclusion.",
+      'The end of the season has once again prompted Valve to refresh the map pool.',
+      'Valve has moved to shake up the Active Duty pool following the latest season.',
+      'Another map pool rotation is here as Valve makes changes after the season.',
+      'Valve has once again taken the opportunity to alter the map pool between seasons.',
+      'The offseason brings another Active Duty pool change from Valve.',
+      'Valve has made another tweak to the competitive map pool after the season wrapped up.',
+      'With the season now over, Valve has opted to make another change to the map rotation.',
+      'Valve has once again refreshed the map pool heading into the next stretch of competition.',
+      'The competitive map pool is getting another update following the end of the season.',
+      'Valve has chosen the post-season window for another Active Duty pool shake-up.',
+      'The latest season has concluded with Valve making another adjustment to the map pool.',
+      'Valve is changing up the map rotation once again after the conclusion of the season.',
+    ],
+    seed + 11,
+  );
+  const firstSentence = fillMaps(
+    pickVariant(
+      [
+        'Valve have announced that MAP will replace MAP following the end of the current season on DATE.',
+        'Valve have announced that MAP will take the place of MAP in the Active Duty pool following the end of the current season on DATE.',
+        'Valve have confirmed that MAP will replace MAP once the current season concludes on DATE.',
+        'MAP will replace MAP in the Active Duty map pool after the current season ends on DATE, Valve have announced.',
+        'Valve are set to swap MAP for MAP following the conclusion of the current season on DATE.',
+        'Valve have revealed that MAP will enter the Active Duty pool in place of MAP when the season ends on DATE.',
+        'The Active Duty pool will see MAP replace MAP following the end of the current season on DATE.',
+        'Valve have confirmed a map pool rotation that will see MAP come in for MAP after the season concludes on DATE.',
+        "MAP is set to take over MAP's spot in the Active Duty pool once the current season wraps up on DATE.",
+        "Valve will rotate MAP into the Active Duty pool for MAP following the season's conclusion on DATE.",
+        'Valve have announced a post-season map pool change, with MAP replacing MAP on DATE.',
+        'MAP will join the Active Duty pool at the expense of MAP after the current season comes to an end on DATE.',
+        'Valve have opted to bring MAP into the Active Duty pool for MAP following the DATE conclusion of the current season.',
+        'The end of the current season on DATE will bring a change to the Active Duty pool, with MAP replacing MAP.',
+        "Valve have unveiled their next Active Duty pool adjustment, as MAP will replace MAP following the season's end on DATE.",
+      ],
+      seed + 23,
+    ),
+  ).replace(/DATE/g, dateLabel);
+  const secondSentence = previousPlayedYear
+    ? pickVariant(
+        [
+          `${promotedName} returns to the Active Duty pool after a ${returningDurationCompound} hiatus, having been removed in ${previousPlayedYear} in favor of ${demotedName}.`,
+          `${promotedName} makes its return to the map pool following ${returningDuration} away, after being replaced by ${demotedName} in ${previousPlayedYear}.`,
+          `${promotedName} is back in the Active Duty pool for the first time since ${previousPlayedYear}, when it made way for ${demotedName}.`,
+          `${promotedName} returns after ${returningDuration} out of rotation, having last been removed from the pool in ${previousPlayedYear} for ${demotedName}.`,
+          `${promotedName} rejoins the competitive map pool following a ${returningDurationCompound} absence that began when ${demotedName} replaced it in ${previousPlayedYear}.`,
+          `${promotedName} makes its comeback to the Active Duty pool after being out since ${previousPlayedYear}, when it was swapped out for ${demotedName}.`,
+          `${promotedName} returns to competitive rotation after ${returningDuration} on the sidelines, having exited the pool in ${previousPlayedYear} in favor of ${demotedName}.`,
+          `${promotedName} is set to re-enter the Active Duty pool after a ${returningDurationCompound} break, with its previous removal coming in ${previousPlayedYear} for ${demotedName}.`,
+          `${promotedName} returns to the map pool after ${returningDuration} away from Active Duty, having been replaced by ${demotedName} back in ${previousPlayedYear}.`,
+          `${promotedName} rejoins the rotation following a ${returningDurationCompound} hiatus, ending an absence that began when it was removed for ${demotedName} in ${previousPlayedYear}.`,
+        ],
+        seed + 31,
+      )
+    : pickVariant(
+        [
+          `${promotedName} enters the Active Duty pool, replacing ${demotedName} after its ${outgoingDurationCompound} spell in the rotation.`,
+          `${promotedName} joins the map pool in place of ${demotedName}, which had been part of the rotation for ${outgoingDuration}.`,
+          `${promotedName} is added to the Active Duty pool as ${demotedName} departs following a ${outgoingDurationCompound} stint.`,
+          `${promotedName} takes a place in the competitive map pool, replacing ${demotedName} after ${outgoingDuration} in the rotation.`,
+          `${promotedName} moves into the Active Duty pool while ${demotedName} exits after spending ${outgoingDuration} in the map pool.`,
+          `${promotedName} joins the competitive rotation in place of ${demotedName}, ending the latter's ${outgoingDurationCompound} run in the pool.`,
+          `${promotedName} is brought into the Active Duty pool as ${demotedName} makes way after ${outgoingDuration} in rotation.`,
+          `${promotedName} enters the map pool at the expense of ${demotedName}, which had occupied a spot for ${outgoingDuration}.`,
+          `${promotedName} becomes part of the Active Duty rotation as ${demotedName} drops out following a ${outgoingDurationCompound} stint.`,
+          `${promotedName} rotates into the Active Duty pool for ${demotedName}, bringing the outgoing map's ${outgoingDurationCompound} spell to an end.`,
+        ],
+        seed + 37,
+      );
+  const rankLabel = Util.toOrdinalSuffix(usage.rank);
+  const statisticSentence = pickVariant(
+    [
+      `The departing ${demotedName} was played ${usage.count} times over the course of the last season, making it the ${rankLabel}-most played map in the pool.`,
+      `${demotedName} featured ${usage.count} times throughout the previous season, ranking as the ${rankLabel}-most played map.`,
+      `The outgoing ${demotedName} was picked ${usage.count} times last season, placing it ${rankLabel} in terms of overall play frequency.`,
+      `${demotedName} leaves the pool after being played ${usage.count} times during the last season, the ${rankLabel}-highest total among all maps.`,
+      `Over the previous season, ${demotedName} was played ${usage.count} times, making it the ${rankLabel}-most frequently played map.`,
+      `The leaving ${demotedName} appeared ${usage.count} times across last season and finished as the ${rankLabel}-most played map in the rotation.`,
+      `${demotedName} saw ${usage.count} plays during the previous season, ranking ${rankLabel} among the most frequently played maps.`,
+      `The outgoing ${demotedName} was used ${usage.count} times throughout the season, enough to make it the ${rankLabel}-most played map.`,
+      `${demotedName} exits the pool after recording ${usage.count} plays last season, placing it ${rankLabel} in the map usage standings.`,
+      `The departing ${demotedName} featured in ${usage.count} matches during the previous season, making it the ${rankLabel}-most played map overall.`,
+      `${demotedName} was played ${usage.count} times over the last season and ranked ${rankLabel} in total usage across the pool.`,
+      `The map being removed saw ${usage.count} plays throughout the previous season, finishing as the ${rankLabel}-most played in rotation.`,
+      `${demotedName} leaves Active Duty after appearing ${usage.count} times last season, the ${rankLabel}-most among the available maps.`,
+      `Across the last season, ${demotedName} was selected ${usage.count} times, ranking as the ${rankLabel}-most played map in the pool.`,
+      `The outgoing ${demotedName} accumulated ${usage.count} plays during the previous season, placing it ${rankLabel} on the season's map frequency list.`,
+    ],
+    seed + 41,
+  );
+  const finalPoolBlock = [
+    'The new map pool is:',
+    '',
+    ...finalPool.map((map) => `- ${map.name}`),
+  ].join('\n');
+
+  return createDrafts([
+    {
+      type: 'ARTICLE',
+      topic: 'COMPETITIONS',
+      headline,
+      summary,
+      body: [
+        firstSentence,
+        '',
+        `::map-image{map="${promotedSlug}" icon="${formatMapIconName(promotedSlug)}"}`,
+        '',
+        secondSentence,
+        '',
+        statisticSentence,
+        '',
+        '::map-usage-chart',
+        '',
+        finalPoolBlock,
+      ].join('\n'),
+      image: null,
+      priority: 78,
+      eventKey: `${AUTO_EVENT_PREFIX}:map-pool:${args.profileSeason || 0}:${promotedSlug}:${demotedSlug}`,
+      payload: {
+        flagCode: 'other',
+        gameVersionSlug: args.gameVersionSlug,
+        promotedMap: promotedSlug,
+        demotedMap: demotedSlug,
+        hideArticleImage: true,
+        activeMaps: finalPool.map((map) => map.slug),
+        mapUsage,
+      },
+      publishedAt: articleDate,
+    },
+  ]);
 }
 
 async function createDrafts(drafts: NewsDraft[]) {

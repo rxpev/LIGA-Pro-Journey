@@ -8,6 +8,7 @@ import * as Autofill from './autofill';
 import * as Simulator from './simulator';
 import * as WindowManager from './window-manager';
 import * as Engine from './engine';
+import * as News from './news';
 import { syncLeagueSchedule } from '@liga/backend/prisma/seeds/030-leagues';
 import Tournament from '@liga/shared/tournament';
 import DatabaseClient from './database-client';
@@ -229,6 +230,21 @@ function isDateWithinCareerStint(
 }
 
 function getSimulatedLineup(team: SimulatedTeam, matchDate: Date): Array<SimulatedParticipant> {
+  const appendUniquePlayers = <T extends { id: number }>(target: T[], candidates: T[]) => {
+    const seen = new Set(target.map((player) => player.id));
+
+    for (const player of candidates) {
+      if (seen.has(player.id)) continue;
+      target.push(player);
+      seen.add(player.id);
+
+      if (target.length >= Constants.Application.SQUAD_MIN_LENGTH) {
+        break;
+      }
+    }
+
+    return target;
+  };
   const teamStintPlayers = (team.careerStints ?? [])
     .filter((stint) => isDateWithinCareerStint(matchDate, stint, team.id))
     .sort((a, b) => {
@@ -279,11 +295,33 @@ function getSimulatedLineup(team: SimulatedTeam, matchDate: Date): Array<Simulat
       ...entry.player,
       starter: entry.stint.starter,
     }));
-  const lineup = teamHistoricalLineup.length
-    ? teamHistoricalLineup
-    : playerHistoricalLineup.length
-      ? playerHistoricalLineup
-      : team.players;
+  const nearbyHistoricalLineup = (team.careerStints ?? [])
+    .filter((stint) => stint.teamId === team.id && new Date(stint.startedAt) <= matchDate)
+    .sort((a, b) => {
+      if (Number(b.starter) !== Number(a.starter)) {
+        return Number(b.starter) - Number(a.starter);
+      }
+
+      return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+    })
+    .reduce<Array<(typeof teamHistoricalLineup)[number]>>((acc, stint) => {
+      if (acc.some((player) => player.id === stint.player.id)) {
+        return acc;
+      }
+
+      acc.push({
+        ...stint.player,
+        starter: stint.starter,
+      });
+      return acc;
+    }, []);
+  const lineup = appendUniquePlayers(
+    appendUniquePlayers(
+      appendUniquePlayers([...teamHistoricalLineup], playerHistoricalLineup),
+      nearbyHistoricalLineup,
+    ),
+    team.players,
+  );
   const sortedPlayers = lineup.sort((a, b) => {
     if (Number(b.starter) !== Number(a.starter)) {
       return Number(b.starter) - Number(a.starter);
@@ -1194,6 +1232,19 @@ export async function rotateMapPoolForNewSeason() {
       },
     }),
   ]);
+
+  const updatedActiveMaps = activeMaps
+    .filter((map) => map.id !== demotedMap.id)
+    .concat({ ...promotedMap, position: demotedMap.position });
+
+  await News.createMapPoolRotationItem({
+    activeMaps: updatedActiveMaps,
+    demotedMap,
+    gameVersionSlug,
+    profileSeason: profile.season,
+    promotedMap,
+    publishedAt: profile.date || new Date(),
+  });
 
   Engine.Runtime.Instance.log.info(
     'Rotated map pool for %s: moved %s into active and %s into reserve.',
