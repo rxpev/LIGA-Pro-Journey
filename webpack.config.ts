@@ -115,6 +115,10 @@ export const ElectronRendererWebpackConfig: Configuration = {
         type: 'asset/resource',
       },
       {
+        test: /\.(woff2?|ttf|otf)$/,
+        type: 'asset/resource',
+      },
+      {
         test: /(\.png|\.svg)$/,
         type: 'asset/inline',
       },

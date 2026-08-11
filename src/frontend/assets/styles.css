@@ -9,6 +9,83 @@
     sunset --prefersdark;
 }
 
+@font-face {
+  font-family: 'BEORNHEARD';
+  font-style: italic;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/BEORNHEARD.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JUNEVILLE';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/JUNEVILLE.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'BEBAS NEUE';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/BEBAS-NEUE.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'VERDANA WELCOME';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/VERDANA-BOLD.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'ECHIZEN';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/ECHIZEN.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'STAATLICHES';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/STAATLICHES.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'PEANUT';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/PEANUT.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'JARED';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/JARED.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'AMARANTH';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/AMARANTH-BOLD.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'CAPTURE IT';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/CAPTURE-IT.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'NATURE FORCE';
+  font-style: normal;
+  font-weight: 900;
+  src: url('../../resources/fonts/welcome/NATURE-FORCE.otf') format('opentype');
+}
+
 /** for smoother startups */
 @keyframes fadein {
   from {

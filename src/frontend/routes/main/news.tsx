@@ -40,6 +40,33 @@ type NewsComment = {
   message: string;
   score: number;
 };
+type WelcomeGraphic = {
+  aspectRatio?: string | null;
+  avatar?: string | null;
+  avatarLayout?: {
+    bottom?: string | null;
+    height?: string | null;
+    left?: string | null;
+    maxWidth?: string | null;
+  } | null;
+  fontFamily?: string | null;
+  fontSize?: string | null;
+  fontStyle?: string | null;
+  letterSpacing?: string | null;
+  nameLayout?: {
+    left?: string | null;
+    top?: string | null;
+    width?: string | null;
+  } | null;
+  playerName?: string | null;
+  rotate?: string | null;
+  skewX?: string | null;
+  teamSlug?: string | null;
+  template?: string | null;
+  textColor?: string | null;
+  textGradient?: string | null;
+  textStroke?: string | null;
+};
 type NewsPayload = Record<string, unknown> & {
   comments?: NewsComment[];
   flagCode?: string | null;
@@ -48,6 +75,7 @@ type NewsPayload = Record<string, unknown> & {
   relatedPlayers?: RelatedPlayer[];
   relatedTeams?: RelatedTeam[];
   showMatchPanel?: boolean;
+  welcomeGraphic?: WelcomeGraphic | null;
 };
 type PlayerHoverStats = Awaited<ReturnType<typeof api.matches.playerAllTimeStats>>;
 type HoverPlayer = {
@@ -639,6 +667,111 @@ function getTopicLabel(item: NewsItem) {
   return item.topic.charAt(0) + item.topic.slice(1).toLowerCase();
 }
 
+function asWelcomeGraphic(value: unknown): WelcomeGraphic | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const template = typeof value.template === 'string' ? value.template : null;
+  const playerName = typeof value.playerName === 'string' ? value.playerName : null;
+
+  if (!template || !playerName) {
+    return null;
+  }
+
+  const avatarLayout = isRecord(value.avatarLayout) ? value.avatarLayout : null;
+  const nameLayout = isRecord(value.nameLayout) ? value.nameLayout : null;
+
+  return {
+    aspectRatio: typeof value.aspectRatio === 'string' ? value.aspectRatio : null,
+    avatar: typeof value.avatar === 'string' ? value.avatar : null,
+    avatarLayout: avatarLayout
+      ? {
+          bottom: typeof avatarLayout.bottom === 'string' ? avatarLayout.bottom : null,
+          height: typeof avatarLayout.height === 'string' ? avatarLayout.height : null,
+          left: typeof avatarLayout.left === 'string' ? avatarLayout.left : null,
+          maxWidth: typeof avatarLayout.maxWidth === 'string' ? avatarLayout.maxWidth : null,
+        }
+      : null,
+    fontFamily: typeof value.fontFamily === 'string' ? value.fontFamily : null,
+    fontSize: typeof value.fontSize === 'string' ? value.fontSize : null,
+    fontStyle: typeof value.fontStyle === 'string' ? value.fontStyle : null,
+    letterSpacing: typeof value.letterSpacing === 'string' ? value.letterSpacing : null,
+    nameLayout: nameLayout
+      ? {
+          left: typeof nameLayout.left === 'string' ? nameLayout.left : null,
+          top: typeof nameLayout.top === 'string' ? nameLayout.top : null,
+          width: typeof nameLayout.width === 'string' ? nameLayout.width : null,
+        }
+      : null,
+    playerName,
+    rotate: typeof value.rotate === 'string' ? value.rotate : null,
+    skewX: typeof value.skewX === 'string' ? value.skewX : null,
+    teamSlug: typeof value.teamSlug === 'string' ? value.teamSlug : null,
+    template,
+    textColor: typeof value.textColor === 'string' ? value.textColor : null,
+    textGradient: typeof value.textGradient === 'string' ? value.textGradient : null,
+    textStroke: typeof value.textStroke === 'string' ? value.textStroke : null,
+  };
+}
+
+function WelcomeGraphicImage(props: { graphic: WelcomeGraphic }) {
+  const fontFamily = props.graphic.fontFamily
+    ? `${props.graphic.fontFamily}, Impact, Haettenschweiler, 'Arial Black', sans-serif`
+    : "Impact, Haettenschweiler, 'Arial Black', sans-serif";
+  const avatar = props.graphic.avatarLayout;
+  const name = props.graphic.nameLayout;
+
+  return (
+    <figure
+      className="border-base-content/10 bg-base-100 relative mb-6 overflow-hidden border"
+      style={{ aspectRatio: props.graphic.aspectRatio || '1836 / 857' }}
+    >
+      <img src={props.graphic.template} className="absolute inset-0 size-full object-cover" />
+      <img
+        src={props.graphic.avatar || 'resources://avatars/empty.png'}
+        className="absolute object-contain object-bottom drop-shadow-[0_18px_22px_rgba(0,0,0,0.65)]"
+        style={{
+          bottom: avatar?.bottom || '0%',
+          height: avatar?.height || '90%',
+          left: avatar?.left || '3%',
+          maxWidth: avatar?.maxWidth || '37%',
+        }}
+      />
+      <figcaption
+        className="absolute overflow-visible text-center leading-[1.16] font-black tracking-normal whitespace-nowrap uppercase drop-shadow-[0_8px_12px_rgba(0,0,0,0.9)]"
+        style={{
+          color: props.graphic.textColor || '#ffffff',
+          fontFamily,
+          fontSize: props.graphic.fontSize || '4.5rem',
+          fontStyle: props.graphic.fontStyle || 'normal',
+          letterSpacing: props.graphic.letterSpacing || '0',
+          left: name?.left || '68%',
+          backgroundClip: props.graphic.textGradient ? 'text' : undefined,
+          backgroundImage: props.graphic.textGradient || undefined,
+          top: name?.top || '84%',
+          transform: `translate(-50%, -50%) rotate(${props.graphic.rotate || '0deg'}) skewX(${props.graphic.skewX || '0deg'})`,
+          WebkitBackgroundClip: props.graphic.textGradient ? 'text' : undefined,
+          WebkitTextFillColor: props.graphic.textGradient ? 'transparent' : undefined,
+          WebkitTextStroke: props.graphic.textStroke || undefined,
+          width: name?.width || '34%',
+        }}
+      >
+        {props.graphic.playerName}
+      </figcaption>
+    </figure>
+  );
+}
+
+function splitOpeningBlock(body: string) {
+  const blocks = body.split(/\r?\n\s*\r?\n/).filter((block) => block.trim());
+
+  return {
+    openingBlock: blocks[0] || '',
+    remainingBody: blocks.slice(1).join('\n\n'),
+  };
+}
+
 function NewsBody(props: { body: string; headline: string }) {
   const lines = props.body
     .split(/\r?\n/)
@@ -1109,6 +1242,14 @@ export default function () {
       null,
     [filteredItems, items, selectedId],
   );
+  const selectedWelcomeGraphic = React.useMemo(
+    () => (selected ? asWelcomeGraphic(parsePayload(selected).welcomeGraphic) : null),
+    [selected],
+  );
+  const selectedWelcomeBody = React.useMemo(
+    () => (selectedWelcomeGraphic && selected ? splitOpeningBlock(selected.body) : null),
+    [selected?.body, selectedWelcomeGraphic],
+  );
 
   React.useEffect(() => {
     if (!selected || selected.read) {
@@ -1242,20 +1383,43 @@ export default function () {
                 <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
                 <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
               </header>
-              <div className="grid grid-cols-[9rem_1fr] gap-6 px-7 py-6">
-                <aside className="pt-1">
-                  <img
-                    src={selected.image || 'resources://blazonry/noteam.svg'}
-                    className="bg-base-100 border-base-content/10 aspect-square w-full border object-contain p-3"
-                  />
-                </aside>
-                <section className="min-w-0">
-                  <div className="max-w-3xl">
-                    <NewsBody body={selected.body} headline={selected.headline} />
+              {selectedWelcomeGraphic ? (
+                <div className="px-7 py-6">
+                  <div className="mx-auto max-w-3xl">
+                    {selectedWelcomeBody?.openingBlock && (
+                      <div className="mb-6">
+                        <NewsBody
+                          body={selectedWelcomeBody.openingBlock}
+                          headline={selected.headline}
+                        />
+                      </div>
+                    )}
+                    <WelcomeGraphicImage graphic={selectedWelcomeGraphic} />
+                    {selectedWelcomeBody?.remainingBody && (
+                      <NewsBody
+                        body={selectedWelcomeBody.remainingBody}
+                        headline={selected.headline}
+                      />
+                    )}
+                    <MatchPanel item={selected} />
                   </div>
-                  <MatchPanel item={selected} />
-                </section>
-              </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[9rem_1fr] gap-6 px-7 py-6">
+                  <aside className="pt-1">
+                    <img
+                      src={selected.image || 'resources://blazonry/noteam.svg'}
+                      className="bg-base-100 border-base-content/10 aspect-square w-full border object-contain p-3"
+                    />
+                  </aside>
+                  <section className="min-w-0">
+                    <div className="max-w-3xl">
+                      <NewsBody body={selected.body} headline={selected.headline} />
+                    </div>
+                    <MatchPanel item={selected} />
+                  </section>
+                </div>
+              )}
               <section className="px-7 pb-6">
                 <div className="mx-auto max-w-3xl">
                   <RelatedLinks item={selected} />

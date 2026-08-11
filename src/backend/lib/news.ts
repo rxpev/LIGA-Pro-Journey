@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import DatabaseClient from './database-client';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
+import { getWelcomeGraphic } from './news-welcome-graphics';
 
 const PROTOTYPE_EVENT_PREFIX = 'prototype-news';
 const AUTO_EVENT_PREFIX = 'auto-news';
@@ -450,6 +451,10 @@ function playerLink(player?: { id?: number | null; name?: string | null } | null
     : `**${name}**`;
 }
 
+function cleanCompetitionNewsName(name: string) {
+  return name.replace(/\s+world$/i, '').trim();
+}
+
 function getCompetitionNewsName(
   competition: {
     federation?: { slug?: string | null } | null;
@@ -483,7 +488,9 @@ function getCompetitionNewsName(
       : name;
   })();
 
-  return options?.trophy ? rawName.replace(/\s+Playoffs\b/gi, '').trim() : rawName;
+  const cleanedName = cleanCompetitionNewsName(rawName);
+
+  return options?.trophy ? cleanedName.replace(/\s+Playoffs\b/gi, '').trim() : cleanedName;
 }
 
 function competitionLink(competition: {
@@ -910,10 +917,14 @@ async function getRecentTeamTitles(
       teamId?: number | null;
     }>;
   },
+  afterDate?: Date | null,
 ) {
   if (!teamId) {
     return [];
   }
+
+  const titleAfterDate =
+    afterDate || (beforeDate ? new Date(beforeDate.getTime() - 365 * 24 * 60 * 60 * 1000) : null);
 
   return DatabaseClient.prisma.competitionToTeam
     .findMany({
@@ -953,7 +964,7 @@ async function getRecentTeamTitles(
             ? {
                 some: {
                   date: {
-                    gte: new Date(beforeDate.getTime() - 365 * 24 * 60 * 60 * 1000),
+                    ...(titleAfterDate ? { gte: titleAfterDate } : {}),
                     lte: beforeDate,
                   },
                 },
@@ -1329,6 +1340,8 @@ async function buildTransferDraft(
   const backfillDestinationLabel = teamLink(backfillDeparture?.from);
   const benchedName = playerName(benchedPlayer);
   const benchedLabel = playerLink(benchedPlayer);
+  const benchedAgeLabel = playerAgeLabel(benchedPlayer, benchedLabel);
+  const benchedAgeSentenceLabel = playerAgeLabel(benchedPlayer, benchedLabel, true);
   const fee = latestOffer?.cost || 0;
   const includeDetailedStats = isTopTeamTransfer;
   const includeShortSourceStats = seededNumber(transfer.id, 83) > 0.45;
@@ -1386,6 +1399,19 @@ async function buildTransferDraft(
     storyDate,
     target,
   );
+  const benchedStintEnd = benchedStint?.endedAt ? new Date(benchedStint.endedAt) : storyDate;
+  const benchedStintDuration = benchedStint
+    ? formatBenchDuration(benchedStint.startedAt, benchedStintEnd)
+    : null;
+  const benchedTitles =
+    benchedStats && benchedPlayer && benchedStint
+      ? await getRecentTeamTitles(
+          destination?.id,
+          benchedStintEnd,
+          benchedPlayer,
+          new Date(benchedStint.startedAt),
+        )
+      : [];
   const upcomingMatches = await getUpcomingTeamMatches(destination?.id, storyDate);
   const destinationPlayers = destination?.players || [];
   const sellerPlayers = seller?.players || [];
@@ -1741,7 +1767,7 @@ async function buildTransferDraft(
     seller.country.continent.code !== destination.country.continent.code
       ? `${targetLabel} will be changing regions as well, moving from ${seller.country.continent.name} to ${destination.country.continent.name}.`
       : null;
-  const benchedLine = benchedPlayer
+  const benchedStatsLine = benchedPlayer
     ? benchedStats
       ? pickVariant(
           {
@@ -1819,6 +1845,45 @@ async function buildTransferDraft(
           )
         : null
     : null;
+  const benchedTrophyList = formatLinkedList(
+    benchedTitles.map((title) => competitionLink(title.competition)),
+  );
+  const benchedWonMultipleTitles = benchedTitles.length !== 1;
+  const benchedStintAddonLine =
+    benchedStats && benchedStintDuration
+      ? benchedTitles.length
+        ? pickVariant(
+            [
+              `${benchedAgeSentenceLabel} helped ${destinationLabel} to ${benchedWonMultipleTitles ? 'victories' : 'a victory'} at ${benchedTrophyList} during their ${benchedStintDuration} with the team.`,
+              `During their ${benchedStintDuration} stint, ${benchedAgeLabel} helped ${destinationLabel} ${benchedWonMultipleTitles ? 'claim titles' : 'claim a title'} at ${benchedTrophyList}.`,
+              `${benchedAgeSentenceLabel} leaves the active lineup having helped ${destinationLabel} win ${benchedTrophyList} over a ${benchedStintDuration} spell.`,
+              `${benchedAgeSentenceLabel} was part of ${destinationLabel}'s title-winning ${benchedWonMultipleTitles ? 'runs' : 'run'} at ${benchedTrophyList} during their ${benchedStintDuration} on the roster.`,
+              `${benchedAgeSentenceLabel} contributed to ${destinationLabel}'s ${benchedWonMultipleTitles ? 'triumphs' : 'triumph'} at ${benchedTrophyList} across a ${benchedStintDuration} stint.`,
+              `${benchedAgeSentenceLabel}'s ${benchedStintDuration} in ${destinationLabel}'s active lineup included ${benchedWonMultipleTitles ? 'victories' : 'a victory'} at ${benchedTrophyList}.`,
+              `Over their ${benchedStintDuration} with ${destinationLabel}, ${benchedAgeLabel} helped the side lift ${benchedWonMultipleTitles ? 'trophies' : 'a trophy'} at ${benchedTrophyList}.`,
+              `The stint also brought silverware for ${benchedAgeLabel}, who helped ${destinationLabel} secure ${benchedTrophyList} during their ${benchedStintDuration} together.`,
+              `${benchedAgeSentenceLabel} departs the active roster after a ${benchedStintDuration} spell that featured ${benchedWonMultipleTitles ? 'title wins' : 'a title win'} at ${benchedTrophyList}.`,
+              `${benchedAgeSentenceLabel}'s ${benchedStintDuration} run with ${destinationLabel} saw the team come out on top at ${benchedTrophyList}.`,
+            ],
+            transfer.id + 63,
+          )
+        : pickVariant(
+            [
+              `${benchedAgeSentenceLabel} spent ${benchedStintDuration} in ${destinationLabel}'s active lineup.`,
+              `${benchedAgeSentenceLabel}'s spell in ${destinationLabel}'s starting roster lasted ${benchedStintDuration}.`,
+              `${benchedAgeSentenceLabel} had been part of ${destinationLabel}'s active roster for ${benchedStintDuration}.`,
+              `${benchedAgeSentenceLabel} now moves out of the lineup after a ${benchedStintDuration} stint with ${destinationLabel}.`,
+              `The benching brings an end to ${benchedAgeLabel}'s ${benchedStintDuration} run in ${destinationLabel}'s active five.`,
+              `${benchedAgeSentenceLabel} spent a total of ${benchedStintDuration} competing as part of ${destinationLabel}'s active lineup.`,
+              `${benchedAgeSentenceLabel}'s time in ${destinationLabel}'s starting roster spanned ${benchedStintDuration}.`,
+              `${benchedAgeSentenceLabel} had occupied a place in ${destinationLabel}'s active lineup for ${benchedStintDuration} before the change.`,
+              `The roster move ends a ${benchedStintDuration} active stint for ${benchedAgeLabel} at ${destinationLabel}.`,
+              `${benchedAgeSentenceLabel} steps onto the bench following ${benchedStintDuration} as part of ${destinationLabel}'s starting lineup.`,
+            ],
+            transfer.id + 64,
+          )
+      : null;
+  const benchedLine = [benchedStatsLine, benchedStintAddonLine].filter(Boolean).join(' ') || null;
   const upcomingLine = upcomingMatches.length
     ? (() => {
         const match = upcomingMatches[0];
@@ -1827,7 +1892,7 @@ async function buildTransferDraft(
         );
         const opponentLabel = opponent?.team ? teamLink(opponent.team) : 'their next opponent';
         const competitionName = match.competition
-          ? getCompetitionNewsName(match.competition)
+          ? competitionLink(match.competition)
           : 'their next competition';
         return pickVariant(
           [
@@ -1947,6 +2012,7 @@ async function buildTransferDraft(
       teamId: destination?.id || seller?.id,
       teamIds: [destination?.id, isFreeAgentSigning ? null : seller?.id].filter(Boolean),
       flagCode: toFlagCode(target.country?.code),
+      welcomeGraphic: getWelcomeGraphic(destination, target),
       comments: buildTransferComments({
         benchedPlayer,
         destination,
