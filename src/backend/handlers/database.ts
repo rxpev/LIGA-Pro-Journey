@@ -6,7 +6,7 @@
 import log from "electron-log";
 import { ipcMain } from "electron";
 import { Prisma } from "@prisma/client";
-import { DatabaseClient, DiscordPresence, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
+import { CompetitionMvps, DatabaseClient, DiscordPresence, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
 import { Util, Constants, Eagers } from "@liga/shared";
 import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
 import {
@@ -129,6 +129,14 @@ export default function registerDatabaseHandlers() {
     async (_, query: Prisma.CompetitionFindFirstArgs) => {
       const prisma = await DatabaseClient.connect();
       return prisma.competition.findFirst(query);
+    }
+  );
+
+  ipcMain.handle(
+    Constants.IPCRoute.COMPETITIONS_MVPS,
+    async (_, options: { competitionId?: number; playerId?: number } = {}) => {
+      await DatabaseClient.connect();
+      return CompetitionMvps.findCompetitionMvps(options);
     }
   );
 

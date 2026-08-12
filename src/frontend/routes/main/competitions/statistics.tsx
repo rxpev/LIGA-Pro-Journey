@@ -4,12 +4,19 @@
  * @module
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useOutletContext } from 'react-router-dom';
-import { Constants } from '@liga/shared';
+import { Constants, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
+
+const MVP_MEDAL_SRC = 'resources://competitions/mvp.png';
 
 type PlayerSort = 'rating' | 'kills' | 'deaths' | 'maps' | 'team';
 type PlayerStatsRow = Awaited<ReturnType<typeof api.matches.globalPlayerStats>>['players'][number];
+type TooltipPosition = {
+  left: number;
+  top: number;
+};
 
 const PageSize = 15;
 
@@ -30,6 +37,41 @@ function getRatingColorClass(rating: number) {
   return 'text-inherit';
 }
 
+function getCompetitionTitle(competition: RouteContextCompetitions['competition']) {
+  const year = competition.season ? 2025 + competition.season : null;
+  const city = Util.getCompetitionHostingLocationCity(competition.location);
+
+  if (Util.isMajorStageTier(competition.tier.slug)) {
+    return [Util.getMajorEventDisplayName(competition.location, competition.organizer), year]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.BLAST_FINALS) {
+    return ['BLAST Finals', city, year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    return ['IEM Cologne', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    return ['IEM Krakow', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return ['ESL Pro League', city, year].filter(Boolean).join(' ');
+  }
+
+  return [
+    Util.getCompetitionDisplayName(competition.tier.league.name, competition.tier.slug),
+    city,
+    year,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 /**
  * Exports this module.
  *
@@ -43,6 +85,11 @@ export default function Statistics(): JSX.Element {
   const [search, setSearch] = React.useState('');
   const [sort, setSort] = React.useState<PlayerSort>('rating');
   const [loading, setLoading] = React.useState(false);
+  const [mvpTooltipPosition, setMvpTooltipPosition] = React.useState<TooltipPosition | null>(null);
+  const mvpTooltip = React.useMemo(
+    () => `MVP winner at:\n${getCompetitionTitle(competition)}`,
+    [competition],
+  );
 
   React.useEffect(() => {
     setPage(1);
@@ -80,6 +127,20 @@ export default function Statistics(): JSX.Element {
   }, [competition.id, page, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(numPlayers / PageSize));
+  const showMvpTooltip = React.useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 280;
+    const tooltipHeight = 56;
+    const top =
+      rect.bottom + 8 + tooltipHeight <= window.innerHeight
+        ? rect.bottom + 8
+        : Math.max(12, rect.top - tooltipHeight - 8);
+
+    setMvpTooltipPosition({
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
+      top,
+    });
+  }, []);
 
   const renderPlayerName = (player: PlayerStatsRow) => {
     return (
@@ -96,6 +157,16 @@ export default function Statistics(): JSX.Element {
         <span className="flex min-w-0 items-center gap-2">
           {player.country?.code && <span className={cx('fp', player.country.code.toLowerCase())} />}
           <span className="truncate font-semibold">{player.name}</span>
+          {player.mvp && (
+            <span
+              className="inline-flex shrink-0"
+              aria-label={mvpTooltip}
+              onMouseEnter={showMvpTooltip}
+              onMouseLeave={() => setMvpTooltipPosition(null)}
+            >
+              <img src={MVP_MEDAL_SRC} className="size-5 object-contain" />
+            </span>
+          )}
         </span>
       </button>
     );
@@ -103,6 +174,16 @@ export default function Statistics(): JSX.Element {
 
   return (
     <section className="p-3">
+      {mvpTooltipPosition &&
+        createPortal(
+          <div
+            className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
+            style={mvpTooltipPosition}
+          >
+            {mvpTooltip}
+          </div>,
+          document.body,
+        )}
       <article className="border-base-content/10 flex min-h-[640px] flex-col border">
         <header className="border-base-content/10 grid grid-cols-1 gap-3 border-b p-3 lg:grid-cols-[1fr_180px]">
           <input

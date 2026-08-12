@@ -7,7 +7,7 @@ import Tournament from '@liga/shared/tournament';
 import { ipcMain } from 'electron';
 import { differenceBy } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
-import { DatabaseClient } from '@liga/backend/lib';
+import { CompetitionMvps, DatabaseClient } from '@liga/backend/lib';
 import { Prisma } from '@prisma/client';
 
 type MatchVetoInput = {
@@ -40,6 +40,12 @@ type GlobalPlayerStatsRow = {
   deaths: number;
   assists: number;
   maps: number;
+  mvp?: {
+    score: number;
+    rating: number;
+    maps: number;
+    placement: number;
+  } | null;
 };
 
 const GLOBAL_PLAYER_STATS_CACHE_TTL_MS = 60_000;
@@ -581,9 +587,31 @@ export default function () {
 
       const sorted = sortGlobalPlayerStats(basePlayers, sort);
       const start = (page - 1) * pageSize;
+      const mvpByPlayerId = new Map<
+        number,
+        { score: number; rating: number; maps: number; placement: number }
+      >();
+
+      if (params.competitionId) {
+        const mvps = await CompetitionMvps.findCompetitionMvps({
+          competitionId: params.competitionId,
+        });
+
+        mvps.forEach((mvp) => {
+          mvpByPlayerId.set(mvp.playerId, {
+            score: mvp.score,
+            rating: mvp.rating,
+            maps: mvp.maps,
+            placement: mvp.placement,
+          });
+        });
+      }
 
       return {
-        players: sorted.slice(start, start + pageSize),
+        players: sorted.slice(start, start + pageSize).map((player) => ({
+          ...player,
+          mvp: mvpByPlayerId.get(player.id) || null,
+        })),
         total: sorted.length,
       };
     },

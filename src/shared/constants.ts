@@ -319,6 +319,7 @@ export enum IPCRoute {
   CALENDAR_STOP = '/calendar/stop',
   COMPETITIONS_ALL = '/competitions/all',
   COMPETITIONS_FIND = '/competitions/find',
+  COMPETITIONS_MVPS = '/competitions/mvps',
   COMPETITIONS_PARTICIPANT_LINEUP = '/competitions/participant-lineup',
   COMPETITIONS_WINNERS = '/competitions/winners',
   CONFETTI_START = '/confetti/start',

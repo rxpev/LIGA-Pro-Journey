@@ -40,6 +40,7 @@ import { computeLifetimeStats } from './faceitstats';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { backfillCompetitionLocations } from './competition-locations';
+import { upsertCompetitionMvp } from './competition-mvps';
 import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
@@ -4973,17 +4974,12 @@ export async function recordMatchResults() {
         }
       }
 
-      // awards and prize pool distribution
-      await Promise.all([
-        sendUserAward(competition, tournament),
-        distributePrizePool(competition, tournament),
-      ]);
-
+      const isCompetitionDone = tournament.$base.isDone();
       // update the competition database record
-      return DatabaseClient.prisma.competition.update({
+      const updatedCompetition = await DatabaseClient.prisma.competition.update({
         where: { id: Number(competitionId) },
         data: {
-          status: tournament.$base.isDone()
+          status: isCompetitionDone
             ? Constants.CompetitionStatus.COMPLETED
             : Constants.CompetitionStatus.STARTED,
           tournament: JSON.stringify(tournament.save()),
@@ -5003,6 +4999,15 @@ export async function recordMatchResults() {
           },
         },
       });
+
+      // awards and prize pool distribution
+      await Promise.all([
+        sendUserAward(competition, tournament),
+        distributePrizePool(competition, tournament),
+        isCompetitionDone ? upsertCompetitionMvp(Number(competitionId)) : Promise.resolve(),
+      ]);
+
+      return updatedCompetition;
     }),
   );
 }

@@ -64,6 +64,7 @@ model Competition {
   // has many
   matches     Match[]
   competitors CompetitionToTeam[]
+  mvps        CompetitionMvp[]
 
   // belongs to
   federation   Federation @relation(fields: [federationId], references: [id])
@@ -86,6 +87,28 @@ model CompetitionToTeam {
   competitionId Int
   team          Team?       @relation(fields: [teamId], references: [id])
   teamId        Int?
+}
+
+model CompetitionMvp {
+  id             Int      @id @default(autoincrement())
+  score          Float
+  rating         Float
+  maps           Int
+  placement      Int
+  opponentElo    Float?
+  formulaVersion Int      @default(2)
+  createdAt      DateTime @default(now())
+
+  // belongs to
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  competitionId Int         @unique
+  player        Player      @relation(fields: [playerId], references: [id])
+  playerId      Int
+  team          Team?       @relation(fields: [teamId], references: [id])
+  teamId        Int?
+
+  @@index([playerId])
+  @@index([teamId])
 }
 
 model Continent {
@@ -378,13 +401,14 @@ model Player {
   lastOfferAt    DateTime?
 
   // has many
-  matches      Match[]
-  shortlist    Shortlist[]
-  transfers    Transfer[]
-  assists      MatchEvent[]  @relation("assist")
-  kills        MatchEvent[]  @relation("attacker")
-  deaths       MatchEvent[]  @relation("victim")
-  careerStints CareerStint[]
+  matches         Match[]
+  shortlist       Shortlist[]
+  transfers       Transfer[]
+  assists         MatchEvent[]     @relation("assist")
+  kills           MatchEvent[]     @relation("attacker")
+  deaths          MatchEvent[]     @relation("victim")
+  careerStints    CareerStint[]
+  competitionMvps CompetitionMvp[]
 
   // has one
   profile Profile?
@@ -454,16 +478,17 @@ model Team {
   elo      Int?    @default(1000)
 
   // has many
-  competitions CompetitionToTeam[]
-  games        GameToTeam[]
-  matches      MatchToTeam[]
-  players      Player[]
-  personas     Persona[]
-  shortlist    Shortlist[]
-  transfersIn  Transfer[]          @relation("to")
-  transfersOut Transfer[]          @relation("from")
-  careerStints CareerStint[]
-  vetoes       MatchVeto[]
+  competitions    CompetitionToTeam[]
+  games           GameToTeam[]
+  matches         MatchToTeam[]
+  players         Player[]
+  personas        Persona[]
+  shortlist       Shortlist[]
+  transfersIn     Transfer[]          @relation("to")
+  transfersOut    Transfer[]          @relation("from")
+  careerStints    CareerStint[]
+  vetoes          MatchVeto[]
+  competitionMvps CompetitionMvp[]
 
   // has one
   profile Profile?

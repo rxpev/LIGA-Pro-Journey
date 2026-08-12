@@ -19,6 +19,7 @@ export * as VPK from './vpk';
 export * as WindowManager from './window-manager';
 export * as Worldgen from './worldgen';
 export * as DiscordPresence from './discord-presence';
+export * as CompetitionMvps from './competition-mvps';
 export { cleanupStaleFaceitMatchRooms } from './faceit-matchrooms';
 export {
   disconnectActiveDatabaseWithIntegrity,

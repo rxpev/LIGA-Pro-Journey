@@ -1233,6 +1233,37 @@ export default class DatabaseClient {
         `ALTER TABLE "Profile" ADD COLUMN "simulateNpcMatchStats" BOOLEAN NOT NULL DEFAULT false`,
       );
     }
+
+    await DatabaseClient.runSqlite(
+      cnx,
+      `
+      CREATE TABLE IF NOT EXISTS "CompetitionMvp" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "competitionId" INTEGER NOT NULL,
+        "playerId" INTEGER NOT NULL,
+        "teamId" INTEGER,
+        "score" REAL NOT NULL,
+        "rating" REAL NOT NULL,
+        "maps" INTEGER NOT NULL,
+        "placement" INTEGER NOT NULL,
+        "opponentElo" REAL,
+        "formulaVersion" INTEGER NOT NULL DEFAULT 2,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+      `,
+    );
+    await DatabaseClient.runSqlite(
+      cnx,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "CompetitionMvp_competitionId_key" ON "CompetitionMvp"("competitionId")`,
+    );
+    await DatabaseClient.runSqlite(
+      cnx,
+      `CREATE INDEX IF NOT EXISTS "CompetitionMvp_playerId_idx" ON "CompetitionMvp"("playerId")`,
+    );
+    await DatabaseClient.runSqlite(
+      cnx,
+      `CREATE INDEX IF NOT EXISTS "CompetitionMvp_teamId_idx" ON "CompetitionMvp"("teamId")`,
+    );
   }
 
   /**

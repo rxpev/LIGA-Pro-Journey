@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { FaChartBar, FaNewspaper, FaStar } from 'react-icons/fa';
 import { levelFromElo } from '@liga/backend/lib/levels';
@@ -57,6 +58,16 @@ type HonorOccurrence = {
   organizer: string | null;
 };
 
+type MvpOccurrence = {
+  id: number;
+  key: string;
+  teamId: number | null;
+  season: number | null;
+  date: Date;
+  title: string;
+  tierSlug: string;
+};
+
 type HonorGroup = {
   key: string;
   count: number;
@@ -78,6 +89,11 @@ type RatingGame = {
   rating: number;
 };
 
+type TooltipPosition = {
+  left: number;
+  top: number;
+};
+
 const FACEIT_LEVEL_IMAGES: Record<number, string> = {
   1: faceitLevel1,
   2: faceitLevel2,
@@ -90,6 +106,8 @@ const FACEIT_LEVEL_IMAGES: Record<number, string> = {
   9: faceitLevel9,
   10: faceitLevel10,
 };
+
+const MVP_MEDAL_SRC = 'resources://competitions/mvp.png';
 
 enum Rating {
   LOW = 0.95,
@@ -150,11 +168,50 @@ function MajorHonorBadge() {
   );
 }
 
+function getCompetitionTitle(
+  competition: Awaited<ReturnType<typeof api.competitions.mvps>>[number]['competition'],
+) {
+  const year = competition.season ? 2025 + competition.season : null;
+  const city = Util.getCompetitionHostingLocationCity(competition.location);
+
+  if (Util.isMajorStageTier(competition.tier.slug)) {
+    return [Util.getMajorEventDisplayName(competition.location, competition.organizer), year]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.BLAST_FINALS) {
+    return ['BLAST Finals', city, year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    return ['IEM Cologne', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    return ['IEM Krakow', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return ['ESL Pro League', city, year].filter(Boolean).join(' ');
+  }
+
+  return [
+    Util.getCompetitionDisplayName(competition.tier.league.name, competition.tier.slug),
+    city,
+    year,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 export default function TransferModal() {
   const location = useLocation();
   const { state } = React.useContext(AppStateContext);
   const [player, setPlayer] = React.useState<Player>();
   const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
+  const [mvps, setMvps] = React.useState<MvpOccurrence[]>([]);
+  const [mvpTooltipPosition, setMvpTooltipPosition] = React.useState<TooltipPosition | null>(null);
   const [ratingGames, setRatingGames] = React.useState<RatingGame[]>([]);
 
   React.useEffect(() => {
@@ -197,6 +254,24 @@ export default function TransferModal() {
 
   React.useEffect(() => {
     if (!player) return;
+
+    api.competitions.mvps({ playerId: player.id }).then((awards) => {
+      setMvps(
+        awards.map((award) => {
+          const title = getCompetitionTitle(award.competition);
+
+          return {
+            id: award.id,
+            key: `${award.competitionId}:${award.playerId}`,
+            teamId: award.teamId,
+            season: award.competition.season,
+            date: new Date(award.createdAt),
+            title,
+            tierSlug: award.competition.tier.slug,
+          };
+        }),
+      );
+    });
 
     const championAwards = [
       ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
@@ -336,6 +411,34 @@ export default function TransferModal() {
       honors.filter((honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
     [honors],
   );
+  const majorMvpCount = React.useMemo(
+    () => mvps.filter((mvp) => mvp.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE).length,
+    [mvps],
+  );
+  const mvpTooltip = React.useMemo(() => {
+    if (!mvps.length) {
+      return '';
+    }
+
+    return ['MVP winner at:', ...mvps.map((mvp) => mvp.title)].join('\n');
+  }, [mvps]);
+  const showMvpTooltip = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const tooltipWidth = 280;
+      const tooltipHeight = Math.min(320, 32 + mvpTooltip.split('\n').length * 20);
+      const top =
+        rect.bottom + 8 + tooltipHeight <= window.innerHeight
+          ? rect.bottom + 8
+          : Math.max(12, rect.top - tooltipHeight - 8);
+
+      setMvpTooltipPosition({
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
+        top,
+      });
+    },
+    [mvpTooltip],
+  );
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
@@ -425,15 +528,22 @@ export default function TransferModal() {
 
           <thead>
             <tr>
-              <th colSpan={3} className="py-2">
+              <th colSpan={2} className="py-2">
                 Stats
               </th>
-              <th className="py-2 text-right">
-                {majorWinCount > 0 && (
-                  <span className="badge border-yellow-300 bg-yellow-500/20 px-3 py-2 font-semibold text-yellow-200">
-                    {majorWinCount}x Major winner
-                  </span>
-                )}
+              <th colSpan={2} className="py-2 text-right">
+                <span className="inline-flex flex-nowrap justify-end gap-2 whitespace-nowrap">
+                  {majorWinCount > 0 && (
+                    <span className="badge border-yellow-300 bg-yellow-500/20 px-3 py-2 font-semibold text-yellow-200">
+                      {majorWinCount}x Major winner
+                    </span>
+                  )}
+                  {majorMvpCount > 0 && (
+                    <span className="badge border-slate-300 bg-slate-500/30 px-3 py-2 font-semibold text-slate-100">
+                      {majorMvpCount}x Major MVP
+                    </span>
+                  )}
+                </span>
               </th>
             </tr>
           </thead>
@@ -480,7 +590,7 @@ export default function TransferModal() {
                       <div className="absolute bottom-9 left-1/2 flex -translate-x-1/2 items-center justify-center gap-2">
                         <button
                           type="button"
-                          className="btn btn-square border-base-content/20 bg-base-200/80 size-8 min-h-0 hover:bg-primary hover:text-primary-content"
+                          className="btn btn-square border-base-content/20 bg-base-200/80 hover:bg-primary hover:text-primary-content size-8 min-h-0"
                           title="View detailed player statistics"
                           aria-label="View detailed player statistics"
                           data-interaction-sound="click"
@@ -490,7 +600,7 @@ export default function TransferModal() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn-square border-base-content/20 bg-base-200/80 size-8 min-h-0 hover:bg-primary hover:text-primary-content"
+                          className="btn btn-square border-base-content/20 bg-base-200/80 hover:bg-primary hover:text-primary-content size-8 min-h-0"
                           title="View related news"
                           aria-label="View related news"
                           data-interaction-sound="click"
@@ -517,9 +627,30 @@ export default function TransferModal() {
       </section>
 
       <section className="border-base-content/10 flex min-h-12 items-center gap-4 border-t px-4 py-2">
-        {Object.keys(honorGroups).length === 0 && (
+        {mvps.length === 0 && Object.keys(honorGroups).length === 0 && (
           <span className="text-sm opacity-60">No honors yet.</span>
         )}
+        {mvps.length > 0 && (
+          <div
+            className="flex items-center gap-2"
+            aria-label={mvpTooltip}
+            onMouseEnter={showMvpTooltip}
+            onMouseLeave={() => setMvpTooltipPosition(null)}
+          >
+            <Image className="h-9 w-9 object-contain" src={MVP_MEDAL_SRC} />
+            {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
+          </div>
+        )}
+        {mvpTooltipPosition &&
+          createPortal(
+            <div
+              className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
+              style={mvpTooltipPosition}
+            >
+              {mvpTooltip}
+            </div>,
+            document.body,
+          )}
         {Object.values(honorGroups).map((honor) => {
           const seasonsList = [...honor.seasons]
             .sort((a, b) => a - b)
@@ -551,7 +682,9 @@ export default function TransferModal() {
             <tr>
               <th className="w-3/12">Time period</th>
               <th className="w-4/12">Team</th>
-              {state.profile?.simulateNpcMatchStats && <th className="w-2/12 text-right">Rating</th>}
+              {state.profile?.simulateNpcMatchStats && (
+                <th className="w-2/12 text-right">Rating</th>
+              )}
               <th className="w-3/12">Honors</th>
             </tr>
           </thead>

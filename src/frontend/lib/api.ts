@@ -128,6 +128,37 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.COMPETITIONS_FIND, query) as Promise<
         Prisma.CompetitionGetPayload<T>
       >,
+    mvps: (options: { competitionId?: number; playerId?: number }) =>
+      ipcRenderer.invoke(Constants.IPCRoute.COMPETITIONS_MVPS, options) as Promise<
+        Array<{
+          id: number;
+          competitionId: number;
+          playerId: number;
+          teamId: number | null;
+          score: number;
+          rating: number;
+          maps: number;
+          placement: number;
+          opponentElo: number | null;
+          formulaVersion: number;
+          createdAt: Date | string;
+          player: {
+            id: number;
+            name: string;
+            avatar: string | null;
+            country: { code: string; name: string } | null;
+          };
+          team: { id: number; name: string; blazon: string | null } | null;
+          competition: {
+            id: number;
+            season: number | null;
+            location: string | null;
+            organizer: string | null;
+            federation: { slug: string; name: string };
+            tier: { slug: string; name: string; league: { name: string; slug: string } };
+          };
+        }>
+      >,
     participantLineup: (competitionId: number, teamId: number) =>
       ipcRenderer.invoke(
         Constants.IPCRoute.COMPETITIONS_PARTICIPANT_LINEUP,
@@ -409,6 +440,12 @@ export default {
           deaths: number;
           assists: number;
           maps: number;
+          mvp?: {
+            score: number;
+            rating: number;
+            maps: number;
+            placement: number;
+          } | null;
         }>;
         total: number;
       }>,
