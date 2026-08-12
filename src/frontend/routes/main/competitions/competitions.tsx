@@ -356,6 +356,7 @@ export default function () {
   // Used to ensure we only auto-initialize filters once from the profile.
   const [initializedFromProfile, setInitializedFromProfile] = React.useState(false);
   const [initializedQueryCompetition, setInitializedQueryCompetition] = React.useState(false);
+  const canViewStatistics = Boolean(state.profile?.simulateNpcMatchStats);
 
   const queryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const queryFederationId = Number(queryParams.get('federationId'));
@@ -933,6 +934,12 @@ export default function () {
     loadCompetition,
   ]);
 
+  React.useEffect(() => {
+    if (!canViewStatistics && location.pathname === TabIdentifier.STATISTICS) {
+      navigate(TabIdentifier.RESULTS);
+    }
+  }, [canViewStatistics, location.pathname, navigate]);
+
   // Build seasons dropdown data
   const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
 
@@ -957,12 +964,14 @@ export default function () {
         >
           {t('shared.results')}
         </button>
-        <button
-          className={cx(location.pathname === TabIdentifier.STATISTICS && 'btn-active!')}
-          onClick={() => navigate(TabIdentifier.STATISTICS)}
-        >
-          Statistics
-        </button>
+        {canViewStatistics && (
+          <button
+            className={cx(location.pathname === TabIdentifier.STATISTICS && 'btn-active!')}
+            onClick={() => navigate(TabIdentifier.STATISTICS)}
+          >
+            Statistics
+          </button>
+        )}
         <button
           className={cx(location.pathname === TabIdentifier.PARTICIPANTS && 'btn-active!')}
           onClick={() => navigate(TabIdentifier.PARTICIPANTS)}
