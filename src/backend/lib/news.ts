@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import DatabaseClient from './database-client';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
-import { getWelcomeGraphic } from './news-welcome-graphics';
+import { getThankYouGraphic, getWelcomeGraphic } from './news-welcome-graphics';
 
 const PROTOTYPE_EVENT_PREFIX = 'prototype-news';
 const AUTO_EVENT_PREFIX = 'auto-news';
@@ -63,7 +63,14 @@ function playerAgeLabel(
   player?: { age?: number | null } | null,
   fallback = 'the player',
   sentenceStart = false,
+  majorWins = 0,
 ) {
+  if (majorWins > 0) {
+    const title = majorWins === 1 ? 'Major Winner' : `${majorWins}x Major Winner`;
+
+    return `${sentenceStart ? 'The' : 'the'} ${title}`;
+  }
+
   return player?.age ? `${sentenceStart ? 'The' : 'the'} ${player.age}-year-old` : fallback;
 }
 
@@ -268,6 +275,96 @@ function findRecentStarterStintForTeam(
   );
 }
 
+function findContinuousCareerSpellForTeam(
+  player: {
+    careerStints?: Array<{
+      endedAt?: Date | string | null;
+      startedAt: Date | string;
+      starter?: boolean | null;
+      team?: { id?: number | null; name?: string | null } | null;
+      teamId?: number | null;
+    }>;
+  },
+  teamId?: number | null,
+  date?: Date | string,
+) {
+  if (!teamId || !player.careerStints?.length) {
+    return null;
+  }
+
+  const lookupDate = date ? startOfDay(new Date(date)) : null;
+  const stints = player.careerStints
+    .filter((stint) => (lookupDate ? new Date(stint.startedAt) <= endOfDay(lookupDate) : true))
+    .slice()
+    .sort((a, b) => {
+      const timeDiff = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+
+      return (
+        timeDiff ||
+        new Date(a.endedAt || a.startedAt).getTime() - new Date(b.endedAt || b.startedAt).getTime()
+      );
+    });
+  const anchorIndex = (() => {
+    for (let index = stints.length - 1; index >= 0; index -= 1) {
+      const stint = stints[index];
+
+      if (stint.teamId !== teamId) {
+        continue;
+      }
+
+      if (!lookupDate) {
+        return index;
+      }
+
+      const startedAt = new Date(stint.startedAt);
+      const endedAt = stint.endedAt ? new Date(stint.endedAt) : null;
+
+      if (startedAt <= endOfDay(lookupDate) && (!endedAt || endedAt >= lookupDate)) {
+        return index;
+      }
+    }
+
+    return -1;
+  })();
+
+  if (anchorIndex < 0) {
+    return null;
+  }
+
+  let firstIndex = anchorIndex;
+
+  while (firstIndex > 0) {
+    const previous = stints[firstIndex - 1];
+    const current = stints[firstIndex];
+
+    if (previous.teamId !== teamId) {
+      break;
+    }
+
+    const previousEndedAt = previous.endedAt ? new Date(previous.endedAt) : null;
+    const currentStartedAt = startOfDay(new Date(current.startedAt));
+
+    if (!previousEndedAt || previousEndedAt < new Date(currentStartedAt.getTime() - 86_400_000)) {
+      break;
+    }
+
+    firstIndex -= 1;
+  }
+
+  const spellStints = stints.slice(firstIndex, anchorIndex + 1);
+  const firstStint = spellStints[0];
+  const anchorStint = spellStints.at(-1);
+
+  return firstStint && anchorStint
+    ? {
+        endedAt: lookupDate || anchorStint.endedAt || new Date(),
+        startedAt: firstStint.startedAt,
+        stints: spellStints,
+        currentStint: anchorStint,
+      }
+    : null;
+}
+
 function formatBenchDuration(startedAt?: Date | string | null, endedAt?: Date | string | null) {
   if (!startedAt || !endedAt) {
     return null;
@@ -292,6 +389,37 @@ function formatBenchDuration(startedAt?: Date | string | null, endedAt?: Date | 
 
   if (days < 730) {
     const months = Math.min(24, Math.max(2, Math.round(days / 30)));
+    return `${months} months`;
+  }
+
+  const years = Math.max(2, Math.round(days / 365));
+  return `${years} years`;
+}
+
+function formatContractDuration(startedAt?: Date | string | null, endedAt?: Date | string | null) {
+  if (!startedAt || !endedAt) {
+    return null;
+  }
+
+  const days = Math.max(
+    1,
+    Math.round(
+      (startOfDay(new Date(endedAt)).getTime() - startOfDay(new Date(startedAt)).getTime()) /
+        86_400_000,
+    ),
+  );
+
+  if (days < 14) {
+    return `${days} day${days === 1 ? '' : 's'}`;
+  }
+
+  if (days < 56) {
+    const weeks = Math.min(8, Math.max(3, Math.round(days / 7)));
+    return `${weeks} weeks`;
+  }
+
+  if (days < 720) {
+    const months = Math.min(23, Math.max(2, Math.round(days / 30)));
     return `${months} months`;
   }
 
@@ -646,6 +774,18 @@ function getRatingBucket(rating: number) {
   return 'POOR';
 }
 
+function mapCountLabel(count: number) {
+  return `${count} map${count === 1 ? '' : 's'}`;
+}
+
+function titleNoun(count: number) {
+  return count === 1 ? 'a title' : 'titles';
+}
+
+function victoryNoun(count: number) {
+  return count === 1 ? 'a victory' : 'victories';
+}
+
 function escapeMarkdownLinkText(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
 }
@@ -708,7 +848,7 @@ function getCompetitionNewsName(
   return options?.trophy ? cleanedName.replace(/\s+Playoffs\b/gi, '').trim() : cleanedName;
 }
 
-function competitionLink(competition: {
+type CompetitionLinkTarget = {
   federation?: { slug?: string | null } | null;
   federationId?: number | null;
   id?: number | null;
@@ -721,8 +861,10 @@ function competitionLink(competition: {
     name?: string | null;
     slug?: string | null;
   };
-}) {
-  const name = getCompetitionNewsName(competition, { trophy: true });
+};
+
+function competitionLink(competition: CompetitionLinkTarget, label?: string) {
+  const name = label || getCompetitionNewsName(competition, { trophy: true });
 
   return competition.id && competition.federationId && competition.season && competition.tier.id
     ? `**[${escapeMarkdownLinkText(name)}](/competitions?competitionId=${competition.id}&federationId=${competition.federationId}&season=${competition.season}&tierId=${competition.tier.id})**`
@@ -741,6 +883,101 @@ function formatLinkedList(items: string[]) {
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
+function formatRepeatCount(count: number) {
+  if (count === 2) {
+    return 'twice';
+  }
+
+  if (count === 3) {
+    return 'three times';
+  }
+
+  return `${count} times`;
+}
+
+function formatMajorCompetitionTitleLink(competition: CompetitionLinkTarget) {
+  const city = Util.getCompetitionHostingLocationCity(competition.location);
+  const organizer = competition.organizer || 'LIGA';
+  const useInVariation = Boolean((competition.id ?? competition.season ?? 0) % 2);
+
+  if (city && useInVariation) {
+    return `the ${competitionLink(competition, `${organizer} Major`)} in ${competitionLink(
+      competition,
+      city,
+    )}`;
+  }
+
+  return `the ${competitionLink(competition, Util.getMajorEventDisplayName(competition.location, organizer))}`;
+}
+
+function getCompetitionTitleGroup(competition: CompetitionLinkTarget) {
+  const isMajor = Util.isMajorStageTier(competition.tier.slug);
+
+  if (isMajor) {
+    const label = formatMajorCompetitionTitleLink(competition);
+
+    return {
+      key: `major:${competition.id ?? getCompetitionNewsName(competition, { trophy: true })}`,
+      label,
+      repeatLabel: label,
+      collapseRepeats: false,
+    };
+  }
+
+  const hostedTitle = Util.getHostedEventTitleDisplayName(competition.tier.slug);
+  const repeatLabel = hostedTitle || getCompetitionNewsName(competition, { trophy: true });
+
+  return {
+    key: repeatLabel.toLocaleLowerCase(),
+    label: competitionLink(competition),
+    repeatLabel: competitionLink(competition, repeatLabel),
+    collapseRepeats: true,
+  };
+}
+
+function formatCompetitionTitleList(
+  titles: Array<{
+    competition: CompetitionLinkTarget;
+  }>,
+) {
+  const groupedTitles = titles.reduce<
+    Array<{
+      collapseRepeats: boolean;
+      key: string;
+      label: string;
+      repeatLabel: string;
+      count: number;
+    }>
+  >((groups, title) => {
+    const titleGroup = getCompetitionTitleGroup(title.competition);
+    const key = titleGroup.key.toLocaleLowerCase();
+    const existing = groups.find((group) => group.key === key);
+
+    if (existing && titleGroup.collapseRepeats) {
+      existing.count += 1;
+      return groups;
+    }
+
+    groups.push({
+      collapseRepeats: titleGroup.collapseRepeats,
+      key,
+      label: titleGroup.label,
+      repeatLabel: titleGroup.repeatLabel,
+      count: 1,
+    });
+
+    return groups;
+  }, []);
+
+  return formatLinkedList(
+    groupedTitles.map((title) =>
+      title.collapseRepeats && title.count > 1
+        ? `${title.repeatLabel} ${formatRepeatCount(title.count)}`
+        : title.label,
+    ),
+  );
+}
+
 function isExcludedTitleCompetition(competition: {
   tier: { name?: string | null; slug?: string | null };
 }) {
@@ -753,6 +990,99 @@ function isExcludedTitleCompetition(competition: {
     name.includes('qualifier') ||
     name.includes('rmr')
   );
+}
+
+async function getPlayerMajorWinCount(
+  player?: {
+    id?: number | null;
+    careerStints?: Parameters<typeof findCareerStintForTeam>[0]['careerStints'];
+  } | null,
+  beforeDate?: Date,
+) {
+  if (!player?.id) {
+    return 0;
+  }
+
+  const [careerStints, titles] = await Promise.all([
+    DatabaseClient.prisma.careerStint.findMany({
+      orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+      where: {
+        playerId: player.id,
+      },
+    }),
+    DatabaseClient.prisma.competitionToTeam.findMany({
+      include: {
+        competition: {
+          include: {
+            competitors: true,
+            matches: {
+              orderBy: [{ date: 'desc' }, { id: 'desc' }],
+              include: {
+                competitors: true,
+              },
+              take: 1,
+            },
+            tier: true,
+          },
+        },
+      },
+      where: {
+        position: 1,
+        teamId: {
+          not: null,
+        },
+        competition: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          tier: {
+            slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+          },
+          matches: beforeDate
+            ? {
+                some: {
+                  date: {
+                    lte: beforeDate,
+                  },
+                },
+              }
+            : undefined,
+        },
+      },
+    }),
+  ]);
+  const playerWithStints = { ...player, careerStints };
+  const wonMajorCompetitionIds = new Set<number>();
+
+  for (const title of titles) {
+    const teamId = title.teamId;
+    const championshipMatch = title.competition.matches[0];
+
+    if (!teamId || !championshipMatch) {
+      continue;
+    }
+
+    let winnerTeamId = title.competition.competitors?.find(
+      (competitor) => competitor.position === 1,
+    )?.teamId;
+
+    if (!winnerTeamId && championshipMatch.competitors.length >= 2) {
+      const ordered = [...championshipMatch.competitors].sort(
+        (a, b) => (b.score ?? 0) - (a.score ?? 0),
+      );
+      winnerTeamId = ordered[0]?.teamId;
+    }
+
+    if (winnerTeamId !== teamId || (beforeDate && championshipMatch.date > beforeDate)) {
+      continue;
+    }
+
+    if (!findCareerStintForTeam(playerWithStints, teamId, championshipMatch.date)?.starter) {
+      continue;
+    }
+
+    wonMajorCompetitionIds.add(title.competitionId);
+  }
+
+  return wonMajorCompetitionIds.size;
 }
 
 function buildTransferComments(args: {
@@ -957,7 +1287,7 @@ async function getCompletedTransfersForNews() {
               team: true,
             },
             orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-            take: 8,
+            take: 24,
           },
           country: true,
           team: true,
@@ -972,7 +1302,11 @@ async function getCompletedTransfersForNews() {
     take: 40,
     where: {
       status: {
-        in: [Constants.TransferStatus.TEAM_ACCEPTED, Constants.TransferStatus.PLAYER_ACCEPTED],
+        in: [
+          Constants.TransferStatus.TEAM_ACCEPTED,
+          Constants.TransferStatus.PLAYER_ACCEPTED,
+          Constants.TransferStatus.EXPIRED,
+        ],
       },
     },
   });
@@ -1138,8 +1472,7 @@ async function getRecentTeamTitles(
     return [];
   }
 
-  const titleAfterDate =
-    afterDate || (beforeDate ? new Date(beforeDate.getTime() - 365 * 24 * 60 * 60 * 1000) : null);
+  const titleAfterDate = afterDate || null;
 
   return DatabaseClient.prisma.competitionToTeam
     .findMany({
@@ -1164,7 +1497,6 @@ async function getRecentTeamTitles(
         },
       },
       orderBy: [{ competitionId: 'desc' }, { id: 'desc' }],
-      take: 3,
       where: {
         position: 1,
         teamId,
@@ -1221,7 +1553,6 @@ async function getRecentTeamTitles(
 
           return Boolean(findCareerStintForTeam(player, teamId, new Date(titleDate))?.starter);
         })
-        .slice(0, 3),
     );
 }
 
@@ -1288,6 +1619,263 @@ async function getQualifierMatches(competitionId: number) {
       status: Constants.MatchStatus.COMPLETED,
     },
   });
+}
+
+async function buildContractExpiryDraft(
+  transfer: TransferSeed,
+  previousTeam: NonNullable<TransferSeed['from']>,
+  storyDate: Date,
+  articleDate: Date,
+  includeStatistics: boolean,
+  isTopTeamTransfer: boolean,
+): Promise<NewsDraft> {
+  const target = transfer.target;
+  const targetName = playerName(target);
+  const targetLabel = playerLink(target);
+  const previousTeamName = teamName(previousTeam);
+  const previousTeamLabel = teamLink(previousTeam);
+  const targetMajorWins = await getPlayerMajorWinCount(target, storyDate);
+  const targetSecondDescriptorSentenceLabel = playerAgeLabel(
+    target,
+    targetLabel,
+    true,
+    targetMajorWins,
+  );
+  const targetLaterDescriptorSentenceLabel = playerAgeLabel(target, targetLabel, true);
+  const continuousSpell = findContinuousCareerSpellForTeam(target, previousTeam.id, storyDate);
+  const currentStint =
+    continuousSpell?.currentStint || findCareerStintForTeam(target, previousTeam.id, storyDate);
+  const wasBenchedAtExpiry = currentStint?.starter === false;
+  const activeStint = wasBenchedAtExpiry
+    ? findRecentStarterStintForTeam(target, previousTeam.id, currentStint?.startedAt)
+    : currentStint;
+  const stintDuration =
+    formatContractDuration(continuousSpell?.startedAt || currentStint?.startedAt, storyDate) ||
+    'time with the organization';
+  const compoundDuration = formatDurationAsCompound(stintDuration);
+  const benchDuration = wasBenchedAtExpiry
+    ? formatBenchDuration(currentStint?.startedAt, storyDate)
+    : null;
+  const statsStint = activeStint || currentStint;
+  const sourceStats =
+    includeStatistics && target.id
+      ? await getPlayerAggregateStats(
+          target.id,
+          previousTeam.id,
+          statsStint ? new Date(statsStint.startedAt) : null,
+          statsStint?.endedAt ? new Date(statsStint.endedAt) : storyDate,
+        )
+      : null;
+  const titles = await getRecentTeamTitles(
+    previousTeam.id,
+    storyDate,
+    target,
+    statsStint ? new Date(statsStint.startedAt) : null,
+  );
+  const trophyList = formatCompetitionTitleList(titles);
+  const headline = pickVariant(
+    [
+      `${targetName} becomes a free agent`,
+      `${targetName} leaves ${previousTeamName}`,
+      `${targetName} departs ${previousTeamName}`,
+      `${targetName} enters free agency`,
+      `${targetName} parts ways with ${previousTeamName}`,
+      `${targetName} leaves after ${stintDuration}`,
+      `${targetName} departs after ${stintDuration}`,
+      `${targetName} hits free agency`,
+      `${targetName} exits ${previousTeamName}`,
+      `${targetName} moves on from ${previousTeamName}`,
+      `${previousTeamName} part ways with ${targetName}`,
+      `${targetName}'s ${previousTeamName} stint ends`,
+      `${targetName}'s contract expires`,
+      `${targetName} leaves as contract expires`,
+      `${targetName} becomes available`,
+      `${targetName} enters the open market`,
+      `${targetName} ends ${previousTeamName} spell`,
+      `${targetName}'s ${previousTeamName} tenure ends`,
+      `${previousTeamName} release ${targetName}`,
+      `${targetName} leaves after contract expiry`,
+    ],
+    transfer.id,
+  );
+  const summary = pickVariant(
+    [
+      `${targetName} becomes a free agent after leaving ${previousTeamName}.`,
+      `${targetName} leaves ${previousTeamName} after ${stintDuration} with the organization.`,
+      `${targetName} parts ways with ${previousTeamName} following the end of their contract.`,
+      `${targetName} enters free agency after ${previousTeamName} opted not to extend their contract.`,
+      `${targetName} departs ${previousTeamName} after ${stintDuration} on the roster.`,
+      `${previousTeamName} part ways with ${targetName} as their contract comes to an end.`,
+      `${targetName} is now a free agent following their departure from ${previousTeamName}.`,
+      `${targetName} leaves ${previousTeamName} after the two sides did not agree on a contract extension.`,
+      `${targetName} hits free agency after ${stintDuration} with ${previousTeamName}.`,
+      `${targetName}'s spell with ${previousTeamName} comes to an end after ${stintDuration}.`,
+      `${previousTeamName} allow ${targetName}'s contract to expire, sending the player into free agency.`,
+      `${targetName} moves on from ${previousTeamName} after their contract was not renewed.`,
+      `${targetName} becomes available as a free agent following the conclusion of their ${previousTeamName} contract.`,
+      `${targetName}'s ${compoundDuration} tenure with ${previousTeamName} ends as their contract expires.`,
+      `${targetName} leaves the ${previousTeamName} roster after the organization chose not to extend their deal.`,
+      `${previousTeamName} and ${targetName} go their separate ways following ${stintDuration} together.`,
+      `${targetName} enters the open market after their stint with ${previousTeamName} came to an end.`,
+      `${targetName} departs ${previousTeamName} upon the expiration of their contract.`,
+      `${targetName} is searching for a new team after ending a ${compoundDuration} spell with ${previousTeamName}.`,
+      `${targetName} becomes a free agent as ${previousTeamName} elect against renewing their contract.`,
+    ],
+    transfer.id + 11,
+  );
+  const firstSentence = pickVariant(
+    [
+      `${targetLabel} leaves ${previousTeamLabel} after his contract expired following a ${compoundDuration} stint.`,
+      `${targetLabel} departs ${previousTeamLabel} after ${stintDuration} as his contract comes to an end.`,
+      `${targetLabel} leaves ${previousTeamLabel} following the expiration of his contract after ${stintDuration}.`,
+      `${targetLabel} parts ways with ${previousTeamLabel} after his ${compoundDuration} contract ran its course.`,
+      `${targetLabel} exits ${previousTeamLabel} after ${stintDuration} following the end of his contract.`,
+      `${targetLabel} becomes a free agent after his contract with ${previousTeamLabel} expired following ${stintDuration}.`,
+      `${targetLabel} moves on from ${previousTeamLabel} after ${stintDuration} as his deal expires.`,
+      `${targetLabel} leaves ${previousTeamLabel} upon the expiration of his contract after ${stintDuration} with the team.`,
+      `${targetLabel} departs ${previousTeamLabel} after a ${compoundDuration} spell as his contract reaches its end.`,
+      `${targetLabel}'s ${compoundDuration} stint with ${previousTeamLabel} ends following the expiration of his contract.`,
+      `${targetLabel} leaves ${previousTeamLabel} after spending ${stintDuration} with the organization, with his contract now expired.`,
+      `${targetLabel} parts ways with ${previousTeamLabel} following ${stintDuration} as his contract expires.`,
+      `${targetLabel} exits the ${previousTeamLabel} roster after his contract ended following ${stintDuration}.`,
+      `${targetLabel} leaves ${previousTeamLabel} after a ${compoundDuration} tenure, with his contract having run out.`,
+      `${targetLabel} departs ${previousTeamLabel} at the end of his contract following ${stintDuration} with the organization.`,
+    ],
+    transfer.id + 23,
+  );
+  const addon = wasBenchedAtExpiry
+    ? pickVariant(
+        [
+          `${targetSecondDescriptorSentenceLabel} spent his final ${benchDuration || stintDuration} with ${previousTeamLabel} on the bench and will now be hoping for a new opportunity.`,
+          `${targetSecondDescriptorSentenceLabel} had been on the bench for ${benchDuration || stintDuration} before his contract with ${previousTeamLabel} came to an end.`,
+          `${targetSecondDescriptorSentenceLabel} enters free agency after spending the last ${benchDuration || stintDuration} on ${previousTeamLabel}'s bench.`,
+          `${targetSecondDescriptorSentenceLabel} leaves ${previousTeamLabel} following ${benchDuration || stintDuration} on the sidelines and will now look for a fresh start.`,
+          `${targetSecondDescriptorSentenceLabel} had spent ${benchDuration || stintDuration} out of the active lineup before becoming a free agent.`,
+          `${targetSecondDescriptorSentenceLabel}'s departure comes after a ${formatDurationAsCompound(benchDuration || stintDuration)} spell on ${previousTeamLabel}'s bench.`,
+          `${targetSecondDescriptorSentenceLabel} now hopes to find a new opportunity after spending his final ${benchDuration || stintDuration} at ${previousTeamLabel} on the bench.`,
+          `${targetSecondDescriptorSentenceLabel} hits the open market after being sidelined from ${previousTeamLabel}'s active lineup for ${benchDuration || stintDuration}.`,
+          `${targetSecondDescriptorSentenceLabel} sees his contract expiry end a ${formatDurationAsCompound(benchDuration || stintDuration)} spell on the bench and will now seek a new team.`,
+          `${targetSecondDescriptorSentenceLabel} becomes available after spending the final ${benchDuration || stintDuration} of his ${previousTeamLabel} tenure on the bench.`,
+        ],
+        transfer.id + 31,
+      )
+    : pickVariant(
+        [
+          `${targetSecondDescriptorSentenceLabel}'s side of the decision remains unknown, with no clarity on whether he or ${previousTeamLabel} decided against extending the contract.`,
+          `${targetSecondDescriptorSentenceLabel} leaves with it still unclear whether he or the organization opted against a contract extension.`,
+          `${targetSecondDescriptorSentenceLabel} departs with the decision not to renew still unclear, as neither he nor ${previousTeamLabel} has been identified as the side behind it.`,
+          `${targetSecondDescriptorSentenceLabel}'s stay with ${previousTeamLabel} ends without clarity on which side decided against extending the deal.`,
+          `${targetSecondDescriptorSentenceLabel} leaves with no indication given as to whether he or ${previousTeamLabel} chose not to continue the partnership.`,
+          `${targetSecondDescriptorSentenceLabel}'s lack of an extension remains unexplained, with neither side known to have made the decision.`,
+          `${targetSecondDescriptorSentenceLabel} enters free agency with it still unknown whether he turned down an extension or ${previousTeamLabel} opted not to offer one.`,
+          `${targetSecondDescriptorSentenceLabel} parts ways with ${previousTeamLabel} without either side indicating who decided against continuing.`,
+          `${targetSecondDescriptorSentenceLabel} remained part of the active lineup until his contract expired, with the decision behind the lack of an extension unclear.`,
+          `${targetSecondDescriptorSentenceLabel} leaves while still part of ${previousTeamLabel}'s active lineup, though it remains unknown which side decided against extending the deal.`,
+        ],
+        transfer.id + 37,
+      );
+  const statLine =
+    sourceStats &&
+    (wasBenchedAtExpiry
+      ? titles.length
+        ? pickVariant(
+            [
+              `Before moving to the bench, ${targetLabel} played ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel} and averaged a ${formatRating(sourceStats.rating)} rating, helping the team win ${trophyList}.`,
+              `During their active stint with ${previousTeamLabel}, ${targetLabel} featured across ${mapCountLabel(sourceStats.maps)} with a ${formatRating(sourceStats.rating)} average and claimed ${titleNoun(titles.length)} at ${trophyList}.`,
+              `Prior to being benched, ${targetLabel} recorded a ${formatRating(sourceStats.rating)} rating over ${mapCountLabel(sourceStats.maps)} while helping ${previousTeamLabel} to ${victoryNoun(titles.length)} at ${trophyList}.`,
+              `${targetLabel} played ${mapCountLabel(sourceStats.maps)} during their time in ${previousTeamLabel}'s active lineup, averaging ${formatRating(sourceStats.rating)} and lifting ${titles.length === 1 ? 'a trophy' : 'trophies'} at ${trophyList}.`,
+              `Across ${mapCountLabel(sourceStats.maps)} in ${previousTeamLabel}'s starting lineup, ${targetLabel} averaged ${formatRating(sourceStats.rating)} and contributed to ${titles.length === 1 ? 'a triumph' : 'triumphs'} at ${trophyList}.`,
+            ],
+            transfer.id + 41,
+          )
+        : pickVariant(
+            [
+              `Before moving to the bench, ${targetLabel} played ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel} and averaged a ${formatRating(sourceStats.rating)} rating.`,
+              `During their active stint with ${previousTeamLabel}, ${targetLabel} featured across ${mapCountLabel(sourceStats.maps)} with a ${formatRating(sourceStats.rating)} average rating.`,
+              `Prior to being benched, ${targetLabel} recorded a ${formatRating(sourceStats.rating)} rating across ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel}.`,
+              `${targetLabel} played ${mapCountLabel(sourceStats.maps)} during their time in ${previousTeamLabel}'s active lineup, averaging a ${formatRating(sourceStats.rating)} rating.`,
+              `Across ${mapCountLabel(sourceStats.maps)} in ${previousTeamLabel}'s starting lineup, ${targetLabel} averaged a ${formatRating(sourceStats.rating)} rating before moving to the bench.`,
+            ],
+            transfer.id + 43,
+          )
+      : titles.length
+        ? pickVariant(
+            [
+              `During their stint, ${targetLabel} played ${mapCountLabel(sourceStats.maps)} at a ${formatRating(sourceStats.rating)} average, helping ${previousTeamLabel} win ${trophyList}.`,
+              `${targetLabel} featured across ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel} with a ${formatRating(sourceStats.rating)} rating and contributed to ${titles.length === 1 ? 'a victory' : 'victories'} at ${trophyList}.`,
+              `Over the course of their ${previousTeamLabel} spell, ${targetLabel} averaged ${formatRating(sourceStats.rating)} across ${mapCountLabel(sourceStats.maps)} while helping the team claim ${trophyList}.`,
+              `${targetLabel} leaves ${previousTeamLabel} after ${mapCountLabel(sourceStats.maps)} at a ${formatRating(sourceStats.rating)} average, with ${titleNoun(titles.length)} at ${trophyList} along the way.`,
+              `Across ${mapCountLabel(sourceStats.maps)} in ${previousTeamLabel} colors, ${targetLabel} averaged ${formatRating(sourceStats.rating)} and helped secure ${titles.length === 1 ? 'a trophy' : 'trophies'} at ${trophyList}.`,
+            ],
+            transfer.id + 47,
+          )
+        : pickVariant(
+            [
+              `During their stint with ${previousTeamLabel}, ${targetLabel} played ${mapCountLabel(sourceStats.maps)} and averaged a ${formatRating(sourceStats.rating)} rating.`,
+              `${targetLabel} featured across ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel}, posting a ${formatRating(sourceStats.rating)} average rating.`,
+              `Over the course of their ${previousTeamLabel} stint, ${targetLabel} recorded a ${formatRating(sourceStats.rating)} rating across ${mapCountLabel(sourceStats.maps)}.`,
+              `${targetLabel} leaves ${previousTeamLabel} having played ${mapCountLabel(sourceStats.maps)} at a ${formatRating(sourceStats.rating)} average.`,
+              `Across ${mapCountLabel(sourceStats.maps)} in ${previousTeamLabel} colors, ${targetLabel} averaged a ${formatRating(sourceStats.rating)} rating.`,
+              `${targetLabel}'s stint with ${previousTeamLabel} saw them average ${formatRating(sourceStats.rating)} across ${mapCountLabel(sourceStats.maps)}.`,
+              `Over ${mapCountLabel(sourceStats.maps)} for ${previousTeamLabel}, ${targetLabel} maintained a ${formatRating(sourceStats.rating)} average rating.`,
+            ],
+            transfer.id + 53,
+          ));
+  const finalLine = pickVariant(
+    [
+      `${targetLabel} now enters free agency with his next destination yet to be determined.`,
+      `${targetLaterDescriptorSentenceLabel} is now free to explore his options as he searches for his next team.`,
+      `${targetLabel}'s future remains open following the expiration of his ${previousTeamLabel} contract.`,
+      `${targetLabel} now heads to the open market with no new team confirmed.`,
+      `${targetLaterDescriptorSentenceLabel} is available as a free agent while he considers his next move.`,
+      `${targetLabel} will now assess his options after bringing his time with ${previousTeamLabel} to an end.`,
+      `No next destination has been announced for ${targetLabel} following his departure from ${previousTeamLabel}.`,
+      `${targetLabel} is now looking for his next opportunity after entering free agency.`,
+      `${targetLaterDescriptorSentenceLabel}'s next move remains unclear as he becomes available on the open market.`,
+      `${targetLabel} is free to speak with interested teams as he weighs up his future.`,
+      `${targetLabel} now faces an uncertain next chapter after his contract with ${previousTeamLabel} expired.`,
+      `The former ${previousTeamLabel} player is now on the market with his next destination still unknown.`,
+      `${targetLabel} will now look for a new home, with no agreement elsewhere announced so far.`,
+      `${targetLaterDescriptorSentenceLabel} enters free agency without a confirmed landing spot.`,
+      `${targetLabel}'s next step is yet to be revealed following the end of his ${previousTeamLabel} stint.`,
+      `${targetLabel} is now available to interested organizations as he searches for a new project.`,
+      `${targetLaterDescriptorSentenceLabel} will now consider his options before deciding on the next move of his career.`,
+      `${targetLabel} remains without a team for the time being after leaving ${previousTeamLabel}.`,
+      `${targetLabel}'s future is currently undecided as he begins his spell as a free agent.`,
+      `${targetLaterDescriptorSentenceLabel} now turns his attention to finding a new team after his ${previousTeamLabel} chapter came to a close.`,
+    ],
+    transfer.id + 61,
+  );
+  const type = isTopTeamTransfer ? 'ARTICLE' : 'SHORT';
+
+  return {
+    type,
+    topic: 'TRANSFERS',
+    headline,
+    summary,
+    body: [[firstSentence, addon].join(' '), statLine, finalLine].filter(Boolean).join('\n\n'),
+    image: playerImage(target, previousTeam),
+    priority: 0,
+    eventKey: `${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`,
+    payload: {
+      transferId: transfer.id,
+      playerId: target.id,
+      teamId: previousTeam.id,
+      teamIds: [previousTeam.id],
+      flagCode: toFlagCode(target.country?.code),
+      welcomeGraphic: getThankYouGraphic(previousTeam, target),
+      comments: buildTransferComments({
+        destination: null,
+        isArticle: type === 'ARTICLE',
+        seed: transfer.id,
+        seller: previousTeam,
+        target,
+      }),
+      relatedPlayers: [toRelatedPlayer(target)].filter(Boolean),
+      relatedTeams: [toRelatedTeam(previousTeam)].filter(Boolean),
+    },
+    publishedAt: articleDate,
+  };
 }
 
 function buildMatchDraft(
@@ -1527,7 +2115,10 @@ async function buildTransferDraft(
   const isTopTeamTransfer = destinationIsTop || sellerIsTop;
   const tier = getTransferTier(transfer);
   const latestOffer = transfer.offers[0];
-  const storyDate = getTransferStoryDate(transfer, publishedAt);
+  const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
+  const storyDate = isContractExpiry
+    ? transfer.target.lastOfferAt || publishedAt
+    : getTransferStoryDate(transfer, publishedAt);
   const articleDate = new Date(startOfDay(storyDate).getTime() + transfer.id);
   const isFreeAgentSigning =
     isNoTeam(seller) || (!!destination && !!seller && destination.id === seller.id);
@@ -1536,14 +2127,33 @@ async function buildTransferDraft(
     return null;
   }
 
+  if (isContractExpiry && destination && !isNoTeam(destination)) {
+    return buildContractExpiryDraft(
+      transfer,
+      destination,
+      storyDate,
+      articleDate,
+      includeStatistics,
+      isTopTeamTransfer,
+    );
+  }
+
   const targetName = playerName(target);
   const destinationName = teamName(destination);
   const sellerName = teamName(seller);
   const targetLabel = playerLink(target);
   const destinationLabel = teamLink(destination);
   const sellerLabel = teamLink(seller);
-  const targetAgeLabel = playerAgeLabel(target, targetLabel);
-  const targetAgeSentenceLabel = playerAgeLabel(target, targetLabel, true);
+  const targetMajorWins = await getPlayerMajorWinCount(target, storyDate);
+  const targetSecondDescriptorLabel = playerAgeLabel(target, targetLabel, false, targetMajorWins);
+  const targetSecondDescriptorSentenceLabel = playerAgeLabel(
+    target,
+    targetLabel,
+    true,
+    targetMajorWins,
+  );
+  const targetLaterDescriptorLabel = playerAgeLabel(target, targetLabel);
+  const targetLaterDescriptorSentenceLabel = playerAgeLabel(target, targetLabel, true);
   const mainTeam = destination || seller;
   const backfillDeparture = destination
     ? getBackfillDeparture(transfers, transfer, destination.id, storyDate, publishedAt)
@@ -1555,8 +2165,14 @@ async function buildTransferDraft(
   const backfillDestinationLabel = teamLink(backfillDeparture?.from);
   const benchedName = playerName(benchedPlayer);
   const benchedLabel = playerLink(benchedPlayer);
-  const benchedAgeLabel = playerAgeLabel(benchedPlayer, benchedLabel);
-  const benchedAgeSentenceLabel = playerAgeLabel(benchedPlayer, benchedLabel, true);
+  const benchedMajorWins = await getPlayerMajorWinCount(benchedPlayer, storyDate);
+  const benchedAgeLabel = playerAgeLabel(benchedPlayer, benchedLabel, false, benchedMajorWins);
+  const benchedAgeSentenceLabel = playerAgeLabel(
+    benchedPlayer,
+    benchedLabel,
+    true,
+    benchedMajorWins,
+  );
   const fee = latestOffer?.cost || 0;
   const includeDetailedStats = isTopTeamTransfer;
   const includeShortSourceStats = seededNumber(transfer.id, 83) > 0.45;
@@ -1585,6 +2201,14 @@ async function buildTransferDraft(
     statsSourceTeamId && target.id
       ? activeSourceStint || currentSourceStint || freeAgentPreviousStint
       : null;
+  const sourceSpell =
+    statsSourceTeamId && target.id
+      ? findContinuousCareerSpellForTeam(target, statsSourceTeamId, storyDate)
+      : null;
+  const sourceStintDuration = formatContractDuration(
+    sourceSpell?.startedAt || sourceStint?.startedAt,
+    storyDate,
+  );
   const benchDuration = isSignedFromBench
     ? formatBenchDuration(currentSourceStint?.startedAt, storyDate)
     : null;
@@ -1613,6 +2237,9 @@ async function buildTransferDraft(
     isFreeAgentSigning ? null : seller?.id,
     storyDate,
     target,
+    sourceSpell?.startedAt || sourceStint?.startedAt
+      ? new Date(sourceSpell?.startedAt || sourceStint?.startedAt || storyDate)
+      : null,
   );
   const benchedStintEnd = benchedStint?.endedAt ? new Date(benchedStint.endedAt) : storyDate;
   const benchedStintDuration = benchedStint
@@ -1805,26 +2432,33 @@ async function buildTransferDraft(
           : destination
             ? pickVariant(freeAgentOpeners, transfer.id + 17)
             : pickVariant(departureOpeners, transfer.id + 17);
+  const hasAwperLine = Boolean(destination && benchedPlayer && isAwper(target) && isAwper(benchedPlayer));
+  const targetStatsDescriptorLabel = hasAwperLine
+    ? targetLaterDescriptorLabel
+    : targetSecondDescriptorLabel;
+  const targetStatsDescriptorSentenceLabel = hasAwperLine
+    ? targetLaterDescriptorSentenceLabel
+    : targetSecondDescriptorSentenceLabel;
   const statLine =
     sourceStats && statsSourceTeam
       ? pickVariant(
           isSignedFromBench
             ? [
-                `Before moving to the bench, ${targetAgeLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} for ${statsSourceLabel}.`,
+                `Before moving to the bench, ${targetStatsDescriptorLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} for ${statsSourceLabel}.`,
                 `Prior to being benched, ${targetLabel} posted a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} with ${statsSourceLabel}.`,
-                `${targetAgeSentenceLabel} recorded a ${formatRating(sourceStats.rating)} average across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} before being moved out of ${statsSourceLabel}'s active lineup.`,
+                `${targetStatsDescriptorSentenceLabel} recorded a ${formatRating(sourceStats.rating)} average across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} before being moved out of ${statsSourceLabel}'s active lineup.`,
                 `Before their spell on the bench, ${targetLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} for ${statsSourceLabel}.`,
                 `${targetLabel} had posted a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} with ${statsSourceLabel} before being benched.`,
-                `During their previous run in ${statsSourceLabel}'s active lineup, ${targetAgeLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'}.`,
+                `During their previous run in ${statsSourceLabel}'s active lineup, ${targetStatsDescriptorLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'}.`,
                 `${targetLabel} leaves ${statsSourceLabel} having previously averaged a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} before moving to the bench.`,
-                `Prior to their benching, ${targetAgeLabel} registered a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} in ${statsSourceLabel} colors.`,
+                `Prior to their benching, ${targetStatsDescriptorLabel} registered a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} in ${statsSourceLabel} colors.`,
                 `${targetLabel} averaged a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} during their last stint in ${statsSourceLabel}'s starting lineup.`,
                 `Before dropping out of the active roster, ${targetLabel} recorded a ${formatRating(sourceStats.rating)} average across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} for ${statsSourceLabel}.`,
-                `${targetAgeSentenceLabel} had accumulated a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} before ${statsSourceLabel} moved them to the bench.`,
+                `${targetStatsDescriptorSentenceLabel} had accumulated a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} before ${statsSourceLabel} moved them to the bench.`,
                 `${targetLabel}'s most recent active stint with ${statsSourceLabel} saw them average a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'}.`,
                 `Before spending time on the sidelines, ${targetLabel} posted a ${formatRating(sourceStats.rating)} average across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} for ${statsSourceLabel}.`,
                 `${targetLabel} entered their bench spell at ${statsSourceLabel} with a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} played in the active lineup.`,
-                `${targetAgeSentenceLabel} averaged a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} in ${statsSourceLabel}'s lineup before eventually being benched.`,
+                `${targetStatsDescriptorSentenceLabel} averaged a ${formatRating(sourceStats.rating)} rating over ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} in ${statsSourceLabel}'s lineup before eventually being benched.`,
               ]
             : [
                 `${targetLabel} averaged a ${formatRating(sourceStats.rating)} rating across ${sourceStats.maps} map${sourceStats.maps === 1 ? '' : 's'} during the ${statsSourceLabel} stint.`,
@@ -1851,52 +2485,52 @@ async function buildTransferDraft(
       ? pickVariant(
           {
             GREAT: [
-              `${targetAgeSentenceLabel} will look to carry their strong form into their new surroundings.`,
-              `${targetAgeSentenceLabel} hopes to maintain their level of performance under the new banner.`,
-              `${targetAgeSentenceLabel} will aim to build on their impressive form with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes to keep their momentum going in the new jersey.`,
-              `${targetAgeSentenceLabel} will look to continue delivering at a high level for ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes their strong run of form carries over to the new lineup.`,
-              `${targetAgeSentenceLabel} will aim to replicate their previous performances with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes to remain a consistent performer in their new colors.`,
-              `${targetAgeSentenceLabel} will look to pick up where they left off after joining ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes to bring the same level of impact to their new team.`,
+              `${targetStatsDescriptorSentenceLabel} will look to carry their strong form into their new surroundings.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to maintain their level of performance under the new banner.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to build on their impressive form with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to keep their momentum going in the new jersey.`,
+              `${targetStatsDescriptorSentenceLabel} will look to continue delivering at a high level for ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes their strong run of form carries over to the new lineup.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to replicate their previous performances with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to remain a consistent performer in their new colors.`,
+              `${targetStatsDescriptorSentenceLabel} will look to pick up where they left off after joining ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to bring the same level of impact to their new team.`,
             ],
             GOOD: [
-              `${targetAgeSentenceLabel} will look to take another step forward under the new banner.`,
-              `${targetAgeSentenceLabel} hopes to further develop their game with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} will aim to improve on their previous level in the new lineup.`,
-              `${targetAgeSentenceLabel} hopes the move can help elevate their performances further.`,
-              `${targetAgeSentenceLabel} will look to build on their solid showing with ${statsSourceLabel}.`,
-              `${targetAgeSentenceLabel} hopes to reach another level in their new surroundings.`,
-              `${targetAgeSentenceLabel} will aim to continue progressing as part of ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes the new environment can bring further improvement.`,
-              `${targetAgeSentenceLabel} will look to build on their previous form in the ${destinationLabel} jersey.`,
-              `${targetAgeSentenceLabel} hopes to raise their level after making the switch to ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} will look to take another step forward under the new banner.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to further develop their game with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to improve on their previous level in the new lineup.`,
+              `${targetStatsDescriptorSentenceLabel} hopes the move can help elevate their performances further.`,
+              `${targetStatsDescriptorSentenceLabel} will look to build on their solid showing with ${statsSourceLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to reach another level in their new surroundings.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to continue progressing as part of ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes the new environment can bring further improvement.`,
+              `${targetStatsDescriptorSentenceLabel} will look to build on their previous form in the ${destinationLabel} jersey.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to raise their level after making the switch to ${destinationLabel}.`,
             ],
             MIXED: [
-              `${targetAgeSentenceLabel} will look to sharpen their game under the new banner.`,
-              `${targetAgeSentenceLabel} hopes to develop further in their new surroundings.`,
-              `${targetAgeSentenceLabel} will aim to strengthen their performances with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes the move provides an opportunity to take their game forward.`,
-              `${targetAgeSentenceLabel} will look to make further strides as part of the new lineup.`,
-              `${targetAgeSentenceLabel} hopes to refine their game during their time with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} will aim to unlock more of their potential under the new banner.`,
-              `${targetAgeSentenceLabel} hopes a change of scenery can help improve their level.`,
-              `${targetAgeSentenceLabel} will look to grow into a stronger contributor for ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes to make progress and establish themselves in the new lineup.`,
+              `${targetStatsDescriptorSentenceLabel} will look to sharpen their game under the new banner.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to develop further in their new surroundings.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to strengthen their performances with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes the move provides an opportunity to take their game forward.`,
+              `${targetStatsDescriptorSentenceLabel} will look to make further strides as part of the new lineup.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to refine their game during their time with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to unlock more of their potential under the new banner.`,
+              `${targetStatsDescriptorSentenceLabel} hopes a change of scenery can help improve their level.`,
+              `${targetStatsDescriptorSentenceLabel} will look to grow into a stronger contributor for ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to make progress and establish themselves in the new lineup.`,
             ],
             POOR: [
-              `${targetAgeSentenceLabel} will look to rediscover their form with ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes a fresh start can help turn their performances around.`,
-              `${targetAgeSentenceLabel} will aim to bounce back in their new surroundings.`,
-              `${targetAgeSentenceLabel} hopes the move to ${destinationLabel} can spark an upturn in form.`,
-              `${targetAgeSentenceLabel} will look to get back on track under the new banner.`,
-              `${targetAgeSentenceLabel} hopes a new environment can help them regain their footing.`,
-              `${targetAgeSentenceLabel} will aim to put their previous struggles behind them at ${destinationLabel}.`,
-              `${targetAgeSentenceLabel} hopes to find renewed form after making the switch.`,
-              `${targetAgeSentenceLabel} will look to reset and improve upon their recent performances.`,
-              `${targetAgeSentenceLabel} hopes their new chapter with ${destinationLabel} can bring stronger results.`,
+              `${targetStatsDescriptorSentenceLabel} will look to rediscover their form with ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes a fresh start can help turn their performances around.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to bounce back in their new surroundings.`,
+              `${targetStatsDescriptorSentenceLabel} hopes the move to ${destinationLabel} can spark an upturn in form.`,
+              `${targetStatsDescriptorSentenceLabel} will look to get back on track under the new banner.`,
+              `${targetStatsDescriptorSentenceLabel} hopes a new environment can help them regain their footing.`,
+              `${targetStatsDescriptorSentenceLabel} will aim to put their previous struggles behind them at ${destinationLabel}.`,
+              `${targetStatsDescriptorSentenceLabel} hopes to find renewed form after making the switch.`,
+              `${targetStatsDescriptorSentenceLabel} will look to reset and improve upon their recent performances.`,
+              `${targetStatsDescriptorSentenceLabel} hopes their new chapter with ${destinationLabel} can bring stronger results.`,
             ],
           }[getRatingBucket(sourceStats.rating)],
           transfer.id + 41,
@@ -1904,40 +2538,40 @@ async function buildTransferDraft(
       : null;
   const sourceStatsParagraph = [statLine, sourceStatsAddonLine].filter(Boolean).join(' ') || null;
   const awperLine =
-    destination && benchedPlayer && isAwper(target) && isAwper(benchedPlayer)
+    hasAwperLine
       ? pickVariant(
           [
-            `${destinationLabel} will retain their AWP setup, with ${targetAgeLabel} replacing fellow sniper ${benchedLabel}.`,
-            `${destinationLabel} have found their new AWPer, bringing in ${targetAgeLabel} to take over from ${benchedLabel}.`,
-            `${targetAgeSentenceLabel} steps into the AWP role for ${destinationLabel}, replacing fellow AWPer ${benchedLabel}.`,
-            `${destinationLabel} keep the AWP position unchanged in structure, with ${targetAgeLabel} coming in for ${benchedLabel}.`,
-            `${destinationLabel} have opted for an AWP change, replacing ${benchedLabel} with ${targetAgeLabel}.`,
-            `${targetAgeSentenceLabel} takes over ${destinationLabel}'s AWP duties from ${benchedLabel}.`,
-            `${destinationLabel} remain committed to the AWP role as ${targetAgeLabel} replaces ${benchedLabel} in the lineup.`,
-            `${targetAgeSentenceLabel} joins ${destinationLabel} as the new AWPer, taking the place of ${benchedLabel}.`,
-            `${destinationLabel} make a direct change in the AWP position, bringing ${targetAgeLabel} in for ${benchedLabel}.`,
-            `${targetAgeSentenceLabel} is set to assume AWP responsibilities for ${destinationLabel} following ${benchedLabel}'s departure.`,
-            `${destinationLabel} swap one AWPer for another, with ${targetAgeLabel} arriving to replace ${benchedLabel}.`,
+            `${destinationLabel} will retain their AWP setup, with ${targetSecondDescriptorLabel} replacing fellow sniper ${benchedLabel}.`,
+            `${destinationLabel} have found their new AWPer, bringing in ${targetSecondDescriptorLabel} to take over from ${benchedLabel}.`,
+            `${targetSecondDescriptorSentenceLabel} steps into the AWP role for ${destinationLabel}, replacing fellow AWPer ${benchedLabel}.`,
+            `${destinationLabel} keep the AWP position unchanged in structure, with ${targetSecondDescriptorLabel} coming in for ${benchedLabel}.`,
+            `${destinationLabel} have opted for an AWP change, replacing ${benchedLabel} with ${targetSecondDescriptorLabel}.`,
+            `${targetSecondDescriptorSentenceLabel} takes over ${destinationLabel}'s AWP duties from ${benchedLabel}.`,
+            `${destinationLabel} remain committed to the AWP role as ${targetSecondDescriptorLabel} replaces ${benchedLabel} in the lineup.`,
+            `${targetSecondDescriptorSentenceLabel} joins ${destinationLabel} as the new AWPer, taking the place of ${benchedLabel}.`,
+            `${destinationLabel} make a direct change in the AWP position, bringing ${targetSecondDescriptorLabel} in for ${benchedLabel}.`,
+            `${targetSecondDescriptorSentenceLabel} is set to assume AWP responsibilities for ${destinationLabel} following ${benchedLabel}'s departure.`,
+            `${destinationLabel} swap one AWPer for another, with ${targetSecondDescriptorLabel} arriving to replace ${benchedLabel}.`,
           ],
           transfer.id + 43,
         )
       : null;
-  const trophyList = formatLinkedList(
-    sellerTitles.map((title) => competitionLink(title.competition)),
-  );
+  const trophyList = formatCompetitionTitleList(sellerTitles);
+  const sourceDurationLabel = sourceStintDuration || 'their time';
+  const sourceStintLabel = sourceStintDuration ? `${sourceStintDuration} stint` : 'time';
   const titlesLine = sellerTitles.length
     ? pickVariant(
         [
-          `${targetLabel} also departs with silverware to their name after ${sellerLabel}'s recent triumph at ${trophyList}.`,
-          `${targetLabel} leaves ${sellerLabel} on the back of a recent title win at ${trophyList}.`,
-          `The move also sees ${targetLabel} leave behind a trophy-winning side, with ${sellerLabel} recently claiming ${trophyList}.`,
-          `${targetLabel} exits ${sellerLabel} after helping the team secure the title at ${trophyList}.`,
-          `${targetLabel}'s stint with ${sellerLabel} also included recent silverware at ${trophyList}.`,
-          `${targetLabel} departs ${sellerLabel} shortly after the team's victory at ${trophyList}.`,
-          `The ${sellerLabel} chapter ends with silverware for ${targetLabel} following the recent ${trophyList} win.`,
-          `${targetLabel} leaves ${sellerLabel} as a recent champion, having won ${trophyList} with the team.`,
-          `${targetLabel} moves on from ${sellerLabel} after adding ${trophyList} to their list of achievements.`,
-          `${targetLabel}'s departure comes after ${sellerLabel} recently lifted the trophy at ${trophyList}.`,
+          `${targetLabel} leaves ${sellerLabel} after ${sourceDurationLabel} with the team, a spell that included silverware at ${trophyList}.`,
+          `${targetLabel} moves on from ${sellerLabel} after ${sourceDurationLabel}, having won ${trophyList} with the team.`,
+          `${targetLabel}'s ${sourceStintLabel} with ${sellerLabel} included title success at ${trophyList}.`,
+          `${targetLabel} exits ${sellerLabel} after ${sourceDurationLabel}, during which they helped the team win ${trophyList}.`,
+          `${targetLabel} departs ${sellerLabel} after ${sourceDurationLabel} and silverware at ${trophyList}.`,
+          `${targetLabel}'s time with ${sellerLabel} ends after ${sourceDurationLabel}, with trophies claimed at ${trophyList}.`,
+          `The ${sellerLabel} chapter closes for ${targetLabel} after ${sourceDurationLabel}, a run that featured success at ${trophyList}.`,
+          `${targetLabel} leaves ${sellerLabel} after ${sourceDurationLabel} as a title winner with victories at ${trophyList}.`,
+          `${targetLabel} moves on from ${sellerLabel} after ${sourceDurationLabel}, adding ${trophyList} to their list of achievements along the way.`,
+          `${targetLabel}'s departure from ${sellerLabel} comes after ${sourceDurationLabel} together and title wins at ${trophyList}.`,
         ],
         transfer.id + 47,
       )
@@ -2060,9 +2694,7 @@ async function buildTransferDraft(
           )
         : null
     : null;
-  const benchedTrophyList = formatLinkedList(
-    benchedTitles.map((title) => competitionLink(title.competition)),
-  );
+  const benchedTrophyList = formatCompetitionTitleList(benchedTitles);
   const benchedWonMultipleTitles = benchedTitles.length !== 1;
   const benchedStintAddonLine =
     benchedStats && benchedStintDuration

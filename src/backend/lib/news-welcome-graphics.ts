@@ -581,6 +581,26 @@ const WELCOME_GRAPHIC_TEMPLATES: Record<string, WelcomeGraphicTemplate> = {
     template: 'resources://news/welcome/welcome-tyloo.png',
     textColor: '#ffffff',
   },
+  passionua: {
+    aliases: ['passion-ua'],
+    aspectRatio: '1672 / 941',
+    avatarLayout: {
+      bottom: '0%',
+      height: '101%',
+      left: '59%',
+      maxWidth: '42%',
+    },
+    fontFamily: 'BEBAS NEUE',
+    fontSize: '5.6rem',
+    nameLayout: {
+      left: '16%',
+      top: '82%',
+      width: '40%',
+    },
+    template: 'resources://news/welcome/welcome-passionua.png',
+    textColor: '#ffffff',
+    textStroke: '1px #095cff',
+  },
   bcgame: {
     aliases: ['bc-game', 'bc-game-esports'],
     aspectRatio: '1672 / 941',
@@ -676,6 +696,26 @@ export function getWelcomeGraphic(
         avatar: player?.avatar || 'resources://avatars/empty.png',
         playerName: getPlayerName(player).toLocaleUpperCase(),
         teamSlug: match.key,
+      }
+    : null;
+}
+
+export function getThankYouGraphic(
+  team: WelcomeGraphicTeam | null | undefined,
+  player: WelcomeGraphicPlayer | null | undefined,
+) {
+  const match = getWelcomeGraphicTemplate(team);
+
+  return match
+    ? {
+        ...match.template,
+        avatar: player?.avatar || 'resources://avatars/empty.png',
+        playerName: getPlayerName(player).toLocaleUpperCase(),
+        teamSlug: match.key,
+        template: match.template.template.replace(
+          /resources:\/\/news\/welcome\/welcome-/,
+          'resources://news/thankyou/thankyou-',
+        ),
       }
     : null;
 }

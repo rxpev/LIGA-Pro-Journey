@@ -11,6 +11,8 @@ const SAVE_IDENTITY_KEY = 'saveUuid';
 const INSTALL_SECRET_FILE = 'index.bin';
 const SAVE_REGISTRY_FILE = 'store.bin';
 const SQLITE_PARAMETER_BATCH_SIZE = 500;
+const SAVE_INTEGRITY_RESTORE_TRANSACTION_TIMEOUT_MS = 60_000;
+const SAVE_INTEGRITY_RESTORE_TRANSACTION_MAX_WAIT_MS = 10_000;
 const execFileAsync = promisify(execFile);
 
 type SaveIntegrityRecord = {
@@ -382,153 +384,159 @@ async function restoreProtectedSaveSnapshot(
   prisma: PrismaClientType,
   snapshot: ProtectedSaveSnapshot,
 ) {
-  await prisma.$transaction(async (tx) => {
-    for (const player of snapshot.players) {
-      const data = {
-        age: player.age,
-        avatar: player.avatar,
-        contractEnd: player.contractEnd ? new Date(player.contractEnd) : null,
-        cost: player.cost,
-        countryId: player.countryId,
-        elo: player.elo,
-        lastOfferAt: player.lastOfferAt ? new Date(player.lastOfferAt) : null,
-        name: player.name,
-        personality: player.personality,
-        prestige: player.prestige,
-        role: player.role,
-        starter: player.starter,
-        teamId: player.teamId,
-        transferListed: player.transferListed,
-        userControlled: player.userControlled,
-        wages: player.wages,
-        xp: player.xp,
-      };
+  await prisma.$transaction(
+    async (tx) => {
+      for (const player of snapshot.players) {
+        const data = {
+          age: player.age,
+          avatar: player.avatar,
+          contractEnd: player.contractEnd ? new Date(player.contractEnd) : null,
+          cost: player.cost,
+          countryId: player.countryId,
+          elo: player.elo,
+          lastOfferAt: player.lastOfferAt ? new Date(player.lastOfferAt) : null,
+          name: player.name,
+          personality: player.personality,
+          prestige: player.prestige,
+          role: player.role,
+          starter: player.starter,
+          teamId: player.teamId,
+          transferListed: player.transferListed,
+          userControlled: player.userControlled,
+          wages: player.wages,
+          xp: player.xp,
+        };
 
-      await tx.player.upsert({
-        where: { id: player.id },
-        create: {
-          id: player.id,
-          ...data,
-        },
-        update: data,
-      }).catch(() => Promise.resolve());
-    }
+        await tx.player.upsert({
+          where: { id: player.id },
+          create: {
+            id: player.id,
+            ...data,
+          },
+          update: data,
+        }).catch(() => Promise.resolve());
+      }
 
-    for (const profile of snapshot.profiles) {
-      await tx.profile.update({
-        where: { id: profile.id },
-        data: {
-          date: new Date(profile.date),
-          faceitElo: profile.faceitElo,
-          name: profile.name,
-          playerId: profile.playerId,
-          season: profile.season,
-          simulateNpcMatchStats: profile.simulateNpcMatchStats,
-          teamId: profile.teamId,
-        },
-      }).catch(() => Promise.resolve());
-    }
+      for (const profile of snapshot.profiles) {
+        await tx.profile.update({
+          where: { id: profile.id },
+          data: {
+            date: new Date(profile.date),
+            faceitElo: profile.faceitElo,
+            name: profile.name,
+            playerId: profile.playerId,
+            season: profile.season,
+            simulateNpcMatchStats: profile.simulateNpcMatchStats,
+            teamId: profile.teamId,
+          },
+        }).catch(() => Promise.resolve());
+      }
 
-    for (const stint of snapshot.careerStints) {
-      await tx.careerStint.upsert({
-        where: { id: stint.id },
-        create: {
-          id: stint.id,
-          endedAt: stint.endedAt ? new Date(stint.endedAt) : null,
-          playerId: stint.playerId,
-          startedAt: stint.startedAt ? new Date(stint.startedAt) : new Date(),
-          starter: stint.starter,
-          teamId: stint.teamId,
-          tier: stint.tier,
-        },
-        update: {
-          endedAt: stint.endedAt ? new Date(stint.endedAt) : null,
-          playerId: stint.playerId,
-          startedAt: stint.startedAt ? new Date(stint.startedAt) : new Date(),
-          starter: stint.starter,
-          teamId: stint.teamId,
-          tier: stint.tier,
-        },
+      for (const stint of snapshot.careerStints) {
+        await tx.careerStint.upsert({
+          where: { id: stint.id },
+          create: {
+            id: stint.id,
+            endedAt: stint.endedAt ? new Date(stint.endedAt) : null,
+            playerId: stint.playerId,
+            startedAt: stint.startedAt ? new Date(stint.startedAt) : new Date(),
+            starter: stint.starter,
+            teamId: stint.teamId,
+            tier: stint.tier,
+          },
+          update: {
+            endedAt: stint.endedAt ? new Date(stint.endedAt) : null,
+            playerId: stint.playerId,
+            startedAt: stint.startedAt ? new Date(stint.startedAt) : new Date(),
+            starter: stint.starter,
+            teamId: stint.teamId,
+            tier: stint.tier,
+          },
+        });
+      }
+
+      const protectedStintIds = new Set(snapshot.careerStints.map((stint) => stint.id));
+      const currentStintIds = await tx.careerStint.findMany({
+        select: { id: true },
       });
-    }
+      const extraStintIds = currentStintIds
+        .map((stint) => stint.id)
+        .filter((id) => !protectedStintIds.has(id));
 
-    const protectedStintIds = new Set(snapshot.careerStints.map((stint) => stint.id));
-    const currentStintIds = await tx.careerStint.findMany({
-      select: { id: true },
-    });
-    const extraStintIds = currentStintIds
-      .map((stint) => stint.id)
-      .filter((id) => !protectedStintIds.has(id));
+      for (const ids of chunkArray(extraStintIds, SQLITE_PARAMETER_BATCH_SIZE)) {
+        await tx.careerStint.deleteMany({
+          where: { id: { in: ids } },
+        });
+      }
 
-    for (const ids of chunkArray(extraStintIds, SQLITE_PARAMETER_BATCH_SIZE)) {
-      await tx.careerStint.deleteMany({
-        where: { id: { in: ids } },
+      for (const entry of snapshot.teammateSeasonXp) {
+        await tx.userTeammateSeasonXp.upsert({
+          where: { id: entry.id },
+          create: entry,
+          update: {
+            baselineXp: entry.baselineXp,
+            playerId: entry.playerId,
+            profileId: entry.profileId,
+            season: entry.season,
+          },
+        });
+      }
+
+      const protectedTeammateXpIds = new Set(snapshot.teammateSeasonXp.map((entry) => entry.id));
+      const currentTeammateXpIds = await tx.userTeammateSeasonXp.findMany({
+        select: { id: true },
       });
-    }
+      const extraTeammateXpIds = currentTeammateXpIds
+        .map((entry) => entry.id)
+        .filter((id) => !protectedTeammateXpIds.has(id));
 
-    for (const entry of snapshot.teammateSeasonXp) {
-      await tx.userTeammateSeasonXp.upsert({
-        where: { id: entry.id },
-        create: entry,
-        update: {
-          baselineXp: entry.baselineXp,
-          playerId: entry.playerId,
-          profileId: entry.profileId,
-          season: entry.season,
-        },
+      for (const ids of chunkArray(extraTeammateXpIds, SQLITE_PARAMETER_BATCH_SIZE)) {
+        await tx.userTeammateSeasonXp.deleteMany({
+          where: { id: { in: ids } },
+        });
+      }
+
+      for (const match of snapshot.faceitMatches) {
+        await tx.match.update({
+          where: { id: match.id },
+          data: {
+            faceitEloDelta: match.faceitEloDelta,
+            faceitIsWin: match.faceitIsWin,
+            faceitOpponents: match.faceitOpponents,
+            faceitRating: match.faceitRating,
+            faceitTeammates: match.faceitTeammates,
+            status: match.status,
+          },
+        }).catch(() => Promise.resolve());
+      }
+
+      const protectedFaceitMatchIds = new Set(snapshot.faceitMatches.map((match) => match.id));
+      const currentFaceitMatchIds = await tx.match.findMany({
+        where: { matchType: 'FACEIT_PUG' },
+        select: { id: true },
       });
-    }
+      const extraFaceitMatchIds = currentFaceitMatchIds
+        .map((match) => match.id)
+        .filter((id) => !protectedFaceitMatchIds.has(id));
 
-    const protectedTeammateXpIds = new Set(snapshot.teammateSeasonXp.map((entry) => entry.id));
-    const currentTeammateXpIds = await tx.userTeammateSeasonXp.findMany({
-      select: { id: true },
-    });
-    const extraTeammateXpIds = currentTeammateXpIds
-      .map((entry) => entry.id)
-      .filter((id) => !protectedTeammateXpIds.has(id));
-
-    for (const ids of chunkArray(extraTeammateXpIds, SQLITE_PARAMETER_BATCH_SIZE)) {
-      await tx.userTeammateSeasonXp.deleteMany({
-        where: { id: { in: ids } },
-      });
-    }
-
-    for (const match of snapshot.faceitMatches) {
-      await tx.match.update({
-        where: { id: match.id },
-        data: {
-          faceitEloDelta: match.faceitEloDelta,
-          faceitIsWin: match.faceitIsWin,
-          faceitOpponents: match.faceitOpponents,
-          faceitRating: match.faceitRating,
-          faceitTeammates: match.faceitTeammates,
-          status: match.status,
-        },
-      }).catch(() => Promise.resolve());
-    }
-
-    const protectedFaceitMatchIds = new Set(snapshot.faceitMatches.map((match) => match.id));
-    const currentFaceitMatchIds = await tx.match.findMany({
-      where: { matchType: 'FACEIT_PUG' },
-      select: { id: true },
-    });
-    const extraFaceitMatchIds = currentFaceitMatchIds
-      .map((match) => match.id)
-      .filter((id) => !protectedFaceitMatchIds.has(id));
-
-    for (const ids of chunkArray(extraFaceitMatchIds, SQLITE_PARAMETER_BATCH_SIZE)) {
-      await tx.match.updateMany({
-        where: { id: { in: ids } },
-        data: {
-          faceitEloDelta: null,
-          faceitIsWin: null,
-          faceitOpponents: null,
-          faceitRating: null,
-          faceitTeammates: null,
-        },
-      });
-    }
-  });
+      for (const ids of chunkArray(extraFaceitMatchIds, SQLITE_PARAMETER_BATCH_SIZE)) {
+        await tx.match.updateMany({
+          where: { id: { in: ids } },
+          data: {
+            faceitEloDelta: null,
+            faceitIsWin: null,
+            faceitOpponents: null,
+            faceitRating: null,
+            faceitTeammates: null,
+          },
+        });
+      }
+    },
+    {
+      maxWait: SAVE_INTEGRITY_RESTORE_TRANSACTION_MAX_WAIT_MS,
+      timeout: SAVE_INTEGRITY_RESTORE_TRANSACTION_TIMEOUT_MS,
+    },
+  );
 }
 
 async function readIntegrityRecord(saveUuid: string) {
