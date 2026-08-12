@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { FaStar } from 'react-icons/fa';
+import { FaChartBar, FaNewspaper, FaStar } from 'react-icons/fa';
 import { levelFromElo } from '@liga/backend/lib/levels';
 import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -339,6 +339,32 @@ export default function TransferModal() {
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
+  const openPlayerStatistics = React.useCallback(() => {
+    if (!player) return;
+
+    api.window.send<ModalRequest<{ tab: 'GLOBAL_PLAYERS'; playerId: number }>>(
+      Constants.WindowIdentifier.Main,
+      {
+        target: '/stats',
+        payload: {
+          tab: 'GLOBAL_PLAYERS',
+          playerId: player.id,
+        },
+      },
+      0,
+    );
+    api.window.close(Constants.WindowIdentifier.Modal);
+  }, [player]);
+  const openNewsPlaceholder = React.useCallback(() => {
+    api.window.send<ModalRequest>(
+      Constants.WindowIdentifier.Main,
+      {
+        target: '/news',
+      },
+      0,
+    );
+    api.window.close(Constants.WindowIdentifier.Modal);
+  }, []);
 
   if (!player) {
     return (
@@ -449,7 +475,31 @@ export default function TransferModal() {
                     )}
                   </div>
                   <span className="h-5 w-px bg-white/20" />
-                  <div className="mb-0.5 flex items-center gap-2">
+                  <div className="relative mb-0.5 flex items-center gap-2">
+                    {state.profile?.simulateNpcMatchStats && (
+                      <div className="absolute bottom-9 left-1/2 flex -translate-x-1/2 items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-square border-base-content/20 bg-base-200/80 size-8 min-h-0 hover:bg-primary hover:text-primary-content"
+                          title="View detailed player statistics"
+                          aria-label="View detailed player statistics"
+                          data-interaction-sound="click"
+                          onClick={openPlayerStatistics}
+                        >
+                          <FaChartBar className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-square border-base-content/20 bg-base-200/80 size-8 min-h-0 hover:bg-primary hover:text-primary-content"
+                          title="View related news"
+                          aria-label="View related news"
+                          data-interaction-sound="click"
+                          onClick={openNewsPlaceholder}
+                        >
+                          <FaNewspaper className="size-4" />
+                        </button>
+                      </div>
+                    )}
                     <img src={faceitLogo} className="h-5 w-5 object-contain" />
                     <img
                       src={FACEIT_LEVEL_IMAGES[faceitLevel ?? 1] || FACEIT_LEVEL_IMAGES[1]}

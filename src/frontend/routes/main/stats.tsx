@@ -11,7 +11,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { Pagination } from '@liga/frontend/components';
 import { FaChartBar } from 'react-icons/fa';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import CompetitionLocationTag from './competitions/competition-location-tag';
 
 declare const require: {
@@ -67,6 +67,11 @@ type StatsPlayerOption = {
   deaths?: number;
   assists?: number;
   maps?: number;
+};
+
+type StatsRouteState = {
+  playerId?: number;
+  tab?: 'GLOBAL_PLAYERS';
 };
 
 type WeaponPerformance = {
@@ -821,6 +826,7 @@ function getPlayerMatchCompetitor(match: MatchRecord, playerId: number, selected
 
 export default function LeagueStatsConcept(): JSX.Element {
   const { state } = React.useContext(AppStateContext);
+  const location = useLocation();
   const [loading, setLoading] = React.useState(true);
   const [activeTab, setActiveTab] = React.useState<StatsTab>(StatsTab.INDIVIDUAL);
   const [activeDetailView, setActiveDetailView] = React.useState<StatsDetailView>(
@@ -829,6 +835,8 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [matches, setMatches] = React.useState<MatchRecord[]>([]);
   const [globalPlayerMatches, setGlobalPlayerMatches] = React.useState<MatchRecord[]>([]);
   const [globalPlayers, setGlobalPlayers] = React.useState<StatsPlayerOption[]>([]);
+  const [selectedGlobalPlayerProfile, setSelectedGlobalPlayerProfile] =
+    React.useState<StatsPlayerOption | null>(null);
   const [globalPlayerTeams, setGlobalPlayerTeams] = React.useState<Array<any>>([]);
   const [numGlobalPlayers, setNumGlobalPlayers] = React.useState(0);
   const [globalPlayerPage, setGlobalPlayerPage] = React.useState(1);
@@ -973,6 +981,30 @@ export default function LeagueStatsConcept(): JSX.Element {
       .then((teams: any[]) => setGlobalPlayerTeams(teams));
   }, [canViewGlobalPlayerStats]);
 
+  React.useEffect(() => {
+    const routeState = location.state as StatsRouteState | null;
+    const playerId = Number(routeState?.playerId);
+
+    if (
+      !canViewGlobalPlayerStats ||
+      routeState?.tab !== 'GLOBAL_PLAYERS' ||
+      !Number.isFinite(playerId)
+    ) {
+      return;
+    }
+
+    setSelectedGlobalDetailCompetitionGroup('');
+    setSelectedGlobalDetailMap('');
+    setSelectedGlobalDetailSeason('');
+    setSelectedGlobalDetailTimeframe('');
+    setSelectedGlobalDetailMatchType('');
+    setSelectedGlobalDetailCompetitionStage('');
+    setSelectedGlobalDetailCareerTeamId('');
+    setActiveTab(StatsTab.GLOBAL_PLAYERS);
+    setSelectedGlobalPlayerId(String(playerId));
+    setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+  }, [canViewGlobalPlayerStats, location.state]);
+
   const careerTeamIds = React.useMemo(
     () => [...new Set(careerStints.map((stint) => stint.teamId))],
     [careerStints],
@@ -1115,6 +1147,37 @@ export default function LeagueStatsConcept(): JSX.Element {
     canViewGlobalPlayerStats,
     selectedGlobalPlayerId,
   ]);
+
+  React.useEffect(() => {
+    if (!canViewGlobalPlayerStats || activeTab !== StatsTab.GLOBAL_PLAYERS || !selectedGlobalPlayerId) {
+      setSelectedGlobalPlayerProfile(null);
+      return;
+    }
+
+    api.players
+      .find({
+        include: {
+          country: true,
+          team: true,
+        },
+        where: {
+          id: Number(selectedGlobalPlayerId),
+        },
+      })
+      .then((player: any) => {
+        setSelectedGlobalPlayerProfile(
+          player
+            ? {
+                id: player.id,
+                name: player.name,
+                avatar: player.avatar,
+                country: player.country,
+                team: player.team,
+              }
+            : null,
+        );
+      });
+  }, [activeTab, canViewGlobalPlayerStats, selectedGlobalPlayerId]);
 
   React.useEffect(() => {
     if (!canViewGlobalPlayerStats && activeTab === StatsTab.GLOBAL_PLAYERS) {
@@ -1736,7 +1799,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         'resources://blazonry/noteam.svg';
   const selectedGlobalPlayer = globalPlayers.find(
     (player) => String(player.id) === selectedGlobalPlayerId,
-  );
+  ) || selectedGlobalPlayerProfile;
   const currentLoading =
     activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatchesLoading : loading;
   const globalPlayerTotalPages = Math.max(1, Math.ceil(numGlobalPlayers / GlobalPlayerPageSize));

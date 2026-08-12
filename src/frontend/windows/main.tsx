@@ -353,13 +353,13 @@ function Root() {
     // handle play events / external navigation requests
     api.ipc.on(
       Constants.IPCRoute.WINDOW_SEND,
-      (payload: number | { target?: string; inAppModal?: boolean }) => {
+      (payload: number | (ModalRequest & { inAppModal?: boolean })) => {
         if (typeof payload === 'number') {
           return dispatch(play(payload));
         }
 
         if (payload?.target && !payload.inAppModal) {
-          navigate(payload.target);
+          navigate(payload.target, { state: payload.payload });
         }
       },
     );
