@@ -16,11 +16,14 @@ enum TabIdentifier {
   OVERVIEW = '/competitions',
   STANDINGS = '/competitions/standings',
   RESULTS = '/competitions/results',
+  STATISTICS = '/competitions/statistics',
   PARTICIPANTS = '/competitions/participants',
 }
 
 type CompetitionTier = Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>[number];
-type Competition = Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>[number];
+type Competition = Awaited<
+  ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
+>[number];
 type TournamentFamily = 'all' | 'esea' | 'major' | 'cct' | 'qualifiers';
 
 type TournamentCard = {
@@ -338,9 +341,9 @@ export default function () {
   const [tiers, setTiers] = React.useState<
     Awaited<ReturnType<typeof api.tiers.all<typeof Eagers.tier>>>
   >([]);
-  const [seasonCompetitions, setSeasonCompetitions] = React.useState<
-    Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>> | null
-  >(null);
+  const [seasonCompetitions, setSeasonCompetitions] = React.useState<Awaited<
+    ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
+  > | null>(null);
 
   const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
@@ -955,6 +958,12 @@ export default function () {
           {t('shared.results')}
         </button>
         <button
+          className={cx(location.pathname === TabIdentifier.STATISTICS && 'btn-active!')}
+          onClick={() => navigate(TabIdentifier.STATISTICS)}
+        >
+          Statistics
+        </button>
+        <button
           className={cx(location.pathname === TabIdentifier.PARTICIPANTS && 'btn-active!')}
           onClick={() => navigate(TabIdentifier.PARTICIPANTS)}
         >
@@ -1112,9 +1121,7 @@ export default function () {
                   </span>
                   <CompetitionLocationTag tier={competition.tier} />
                 </p>
-                <h2 className="truncate text-lg font-black">
-                  {competitionTitle}
-                </h2>
+                <h2 className="truncate text-lg font-black">{competitionTitle}</h2>
                 {competitionLocationDisplay && (
                   <p className="text-base-content/70 mt-0.5 flex items-center gap-2 text-xs font-semibold">
                     {competitionLocationCountryCode && (

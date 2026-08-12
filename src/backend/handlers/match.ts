@@ -17,6 +17,7 @@ type MatchVetoInput = {
 };
 
 type GlobalPlayerStatsParams = {
+  competitionId?: number;
   currentDate?: Date | string;
   federationSlug?: string;
   name?: string;
@@ -49,6 +50,7 @@ const globalPlayerStatsCache = new Map<
 
 function getGlobalPlayerStatsCacheKey(params: GlobalPlayerStatsParams) {
   return JSON.stringify({
+    competitionId: params.competitionId || 0,
     currentDate: params.currentDate ? new Date(params.currentDate).toISOString() : '',
     federationSlug: params.federationSlug || '',
     name: params.name || '',
@@ -315,6 +317,11 @@ export default function () {
               ];
               const matchParams: unknown[] = [Constants.MatchStatus.COMPLETED];
 
+              if (params.competitionId) {
+                matchWhere.push('"Match"."competitionId" = ?');
+                matchParams.push(params.competitionId);
+              }
+
               if (params.year) {
                 const year = Number(params.year);
                 if (Number.isFinite(year)) {
@@ -496,6 +503,77 @@ export default function () {
                     : 0,
                 };
               });
+
+              if (params.competitionId && players.length) {
+                const playerIds = players.map((player) => player.id);
+                const teamRows = await DatabaseClient.prisma.$queryRawUnsafe<
+                  Array<{
+                    playerId: number;
+                    teamId: number;
+                    teamName: string;
+                    teamBlazon: string | null;
+                    teamTier: number | null;
+                    evidence: bigint | number;
+                  }>
+                >(
+                  `
+                    SELECT
+                      "MatchPlayerGameStat"."playerId" AS "playerId",
+                      "Team"."id" AS "teamId",
+                      "Team"."name" AS "teamName",
+                      "Team"."blazon" AS "teamBlazon",
+                      "Team"."tier" AS "teamTier",
+                      COUNT(*) AS "evidence"
+                    FROM "MatchPlayerGameStat"
+                    INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+                    INNER JOIN "CareerStint"
+                      ON "CareerStint"."playerId" = "MatchPlayerGameStat"."playerId"
+                      AND "CareerStint"."startedAt" <= "Match"."date"
+                      AND (
+                        "CareerStint"."endedAt" IS NULL
+                        OR "CareerStint"."endedAt" >= "Match"."date"
+                      )
+                    INNER JOIN "MatchToTeam"
+                      ON "MatchToTeam"."matchId" = "Match"."id"
+                      AND "MatchToTeam"."teamId" = "CareerStint"."teamId"
+                    INNER JOIN "Team" ON "Team"."id" = "CareerStint"."teamId"
+                    WHERE ${matchWhere.join(' AND ')}
+                      AND "MatchPlayerGameStat"."playerId" IN (${playerIds.map(() => '?').join(',')})
+                    GROUP BY
+                      "MatchPlayerGameStat"."playerId",
+                      "Team"."id",
+                      "Team"."name",
+                      "Team"."blazon",
+                      "Team"."tier"
+                    ORDER BY
+                      "MatchPlayerGameStat"."playerId" ASC,
+                      "evidence" DESC,
+                      "Team"."name" ASC
+                  `,
+                  ...matchParams,
+                  ...playerIds,
+                );
+                const teamByPlayerId = new Map<number, (typeof teamRows)[number]>();
+
+                teamRows.forEach((row) => {
+                  if (!teamByPlayerId.has(row.playerId)) {
+                    teamByPlayerId.set(row.playerId, row);
+                  }
+                });
+
+                players.forEach((player) => {
+                  const team = teamByPlayerId.get(player.id);
+
+                  if (team) {
+                    player.team = {
+                      id: team.teamId,
+                      name: team.teamName,
+                      blazon: team.teamBlazon,
+                      tier: team.teamTier,
+                    };
+                  }
+                });
+              }
 
               globalPlayerStatsCache.set(cacheKey, { createdAt: Date.now(), players });
               return players;

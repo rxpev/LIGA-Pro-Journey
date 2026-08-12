@@ -386,6 +386,7 @@ export default {
     count: (where?: Prisma.MatchWhereInput) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_COUNT, where) as Promise<number>,
     globalPlayerStats: (params: {
+      competitionId?: number;
       currentDate?: Date | string;
       federationSlug?: string;
       name?: string;

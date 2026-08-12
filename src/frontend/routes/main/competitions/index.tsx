@@ -7,6 +7,7 @@ import Competitions from './competitions';
 import Overview from './overview';
 import Standings from './standings';
 import Results from './results';
+import Statistics from './statistics';
 import Participants from './participants';
 
 /**
@@ -19,5 +20,6 @@ export default {
   Overview,
   Standings,
   Results,
+  Statistics,
   Participants,
 };
