@@ -3,6 +3,7 @@ import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
+  getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
   isNpcTransferCompatible,
@@ -22,6 +23,10 @@ const countries = {
   denmark: { id: 10, country: { code: 'dk', continent: continents.europe } },
   sweden: { id: 11, country: { code: 'se', continent: continents.europe } },
   germany: { id: 12, country: { code: 'de', continent: continents.europe } },
+  russia: { id: 13, country: { code: 'ru', continent: continents.europe } },
+  ukraine: { id: 14, country: { code: 'ua', continent: continents.europe } },
+  belarus: { id: 15, country: { code: 'by', continent: continents.europe } },
+  uzbekistan: { id: 16, country: { code: 'uz', continent: continents.asia } },
   china: { id: 20, country: { code: 'cn', continent: continents.asia } },
   korea: { id: 21, country: { code: 'kr', continent: continents.asia } },
   brazil: { id: 30, country: { code: 'br', continent: continents.southAmerica } },
@@ -110,6 +115,20 @@ const mixedEuropeanTeam = team(countries.germany, [
   player(3, countries.germany),
   player(4, countries.china),
   player(5, countries.brazil),
+]);
+const arcredStyleCisTeam = team(countries.europe, [
+  player(1, countries.uzbekistan),
+  player(2, countries.belarus),
+  player(3, countries.uzbekistan),
+  player(4, countries.russia),
+  player(5, countries.ukraine),
+]);
+const russianMajorityCisTeam = team(countries.russia, [
+  player(1, countries.russia),
+  player(2, countries.russia),
+  player(3, countries.russia),
+  player(4, countries.ukraine),
+  player(5, countries.belarus),
 ]);
 const mixedAsianTeam = team(countries.china, [
   player(1, countries.china),
@@ -222,6 +241,52 @@ assert.equal(
   ])[0].countryId,
   countries.germany.id,
   'mixed European teams prefer European players',
+);
+
+assert.deepEqual(
+  getNpcTransferTeamIdentity(arcredStyleCisTeam),
+  {
+    type: 'cis-core',
+    count: 5,
+    region: 'Europe',
+    dominantCountryId: countries.uzbekistan.id,
+    dominantCount: 2,
+  },
+  'mixed CIS teams are classified separately while keeping their displayed region identity',
+);
+
+assert.deepEqual(
+  filterNpcTransferCompatibleCandidates(arcredStyleCisTeam, [
+    player(101, countries.russia),
+    player(102, countries.denmark),
+    player(103, countries.china),
+    player(104, countries.ukraine),
+  ]).map((candidate) => candidate.countryId),
+  [countries.russia.id, countries.ukraine.id],
+  'CIS teams only allow CIS-nationality transfer candidates',
+);
+
+assert.equal(
+  getUserOfferFitScore(arcredStyleCisTeam, player(101, countries.denmark)),
+  Number.NEGATIVE_INFINITY,
+  'non-CIS European users cannot receive ordinary regional offers from CIS teams',
+);
+
+assert.ok(
+  getNpcTransferCompatibilityScore(russianMajorityCisTeam, player(101, countries.russia)) >
+    getNpcTransferCompatibilityScore(russianMajorityCisTeam, player(102, countries.ukraine)),
+  'Russian-majority CIS teams prefer same-country players over cross-CIS players',
+);
+
+assert.ok(
+  getNpcTransferCompatibilityScore(russianMajorityCisTeam, player(101, countries.ukraine)) > 0,
+  'cross-CIS transfers into Russian-majority teams remain possible',
+);
+
+assert.equal(
+  isNpcTransferCompatible(russianMajorityCisTeam, player(101, countries.denmark)),
+  false,
+  'Russian-majority CIS teams reject non-CIS European players',
 );
 
 assert.equal(

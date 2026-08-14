@@ -48,6 +48,7 @@ import {
   getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
+  isNpcTransferCisCountry,
   isNpcTransferCompatible,
   sortNpcTransferCandidatesByFit,
   USER_OFFER_FIT_BUCKET_WEIGHTS,
@@ -4080,6 +4081,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     let pool = selectCountryAwareOfferPool(
       teams,
       player.countryId,
+      playerCountryContext?.code ?? null,
       playerCountryContext?.continent?.code ?? null,
       userFedId,
       lastOfferTeamId,
@@ -5330,6 +5332,9 @@ function getTeamNationalityCohesion(team: {
     if (identity.type === 'national-lock' || identity.type === 'national-core') {
       return player.countryId === identity.countryId;
     }
+    if (identity.type === 'cis-core') {
+      return isNpcTransferCisCountry(player);
+    }
 
     return matchesTeamCountryPreference(team, player);
   }).length;
@@ -5575,9 +5580,17 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 
   const identity = getNpcTransferTeamIdentity(team);
   const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
+    if (identity.type === 'cis-core') return candidate.countryId === identity.dominantCountryId;
     if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
     return matchesTeamCountryPreference(team, candidate);
   });
+  const crossCisCandidates =
+    identity.type === 'cis-core'
+      ? compatibleCandidates.filter(
+          (candidate) =>
+            candidate.countryId !== identity.dominantCountryId && isNpcTransferCisCountry(candidate),
+        )
+      : [];
   const cohesion = getTeamNationalityCohesion(team as any);
   const sameCountryChance = Math.min(
     100,
@@ -5585,6 +5598,10 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
   );
   if (sameCountryCandidates.length && Chance.rollD2(sameCountryChance)) {
     return sameCountryCandidates;
+  }
+
+  if (crossCisCandidates.length && Chance.rollD2(35)) {
+    return crossCisCandidates;
   }
 
   const teamFederationId = team.competitionFederationId ?? null;
@@ -5612,9 +5629,11 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 
   return sameCountryCandidates.length
     ? sameCountryCandidates
-    : sameFederationCandidates.length
-      ? sameFederationCandidates
-      : compatibleCandidates;
+    : crossCisCandidates.length
+      ? crossCisCandidates
+      : sameFederationCandidates.length
+        ? sameFederationCandidates
+        : compatibleCandidates;
 }
 
 function selectNPCTargetCandidatesByCountryPreference<
@@ -5647,6 +5666,7 @@ function selectNPCTargetCandidatesByCountryPreference<
   const identity = getNpcTransferTeamIdentity(team);
 
   const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
+    if (identity.type === 'cis-core') return candidate.countryId === identity.dominantCountryId;
     if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
     return candidate.countryId === team.countryId;
   });
@@ -5848,6 +5868,7 @@ function selectCountryAwareOfferPool<
 >(
   teams: T[],
   playerCountryId: number | null | undefined,
+  playerCountryCode: string | null | undefined,
   playerCountryContinentCode: string | null | undefined,
   playerFederationId: number | null | undefined,
   lastOfferTeamId: number | null,
@@ -5859,6 +5880,7 @@ function selectCountryAwareOfferPool<
   const playerCandidate = {
     countryId: playerCountryId,
     country: {
+      code: playerCountryCode ?? null,
       continent: {
         code: playerCountryContinentCode ?? null,
         federationId: playerFederationId ?? null,
@@ -5969,6 +5991,7 @@ export async function sendPlayerInviteForUser() {
   const offerPool = selectCountryAwareOfferPool(
     teams,
     profile.player.countryId,
+    playerCountryContext?.code ?? null,
     playerCountryContext?.continent?.code ?? null,
     playerCountryContext?.continent?.federationId ?? null,
     lastOfferTeamId,
@@ -6240,6 +6263,7 @@ export async function sendUserFaceitOffer() {
   let pool = selectCountryAwareOfferPool(
     teams,
     profile.player.countryId,
+    profile.player.country?.code ?? null,
     profile.player.country?.continent?.code ?? null,
     userFedId,
     lastOfferTeamId,
