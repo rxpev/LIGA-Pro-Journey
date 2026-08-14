@@ -1,4 +1,5 @@
 import { Constants, Util } from '@liga/shared';
+import { Prisma } from '@prisma/client';
 import DatabaseClient from './database-client';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 
@@ -41,6 +42,7 @@ type CompetitionCandidate = {
 };
 
 type CompetitionPlayerGameRow = {
+  competitionId: number;
   playerId: number;
   teamId: number | null;
   matchId: number;
@@ -60,12 +62,27 @@ type PlacementRow = {
 type MvpCandidate = {
   playerId: number;
   teamId: number | null;
+  gameRatings: Map<string, number>;
   maps: number;
   ratingSum: number;
   opponentEloSum: number;
   opponentEloMaps: number;
   placement: number;
   score: number;
+  weightedMaps: number;
+  weightedOpponentEloSum: number;
+  weightedOpponentEloMaps: number;
+};
+
+type MvpCandidateScore = {
+  playerId: number;
+  teamId: number | null;
+  score: number;
+  rating: number;
+  maps: number;
+  placement: number;
+  opponentElo: number | null;
+  gameRatings: Map<string, number>;
 };
 
 type CompetitionMvpFlatRow = {
@@ -97,7 +114,7 @@ type CompetitionMvpFlatRow = {
   competitionLeagueSlug: string;
 };
 
-export const COMPETITION_MVP_FORMULA_VERSION = 2;
+export const COMPETITION_MVP_FORMULA_VERSION = 8;
 
 export const CompetitionMvpEligibleTierSlugs = [
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
@@ -120,8 +137,8 @@ export function isMajorMvpTier(tierSlug?: string | null) {
 }
 
 function getPlacementFactor(placement: number) {
-  if (placement <= 1) return 1.13;
-  if (placement === 2) return 1.07;
+  if (placement <= 1) return 1.17;
+  if (placement === 2) return 1.02;
   if (placement <= 4) return 1.02;
 
   return clamp(1 - (placement - 4) * 0.025, 0.82, 0.98);
@@ -132,7 +149,7 @@ function getMapFactor(maps: number, maxMaps: number) {
     return 0;
   }
 
-  return 0.4 + 0.6 * clamp(maps / Math.max(1, maxMaps * 0.8), 0, 1);
+  return 0.85 + 0.15 * clamp(maps / Math.max(1, maxMaps * 0.8), 0, 1);
 }
 
 function getOpponentFactor(opponentElo: number | null, tournamentAverageElo: number | null) {
@@ -141,6 +158,135 @@ function getOpponentFactor(opponentElo: number | null, tournamentAverageElo: num
   }
 
   return 1 + clamp((opponentElo - tournamentAverageElo) / 800, -0.06, 0.08);
+}
+
+function getCompetitionMvpStageWeights(tierSlug: string) {
+  const entries: Array<{ slug: string; weight: number }> = [];
+
+  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) {
+    entries.push(
+      { slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE, weight: 0.15 },
+      { slug: Constants.TierSlug.MAJOR_LEGENDS_STAGE, weight: 0.4 },
+      { slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE, weight: 1 },
+    );
+  } else if (tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    entries.push(
+      { slug: Constants.TierSlug.IEM_COLOGNE_GROUP_A, weight: 0.25 },
+      { slug: Constants.TierSlug.IEM_COLOGNE_GROUP_B, weight: 0.25 },
+      { slug: Constants.TierSlug.IEM_COLOGNE_PLAYOFFS, weight: 1 },
+    );
+  } else if (tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    entries.push(
+      { slug: Constants.TierSlug.IEM_KRAKOW_GROUP_A, weight: 0.25 },
+      { slug: Constants.TierSlug.IEM_KRAKOW_GROUP_B, weight: 0.25 },
+      { slug: Constants.TierSlug.IEM_KRAKOW_PLAYOFFS, weight: 1 },
+    );
+  } else if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    entries.push(
+      { slug: Constants.TierSlug.LEAGUE_PRO, weight: 0.2 },
+      { slug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS, weight: 1 },
+    );
+  } else {
+    entries.push({ slug: tierSlug, weight: 1 });
+  }
+
+  return entries;
+}
+
+async function getCompetitionMvpStageScope(competition: {
+  id: number;
+  federationId: number;
+  location: string | null;
+  organizer: string | null;
+  season: number | null;
+  tier: { slug: string };
+}) {
+  const stageWeights = getCompetitionMvpStageWeights(competition.tier.slug);
+  const slugs = stageWeights.map((stage) => stage.slug);
+  const related = await DatabaseClient.prisma.competition.findMany({
+    select: {
+      id: true,
+      tier: {
+        select: {
+          slug: true,
+        },
+      },
+    },
+    where: {
+      federationId: competition.federationId,
+      season: competition.season,
+      status: Constants.CompetitionStatus.COMPLETED,
+      ...(competition.location ? { location: competition.location } : {}),
+      ...(competition.organizer ? { organizer: competition.organizer } : {}),
+      tier: {
+        slug: {
+          in: slugs,
+        },
+      },
+    },
+  });
+  const weightByCompetitionId = new Map<number, number>();
+
+  related.forEach((stage) => {
+    const weight = stageWeights.find((item) => item.slug === stage.tier.slug)?.weight ?? 1;
+    weightByCompetitionId.set(stage.id, weight);
+  });
+
+  if (!weightByCompetitionId.has(competition.id)) {
+    weightByCompetitionId.set(competition.id, 1);
+  }
+
+  return weightByCompetitionId;
+}
+
+export async function getCompetitionMvpStageCompetitionIds(competitionId: number) {
+  const competition = await DatabaseClient.prisma.competition.findFirst({
+    include: {
+      tier: {
+        select: {
+          slug: true,
+        },
+      },
+    },
+    where: { id: competitionId },
+  });
+
+  if (!competition) {
+    return [competitionId];
+  }
+
+  return [...(await getCompetitionMvpStageScope(competition)).keys()];
+}
+
+function getHeadToHeadFactor(candidate: MvpCandidateScore, contenders: MvpCandidateScore[]) {
+  let ratingDifferenceSum = 0;
+  let sharedMaps = 0;
+
+  for (const contender of contenders) {
+    if (contender.playerId === candidate.playerId || contender.teamId === candidate.teamId) {
+      continue;
+    }
+
+    for (const [gameKey, rating] of candidate.gameRatings) {
+      const contenderRating = contender.gameRatings.get(gameKey);
+
+      if (contenderRating == null) {
+        continue;
+      }
+
+      ratingDifferenceSum += rating - contenderRating;
+      sharedMaps += 1;
+    }
+  }
+
+  if (!sharedMaps) {
+    return 1;
+  }
+
+  const averageRatingDifference = ratingDifferenceSum / sharedMaps;
+  const mapConfidence = clamp(sharedMaps / 3, 0.35, 1);
+
+  return 1 + clamp(averageRatingDifference * 0.45 * mapConfidence, -0.1, 0.1);
 }
 
 export async function ensureCompetitionMvpTable() {
@@ -197,6 +343,8 @@ export async function calculateCompetitionMvp(competitionId: number) {
   }
 
   const placements = new Map<number, PlacementRow>();
+  const stageWeights = await getCompetitionMvpStageScope(competition);
+  const stageCompetitionIds = [...stageWeights.keys()];
   const teamElos = competition.competitors
     .map((competitor) => {
       if (competitor.teamId != null) {
@@ -216,6 +364,7 @@ export async function calculateCompetitionMvp(competitionId: number) {
 
   const rows = await DatabaseClient.prisma.$queryRaw<CompetitionPlayerGameRow[]>`
     SELECT
+      "Match"."competitionId" AS "competitionId",
       "MatchPlayerGameStat"."playerId" AS "playerId",
       "OwnTeam"."teamId" AS "teamId",
       "MatchPlayerGameStat"."matchId" AS "matchId",
@@ -227,7 +376,11 @@ export async function calculateCompetitionMvp(competitionId: number) {
     FROM "MatchPlayerGameStat"
     INNER JOIN "Match"
       ON "Match"."id" = "MatchPlayerGameStat"."matchId"
-    INNER JOIN "CareerStint"
+    INNER JOIN "Competition"
+      ON "Competition"."id" = "Match"."competitionId"
+    INNER JOIN "Player"
+      ON "Player"."id" = "MatchPlayerGameStat"."playerId"
+    LEFT JOIN "CareerStint"
       ON "CareerStint"."playerId" = "MatchPlayerGameStat"."playerId"
       AND "CareerStint"."startedAt" <= "Match"."date"
       AND (
@@ -237,17 +390,18 @@ export async function calculateCompetitionMvp(competitionId: number) {
       AND "CareerStint"."starter" = true
     INNER JOIN "MatchToTeam" AS "OwnTeam"
       ON "OwnTeam"."matchId" = "Match"."id"
-      AND "OwnTeam"."teamId" = "CareerStint"."teamId"
+      AND "OwnTeam"."teamId" = COALESCE("CareerStint"."teamId", "Player"."teamId")
     LEFT JOIN "MatchToTeam" AS "Opponent"
       ON "Opponent"."matchId" = "Match"."id"
       AND "Opponent"."teamId" IS NOT NULL
       AND "Opponent"."teamId" <> "OwnTeam"."teamId"
     LEFT JOIN "Team" AS "OpponentTeam"
       ON "OpponentTeam"."id" = "Opponent"."teamId"
-    WHERE "Match"."competitionId" = ${competitionId}
+    WHERE "Match"."competitionId" IN (${Prisma.join(stageCompetitionIds)})
       AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
       AND "Match"."matchType" <> 'FACEIT_PUG'
     GROUP BY
+      "Match"."competitionId",
       "MatchPlayerGameStat"."playerId",
       "OwnTeam"."teamId",
       "MatchPlayerGameStat"."matchId",
@@ -277,61 +431,110 @@ export async function calculateCompetitionMvp(competitionId: number) {
       ({
         playerId: row.playerId,
         teamId: row.teamId,
+        gameRatings: new Map(),
         maps: 0,
         ratingSum: 0,
         opponentEloSum: 0,
         opponentEloMaps: 0,
         placement,
         score: 0,
+        weightedMaps: 0,
+        weightedOpponentEloSum: 0,
+        weightedOpponentEloMaps: 0,
       } satisfies MvpCandidate);
     const opponentElo = row.opponentElo == null ? null : Number(row.opponentElo);
+    const stageWeight = stageWeights.get(row.competitionId) ?? 1;
 
     candidate.maps += 1;
     candidate.ratingSum += rating;
+    candidate.weightedMaps += stageWeight;
+    candidate.gameRatings.set(`${row.matchId}:${row.gameKey}`, rating);
     candidate.placement = Math.min(candidate.placement, placement);
 
     if (opponentElo != null && Number.isFinite(opponentElo)) {
       candidate.opponentEloSum += opponentElo;
       candidate.opponentEloMaps += 1;
+      candidate.weightedOpponentEloSum += opponentElo * stageWeight;
+      candidate.weightedOpponentEloMaps += stageWeight;
     }
 
     candidates.set(key, candidate);
   });
 
   const maxMaps = Math.max(0, ...[...candidates.values()].map((candidate) => candidate.maps));
-
-  return (
-    [...candidates.values()]
-      .map((candidate) => {
-        const rating = candidate.ratingSum / candidate.maps;
-        const opponentElo = candidate.opponentEloMaps
-          ? candidate.opponentEloSum / candidate.opponentEloMaps
-          : null;
-        const score =
-          rating *
-          getMapFactor(candidate.maps, maxMaps) *
-          getPlacementFactor(candidate.placement) *
-          getOpponentFactor(opponentElo, tournamentAverageElo);
-
-        return {
-          playerId: candidate.playerId,
-          teamId: candidate.teamId,
-          score,
-          rating,
-          maps: candidate.maps,
-          placement: candidate.placement,
-          opponentElo,
-        };
-      })
-      .sort(
-        (a, b) =>
-          b.score - a.score ||
-          b.rating - a.rating ||
-          b.maps - a.maps ||
-          a.placement - b.placement ||
-          a.playerId - b.playerId,
-      )[0] ?? null
+  const maxWeightedMaps = Math.max(
+    0,
+    ...[...candidates.values()].map((candidate) => candidate.weightedMaps),
   );
+  const scoredCandidates = [...candidates.values()].map((candidate) => {
+    const rating = candidate.ratingSum / candidate.maps;
+    const weightedOpponentElo = candidate.weightedOpponentEloMaps
+      ? candidate.weightedOpponentEloSum / candidate.weightedOpponentEloMaps
+      : null;
+    const score =
+      rating *
+      getMapFactor(candidate.weightedMaps, maxWeightedMaps || maxMaps) *
+      getPlacementFactor(candidate.placement) *
+      getOpponentFactor(weightedOpponentElo, tournamentAverageElo);
+
+    return {
+      playerId: candidate.playerId,
+      teamId: candidate.teamId,
+      score,
+      rating,
+      maps: candidate.maps,
+      placement: candidate.placement,
+      opponentElo: weightedOpponentElo,
+      gameRatings: candidate.gameRatings,
+    } satisfies MvpCandidateScore;
+  });
+  const directContenders = scoredCandidates
+    .slice()
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.rating - a.rating ||
+        b.maps - a.maps ||
+        a.placement - b.placement ||
+        a.playerId - b.playerId,
+    )
+    .slice(0, 4);
+
+  const finalCandidates = scoredCandidates
+    .map((candidate) => {
+      const headToHeadFactor = getHeadToHeadFactor(candidate, directContenders);
+
+      return {
+        playerId: candidate.playerId,
+        teamId: candidate.teamId,
+        score: candidate.score * headToHeadFactor,
+        rating: candidate.rating,
+        maps: candidate.maps,
+        placement: candidate.placement,
+        opponentElo: candidate.opponentElo,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.rating - a.rating ||
+        b.maps - a.maps ||
+        a.placement - b.placement ||
+        a.playerId - b.playerId,
+    );
+  const winnerCandidate = finalCandidates.find((candidate) => candidate.placement <= 1) ?? null;
+  const topCandidate = finalCandidates[0] ?? null;
+
+  if (
+    topCandidate &&
+    winnerCandidate &&
+    topCandidate.placement > 1 &&
+    topCandidate.rating <= winnerCandidate.rating + 0.03
+  ) {
+    return winnerCandidate;
+  }
+
+  return topCandidate;
 }
 
 export async function upsertCompetitionMvp(competitionId: number) {

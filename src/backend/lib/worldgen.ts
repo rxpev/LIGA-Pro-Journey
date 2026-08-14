@@ -2321,6 +2321,48 @@ async function startCareerStint(
     },
   });
 }
+
+async function recordPlayerTeamMove(
+  prisma: typeof DatabaseClient.prisma,
+  params: {
+    playerId: number;
+    previousTeamId: number | null;
+    previousTier: number | null;
+    nextTeamId: number | null;
+    nextTier: number | null;
+    starter: boolean;
+    date: Date;
+  },
+) {
+  const { playerId, previousTeamId, previousTier, nextTeamId, nextTier, starter, date } = params;
+  const openStints = await prisma.careerStint.findMany({
+    where: { playerId, endedAt: null },
+  });
+
+  if (!openStints.length && previousTeamId != null && previousTeamId !== nextTeamId) {
+    await prisma.careerStint.create({
+      data: {
+        playerId,
+        teamId: previousTeamId,
+        tier: previousTier,
+        starter: true,
+        startedAt: new Date(Constants.NewSaveSeasonStartDate),
+        endedAt: date,
+      },
+    });
+  } else {
+    await closeOpenCareerStints(prisma, playerId, date);
+  }
+
+  await startCareerStint(prisma, {
+    playerId,
+    teamId: nextTeamId,
+    tier: nextTier,
+    starter,
+    startedAt: date,
+  });
+}
+
 function getTeamTierSlug(teamTierIdx: number | null | undefined): TierSlug | null {
   if (typeof teamTierIdx !== 'number') return null;
   if (teamTierIdx < 0 || teamTierIdx >= Constants.Prestige.length) return null;
@@ -2830,6 +2872,23 @@ export async function acceptTransferOffer(transferId: number) {
     incomingPlayerId: transfer.playerId,
   });
 
+  const now = profile.date;
+  const destTeam = await DatabaseClient.prisma.team.findFirst({
+    where: { id: fromTeamId },
+    select: { tier: true },
+  });
+  const destTierIdx = typeof destTeam?.tier === 'number' ? destTeam.tier : null;
+
+  await recordPlayerTeamMove(DatabaseClient.prisma, {
+    playerId: transfer.playerId,
+    previousTeamId: oldTeamId,
+    previousTier: profile.team?.tier ?? null,
+    nextTeamId: fromTeamId,
+    nextTier: destTierIdx,
+    starter: true,
+    date: now,
+  });
+
   //Connect the player to the new team.
   await DatabaseClient.prisma.player.update({
     where: { id: transfer.playerId },
@@ -2857,21 +2916,6 @@ export async function acceptTransferOffer(transferId: number) {
     mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, updatedProfile);
   }
 
-  const now = profile.date;
-  const destTeam = await DatabaseClient.prisma.team.findFirst({
-    where: { id: fromTeamId },
-    select: { tier: true },
-  });
-  const destTierIdx = typeof destTeam?.tier === 'number' ? destTeam.tier : null;
-
-  await closeOpenCareerStints(DatabaseClient.prisma, transfer.playerId, now);
-  await startCareerStint(DatabaseClient.prisma, {
-    playerId: transfer.playerId,
-    teamId: fromTeamId,
-    tier: destTierIdx,
-    starter: true,
-    startedAt: now,
-  });
   await recalculateTeamCountryIdentity(fromTeamId);
 
   // Schedule contract expiry event in the calendar.
@@ -8192,6 +8236,15 @@ export async function onTransferParse(entry: Calendar) {
       lastOfferAt: null,
     },
   });
+  await recordPlayerTeamMove(DatabaseClient.prisma, {
+    playerId: transfer.target.id,
+    previousTeamId: transfer.to.id,
+    previousTier: transfer.to.tier ?? null,
+    nextTeamId: transfer.from.id,
+    nextTier: transfer.from.tier,
+    starter: true,
+    date: profile.date,
+  });
 
   if (role === 'SNIPER') {
     await enforceSingleStarterSniper({
@@ -8207,15 +8260,6 @@ export async function onTransferParse(entry: Calendar) {
     date: profile.date,
   });
   if (!sellerBackfilled) return Promise.resolve();
-
-  await closeOpenCareerStints(DatabaseClient.prisma, transfer.target.id, profile.date);
-  await startCareerStint(DatabaseClient.prisma, {
-    playerId: transfer.target.id,
-    teamId: transfer.from.id,
-    tier: transfer.from.tier,
-    starter: true,
-    startedAt: profile.date,
-  });
 
   await recalculateTeamCountryIdentity(transfer.from.id);
   await recalculateTeamCountryIdentity(transfer.to.id);

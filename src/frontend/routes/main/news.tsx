@@ -89,8 +89,14 @@ type WelcomeGraphic = {
   textGradient?: string | null;
   textStroke?: string | null;
 };
+type MvpGraphic = {
+  medal?: string | null;
+  playerImage?: string | null;
+  tournamentLogo?: string | null;
+};
 type NewsPayload = Record<string, unknown> & {
   comments?: NewsComment[];
+  competitionId?: number | null;
   flagCode?: string | null;
   hideArticleImage?: boolean;
   mapUsage?: MapUsageDatum[];
@@ -99,6 +105,7 @@ type NewsPayload = Record<string, unknown> & {
   relatedPlayers?: RelatedPlayer[];
   relatedTeams?: RelatedTeam[];
   showMatchPanel?: boolean;
+  mvpGraphic?: MvpGraphic | null;
   welcomeGraphic?: WelcomeGraphic | null;
 };
 type PlayerHoverStats = Awaited<ReturnType<typeof api.matches.playerAllTimeStats>>;
@@ -284,6 +291,77 @@ function getNodeText(node: React.ReactNode): string {
   }
 
   return '';
+}
+
+function preserveMarkdownUri(uri: string) {
+  return uri;
+}
+
+function getCompetitionIdFromHref(href?: string | null) {
+  if (!href) {
+    return null;
+  }
+
+  if (href.startsWith('liga-competition:')) {
+    const competitionId = Number(href.replace('liga-competition:', ''));
+    return Number.isFinite(competitionId) ? competitionId : null;
+  }
+
+  const [, query = ''] = href.split('?');
+  const competitionId = Number(new URLSearchParams(query).get('competitionId'));
+  return Number.isFinite(competitionId) ? competitionId : null;
+}
+
+function isCompetitionHref(href?: string | null) {
+  if (!href) {
+    return false;
+  }
+
+  return href.startsWith('liga-competition:') || href.split('?')[0] === '/competitions';
+}
+
+function normalizeStrongMarkdownLinks(value: string) {
+  return value.replace(/\*\*\[([^\]]+)\]\(([^)]+)\)\*\*/g, '[**$1**]($2)');
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getHeadlineTournamentName(headline: string) {
+  const match =
+    headline.match(/\b(?:at|of)\s+(.+?)$/i) ||
+    headline.match(
+      /\b(?:named|wins|claims|earns|crowned|takes home|secures|voted|lands|awarded|collects|picks up|walks away with|takes)\s+(.+?)\s+MVP\b/i,
+    );
+
+  return match?.[1]?.trim() || null;
+}
+
+function linkPlainTournamentMentions(
+  value: string,
+  tournamentName: string | null,
+  competitionId: number | null,
+) {
+  if (!tournamentName || !competitionId) {
+    return value;
+  }
+
+  const linked = `[**${tournamentName}**](/competitions?competitionId=${competitionId})`;
+  const placeholder = `__LIGA_TOURNAMENT_LINK_${competitionId}__`;
+  const linkPlaceholders: string[] = [];
+  const boldPattern = new RegExp(`\\*\\*${escapeRegExp(tournamentName)}\\*\\*`, 'g');
+  const plainPattern = new RegExp(`\\b${escapeRegExp(tournamentName)}\\b`, 'g');
+
+  return value
+    .replace(/\[[^\]]+\]\([^)]+\)/g, (match) => {
+      const index = linkPlaceholders.push(match) - 1;
+      return `__LIGA_EXISTING_LINK_${index}__`;
+    })
+    .replace(boldPattern, placeholder)
+    .replace(plainPattern, placeholder)
+    .replace(new RegExp(escapeRegExp(placeholder), 'g'), linked)
+    .replace(/__LIGA_EXISTING_LINK_(\d+)__/g, (_, index) => linkPlaceholders[Number(index)] || '');
 }
 
 function PlayerHoverCard(props: { children: React.ReactNode; playerId: number }) {
@@ -739,6 +817,24 @@ function asWelcomeGraphic(value: unknown): WelcomeGraphic | null {
   };
 }
 
+function asMvpGraphic(value: unknown): MvpGraphic | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const playerImage = typeof value.playerImage === 'string' ? value.playerImage : null;
+
+  if (!playerImage) {
+    return null;
+  }
+
+  return {
+    medal: typeof value.medal === 'string' ? value.medal : 'resources://competitions/mvp.png',
+    playerImage,
+    tournamentLogo: typeof value.tournamentLogo === 'string' ? value.tournamentLogo : null,
+  };
+}
+
 function WelcomeGraphicImage(props: { graphic: WelcomeGraphic }) {
   const fontFamily = props.graphic.fontFamily
     ? `${props.graphic.fontFamily}, Impact, Haettenschweiler, 'Arial Black', sans-serif`
@@ -783,6 +879,36 @@ function WelcomeGraphicImage(props: { graphic: WelcomeGraphic }) {
       >
         {props.graphic.playerName}
       </figcaption>
+    </figure>
+  );
+}
+
+function ArticlePlayerImageFrame(props: { src?: string | null }) {
+  return (
+    <figure className="bg-base-100 border-base-content/10 relative aspect-square w-full overflow-hidden border">
+      <img
+        src={props.src || 'resources://blazonry/noteam.svg'}
+        alt=""
+        className="absolute right-1/2 bottom-0 h-full max-w-none translate-x-1/2 object-contain object-bottom"
+      />
+    </figure>
+  );
+}
+
+function MvpArticleImage(props: { graphic: MvpGraphic; image?: string | null }) {
+  return (
+    <figure className="bg-base-100 border-base-content/10 relative aspect-square w-full overflow-hidden border">
+      <img
+        src={props.graphic.playerImage || props.image || 'resources://blazonry/noteam.svg'}
+        alt=""
+        className="absolute right-1/2 bottom-0 h-full max-w-none translate-x-1/2 object-contain object-bottom"
+      />
+      <img
+        src={props.graphic.medal || 'resources://competitions/mvp.png'}
+        alt=""
+        className="absolute right-1 bottom-1 size-12 object-contain drop-shadow-[0_5px_8px_rgba(0,0,0,0.75)]"
+        aria-hidden="true"
+      />
     </figure>
   );
 }
@@ -900,6 +1026,19 @@ function MapUsageChart(props: { item?: NewsItem }) {
 }
 
 function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
+  const payload = props.item ? parsePayload(props.item) : {};
+  const payloadCompetitionId =
+    typeof payload.competitionId === 'number' ? payload.competitionId : null;
+  const headlineTournamentName = getHeadlineTournamentName(props.headline);
+  const normalizeBodyMarkdown = React.useCallback(
+    (value: string) =>
+      linkPlainTournamentMentions(
+        normalizeStrongMarkdownLinks(value),
+        headlineTournamentName,
+        payloadCompetitionId,
+      ),
+    [headlineTournamentName, payloadCompetitionId],
+  );
   const lines = props.body
     .split(/\r?\n/)
     .filter((line, index) => !(index === 0 && line.trim() === `# ${props.headline}`));
@@ -931,8 +1070,7 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
       const isPlayerHref =
         href?.startsWith('/players?playerId=') || href?.startsWith('liga-player:');
       const isTeamHref = href?.startsWith('/teams?teamId=') || href?.startsWith('liga-team:');
-      const isCompetitionHref =
-        href?.startsWith('/competitions?competitionId=') || href?.startsWith('liga-competition:');
+      const isCompetitionLink = isCompetitionHref(href);
 
       if (isPlayerHref) {
         const playerId = href.startsWith('liga-player:')
@@ -972,11 +1110,19 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
         );
       }
 
-      if (isCompetitionHref) {
-        const competitionId = href.startsWith('liga-competition:')
-          ? Number(href.replace('liga-competition:', ''))
-          : Number(new URLSearchParams(href.split('?')[1]).get('competitionId'));
-        const to = href.startsWith('liga-competition:') ? `/competitions` : href;
+      if (isCompetitionLink) {
+        const competitionId = getCompetitionIdFromHref(href) ?? payloadCompetitionId;
+        const to = href?.startsWith('liga-competition:')
+          ? `/competitions?competitionId=${competitionId}`
+          : href || '/competitions';
+
+        if (!competitionId) {
+          return (
+            <Link to={to || '/competitions'} className="link-hover text-base-content font-black">
+              {children}
+            </Link>
+          );
+        }
 
         return (
           <CompetitionHoverCard competitionId={competitionId}>
@@ -1054,8 +1200,11 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
                   return (
                     <li key={line} className="flex items-center gap-2 leading-5">
                       <Flag code={flagLine[1]} />
-                      <ReactMarkdown components={inlineMarkdownComponents}>
-                        {flagLine[2]}
+                      <ReactMarkdown
+                        components={inlineMarkdownComponents}
+                        transformLinkUri={preserveMarkdownUri}
+                      >
+                        {normalizeBodyMarkdown(flagLine[2])}
                       </ReactMarkdown>
                     </li>
                   );
@@ -1069,7 +1218,12 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
             return (
               <p key={`${index}__flag_line`} className="flex items-center gap-2">
                 <Flag code={flagLine[1]} />
-                <ReactMarkdown components={inlineMarkdownComponents}>{flagLine[2]}</ReactMarkdown>
+                <ReactMarkdown
+                  components={inlineMarkdownComponents}
+                  transformLinkUri={preserveMarkdownUri}
+                >
+                  {normalizeBodyMarkdown(flagLine[2])}
+                </ReactMarkdown>
               </p>
             );
           }
@@ -1077,7 +1231,12 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
           const isRosterHeading = /^\*\*.+\*\* are now:$/i.test(block.trim());
           return (
             <div key={`${index}__markdown_block`} className={cx(isRosterHeading && 'pt-1')}>
-              <ReactMarkdown components={blockMarkdownComponents}>{block}</ReactMarkdown>
+              <ReactMarkdown
+                components={blockMarkdownComponents}
+                transformLinkUri={preserveMarkdownUri}
+              >
+                {normalizeBodyMarkdown(block)}
+              </ReactMarkdown>
             </div>
           );
         })}
@@ -1392,6 +1551,13 @@ export default function () {
     () => (selected ? asWelcomeGraphic(selectedPayload.welcomeGraphic) : null),
     [selected, selectedPayload],
   );
+  const selectedMvpGraphic = React.useMemo(
+    () => (selected ? asMvpGraphic(selectedPayload.mvpGraphic) : null),
+    [selected, selectedPayload],
+  );
+  const selectedCompetitionId =
+    typeof selectedPayload.competitionId === 'number' ? selectedPayload.competitionId : null;
+  const selectedMvpLogo = selectedMvpGraphic?.tournamentLogo || null;
   const selectedWelcomeBody = React.useMemo(
     () => (selectedWelcomeGraphic && selected ? splitOpeningBlock(selected.body) : null),
     [selected?.body, selectedWelcomeGraphic],
@@ -1516,19 +1682,42 @@ export default function () {
           )}
           {selected && (
             <article className="border-base-content/10 bg-base-200/80 mx-auto max-w-5xl border shadow-lg">
-              <header className="border-base-content/10 border-b px-7 py-6">
-                <div className="mx-auto max-w-3xl">
-                  <div className="text-base-content/60 mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase">
-                    {selected.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
-                    <Flag code={getFlagCode(selected)} className="opacity-100" />
-                    <span>{getTopicLabel(selected)}</span>
-                    <span className="flex items-center gap-1">
-                      <FaClock />
-                      {fmtDate(toDate(selected.publishedAt))}
-                    </span>
+              <header className="border-base-content/10 relative border-b px-7 py-6">
+                <div
+                  className={cx(
+                    'grid items-center gap-6',
+                    selectedMvpLogo && selectedCompetitionId
+                      ? 'grid-cols-[9rem_minmax(0,1fr)]'
+                      : 'grid-cols-1',
+                  )}
+                >
+                  {selectedMvpLogo && selectedCompetitionId && (
+                    <CompetitionHoverCard competitionId={selectedCompetitionId}>
+                      <Link
+                        to={`/competitions?competitionId=${selectedCompetitionId}`}
+                        className="flex w-full items-center justify-center"
+                      >
+                        <img
+                          src={selectedMvpLogo}
+                          alt=""
+                          className="max-h-24 max-w-full object-contain"
+                        />
+                      </Link>
+                    </CompetitionHoverCard>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-base-content/60 mb-3 flex flex-wrap items-center gap-2 text-xs font-bold uppercase">
+                      {selected.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
+                      <Flag code={getFlagCode(selected)} className="opacity-100" />
+                      <span>{getTopicLabel(selected)}</span>
+                      <span className="flex items-center gap-1">
+                        <FaClock />
+                        {fmtDate(toDate(selected.publishedAt))}
+                      </span>
+                    </div>
+                    <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
+                    <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
                   </div>
-                  <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
-                  <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
                 </div>
               </header>
               {selectedWelcomeGraphic ? (
@@ -1565,10 +1754,11 @@ export default function () {
                 >
                   {selectedPayload.hideArticleImage !== true && (
                     <aside className="pt-1">
-                      <img
-                        src={selected.image || 'resources://blazonry/noteam.svg'}
-                        className="bg-base-100 border-base-content/10 aspect-square w-full border object-contain p-3"
-                      />
+                      {selectedMvpGraphic ? (
+                        <MvpArticleImage graphic={selectedMvpGraphic} image={selected.image} />
+                      ) : (
+                        <ArticlePlayerImageFrame src={selected.image} />
+                      )}
                     </aside>
                   )}
                   <section className="min-w-0">

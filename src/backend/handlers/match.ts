@@ -407,7 +407,8 @@ export default function () {
               const byPlayer = new Map<
                 number,
                 GlobalPlayerStatsRow & {
-                  matchRatings: Map<number, { count: number; sum: number }>;
+                  ratingMaps: number;
+                  ratingSum: number;
                 }
               >();
               const playerById = new Map(playerCandidates.map((player) => [player.id, player]));
@@ -471,9 +472,11 @@ export default function () {
                       deaths: 0,
                       assists: 0,
                       maps: 0,
-                      matchRatings: new Map<number, { count: number; sum: number }>(),
+                      ratingMaps: 0,
+                      ratingSum: 0,
                     } as GlobalPlayerStatsRow & {
-                      matchRatings: Map<number, { count: number; sum: number }>;
+                      ratingMaps: number;
+                      ratingSum: number;
                     });
 
                   const kills = Number(row.kills);
@@ -487,26 +490,18 @@ export default function () {
                   player.maps += 1;
 
                   if (Number.isFinite(rating)) {
-                    const matchRating = player.matchRatings.get(row.matchId) || {
-                      count: 0,
-                      sum: 0,
-                    };
-                    matchRating.count += 1;
-                    matchRating.sum += rating;
-                    player.matchRatings.set(row.matchId, matchRating);
+                    player.ratingMaps += 1;
+                    player.ratingSum += rating;
                   }
 
                   byPlayer.set(row.playerId, player);
                 });
               }
 
-              const players = [...byPlayer.values()].map(({ matchRatings, ...player }) => {
-                const ratings = [...matchRatings.values()].map((entry) => entry.sum / entry.count);
+              const players = [...byPlayer.values()].map(({ ratingMaps, ratingSum, ...player }) => {
                 return {
                   ...player,
-                  rating: ratings.length
-                    ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
-                    : 0,
+                  rating: ratingMaps ? ratingSum / ratingMaps : 0,
                 };
               });
 

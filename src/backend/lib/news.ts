@@ -2,6 +2,7 @@ import { endOfDay, format, startOfDay } from 'date-fns';
 import { Prisma } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import DatabaseClient from './database-client';
+import { findCompetitionMvps, getCompetitionMvpStageCompetitionIds } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 import { getThankYouGraphic, getWelcomeGraphic } from './news-welcome-graphics';
 
@@ -32,8 +33,22 @@ type NewsDraft = {
 
 type MatchSeed = Awaited<ReturnType<typeof getRecentCompletedMatches>>[number];
 type TransferSeed = Awaited<ReturnType<typeof getCompletedTransfersForNews>>[number];
+type CompetitionMvpSeed = Awaited<ReturnType<typeof findCompetitionMvps>>[number];
 
 type NewsCompetition = NonNullable<MatchSeed['competition']>;
+type MvpContender = {
+  playerId: number;
+  playerName: string;
+  rating: number;
+  maps: number;
+};
+type MvpContenderGameRow = {
+  playerId: number;
+  playerName: string;
+  kills: bigint | number;
+  assists: bigint | number;
+  deaths: bigint | number;
+};
 type MapPoolNewsEntry = {
   id: number;
   position: number | null;
@@ -136,7 +151,14 @@ function getCompetitionFlagCode(competition?: NewsCompetition | null) {
   });
 }
 
-function getCompetitionLogo(competition?: NewsCompetition | null) {
+function getCompetitionLogo(
+  competition?: {
+    federation: { slug: string };
+    location?: string | null;
+    organizer?: string | null;
+    tier: { slug: string };
+  } | null,
+) {
   if (!competition) {
     return 'resources://competitions/league-pro-world.png';
   }
@@ -582,6 +604,48 @@ function formatMapIconName(map: string) {
     .replace(/^cbble$/, 'cache');
 }
 
+function getCompetitionYear(competition: { season?: number | null }) {
+  return 2025 + (competition.season || 0);
+}
+
+function getMvpTournamentLabel(
+  competition: CompetitionLinkTarget,
+  options?: { genericMajor?: boolean },
+) {
+  if (options?.genericMajor && Util.isMajorStageTier(competition.tier.slug)) {
+    return 'Majors';
+  }
+
+  const city = Util.getCompetitionHostingLocationCity(competition.location);
+  const year = getCompetitionYear(competition);
+
+  if (Util.isMajorStageTier(competition.tier.slug)) {
+    return [Util.getMajorEventDisplayName(competition.location, competition.organizer), year]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.BLAST_FINALS) {
+    return ['BLAST Finals', city, year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    return ['IEM Cologne', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    return ['IEM Krakow', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return ['ESL Pro League', city, year].filter(Boolean).join(' ');
+  }
+
+  return [getCompetitionNewsName(competition, { trophy: true }), city, year]
+    .filter(Boolean)
+    .join(' ');
+}
+
 function getMapChartColor(map: string) {
   const colors: Record<string, string> = {
     de_mirage: '#2f7fbd',
@@ -867,7 +931,7 @@ function competitionLink(competition: CompetitionLinkTarget, label?: string) {
   const name = label || getCompetitionNewsName(competition, { trophy: true });
 
   return competition.id && competition.federationId && competition.season && competition.tier.id
-    ? `**[${escapeMarkdownLinkText(name)}](/competitions?competitionId=${competition.id}&federationId=${competition.federationId}&season=${competition.season}&tierId=${competition.tier.id})**`
+    ? `[**${escapeMarkdownLinkText(name)}**](/competitions?competitionId=${competition.id}&federationId=${competition.federationId}&season=${competition.season}&tierId=${competition.tier.id})`
     : `**${name}**`;
 }
 
@@ -1312,6 +1376,115 @@ async function getCompletedTransfersForNews() {
   });
 }
 
+async function getCompetitionMvpSeedsForNews(publishedAt: Date) {
+  const mvps = await findCompetitionMvps({});
+  const storyDates = new Map<number, Date>(
+    await Promise.all(
+      mvps.map(
+        async (mvp) =>
+          [mvp.competitionId, await getCompetitionMvpStoryDate(mvp.competitionId, publishedAt)] as [
+            number,
+            Date,
+          ],
+      ),
+    ),
+  );
+
+  return mvps
+    .filter(
+      (mvp) => new Date(storyDates.get(mvp.competitionId) || publishedAt) <= endOfDay(publishedAt),
+    )
+    .sort(
+      (a, b) =>
+        (b.competition.season || 0) - (a.competition.season || 0) ||
+        b.competitionId - a.competitionId ||
+        b.id - a.id,
+    );
+}
+
+async function getCompetitionMvpStoryDate(competitionId: number, fallback: Date) {
+  const match = await DatabaseClient.prisma.match.findFirst({
+    orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    select: {
+      date: true,
+    },
+    where: {
+      competitionId,
+      status: Constants.MatchStatus.COMPLETED,
+    },
+  });
+
+  return match?.date || fallback;
+}
+
+async function getCompetitionMvpContenders(competitionId: number, mvpPlayerId: number) {
+  const stageCompetitionIds = await getCompetitionMvpStageCompetitionIds(competitionId);
+  const rows = await DatabaseClient.prisma.$queryRaw<MvpContenderGameRow[]>`
+    SELECT
+      "MatchPlayerGameStat"."playerId" AS "playerId",
+      "Player"."name" AS "playerName",
+      "MatchPlayerGameStat"."kills" AS "kills",
+      "MatchPlayerGameStat"."assists" AS "assists",
+      "MatchPlayerGameStat"."deaths" AS "deaths"
+    FROM "MatchPlayerGameStat"
+    INNER JOIN "Player"
+      ON "Player"."id" = "MatchPlayerGameStat"."playerId"
+    INNER JOIN "Match"
+      ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+    LEFT JOIN "CareerStint"
+      ON "CareerStint"."playerId" = "MatchPlayerGameStat"."playerId"
+      AND "CareerStint"."startedAt" <= "Match"."date"
+      AND (
+        "CareerStint"."endedAt" IS NULL
+        OR "CareerStint"."endedAt" >= "Match"."date"
+      )
+      AND "CareerStint"."starter" = true
+    INNER JOIN "MatchToTeam" AS "OwnTeam"
+      ON "OwnTeam"."matchId" = "Match"."id"
+      AND "OwnTeam"."teamId" = COALESCE("CareerStint"."teamId", "Player"."teamId")
+    INNER JOIN "CompetitionToTeam" AS "Finalist"
+      ON "Finalist"."competitionId" = ${competitionId}
+      AND "Finalist"."teamId" = "OwnTeam"."teamId"
+    WHERE "Match"."competitionId" IN (${Prisma.join(stageCompetitionIds)})
+      AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+      AND "Match"."matchType" <> 'FACEIT_PUG'
+      AND "Finalist"."position" <= 2
+      AND "MatchPlayerGameStat"."playerId" <> ${mvpPlayerId}
+  `;
+  const contenders = new Map<number, MvpContender & { ratingSum: number }>();
+
+  rows.forEach((row) => {
+    const rating = Util.getPlayerRating(Number(row.kills), Number(row.deaths), Number(row.assists));
+
+    if (!Number.isFinite(rating)) {
+      return;
+    }
+
+    const contender =
+      contenders.get(row.playerId) ||
+      ({
+        playerId: Number(row.playerId),
+        playerName: row.playerName,
+        rating: 0,
+        ratingSum: 0,
+        maps: 0,
+      } satisfies MvpContender & { ratingSum: number });
+    contender.ratingSum += rating;
+    contender.maps += 1;
+    contenders.set(row.playerId, contender);
+  });
+
+  return [...contenders.values()]
+    .map(({ ratingSum, ...contender }) => ({
+      ...contender,
+      rating: contender.maps ? ratingSum / contender.maps : 0,
+    }))
+    .sort(
+      (a, b) => b.rating - a.rating || b.maps - a.maps || a.playerName.localeCompare(b.playerName),
+    )
+    .slice(0, 3);
+}
+
 async function getLikelyBenchedPlayer(destinationId: number, targetId: number, publishedAt: Date) {
   const dayStart = startOfDay(publishedAt);
   const dayEnd = endOfDay(publishedAt);
@@ -1552,7 +1725,7 @@ async function getRecentTeamTitles(
           const titleDate = championshipMatch.date;
 
           return Boolean(findCareerStintForTeam(player, teamId, new Date(titleDate))?.starter);
-        })
+        }),
     );
 }
 
@@ -2100,6 +2273,317 @@ async function buildQualifierDraft(
   };
 }
 
+async function buildCompetitionMvpDraft(
+  mvp: CompetitionMvpSeed,
+  allMvps: CompetitionMvpSeed[],
+  publishedAt: Date,
+): Promise<NewsDraft | null> {
+  const competitionName = getMvpTournamentLabel(mvp.competition);
+  const tournamentReference = competitionLink(mvp.competition, competitionName);
+  const sameTournamentReference = getMvpTournamentLabel(mvp.competition, { genericMajor: true });
+  const player = await DatabaseClient.prisma.player.findFirst({
+    include: {
+      country: true,
+    },
+    where: {
+      id: mvp.playerId,
+    },
+  });
+  const playerDisplayName = playerName(mvp.player);
+  const playerLabel = playerLink(mvp.player);
+  const playerDescriptor = playerAgeLabel(player, playerLabel);
+  const playerDescriptorStart = playerAgeLabel(player, playerLabel, true);
+  const teamLabel = teamLink(mvp.team);
+  const teamDisplayName = teamName(mvp.team);
+  const seed = mvp.competitionId * 97 + mvp.playerId;
+  const storyDate = await getCompetitionMvpStoryDate(mvp.competitionId, publishedAt);
+  const year = getCompetitionYear(mvp.competition);
+  const chronologicalMvps = allMvps.filter(
+    (item) =>
+      (item.competition.season || 0) < (mvp.competition.season || 0) ||
+      ((item.competition.season || 0) === (mvp.competition.season || 0) &&
+        item.competitionId <= mvp.competitionId),
+  );
+  const playerMvps = chronologicalMvps.filter((item) => item.playerId === mvp.playerId);
+  const currentYearMvps = playerMvps.filter(
+    (item) => getCompetitionYear(item.competition) === year,
+  );
+  const previousCareerMvpCount = Math.max(0, playerMvps.length - 1);
+  const currentCareerMvpCount = playerMvps.length;
+  const currentYearMvpCount = currentYearMvps.length;
+  const tournamentMvpCount = playerMvps.filter((item) => {
+    if (Util.isMajorStageTier(mvp.competition.tier.slug)) {
+      return Util.isMajorStageTier(item.competition.tier.slug);
+    }
+
+    return (
+      getMvpTournamentLabel(item.competition, { genericMajor: true }).toLocaleLowerCase() ===
+      sameTournamentReference.toLocaleLowerCase()
+    );
+  }).length;
+  const careerTotals = chronologicalMvps.reduce<
+    Map<number, { count: number; id: number; name: string }>
+  >((acc, item) => {
+    const entry = acc.get(item.playerId) || {
+      count: 0,
+      id: item.playerId,
+      name: playerName(item.player),
+    };
+    entry.count += 1;
+    acc.set(item.playerId, entry);
+    return acc;
+  }, new Map());
+  const tiedPlayer = [...careerTotals.entries()]
+    .filter(
+      ([playerId, entry]) => playerId !== mvp.playerId && entry.count === currentCareerMvpCount,
+    )
+    .sort((a, b) => a[1].name.localeCompare(b[1].name))[0]?.[1];
+  const tiedPlayerLabel = tiedPlayer ? playerLink(tiedPlayer) : null;
+  const overtakenPlayer = [...careerTotals.entries()]
+    .filter(
+      ([playerId, entry]) =>
+        playerId !== mvp.playerId &&
+        entry.count === currentCareerMvpCount - 1 &&
+        previousCareerMvpCount === entry.count,
+    )
+    .sort((a, b) => a[1].name.localeCompare(b[1].name))[0]?.[1];
+  const overtakenPlayerLabel = overtakenPlayer ? playerLink(overtakenPlayer) : null;
+  const contenders = await getCompetitionMvpContenders(mvp.competitionId, mvp.playerId);
+  const closestContender = contenders[0] || null;
+  const closestContenderLabel = closestContender
+    ? playerLink({ id: closestContender.playerId, name: closestContender.playerName })
+    : null;
+  const headline = pickVariant(
+    [
+      `${playerDisplayName} named MVP at ${competitionName}`,
+      `${playerDisplayName} named ${competitionName} MVP`,
+      `${playerDisplayName} wins MVP at ${competitionName}`,
+      `${playerDisplayName} claims ${competitionName} MVP`,
+      `${playerDisplayName} earns MVP honors at ${competitionName}`,
+      `${playerDisplayName} crowned MVP of ${competitionName}`,
+      `${playerDisplayName} takes home ${competitionName} MVP`,
+      `${playerDisplayName} secures MVP award at ${competitionName}`,
+      `${playerDisplayName} voted MVP at ${competitionName}`,
+      `${playerDisplayName} takes ${competitionName} MVP honors`,
+      `${playerDisplayName} lands MVP award at ${competitionName}`,
+      `${playerDisplayName} awarded MVP at ${competitionName}`,
+      `${playerDisplayName} finishes ${competitionName} as MVP`,
+      `${playerDisplayName} collects ${competitionName} MVP award`,
+      `${playerDisplayName} emerges as ${competitionName} MVP`,
+      `${playerDisplayName} picks up MVP honors at ${competitionName}`,
+      `${playerDisplayName} earns ${competitionName} MVP award`,
+      `${playerDisplayName} walks away with ${competitionName} MVP`,
+      `${playerDisplayName} takes MVP honors at ${competitionName}`,
+    ],
+    seed,
+  );
+  const summary =
+    previousCareerMvpCount === 0
+      ? pickVariant(
+          [
+            `${playerDisplayName} wins the first MVP medal of his career`,
+            `${playerDisplayName} claims his first career MVP award`,
+            `${playerDisplayName} earns his maiden MVP medal`,
+            `${playerDisplayName} secures his first-ever MVP honor`,
+            `${playerDisplayName} opens his career MVP account`,
+            `${playerDisplayName} becomes an MVP winner for the first time`,
+          ],
+          seed + 7,
+        )
+      : currentYearMvpCount <= 1
+        ? pickVariant(
+            [
+              `${playerDisplayName} claims his first MVP medal of ${year}`,
+              `${playerDisplayName} earns his first MVP honor of ${year}`,
+              `${playerDisplayName} opens his ${year} MVP account`,
+              `${playerDisplayName} gets on the board with his first MVP of ${year}`,
+              `${playerDisplayName} returns to MVP-winning ways with his first of ${year}`,
+            ],
+            seed + 11,
+          )
+        : pickVariant(
+            [
+              `${playerDisplayName} clinches his ${Util.toOrdinalSuffix(currentYearMvpCount)} MVP medal of ${year}`,
+              `${playerDisplayName} claims his ${Util.toOrdinalSuffix(currentYearMvpCount)} MVP honor of ${year}`,
+              `${playerDisplayName} adds another MVP medal to his ${year} haul`,
+              `${playerDisplayName} makes it ${currentYearMvpCount} MVP medals in ${year}`,
+              `${playerDisplayName} continues his ${year} run with another MVP honor`,
+            ],
+            seed + 13,
+          );
+  const firstSentence =
+    mvp.placement === 2
+      ? pickVariant(
+          [
+            `${playerLabel} claimed the ${tournamentReference} MVP despite ${teamLabel} falling short in the grand final.`,
+            `${playerLabel}'s individual performances were enough to earn MVP honors even as ${teamLabel} finished runners-up at ${tournamentReference}.`,
+            `${playerLabel} walked away with the ${tournamentReference} MVP despite missing out on the trophy in the final.`,
+            `${playerLabel} secured the MVP medal despite ${teamLabel}'s loss in the ${tournamentReference} title decider.`,
+            `${playerLabel} finished ${tournamentReference} as its most valuable player despite ${teamLabel} settling for second place.`,
+          ],
+          seed + 17,
+        )
+      : closestContender && Math.abs(mvp.rating - closestContender.rating) <= 0.04
+        ? pickVariant(
+            [
+              `${playerLabel} claimed the ${tournamentReference} MVP after narrowly edging ${closestContenderLabel} in a closely contested race.`,
+              `${playerLabel} added the MVP medal to ${teamLabel}'s ${tournamentReference} title after finishing just ahead of ${closestContenderLabel}.`,
+              `${playerLabel} came out on top in a tight MVP battle with ${closestContenderLabel} as ${teamLabel} lifted the ${tournamentReference} trophy.`,
+              `${playerLabel} narrowly beat ${closestContenderLabel} to MVP honors following ${teamLabel}'s victory at ${tournamentReference}.`,
+              `${playerLabel} edged out ${closestContenderLabel} for the ${tournamentReference} MVP as ${teamLabel} completed their championship run.`,
+            ],
+            seed + 19,
+          )
+        : pickVariant(
+            [
+              `${playerLabel} capped off ${teamLabel}'s title run at ${tournamentReference} with a dominant individual showing that left little doubt over the MVP award.`,
+              `${playerLabel} was the standout performer throughout ${teamLabel}'s victorious ${tournamentReference} campaign, comfortably securing MVP honors.`,
+              `${playerLabel} led ${teamLabel} to the ${tournamentReference} trophy while establishing himself as the clear choice for MVP.`,
+              `${playerLabel} paired ${teamLabel}'s ${tournamentReference} victory with a commanding performance that earned him the MVP medal.`,
+              `${playerLabel} stood above the rest during ${teamLabel}'s championship run at ${tournamentReference} and walked away with MVP honors.`,
+              `${playerLabel}'s standout performances throughout ${tournamentReference} made him the obvious MVP choice after ${teamLabel} secured the title.`,
+            ],
+            seed + 23,
+          );
+  const contenderSentence = (() => {
+    if (mvp.placement === 2) {
+      return pickVariant(
+        [
+          `${teamLabel} could not convert the final, but ${playerDescriptor}'s performances throughout the tournament made him the clear MVP favorite.`,
+          `Despite losing the title decider, ${playerDescriptor} remained the standout performer across the tournament.`,
+          `${playerDescriptorStart} missed out on the trophy but still finished the event as its standout individual performer.`,
+        ],
+        seed + 29,
+      );
+    }
+
+    if (!contenders.length) {
+      return null;
+    }
+
+    if (closestContender && Math.abs(mvp.rating - closestContender.rating) <= 0.04) {
+      const ratingDifference = Math.abs(mvp.rating - closestContender.rating).toFixed(2);
+
+      return mvp.rating >= closestContender.rating
+        ? pickVariant(
+            [
+              `${closestContenderLabel} pushed him close throughout the event, ultimately finishing just ${ratingDifference} rating points behind ${playerDescriptor}.`,
+              `Only ${ratingDifference} rating points separated ${playerDescriptor} from ${closestContenderLabel} after a closely contested battle for the award.`,
+              `${closestContenderLabel} came close to denying ${playerDescriptor} the medal, with only ${ratingDifference} rating points separating the pair.`,
+            ],
+            seed + 31,
+          )
+        : pickVariant(
+            [
+              `Despite posting a lower rating than ${closestContenderLabel}, ${playerDescriptor} edged the MVP race after facing tougher opposition throughout the tournament.`,
+              `${closestContenderLabel} held the higher rating, though ${playerDescriptor}'s performances against tougher opponents ultimately swung the MVP race.`,
+              `${playerDescriptorStart} claimed the medal despite a lower rating than ${closestContenderLabel}, with the strength of his opposition proving an important factor.`,
+            ],
+            seed + 37,
+          );
+    }
+
+    if (contenders.length >= 3) {
+      const names = contenders
+        .slice(0, 3)
+        .map((contender) => playerLink({ id: contender.playerId, name: contender.playerName }));
+
+      return pickVariant(
+        [
+          `${formatLinkedList(names)} were also in contention, but ${playerDescriptor} comfortably outperformed the chasing pack.`,
+          `${formatLinkedList(names)} emerged as the closest challengers, but ${playerDescriptor} finished well clear of all three.`,
+          `${playerDescriptorStart} faced competition from ${formatLinkedList(names)}, but comfortably separated himself from the field.`,
+          `${formatLinkedList(names)} rounded out the main MVP candidates, with ${playerDescriptor} finishing comfortably ahead of the trio.`,
+        ],
+        seed + 41,
+      );
+    }
+
+    return null;
+  })();
+  const statSentence = pickVariant(
+    [
+      `They posted a ${formatRating(mvp.rating)} average rating across ${mapCountLabel(mvp.maps)}.`,
+      `They averaged a ${formatRating(mvp.rating)} rating over ${mapCountLabel(mvp.maps)}.`,
+      `They finished the tournament with a ${formatRating(mvp.rating)} rating across ${mapCountLabel(mvp.maps)}.`,
+      `They maintained an average rating of ${formatRating(mvp.rating)} through ${mapCountLabel(mvp.maps)}.`,
+      `They wrapped up the event with a ${formatRating(mvp.rating)} rating across ${mapCountLabel(mvp.maps)}.`,
+    ],
+    seed + 43,
+  );
+  const specialSentences = [
+    tournamentMvpCount > 1
+      ? pickVariant(
+          [
+            `This marks the ${Util.toOrdinalSuffix(tournamentMvpCount)} time he has earned MVP honors at ${sameTournamentReference}.`,
+            `This is now his ${Util.toOrdinalSuffix(tournamentMvpCount)} MVP medal from ${sameTournamentReference}.`,
+            `He has now claimed MVP honors at ${sameTournamentReference} for the ${Util.toOrdinalSuffix(tournamentMvpCount)} time.`,
+            `He now boasts ${tournamentMvpCount} MVP medals from ${sameTournamentReference}.`,
+          ],
+          seed + 47,
+        )
+      : null,
+    tiedPlayer
+      ? pickVariant(
+          [
+            `${playerLabel} now draws level with ${tiedPlayerLabel} on ${currentCareerMvpCount} career MVP medals.`,
+            `${playerLabel}'s latest award sees him tie ${tiedPlayerLabel} with ${currentCareerMvpCount} MVPs apiece.`,
+            `The medal moves ${playerLabel} level with ${tiedPlayerLabel} at ${currentCareerMvpCount} MVPs.`,
+          ],
+          seed + 53,
+        )
+      : null,
+    overtakenPlayer
+      ? pickVariant(
+          [
+            `${playerLabel} moves ahead of ${overtakenPlayerLabel} in the MVP standings with ${currentCareerMvpCount} career awards.`,
+            `${playerLabel} overtakes ${overtakenPlayerLabel} in total MVP medals, bringing his tally to ${currentCareerMvpCount}.`,
+            `The latest award moves ${playerLabel} past ${overtakenPlayerLabel} with ${currentCareerMvpCount} career MVPs.`,
+          ],
+          seed + 59,
+        )
+      : null,
+    previousCareerMvpCount === 0
+      ? pickVariant(
+          [
+            `${playerLabel} finally breaks through with his first career MVP medal at ${tournamentReference}.`,
+            `${playerLabel} celebrates his first-ever MVP honor after his standout run at ${tournamentReference}.`,
+            `${playerLabel} opens his MVP account with a career-first award at ${tournamentReference}.`,
+            `${playerLabel}'s wait for an MVP comes to an end with his first award at ${tournamentReference}.`,
+          ],
+          seed + 61,
+        )
+      : null,
+  ].filter(Boolean);
+
+  return {
+    type: 'ARTICLE',
+    topic: 'COMPETITIONS',
+    headline,
+    summary,
+    body: [firstSentence, contenderSentence, statSentence, ...specialSentences]
+      .filter(Boolean)
+      .join('\n\n'),
+    image: playerImage(mvp.player, mvp.team),
+    priority: 84,
+    eventKey: `${AUTO_EVENT_PREFIX}:competition-mvp:${mvp.competitionId}`,
+    payload: {
+      competitionId: mvp.competitionId,
+      playerId: mvp.playerId,
+      teamId: mvp.teamId,
+      flagCode: toFlagCode(player?.country?.code || mvp.player.country?.code),
+      mvpGraphic: {
+        medal: 'resources://competitions/mvp.png',
+        playerImage: playerImage(mvp.player, mvp.team),
+        tournamentLogo: getCompetitionLogo(mvp.competition),
+      },
+      relatedPlayers: [toRelatedPlayer(mvp.player)].filter(Boolean),
+      relatedTeams: [toRelatedTeam(mvp.team)].filter(Boolean),
+    },
+    publishedAt: new Date(startOfDay(storyDate).getTime() + mvp.competitionId),
+  };
+}
+
 async function buildTransferDraft(
   transfer: TransferSeed,
   transfers: TransferSeed[],
@@ -2432,7 +2916,9 @@ async function buildTransferDraft(
           : destination
             ? pickVariant(freeAgentOpeners, transfer.id + 17)
             : pickVariant(departureOpeners, transfer.id + 17);
-  const hasAwperLine = Boolean(destination && benchedPlayer && isAwper(target) && isAwper(benchedPlayer));
+  const hasAwperLine = Boolean(
+    destination && benchedPlayer && isAwper(target) && isAwper(benchedPlayer),
+  );
   const targetStatsDescriptorLabel = hasAwperLine
     ? targetLaterDescriptorLabel
     : targetSecondDescriptorLabel;
@@ -2537,25 +3023,24 @@ async function buildTransferDraft(
         )
       : null;
   const sourceStatsParagraph = [statLine, sourceStatsAddonLine].filter(Boolean).join(' ') || null;
-  const awperLine =
-    hasAwperLine
-      ? pickVariant(
-          [
-            `${destinationLabel} will retain their AWP setup, with ${targetSecondDescriptorLabel} replacing fellow sniper ${benchedLabel}.`,
-            `${destinationLabel} have found their new AWPer, bringing in ${targetSecondDescriptorLabel} to take over from ${benchedLabel}.`,
-            `${targetSecondDescriptorSentenceLabel} steps into the AWP role for ${destinationLabel}, replacing fellow AWPer ${benchedLabel}.`,
-            `${destinationLabel} keep the AWP position unchanged in structure, with ${targetSecondDescriptorLabel} coming in for ${benchedLabel}.`,
-            `${destinationLabel} have opted for an AWP change, replacing ${benchedLabel} with ${targetSecondDescriptorLabel}.`,
-            `${targetSecondDescriptorSentenceLabel} takes over ${destinationLabel}'s AWP duties from ${benchedLabel}.`,
-            `${destinationLabel} remain committed to the AWP role as ${targetSecondDescriptorLabel} replaces ${benchedLabel} in the lineup.`,
-            `${targetSecondDescriptorSentenceLabel} joins ${destinationLabel} as the new AWPer, taking the place of ${benchedLabel}.`,
-            `${destinationLabel} make a direct change in the AWP position, bringing ${targetSecondDescriptorLabel} in for ${benchedLabel}.`,
-            `${targetSecondDescriptorSentenceLabel} is set to assume AWP responsibilities for ${destinationLabel} following ${benchedLabel}'s departure.`,
-            `${destinationLabel} swap one AWPer for another, with ${targetSecondDescriptorLabel} arriving to replace ${benchedLabel}.`,
-          ],
-          transfer.id + 43,
-        )
-      : null;
+  const awperLine = hasAwperLine
+    ? pickVariant(
+        [
+          `${destinationLabel} will retain their AWP setup, with ${targetSecondDescriptorLabel} replacing fellow sniper ${benchedLabel}.`,
+          `${destinationLabel} have found their new AWPer, bringing in ${targetSecondDescriptorLabel} to take over from ${benchedLabel}.`,
+          `${targetSecondDescriptorSentenceLabel} steps into the AWP role for ${destinationLabel}, replacing fellow AWPer ${benchedLabel}.`,
+          `${destinationLabel} keep the AWP position unchanged in structure, with ${targetSecondDescriptorLabel} coming in for ${benchedLabel}.`,
+          `${destinationLabel} have opted for an AWP change, replacing ${benchedLabel} with ${targetSecondDescriptorLabel}.`,
+          `${targetSecondDescriptorSentenceLabel} takes over ${destinationLabel}'s AWP duties from ${benchedLabel}.`,
+          `${destinationLabel} remain committed to the AWP role as ${targetSecondDescriptorLabel} replaces ${benchedLabel} in the lineup.`,
+          `${targetSecondDescriptorSentenceLabel} joins ${destinationLabel} as the new AWPer, taking the place of ${benchedLabel}.`,
+          `${destinationLabel} make a direct change in the AWP position, bringing ${targetSecondDescriptorLabel} in for ${benchedLabel}.`,
+          `${targetSecondDescriptorSentenceLabel} is set to assume AWP responsibilities for ${destinationLabel} following ${benchedLabel}'s departure.`,
+          `${destinationLabel} swap one AWPer for another, with ${targetSecondDescriptorLabel} arriving to replace ${benchedLabel}.`,
+        ],
+        transfer.id + 43,
+      )
+    : null;
   const trophyList = formatCompetitionTitleList(sellerTitles);
   const sourceDurationLabel = sourceStintDuration || 'their time';
   const sourceStintLabel = sourceStintDuration ? `${sourceStintDuration} stint` : 'time';
@@ -3114,15 +3599,6 @@ async function createDrafts(drafts: NewsDraft[]) {
     const existing = existingItemsByEventKey.get(draft.eventKey);
 
     if (existing) {
-      await DatabaseClient.prisma.newsItem.update({
-        data: {
-          ...draft,
-          payload: draft.payload ? JSON.stringify(draft.payload) : null,
-        },
-        where: {
-          id: existing.id,
-        },
-      });
       continue;
     }
 
@@ -3139,40 +3615,6 @@ async function createDrafts(drafts: NewsDraft[]) {
   return created;
 }
 
-async function pruneNonTransferGeneratedItems() {
-  await DatabaseClient.prisma.newsItem.deleteMany({
-    where: {
-      OR: [
-        {
-          eventKey: {
-            startsWith: `${AUTO_EVENT_PREFIX}:match:`,
-          },
-        },
-        {
-          eventKey: {
-            startsWith: `${AUTO_EVENT_PREFIX}:qualifier:`,
-          },
-        },
-        {
-          eventKey: {
-            startsWith: `${AUTO_EVENT_PREFIX}:esea-recap:`,
-          },
-        },
-        {
-          eventKey: {
-            startsWith: `${AUTO_EVENT_PREFIX}:competition-roundup:`,
-          },
-        },
-        {
-          eventKey: {
-            startsWith: `${PROTOTYPE_EVENT_PREFIX}:ranking:`,
-          },
-        },
-      ],
-    },
-  });
-}
-
 export async function generateAutomaticItems(date?: Date) {
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const publishedAt = date || profile?.date || new Date();
@@ -3183,17 +3625,21 @@ export async function generateAutomaticItems(date?: Date) {
     await backfillMissingMatchPlayerGameStats();
   }
 
-  await pruneNonTransferGeneratedItems();
   const transfers = await getCompletedTransfersForNews();
-  const drafts = (
+  const mvpSeeds = includeStatistics ? await getCompetitionMvpSeedsForNews(publishedAt) : [];
+  const allMvps = includeStatistics ? await findCompetitionMvps({}) : [];
+  const transferDrafts = (
     await Promise.all(
       transfers.map((transfer) =>
         buildTransferDraft(transfer, transfers, topTeamIds, publishedAt, includeStatistics),
       ),
     )
   ).filter(Boolean) as NewsDraft[];
+  const mvpDrafts = (
+    await Promise.all(mvpSeeds.map((mvp) => buildCompetitionMvpDraft(mvp, allMvps, publishedAt)))
+  ).filter(Boolean) as NewsDraft[];
 
-  return createDrafts(drafts);
+  return createDrafts([...transferDrafts, ...mvpDrafts]);
 }
 
 export async function generatePrototypeItems() {

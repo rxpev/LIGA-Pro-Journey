@@ -359,9 +359,11 @@ export default function () {
   const canViewStatistics = Boolean(state.profile?.simulateNpcMatchStats);
 
   const queryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const queryCompetitionId = Number(queryParams.get('competitionId'));
   const queryFederationId = Number(queryParams.get('federationId'));
   const querySeasonId = Number(queryParams.get('season'));
   const queryTierId = Number(queryParams.get('tierId'));
+  const hasQueryCompetitionId = Number.isFinite(queryCompetitionId) && queryCompetitionId > 0;
   const hasQueryParams =
     Number.isFinite(queryFederationId) &&
     Number.isFinite(querySeasonId) &&
@@ -487,6 +489,39 @@ export default function () {
   }, [tierQuery]);
 
   React.useEffect(() => {
+    if (hasQueryParams || !hasQueryCompetitionId || initializedFromQuery) return;
+
+    let isCurrent = true;
+
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: {
+          id: queryCompetitionId,
+        },
+      })
+      .then((result) => {
+        if (!isCurrent) {
+          return;
+        }
+
+        if (result) {
+          setSelectedFederationId(result.federationId);
+          setSelectedSeasonId(result.season);
+          setSelectedTierId(result.tierId);
+          setCompetition(result);
+        }
+
+        setInitializedFromQuery(true);
+        setInitializedQueryCompetition(true);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [hasQueryParams, hasQueryCompetitionId, initializedFromQuery, queryCompetitionId]);
+
+  React.useEffect(() => {
     if (!hasQueryParams || initializedFromQuery) return;
 
     setSelectedFederationId(queryFederationId);
@@ -521,7 +556,7 @@ export default function () {
    * - Maps country → continent → federation.
    */
   React.useEffect(() => {
-    if (hasQueryParams) return;
+    if (hasQueryParams || hasQueryCompetitionId) return;
     if (!state.profile || initializedFromProfile) return;
 
     const competitionFederationId = state.profile.team?.competitionFederationId ?? null;
@@ -561,7 +596,13 @@ export default function () {
     }
 
     setInitializedFromProfile(true);
-  }, [state.profile, state.continents, initializedFromProfile]);
+  }, [
+    hasQueryCompetitionId,
+    hasQueryParams,
+    state.profile,
+    state.continents,
+    initializedFromProfile,
+  ]);
 
   /**
    * Once we know:
@@ -936,9 +977,14 @@ export default function () {
 
   React.useEffect(() => {
     if (!canViewStatistics && location.pathname === TabIdentifier.STATISTICS) {
-      navigate(TabIdentifier.RESULTS);
+      navigate({ pathname: TabIdentifier.RESULTS, search: location.search });
     }
-  }, [canViewStatistics, location.pathname, navigate]);
+  }, [canViewStatistics, location.pathname, location.search, navigate]);
+
+  const navigateTab = React.useCallback(
+    (pathname: TabIdentifier) => navigate({ pathname, search: location.search }),
+    [location.search, navigate],
+  );
 
   // Build seasons dropdown data
   const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
@@ -948,33 +994,33 @@ export default function () {
       <header>
         <button
           className={cx(location.pathname === TabIdentifier.OVERVIEW && 'btn-active!')}
-          onClick={() => navigate(TabIdentifier.OVERVIEW)}
+          onClick={() => navigateTab(TabIdentifier.OVERVIEW)}
         >
           {t('shared.overview')}
         </button>
         <button
           className={cx(location.pathname === TabIdentifier.STANDINGS && 'btn-active!')}
-          onClick={() => navigate(TabIdentifier.STANDINGS)}
+          onClick={() => navigateTab(TabIdentifier.STANDINGS)}
         >
           {t('shared.standings')}
         </button>
         <button
           className={cx(location.pathname === TabIdentifier.RESULTS && 'btn-active!')}
-          onClick={() => navigate(TabIdentifier.RESULTS)}
+          onClick={() => navigateTab(TabIdentifier.RESULTS)}
         >
           {t('shared.results')}
         </button>
         {canViewStatistics && (
           <button
             className={cx(location.pathname === TabIdentifier.STATISTICS && 'btn-active!')}
-            onClick={() => navigate(TabIdentifier.STATISTICS)}
+            onClick={() => navigateTab(TabIdentifier.STATISTICS)}
           >
             Statistics
           </button>
         )}
         <button
           className={cx(location.pathname === TabIdentifier.PARTICIPANTS && 'btn-active!')}
-          onClick={() => navigate(TabIdentifier.PARTICIPANTS)}
+          onClick={() => navigateTab(TabIdentifier.PARTICIPANTS)}
         >
           Participants
         </button>

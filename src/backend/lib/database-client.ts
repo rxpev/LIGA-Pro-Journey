@@ -189,7 +189,9 @@ export default class DatabaseClient {
     const continents = await prisma.continent.findMany({
       select: { id: true, code: true },
     });
-    const continentIdByCode = new Map(continents.map((continent) => [continent.code.toUpperCase(), continent.id]));
+    const continentIdByCode = new Map(
+      continents.map((continent) => [continent.code.toUpperCase(), continent.id]),
+    );
 
     // Legacy fix: older builds used "SA"/"XSA" for the mixed South America row.
     // Canonicalize to lowercase "xsa" without violating unique(code|name) constraints.
@@ -212,19 +214,25 @@ export default class DatabaseClient {
           where: { countryId: legacySouthAmerica.id },
           data: { countryId: canonicalSouthAmerica.id },
         });
-        await prisma.country.delete({ where: { id: legacySouthAmerica.id } }).catch(() => Promise.resolve());
+        await prisma.country
+          .delete({ where: { id: legacySouthAmerica.id } })
+          .catch(() => Promise.resolve());
       } else {
-        await prisma.country.update({
-          where: { id: legacySouthAmerica.id },
-          data: { code: 'xsa' },
-        }).catch(() => Promise.resolve());
+        await prisma.country
+          .update({
+            where: { id: legacySouthAmerica.id },
+            data: { code: 'xsa' },
+          })
+          .catch(() => Promise.resolve());
       }
     }
 
-    await prisma.country.update({
-      where: { code: 'XSA' },
-      data: { code: 'xsa' },
-    }).catch(() => Promise.resolve());
+    await prisma.country
+      .update({
+        where: { code: 'XSA' },
+        data: { code: 'xsa' },
+      })
+      .catch(() => Promise.resolve());
 
     for (const country of mixedRegionCountries) {
       const continentId = continentIdByCode.get(country.continentCode);
@@ -246,10 +254,12 @@ export default class DatabaseClient {
 
     const europeContinentId = continentIdByCode.get('EU');
     if (europeContinentId) {
-      await prisma.country.update({
-        where: { code: 'TR' },
-        data: { continentId: europeContinentId },
-      }).catch(() => Promise.resolve());
+      await prisma.country
+        .update({
+          where: { code: 'TR' },
+          data: { continentId: europeContinentId },
+        })
+        .catch(() => Promise.resolve());
     }
   }
 
@@ -303,9 +313,8 @@ export default class DatabaseClient {
     prisma: PrismaClientExtended,
     saveId: number,
   ) {
-    const rootSaveCompetitionFederationIds = await DatabaseClient.getRootSaveCompetitionFederationIds(
-      saveId,
-    );
+    const rootSaveCompetitionFederationIds =
+      await DatabaseClient.getRootSaveCompetitionFederationIds(saveId);
     const teams = await prisma.team.findMany({
       select: {
         id: true,
@@ -331,13 +340,10 @@ export default class DatabaseClient {
       }
 
       const rootSaveCompetitionFederationId = rootSaveCompetitionFederationIds.get(team.slug);
-      const nextCompetitionFederationId = rootSaveCompetitionFederationId
-        ?? team.country?.continent?.federationId
-        ?? null;
+      const nextCompetitionFederationId =
+        rootSaveCompetitionFederationId ?? team.country?.continent?.federationId ?? null;
 
-      if (
-        !nextCompetitionFederationId
-      ) {
+      if (!nextCompetitionFederationId) {
         continue;
       }
 
@@ -398,7 +404,9 @@ export default class DatabaseClient {
         }
       }
 
-      const dominantCountry = [...countryCounts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      const dominantCountry = [...countryCounts.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0] - b[0],
+      )[0];
       let nextCountryId = dominantCountry?.[1] >= 3 ? dominantCountry[0] : null;
 
       if (!nextCountryId) {
@@ -584,7 +592,10 @@ export default class DatabaseClient {
       ),
     );
 
-    DatabaseClient.log.info('Initialized %d player career stints for save bootstrap.', missingStints.length);
+    DatabaseClient.log.info(
+      'Initialized %d player career stints for save bootstrap.',
+      missingStints.length,
+    );
   }
 
   private static async repairMissingPreTransferCareerStints(prisma: PrismaClientExtended) {
@@ -757,10 +768,7 @@ export default class DatabaseClient {
       }),
       prisma.careerStint.findMany({
         where: {
-          OR: [
-            { endedAt: null },
-            { endedAt: splitDate },
-          ],
+          OR: [{ endedAt: null }, { endedAt: splitDate }],
         },
         select: {
           id: true,
@@ -809,15 +817,17 @@ export default class DatabaseClient {
     const intendedInitialStart = new Date(Constants.NewSaveSeasonStartDate);
 
     futureFreeAgentStints.forEach((stint) => {
-      tx.push(prisma.careerStint.update({
-        where: { id: stint.id },
-        data: {
-          startedAt: intendedInitialStart,
-          ...(stint.endedAt != null && stint.endedAt < intendedInitialStart
-            ? { endedAt: intendedInitialStart }
-            : {}),
-        },
-      }));
+      tx.push(
+        prisma.careerStint.update({
+          where: { id: stint.id },
+          data: {
+            startedAt: intendedInitialStart,
+            ...(stint.endedAt != null && stint.endedAt < intendedInitialStart
+              ? { endedAt: intendedInitialStart }
+              : {}),
+          },
+        }),
+      );
     });
 
     // Legacy cleanup: collapse artificial split created at load time by older reconciliation.
@@ -833,25 +843,31 @@ export default class DatabaseClient {
       const hasPreviousStint = stints.some((stint) => stint.id !== active.id);
       const previous = stints
         .filter((stint) => stint.id !== active.id && stint.endedAt != null)
-        .sort((a, b) => new Date(b.endedAt as Date).getTime() - new Date(a.endedAt as Date).getTime())[0];
+        .sort(
+          (a, b) => new Date(b.endedAt as Date).getTime() - new Date(a.endedAt as Date).getTime(),
+        )[0];
 
       if (!previous?.endedAt) continue;
       if (previous.teamId !== active.teamId) continue;
       if (new Date(previous.endedAt).getTime() !== splitDate.getTime()) continue;
       if (new Date(active.startedAt).getTime() !== splitDate.getTime()) continue;
 
-      tx.push(prisma.careerStint.update({
-        where: { id: previous.id },
-        data: {
-          endedAt: null,
-          starter: active.starter,
-          tier: active.tier,
-          teamId: active.teamId,
-        },
-      }));
-      tx.push(prisma.careerStint.delete({
-        where: { id: active.id },
-      }));
+      tx.push(
+        prisma.careerStint.update({
+          where: { id: previous.id },
+          data: {
+            endedAt: null,
+            starter: active.starter,
+            tier: active.tier,
+            teamId: active.teamId,
+          },
+        }),
+      );
+      tx.push(
+        prisma.careerStint.delete({
+          where: { id: active.id },
+        }),
+      );
       activeByPlayer.set(playerId, {
         ...active,
         id: previous.id,
@@ -865,16 +881,61 @@ export default class DatabaseClient {
 
       if (!player.teamId) {
         if (active && active.teamId != null) {
-          tx.push(prisma.careerStint.updateMany({
-            where: { playerId: player.id, endedAt: null },
-            data: { endedAt: splitDate },
-          }));
+          tx.push(
+            prisma.careerStint.updateMany({
+              where: { playerId: player.id, endedAt: null },
+              data: { endedAt: splitDate },
+            }),
+          );
         }
         continue;
       }
 
       if (!active) {
-        tx.push(prisma.careerStint.create({
+        tx.push(
+          prisma.careerStint.create({
+            data: {
+              playerId: player.id,
+              teamId: player.teamId,
+              tier: targetTier,
+              starter: player.starter,
+              startedAt: splitDate,
+            },
+          }),
+        );
+        continue;
+      }
+
+      const sameSnapshot =
+        active.teamId === player.teamId &&
+        active.tier === targetTier &&
+        active.starter === player.starter;
+
+      if (sameSnapshot) continue;
+
+      if (active.startedAt >= splitDate && active.teamId === player.teamId) {
+        tx.push(
+          prisma.careerStint.update({
+            where: { id: active.id },
+            data: {
+              teamId: player.teamId,
+              tier: targetTier,
+              starter: player.starter,
+              startedAt: splitDate,
+            },
+          }),
+        );
+        continue;
+      }
+
+      tx.push(
+        prisma.careerStint.update({
+          where: { id: active.id },
+          data: { endedAt: splitDate },
+        }),
+      );
+      tx.push(
+        prisma.careerStint.create({
           data: {
             playerId: player.id,
             teamId: player.teamId,
@@ -882,47 +943,16 @@ export default class DatabaseClient {
             starter: player.starter,
             startedAt: splitDate,
           },
-        }));
-        continue;
-      }
-
-      const sameSnapshot = active.teamId === player.teamId
-        && active.tier === targetTier
-        && active.starter === player.starter;
-
-      if (sameSnapshot) continue;
-
-      if (active.startedAt >= splitDate && active.teamId === player.teamId) {
-        tx.push(prisma.careerStint.update({
-          where: { id: active.id },
-          data: {
-            teamId: player.teamId,
-            tier: targetTier,
-            starter: player.starter,
-            startedAt: splitDate,
-          },
-        }));
-        continue;
-      }
-
-      tx.push(prisma.careerStint.update({
-        where: { id: active.id },
-        data: { endedAt: splitDate },
-      }));
-      tx.push(prisma.careerStint.create({
-        data: {
-          playerId: player.id,
-          teamId: player.teamId,
-          tier: targetTier,
-          starter: player.starter,
-          startedAt: splitDate,
-        },
-      }));
+        }),
+      );
     }
 
     if (tx.length > 0) {
       await prisma.$transaction(tx);
-      DatabaseClient.log.info('Reconciled %d active career stint snapshot operation(s).', tx.length);
+      DatabaseClient.log.info(
+        'Reconciled %d active career stint snapshot operation(s).',
+        tx.length,
+      );
     }
   }
 
@@ -970,11 +1000,7 @@ export default class DatabaseClient {
     }
   }
 
-  private static runSqlite(
-    cnx: sqlite3.Database,
-    query: string,
-    params: unknown[] = [],
-  ) {
+  private static runSqlite(cnx: sqlite3.Database, query: string, params: unknown[] = []) {
     return new Promise<void>((resolve, reject) => {
       cnx.run(query, params, (error) => {
         if (error) {
@@ -987,11 +1013,7 @@ export default class DatabaseClient {
     });
   }
 
-  private static allSqlite<T>(
-    cnx: sqlite3.Database,
-    query: string,
-    params: unknown[] = [],
-  ) {
+  private static allSqlite<T>(cnx: sqlite3.Database, query: string, params: unknown[] = []) {
     return new Promise<T[]>((resolve, reject) => {
       cnx.all(query, params, (error, rows: T[]) => {
         if (error) {
@@ -1035,7 +1057,9 @@ export default class DatabaseClient {
     );
   }
 
-  private static async getRootSaveBaselineSnapshot(savePath: string): Promise<RootSaveBaselineSnapshot> {
+  private static async getRootSaveBaselineSnapshot(
+    savePath: string,
+  ): Promise<RootSaveBaselineSnapshot> {
     const cnx = await new Promise<sqlite3.Database>((resolve) => {
       const db = new sqlite3.Database(savePath, () => resolve(db));
     });
@@ -1167,8 +1191,9 @@ export default class DatabaseClient {
 
   private static async repairRootSaveFromTemplate(rootSavePath: string): Promise<void> {
     const localRootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
-    const settings = await DatabaseClient.getRootSaveSettings(rootSavePath)
-      .catch((): string | null => null);
+    const settings = await DatabaseClient.getRootSaveSettings(rootSavePath).catch(
+      (): string | null => null,
+    );
 
     await DatabaseClient.removeSqliteSidecars(rootSavePath);
     await fs.promises.copyFile(localRootSavePath, rootSavePath);
@@ -1247,7 +1272,7 @@ export default class DatabaseClient {
         "maps" INTEGER NOT NULL,
         "placement" INTEGER NOT NULL,
         "opponentElo" REAL,
-        "formulaVersion" INTEGER NOT NULL DEFAULT 2,
+        "formulaVersion" INTEGER NOT NULL DEFAULT 8,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
       `,
@@ -1460,15 +1485,18 @@ export default class DatabaseClient {
 
     // load up migration files
     const migrationsBasePath = path.join(path.dirname(DatabaseClient.localBasePath), 'migrations');
-    const migrationsAll: Array<{ name: string; isDirectory: () => boolean; relative: () => string }> =
-      await glob('*_*', {
-        cwd: path.normalize(migrationsBasePath),
-        withFileTypes: true,
-        stat: true,
-      }).catch((err): Array<{ name: string; isDirectory: () => boolean; relative: () => string }> => {
-        DatabaseClient.log.error('Failed to read migrations directory:', err);
-        return [];
-      });
+    const migrationsAll: Array<{
+      name: string;
+      isDirectory: () => boolean;
+      relative: () => string;
+    }> = await glob('*_*', {
+      cwd: path.normalize(migrationsBasePath),
+      withFileTypes: true,
+      stat: true,
+    }).catch((err): Array<{ name: string; isDirectory: () => boolean; relative: () => string }> => {
+      DatabaseClient.log.error('Failed to read migrations directory:', err);
+      return [];
+    });
 
     // defensive guard: ensure we have an array
     if (!migrationsAll || migrationsAll.length === 0) {
@@ -1564,7 +1592,11 @@ export default class DatabaseClient {
         await DatabaseClient.runSqlite(cnx, 'COMMIT');
       } catch (error) {
         await DatabaseClient.runSqlite(cnx, 'ROLLBACK').catch(() => Promise.resolve());
-        DatabaseClient.log.error('Failed to apply migration `%s` to %s.', migration.name, targetDBPath);
+        DatabaseClient.log.error(
+          'Failed to apply migration `%s` to %s.',
+          migration.name,
+          targetDBPath,
+        );
         DatabaseClient.log.error(error);
         throw error;
       }
@@ -1740,28 +1772,19 @@ export default class DatabaseClient {
       );
       const hasCompetitionFederationColumn = tables.includes('Team')
         ? await new Promise<boolean>((resolve) =>
-          cnx.all(
-            `PRAGMA table_info("Team")`,
-            (error, rows: Array<{ name: string }>) => {
+            cnx.all(`PRAGMA table_info("Team")`, (error, rows: Array<{ name: string }>) => {
               if (error) {
-                DatabaseClient.log.warn(
-                  'Failed probing Team columns for %s: %s',
-                  savePath,
-                  error,
-                );
+                DatabaseClient.log.warn('Failed probing Team columns for %s: %s', savePath, error);
                 return resolve(false);
               }
 
               resolve((rows ?? []).some((row) => row.name === 'competitionFederationId'));
-            },
-          ),
-        )
+            }),
+          )
         : false;
       const hasProfileSimulateNpcMatchStatsColumn = tables.includes('Profile')
         ? await new Promise<boolean>((resolve) =>
-          cnx.all(
-            `PRAGMA table_info("Profile")`,
-            (error, rows: Array<{ name: string }>) => {
+            cnx.all(`PRAGMA table_info("Profile")`, (error, rows: Array<{ name: string }>) => {
               if (error) {
                 DatabaseClient.log.warn(
                   'Failed probing Profile columns for %s: %s',
@@ -1772,9 +1795,8 @@ export default class DatabaseClient {
               }
 
               resolve((rows ?? []).some((row) => row.name === 'simulateNpcMatchStats'));
-            },
-          ),
-        )
+            }),
+          )
         : false;
 
       return {

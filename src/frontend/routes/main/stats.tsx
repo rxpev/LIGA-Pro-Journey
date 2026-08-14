@@ -44,6 +44,7 @@ type MatchPerformance = {
   match: MatchRecord;
   kills: number;
   deaths: number;
+  maps: number;
   plusMinus: number;
   rating: number;
 };
@@ -638,7 +639,7 @@ function getSeriesAwarePerformance(
   const performance = getPlayerPerformanceFromEvents(playerId, eventsForStats);
 
   if (!useSeriesAverageRating) {
-    return performance;
+    return { ...performance, maps: 1 };
   }
 
   const ratings = Object.values(groupBy(eventsForStats, 'gameId'))
@@ -646,11 +647,12 @@ function getSeriesAwarePerformance(
     .filter((rating: number) => Number.isFinite(rating));
 
   if (!ratings.length) {
-    return performance;
+    return { ...performance, maps: 1 };
   }
 
   return {
     ...performance,
+    maps: ratings.length,
     rating: ratings.reduce((sum: number, rating: number) => sum + rating, 0) / ratings.length,
   };
 }
@@ -881,7 +883,8 @@ export default function LeagueStatsConcept(): JSX.Element {
   const previousActiveTab = React.useRef<StatsTab>(activeTab);
   const shouldDefaultTeammateTeam = React.useRef(false);
   const canViewGlobalPlayerStats = Boolean(state.profile?.simulateNpcMatchStats);
-  const isGlobalPlayerDetailView = activeTab === StatsTab.GLOBAL_PLAYERS && !!selectedGlobalPlayerId;
+  const isGlobalPlayerDetailView =
+    activeTab === StatsTab.GLOBAL_PLAYERS && !!selectedGlobalPlayerId;
   const activeSelectedCompetitionGroup = isGlobalPlayerDetailView
     ? selectedGlobalDetailCompetitionGroup
     : selectedCompetitionGroup;
@@ -904,7 +907,9 @@ export default function LeagueStatsConcept(): JSX.Element {
   const setActiveSelectedCompetitionGroup = isGlobalPlayerDetailView
     ? setSelectedGlobalDetailCompetitionGroup
     : setSelectedCompetitionGroup;
-  const setActiveSelectedMap = isGlobalPlayerDetailView ? setSelectedGlobalDetailMap : setSelectedMap;
+  const setActiveSelectedMap = isGlobalPlayerDetailView
+    ? setSelectedGlobalDetailMap
+    : setSelectedMap;
   const setActiveSelectedSeason = isGlobalPlayerDetailView
     ? setSelectedGlobalDetailSeason
     : setSelectedSeason;
@@ -1142,14 +1147,14 @@ export default function LeagueStatsConcept(): JSX.Element {
       })
       .then((result: any[]) => setGlobalPlayerMatches(result.filter(isLeagueMatch)))
       .finally(() => setGlobalPlayerMatchesLoading(false));
-  }, [
-    activeTab,
-    canViewGlobalPlayerStats,
-    selectedGlobalPlayerId,
-  ]);
+  }, [activeTab, canViewGlobalPlayerStats, selectedGlobalPlayerId]);
 
   React.useEffect(() => {
-    if (!canViewGlobalPlayerStats || activeTab !== StatsTab.GLOBAL_PLAYERS || !selectedGlobalPlayerId) {
+    if (
+      !canViewGlobalPlayerStats ||
+      activeTab !== StatsTab.GLOBAL_PLAYERS ||
+      !selectedGlobalPlayerId
+    ) {
       setSelectedGlobalPlayerProfile(null);
       return;
     }
@@ -1575,13 +1580,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       );
       return [{ match, ...performance }];
     });
-  }, [
-    matchesByFilters,
-    selectedTeammateId,
-    activeSelectedMap,
-    careerStints,
-    selectedCareerTeamId,
-  ]);
+  }, [matchesByFilters, selectedTeammateId, activeSelectedMap, careerStints, selectedCareerTeamId]);
 
   const globalPlayerPerformances = React.useMemo(() => {
     if (!selectedGlobalPlayerId) return [] as MatchPerformance[];
@@ -1652,8 +1651,8 @@ export default function LeagueStatsConcept(): JSX.Element {
           label: getCompetitionLabel(item.match),
           placement: placement ? `#${placement}` : '-',
           plusMinus: item.plusMinus,
-          ratingSum: item.rating,
-          count: 1,
+          ratingSum: item.rating * item.maps,
+          count: item.maps,
           mapsPlayed: playedMaps,
           teamBlazon: ownTeam?.team.blazon || 'resources://blazonry/noteam.svg',
           tier: item.match.competition?.tier,
@@ -1663,8 +1662,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         });
       } else {
         existing.plusMinus += item.plusMinus;
-        existing.ratingSum += item.rating;
-        existing.count += 1;
+        existing.ratingSum += item.rating * item.maps;
+        existing.count += item.maps;
         existing.mapsPlayed += playedMaps;
       }
     });
@@ -1754,27 +1753,23 @@ export default function LeagueStatsConcept(): JSX.Element {
         acc.matches += 1;
         acc.kills += item.kills;
         acc.deaths += item.deaths;
+        acc.maps += item.maps;
         acc.plusMinus += item.plusMinus;
-        acc.ratingSum += item.rating;
+        acc.ratingMaps += item.maps;
+        acc.ratingSum += item.rating * item.maps;
         return acc;
       },
-      { matches: 0, kills: 0, deaths: 0, plusMinus: 0, ratingSum: 0 },
+      { matches: 0, kills: 0, deaths: 0, maps: 0, plusMinus: 0, ratingMaps: 0, ratingSum: 0 },
     );
 
     return {
       ...totals,
-      avgRating: totals.matches ? Number((totals.ratingSum / totals.matches).toFixed(2)) : 0,
+      avgRating: totals.ratingMaps ? Number((totals.ratingSum / totals.ratingMaps).toFixed(2)) : 0,
       kdRatio: totals.deaths ? Number((totals.kills / totals.deaths).toFixed(2)) : totals.kills,
-      avgKills: totals.matches ? Math.round(totals.kills / totals.matches) : 0,
-      mapsPlayed: activePerformances.reduce((acc: number, item: any) => {
-        const playedGames = getPlayedGames(item.match);
-        if (activeSelectedMap) {
-          return acc + playedGames.filter((game: any) => game.map === activeSelectedMap).length;
-        }
-        return acc + playedGames.length;
-      }, 0),
+      avgKills: totals.maps ? Math.round(totals.kills / totals.maps) : 0,
+      mapsPlayed: totals.maps,
     };
-  }, [activePerformances, activeSelectedMap]);
+  }, [activePerformances]);
 
   const featuredMapSlug =
     activeSelectedMap || getPlayedGames(activePerformances[0]?.match || {})[0]?.map || 'de_mirage';
@@ -1797,9 +1792,9 @@ export default function LeagueStatsConcept(): JSX.Element {
       : selectedFilterTeam?.blazon ||
         state.profile?.team?.blazon ||
         'resources://blazonry/noteam.svg';
-  const selectedGlobalPlayer = globalPlayers.find(
-    (player) => String(player.id) === selectedGlobalPlayerId,
-  ) || selectedGlobalPlayerProfile;
+  const selectedGlobalPlayer =
+    globalPlayers.find((player) => String(player.id) === selectedGlobalPlayerId) ||
+    selectedGlobalPlayerProfile;
   const currentLoading =
     activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatchesLoading : loading;
   const globalPlayerTotalPages = Math.max(1, Math.ceil(numGlobalPlayers / GlobalPlayerPageSize));

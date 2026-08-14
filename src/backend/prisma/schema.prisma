@@ -96,7 +96,7 @@ model CompetitionMvp {
   maps           Int
   placement      Int
   opponentElo    Float?
-  formulaVersion Int      @default(2)
+  formulaVersion Int      @default(8)
   createdAt      DateTime @default(now())
 
   // belongs to
