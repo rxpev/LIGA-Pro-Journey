@@ -5,6 +5,7 @@ import DatabaseClient from './database-client';
 import { findCompetitionMvps, getCompetitionMvpStageCompetitionIds } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 import { getThankYouGraphic, getWelcomeGraphic } from './news-welcome-graphics';
+import { CIS_COUNTRY_CODES } from './npc-transfer-identity';
 
 const PROTOTYPE_EVENT_PREFIX = 'prototype-news';
 const AUTO_EVENT_PREFIX = 'auto-news';
@@ -792,22 +793,28 @@ function isAwper(player?: { role?: string | null } | null) {
 
 function getTeamIdentity(players: Array<{ country?: { code?: string | null } | null }>) {
   const counts = new Map<string, number>();
+  let cisCount = 0;
 
   for (const player of players) {
     const code = toFlagCode(player.country?.code);
 
     if (code) {
       counts.set(code, (counts.get(code) || 0) + 1);
+      if (CIS_COUNTRY_CODES.has(code)) {
+        cisCount += 1;
+      }
     }
   }
 
   const [countryCode, count] =
     [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || [];
+  const isNational = Boolean(countryCode && count >= 3);
+  const isCisNational = cisCount >= 3 && cisCount >= Math.ceil(players.length * 0.6);
 
   return {
     countryCode,
-    isNational: Boolean(countryCode && count >= 3),
-    isInternational: players.length > 0 && count < 3,
+    isNational: isNational || isCisNational,
+    isInternational: players.length > 0 && !isNational && !isCisNational,
   };
 }
 
