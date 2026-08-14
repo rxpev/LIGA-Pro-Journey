@@ -73,7 +73,7 @@ export default function FaceitRankings(): JSX.Element {
       <div className="w-full bg-[#0f0f0f] border-b border-[#ff7300]/60 py-4 shadow-lg flex items-center justify-between px-4">
         <button
           data-interaction-sound="back"
-          onClick={() => navigate("/faceit")}
+          onClick={() => navigate("/faceit", { state: { skipFaceitLoadingAnimation: true } })}
           className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm font-semibold"
         >
           ← Back

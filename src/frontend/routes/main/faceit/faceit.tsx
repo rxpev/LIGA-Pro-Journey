@@ -30,7 +30,7 @@ import headshotIcon from '../../../assets/faceit/headshot.png';
 import { Image } from '@liga/frontend/components';
 import { Constants, Util } from '@liga/shared';
 import { useAudio } from '@liga/frontend/hooks';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from 'react-icons/fa';
 
@@ -155,6 +155,9 @@ const LEVEL_RANGES: Record<number, [number, number]> = {
   10: [2001, 10000],
 };
 
+const FACEIT_MIN_LOADING_MS = 1000;
+const FACEIT_LOADING_EXIT_MS = 520;
+
 const isAwperRole = (role?: string | null) => {
   if (!role) return false;
   const normalized = String(role).toUpperCase();
@@ -183,6 +186,9 @@ const getMatchRoomClientId = (room?: MatchRoomData | null) =>
 
 export default function Faceit(): JSX.Element {
   const { state, dispatch } = React.useContext(AppStateContext);
+  const location = useLocation();
+  const routeState = (location.state || {}) as { skipFaceitLoadingAnimation?: boolean };
+  const skipLoadingAnimation = routeState.skipFaceitLoadingAnimation === true;
 
   const activeMatch = state.faceitMatchRoom;
   const matchCompleted = state.faceitMatchCompleted;
@@ -207,7 +213,8 @@ export default function Faceit(): JSX.Element {
   const [last20, setLast20] = useState<any | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!skipLoadingAnimation);
+  const [loadingPhase, setLoadingPhase] = useState<'enter' | 'exit'>('enter');
 
   // QUEUE
   const [queueTimer, setQueueTimer] = useState(0);
@@ -344,18 +351,35 @@ export default function Faceit(): JSX.Element {
   }, [state.profile, state.continents]);
 
   useEffect(() => {
+    let cancelled = false;
+    const startedAt = Date.now();
+    setLoadingPhase('enter');
+
     (async () => {
       try {
         const pending = await api.faceit.pendingMatchRoom();
-        if (pending?.room) {
+        if (!cancelled && pending?.room) {
           dispatch(faceitRoomSet(pending.room, pending.matchId));
           setShowMatchRoom(true);
         }
         await refreshProfile();
       } finally {
-        setLoading(false);
+        await Util.sleep(Math.max(0, FACEIT_MIN_LOADING_MS - (Date.now() - startedAt)));
+
+        if (!cancelled) {
+          setLoadingPhase('exit');
+          await Util.sleep(FACEIT_LOADING_EXIT_MS);
+        }
+
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [dispatch]);
 
   useEffect(() => {
@@ -730,7 +754,25 @@ export default function Faceit(): JSX.Element {
   // RENDER
   // ---------------------------------------------------------------------------
 
-  if (loading) return <div>Loading FACEIT…</div>;
+  const loadingOverlay = (
+    <div
+      className={`faceit-page-loading pointer-events-none absolute inset-0 z-40 min-h-0 w-full overflow-hidden bg-[#0b0b0b] ${
+        loadingPhase === 'exit' ? 'faceit-page-loading--exit' : ''
+      }`}
+    >
+      <div className="faceit-page-loading__glow" />
+      <div className="faceit-page-loading__sweep" />
+      <img src={faceitLogo} className="faceit-page-loading__logo" />
+    </div>
+  );
+
+  if (loading && loadingPhase === 'enter') {
+    return (
+      <div className="relative h-screen min-h-0 w-full overflow-hidden bg-[#0b0b0b]">
+        {loadingOverlay}
+      </div>
+    );
+  }
 
   const [low, high] = LEVEL_RANGES[level] ?? [0, 100];
   const pct = level === 10 ? 100 : ((elo - low) / (high - low)) * 100;
@@ -738,7 +780,11 @@ export default function Faceit(): JSX.Element {
   const currentMatch = showMatchRoom && activeMatch ? activeMatch : null;
 
   return (
-    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#0b0b0b] text-white">
+    <div
+      className={`relative flex h-screen w-full flex-col overflow-hidden bg-[#0b0b0b] text-white ${
+        loading ? 'faceit-page-content--entering' : ''
+      }`}
+    >
       {/* SCOREBOARD OVERLAY */}
       {viewMatchId && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
@@ -836,6 +882,7 @@ export default function Faceit(): JSX.Element {
           />
         </>
       )}
+      {loading && loadingPhase === 'exit' && loadingOverlay}
     </div>
   );
 }

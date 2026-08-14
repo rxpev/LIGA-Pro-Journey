@@ -40,10 +40,13 @@ type ProtectedSaveSnapshot = Awaited<ReturnType<typeof buildProtectedSaveSnapsho
 
 type SaveRegistry = {
   version: number;
-  files: Record<string, {
-    saveUuid: string;
-    sealedAt: string;
-  }>;
+  files: Record<
+    string,
+    {
+      saveUuid: string;
+      sealedAt: string;
+    }
+  >;
 };
 
 function getStateCachePath() {
@@ -129,8 +132,19 @@ async function readEncryptedString(filePath: string) {
 
 async function writeEncryptedString(filePath: string, value: string) {
   await ensureStateCachePath();
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+
+  await fs.promises.writeFile(temporaryPath, encryptString(value));
+  await hideWindowsPath(temporaryPath);
   await unhideWindowsPath(filePath);
-  await fs.promises.writeFile(filePath, encryptString(value));
+  await fs.promises.rename(temporaryPath, filePath).catch(async (error) => {
+    if (!['EEXIST', 'EPERM'].includes((error as NodeJS.ErrnoException).code || '')) {
+      throw error;
+    }
+
+    await fs.promises.rm(filePath, { force: true });
+    await fs.promises.rename(temporaryPath, filePath);
+  });
   await hideWindowsPath(filePath);
 }
 
@@ -147,15 +161,30 @@ async function getSaveFileKey(savePath: string) {
 async function readSaveRegistry() {
   try {
     const raw = await readEncryptedString(getSaveRegistryPath());
+    if (!raw.trim()) {
+      throw new Error('Empty save registry.');
+    }
+
     const registry = JSON.parse(raw) as SaveRegistry;
 
-    if (registry.version === SAVE_INTEGRITY_VERSION && registry.files) {
+    if (
+      registry.version === SAVE_INTEGRITY_VERSION &&
+      registry.files &&
+      typeof registry.files === 'object' &&
+      !Array.isArray(registry.files)
+    ) {
       return registry;
     }
 
     throw new Error('Invalid save registry.');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+    const code = (error as NodeJS.ErrnoException).code;
+
+    if (code !== 'ENOENT') {
+      await unlinkProtectedFile(getSaveRegistryPath());
+    }
+
+    if (code && code !== 'ENOENT') {
       throw error;
     }
   }
@@ -374,10 +403,7 @@ async function createSaveDigest(prisma: PrismaClientType, allowCreateSecret: boo
 async function createSnapshotDigest(snapshot: ProtectedSaveSnapshot, allowCreateSecret: boolean) {
   const secret = await getInstallSecret(allowCreateSecret);
 
-  return crypto
-    .createHmac('sha256', secret)
-    .update(stableStringify(snapshot))
-    .digest('hex');
+  return crypto.createHmac('sha256', secret).update(stableStringify(snapshot)).digest('hex');
 }
 
 async function restoreProtectedSaveSnapshot(
@@ -407,29 +433,33 @@ async function restoreProtectedSaveSnapshot(
           xp: player.xp,
         };
 
-        await tx.player.upsert({
-          where: { id: player.id },
-          create: {
-            id: player.id,
-            ...data,
-          },
-          update: data,
-        }).catch(() => Promise.resolve());
+        await tx.player
+          .upsert({
+            where: { id: player.id },
+            create: {
+              id: player.id,
+              ...data,
+            },
+            update: data,
+          })
+          .catch(() => Promise.resolve());
       }
 
       for (const profile of snapshot.profiles) {
-        await tx.profile.update({
-          where: { id: profile.id },
-          data: {
-            date: new Date(profile.date),
-            faceitElo: profile.faceitElo,
-            name: profile.name,
-            playerId: profile.playerId,
-            season: profile.season,
-            simulateNpcMatchStats: profile.simulateNpcMatchStats,
-            teamId: profile.teamId,
-          },
-        }).catch(() => Promise.resolve());
+        await tx.profile
+          .update({
+            where: { id: profile.id },
+            data: {
+              date: new Date(profile.date),
+              faceitElo: profile.faceitElo,
+              name: profile.name,
+              playerId: profile.playerId,
+              season: profile.season,
+              simulateNpcMatchStats: profile.simulateNpcMatchStats,
+              teamId: profile.teamId,
+            },
+          })
+          .catch(() => Promise.resolve());
       }
 
       for (const stint of snapshot.careerStints) {
@@ -497,17 +527,19 @@ async function restoreProtectedSaveSnapshot(
       }
 
       for (const match of snapshot.faceitMatches) {
-        await tx.match.update({
-          where: { id: match.id },
-          data: {
-            faceitEloDelta: match.faceitEloDelta,
-            faceitIsWin: match.faceitIsWin,
-            faceitOpponents: match.faceitOpponents,
-            faceitRating: match.faceitRating,
-            faceitTeammates: match.faceitTeammates,
-            status: match.status,
-          },
-        }).catch(() => Promise.resolve());
+        await tx.match
+          .update({
+            where: { id: match.id },
+            data: {
+              faceitEloDelta: match.faceitEloDelta,
+              faceitIsWin: match.faceitIsWin,
+              faceitOpponents: match.faceitOpponents,
+              faceitRating: match.faceitRating,
+              faceitTeammates: match.faceitTeammates,
+              status: match.status,
+            },
+          })
+          .catch(() => Promise.resolve());
       }
 
       const protectedFaceitMatchIds = new Set(snapshot.faceitMatches.map((match) => match.id));
@@ -596,9 +628,10 @@ export async function verifySaveIntegrity(
     };
   }
 
-  const valid = record.version === SAVE_INTEGRITY_VERSION
-      && record.saveUuid === identity.uuid
-      && record.digest === actualDigest;
+  const valid =
+    record.version === SAVE_INTEGRITY_VERSION &&
+    record.saveUuid === identity.uuid &&
+    record.digest === actualDigest;
 
   if (valid) {
     await rememberSaveFile(savePath, identity.uuid);
@@ -632,7 +665,9 @@ export async function verifySaveIntegrity(
 }
 
 export async function removeLegacySaveIntegrity(savePath: string) {
-  await unlinkProtectedFile(path.join(path.dirname(savePath), `.${path.basename(savePath)}.integrity`));
+  await unlinkProtectedFile(
+    path.join(path.dirname(savePath), `.${path.basename(savePath)}.integrity`),
+  );
 }
 
 export async function removeSaveIntegrity(savePath: string) {
@@ -647,10 +682,11 @@ export async function removeSaveIntegrity(savePath: string) {
   });
 
   try {
-    const [existing] = await prisma.$queryRawUnsafe<Array<{ value: string }>>(
-      `SELECT "value" FROM "SaveIntegrityIdentity" WHERE "key" = ? LIMIT 1`,
-      SAVE_IDENTITY_KEY,
-    ).catch((): Array<{ value: string }> => []);
+    const [existing] = await prisma
+      .$queryRawUnsafe<
+        Array<{ value: string }>
+      >(`SELECT "value" FROM "SaveIntegrityIdentity" WHERE "key" = ? LIMIT 1`, SAVE_IDENTITY_KEY)
+      .catch((): Array<{ value: string }> => []);
 
     if (existing?.value) {
       await unlinkProtectedFile(getIntegrityPath(existing.value));
