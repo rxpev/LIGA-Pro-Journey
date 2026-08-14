@@ -207,7 +207,7 @@ const WELCOME_GRAPHIC_TEMPLATES: Record<string, WelcomeGraphicTemplate> = {
     fontSize: '5.4rem',
     letterSpacing: '-4px',
     nameLayout: {
-      left: '52%',
+      left: '51%',
       top: '85%',
       width: '50%',
     },
