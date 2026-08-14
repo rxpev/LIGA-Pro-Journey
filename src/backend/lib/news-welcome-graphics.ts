@@ -21,6 +21,7 @@ type WelcomeGraphicTemplate = {
   template: string;
   textColor: string;
   textGradient?: string;
+  textShadow?: boolean;
   textStroke?: string;
 };
 
@@ -600,6 +601,27 @@ const WELCOME_GRAPHIC_TEMPLATES: Record<string, WelcomeGraphicTemplate> = {
     template: 'resources://news/welcome/welcome-passionua.png',
     textColor: '#ffffff',
     textStroke: '1px #095cff',
+  },
+  vitality: {
+    aliases: ['team-vitality'],
+    aspectRatio: '1672 / 941',
+    avatarLayout: {
+      bottom: '0%',
+      height: '118%',
+      left: '48%',
+      maxWidth: '44%',
+    },
+    fontFamily: 'STAATLICHES',
+    fontSize: '4.85rem',
+    letterSpacing: '-5px',
+    nameLayout: {
+      left: '20.5%',
+      top: '68%',
+      width: '31%',
+    },
+    template: 'resources://news/welcome/welcome-vitality.png',
+    textColor: '#000000',
+    textShadow: false,
   },
   bcgame: {
     aliases: ['bc-game', 'bc-game-esports'],
