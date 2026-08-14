@@ -788,8 +788,14 @@ function SwissDetailedStandings(props: {
  */
 function PureBrackets(props: React.ComponentProps<typeof Brackets>) {
   return React.useMemo(
-    () => <Brackets matches={props.matches} onPartyClick={props.onPartyClick} />,
-    [props.matches, props.onPartyClick],
+    () => (
+      <Brackets
+        matches={props.matches}
+        onMatchClick={props.onMatchClick}
+        onPartyClick={props.onPartyClick}
+      />
+    ),
+    [props.matches, props.onMatchClick, props.onPartyClick],
   );
 }
 
@@ -929,6 +935,12 @@ export default function () {
       <PureBrackets
         key={`${competition.id}:${competition.tier.slug}`}
         matches={bracket}
+        onMatchClick={(match) => {
+          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+            target: '/postgame',
+            payload: match.id,
+          });
+        }}
         onPartyClick={(party) => {
           const route = teamLinkById.get(Number(party.id));
           if (route) {

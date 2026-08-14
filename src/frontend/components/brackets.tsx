@@ -11,8 +11,11 @@ import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import { ParticipantType } from '@g-loot/react-tournament-brackets/dist/esm';
 
 /** @interface */
+type BracketMatches = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
+
 interface Props {
-  matches: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
+  matches: BracketMatches;
+  onMatchClick?: (match: BracketMatches[number]) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
 }
 
@@ -148,18 +151,27 @@ function BracketCard(props: {
   highlightedTeamId?: number;
   match: BracketDisplayMatch;
   fmtDate: (value: Date | number | string) => string;
+  onMatchClick?: (match: BracketDisplayMatch) => void;
   onPartyClick?: Props['onPartyClick'];
   onTeamHover: (teamId?: number) => void;
 }) {
   const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
   const isMatchHighlighted = matchHasTeam(props.match, props.highlightedTeamId);
+  const canOpenMatch = !props.match.isPlaceholder && props.match._count?.events > 0;
+  const handleMatchClick = () => {
+    if (canOpenMatch) {
+      props.onMatchClick?.(props.match);
+    }
+  };
 
   return (
     <article
       className={cx(
         'bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm transition-colors duration-150',
+        canOpenMatch && 'cursor-pointer',
         isMatchHighlighted ? 'border-info/70 shadow-info/20' : 'border-base-content/15',
       )}
+      onClick={handleMatchClick}
     >
       <header className="text-info/70 bg-base-100 border-base-content/10 border-b px-3 py-1 font-semibold">
         {props.match.isPlaceholder ? 'TBD' : props.fmtDate(props.match.date)}
@@ -182,9 +194,8 @@ function BracketCard(props: {
         const isHighlighted = competitor.team.id === props.highlightedTeamId;
 
         return (
-          <button
+          <div
             key={competitor.id}
-            type="button"
             className={cx(
               'hover:bg-base-300 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left transition-colors duration-150',
               isHighlighted
@@ -194,26 +205,33 @@ function BracketCard(props: {
                   : 'bg-base-100/65',
               lost && !isHighlighted && 'text-base-content/50',
             )}
-            onClick={() =>
-              props.onPartyClick?.(
-                {
-                  id: competitor.team.id,
-                  name: competitor.team.name,
-                  resultText: competitor.score != null ? String(competitor.score) : null,
-                } as ParticipantType,
-                won,
-              )
-            }
             onMouseEnter={() => props.onTeamHover(competitor.team.id)}
             onMouseLeave={() => props.onTeamHover(undefined)}
           >
             <span className="flex min-w-0 items-center gap-1.5">
               {competitor.team.blazon && (
-                <img
-                  alt=""
-                  className="size-4 shrink-0 object-contain"
-                  src={competitor.team.blazon}
-                />
+                <button
+                  type="button"
+                  className="grid size-4 shrink-0 place-items-center"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    props.onPartyClick?.(
+                      {
+                        id: competitor.team.id,
+                        name: competitor.team.name,
+                        resultText: competitor.score != null ? String(competitor.score) : null,
+                      } as ParticipantType,
+                      won,
+                    );
+                  }}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <img
+                    alt={`${competitor.team.name} logo`}
+                    className="size-4 object-contain"
+                    src={competitor.team.blazon}
+                  />
+                </button>
               )}
               <span className="truncate">{competitor.team.name}</span>
             </span>
@@ -231,7 +249,7 @@ function BracketCard(props: {
             >
               {competitor.score ?? '-'}
             </span>
-          </button>
+          </div>
         );
       })}
     </article>
@@ -241,6 +259,7 @@ function BracketCard(props: {
 function ManualBracket(props: {
   matches: Props['matches'];
   tourney: Tournament;
+  onMatchClick?: Props['onMatchClick'];
   onPartyClick?: Props['onPartyClick'];
 }) {
   const fmtDate = useFormatAppDate();
@@ -602,6 +621,7 @@ function ManualBracket(props: {
                       highlightedTeamId={highlightedTeamId}
                       match={match}
                       fmtDate={fmtDate}
+                      onMatchClick={props.onMatchClick}
                       onPartyClick={props.onPartyClick}
                       onTeamHover={setHighlightedTeamId}
                     />
@@ -634,6 +654,11 @@ export default function (props: Props) {
   }
 
   return (
-    <ManualBracket matches={props.matches} tourney={tourney} onPartyClick={props.onPartyClick} />
+    <ManualBracket
+      matches={props.matches}
+      tourney={tourney}
+      onMatchClick={props.onMatchClick}
+      onPartyClick={props.onPartyClick}
+    />
   );
 }

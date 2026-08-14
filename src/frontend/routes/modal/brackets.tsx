@@ -4,8 +4,8 @@
  * @module
  */
 import React from 'react';
-import { useLocation } from 'react-router-dom';
-import { Eagers } from '@liga/shared';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Constants, Eagers } from '@liga/shared';
 import { Brackets } from '@liga/frontend/components';
 
 /**
@@ -15,6 +15,7 @@ import { Brackets } from '@liga/frontend/components';
  */
 export default function () {
   const location = useLocation();
+  const navigate = useNavigate();
   const [bracket, setBracket] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
@@ -42,7 +43,18 @@ export default function () {
           <span className="loading loading-bars" />
         </section>
       )}
-      {!!bracket.length && <Brackets matches={bracket} />}
+      {!!bracket.length && (
+        <Brackets
+          matches={bracket}
+          onMatchClick={(match) => navigate('/postgame', { state: match.id })}
+          onPartyClick={(party) => {
+            api.window.send<ModalRequest>(Constants.WindowIdentifier.Main, {
+              target: `/teams?teamId=${party.id}`,
+            });
+            api.window.close(Constants.WindowIdentifier.Modal);
+          }}
+        />
+      )}
     </main>
   );
 }
