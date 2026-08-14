@@ -9,8 +9,9 @@ import { getThankYouGraphic, getWelcomeGraphic } from './news-welcome-graphics';
 const PROTOTYPE_EVENT_PREFIX = 'prototype-news';
 const AUTO_EVENT_PREFIX = 'auto-news';
 const TOP_TRANSFER_TEAM_COUNT = 30;
-const OPEN_TIER_INDEX = 0;
-const INTERMEDIATE_TIER_INDEX = 1;
+const MAIN_TIER_INDEX = Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_MAIN);
+const ADVANCED_TIER_INDEX = Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_ADVANCED);
+const PRO_TIER_INDEX = Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO);
 const PLAYER_HONOR_TIER_SLUGS = [
   ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
     (award) => award.target,
@@ -167,14 +168,6 @@ function getCompetitionLogo(
     location: competition.location,
     organizer: competition.organizer,
   });
-}
-
-function isOpenOrIntermediateTier(tier?: number | null) {
-  return tier === OPEN_TIER_INDEX || tier === INTERMEDIATE_TIER_INDEX;
-}
-
-function getTransferTier(transfer: TransferSeed) {
-  return transfer.to?.tier ?? transfer.from?.tier ?? transfer.target.team?.tier ?? null;
 }
 
 function getTransferStoryDate(transfer: TransferSeed, fallback: Date) {
@@ -1259,6 +1252,111 @@ async function getTopTeamIds(limit = TOP_TRANSFER_TEAM_COUNT) {
   });
 
   return new Set(teams.map((team) => team.id));
+}
+
+async function getTransferShortTeamIds() {
+  const rankedTeams = await DatabaseClient.prisma.team.findMany({
+    orderBy: [{ elo: 'desc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      tier: true,
+      competitionFederation: {
+        select: {
+          slug: true,
+        },
+      },
+      country: {
+        select: {
+          continent: {
+            select: {
+              federation: {
+                select: {
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    where: {
+      OR: [
+        {
+          competitionFederation: {
+            is: {
+              slug: {
+                in: [
+                  Constants.FederationSlug.ESPORTS_EUROPA,
+                  Constants.FederationSlug.ESPORTS_AMERICAS,
+                  Constants.FederationSlug.ESPORTS_ASIA,
+                  Constants.FederationSlug.ESPORTS_OCE,
+                ],
+              },
+            },
+          },
+        },
+        {
+          competitionFederationId: null,
+          country: {
+            continent: {
+              federation: {
+                slug: {
+                  in: [
+                    Constants.FederationSlug.ESPORTS_EUROPA,
+                    Constants.FederationSlug.ESPORTS_AMERICAS,
+                    Constants.FederationSlug.ESPORTS_ASIA,
+                    Constants.FederationSlug.ESPORTS_OCE,
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+  const eligibleTeamIds = new Set<number>();
+  const asiaNonEpl: number[] = [];
+  const oceaniaNonEpl: number[] = [];
+
+  for (const team of rankedTeams) {
+    const federationSlug =
+      team.competitionFederation?.slug || team.country.continent.federation.slug;
+    const tier = team.tier;
+
+    if (
+      tier === ADVANCED_TIER_INDEX &&
+      (federationSlug === Constants.FederationSlug.ESPORTS_EUROPA ||
+        federationSlug === Constants.FederationSlug.ESPORTS_AMERICAS)
+    ) {
+      eligibleTeamIds.add(team.id);
+    }
+
+    if (tier === MAIN_TIER_INDEX && federationSlug === Constants.FederationSlug.ESPORTS_EUROPA) {
+      eligibleTeamIds.add(team.id);
+    }
+
+    if (federationSlug === Constants.FederationSlug.ESPORTS_ASIA) {
+      if (tier === PRO_TIER_INDEX) {
+        eligibleTeamIds.add(team.id);
+      } else {
+        asiaNonEpl.push(team.id);
+      }
+    }
+
+    if (federationSlug === Constants.FederationSlug.ESPORTS_OCE) {
+      if (tier === PRO_TIER_INDEX) {
+        eligibleTeamIds.add(team.id);
+      } else {
+        oceaniaNonEpl.push(team.id);
+      }
+    }
+  }
+
+  asiaNonEpl.slice(0, 5).forEach((teamId) => eligibleTeamIds.add(teamId));
+  oceaniaNonEpl.slice(0, 3).forEach((teamId) => eligibleTeamIds.add(teamId));
+
+  return eligibleTeamIds;
 }
 
 async function getRecentCompletedMatches(date: Date) {
@@ -2588,6 +2686,7 @@ async function buildTransferDraft(
   transfer: TransferSeed,
   transfers: TransferSeed[],
   topTeamIds: Set<number>,
+  transferShortTeamIds: Set<number>,
   publishedAt: Date,
   includeStatistics: boolean,
 ): Promise<NewsDraft | null> {
@@ -2597,7 +2696,9 @@ async function buildTransferDraft(
   const destinationIsTop = !!destination && topTeamIds.has(destination.id);
   const sellerIsTop = !!seller && topTeamIds.has(seller.id);
   const isTopTeamTransfer = destinationIsTop || sellerIsTop;
-  const tier = getTransferTier(transfer);
+  const destinationIsShortEligible = !!destination && transferShortTeamIds.has(destination.id);
+  const sellerIsShortEligible = !!seller && transferShortTeamIds.has(seller.id);
+  const isShortEligibleTransfer = destinationIsShortEligible || sellerIsShortEligible;
   const latestOffer = transfer.offers[0];
   const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
   const storyDate = isContractExpiry
@@ -2607,7 +2708,7 @@ async function buildTransferDraft(
   const isFreeAgentSigning =
     isNoTeam(seller) || (!!destination && !!seller && destination.id === seller.id);
 
-  if (!isTopTeamTransfer && isOpenOrIntermediateTier(tier)) {
+  if (!isTopTeamTransfer && !isShortEligibleTransfer) {
     return null;
   }
 
@@ -3619,6 +3720,7 @@ export async function generateAutomaticItems(date?: Date) {
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const publishedAt = date || profile?.date || new Date();
   const topTeamIds = await getTopTeamIds();
+  const transferShortTeamIds = await getTransferShortTeamIds();
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
 
   if (includeStatistics) {
@@ -3631,7 +3733,14 @@ export async function generateAutomaticItems(date?: Date) {
   const transferDrafts = (
     await Promise.all(
       transfers.map((transfer) =>
-        buildTransferDraft(transfer, transfers, topTeamIds, publishedAt, includeStatistics),
+        buildTransferDraft(
+          transfer,
+          transfers,
+          topTeamIds,
+          transferShortTeamIds,
+          publishedAt,
+          includeStatistics,
+        ),
       ),
     )
   ).filter(Boolean) as NewsDraft[];
