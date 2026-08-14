@@ -177,7 +177,7 @@ function getTransferStoryDate(transfer: TransferSeed, fallback: Date) {
     ? transfer.target.careerStints.find((stint) => stint.teamId === destinationId)
     : null;
 
-  return matchingStint?.startedAt || transfer.target.lastOfferAt || fallback;
+  return matchingStint?.startedAt || transfer.offers[0]?.createdAt || fallback;
 }
 
 function findCareerStintForTeam(
@@ -2711,6 +2711,11 @@ async function buildTransferDraft(
   const storyDate = isContractExpiry
     ? transfer.target.lastOfferAt || publishedAt
     : getTransferStoryDate(transfer, publishedAt);
+
+  if (startOfDay(storyDate).getTime() !== startOfDay(publishedAt).getTime()) {
+    return null;
+  }
+
   const articleDate = new Date(startOfDay(storyDate).getTime() + transfer.id);
   const isFreeAgentSigning =
     isNoTeam(seller) || (!!destination && !!seller && destination.id === seller.id);
