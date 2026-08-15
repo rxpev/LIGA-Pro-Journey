@@ -6,10 +6,11 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
+import { Pagination } from '@liga/frontend/components';
 import {
   FaBolt,
   FaCheckDouble,
@@ -22,6 +23,9 @@ import {
 
 type NewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type NewsTopic = NewsItem['topic'] | 'ALL' | 'SHORTS';
+type NewsRouteState = {
+  articleId?: number;
+};
 type RelatedTeam = {
   id: number;
   name?: string | null;
@@ -45,6 +49,18 @@ type MapUsageDatum = {
   map?: string | null;
   name?: string | null;
   plays?: number | null;
+};
+type TopPlayerRankingEntry = {
+  analysis?: string | null;
+  bigEventMaps?: number | null;
+  flagCode?: string | null;
+  maps?: number | null;
+  playerAvatar?: string | null;
+  playerId?: number | null;
+  playerName?: string | null;
+  rank?: number | null;
+  rating?: number | null;
+  teamName?: string | null;
 };
 
 const mapIconImagesContext = (require as any).context(
@@ -87,6 +103,7 @@ type WelcomeGraphic = {
   template?: string | null;
   textColor?: string | null;
   textGradient?: string | null;
+  textShadow?: boolean | null;
   textStroke?: string | null;
 };
 type MvpGraphic = {
@@ -102,6 +119,7 @@ type NewsPayload = Record<string, unknown> & {
   mapUsage?: MapUsageDatum[];
   matchId?: number | null;
   qualifiedTeams?: RelatedTeam[] & Array<{ flagCode?: string | null }>;
+  ranking?: TopPlayerRankingEntry[];
   relatedPlayers?: RelatedPlayer[];
   relatedTeams?: RelatedTeam[];
   showMatchPanel?: boolean;
@@ -164,6 +182,7 @@ const FILTERS: Array<{ label: string; value: NewsTopic }> = [
   { label: 'Transfers', value: 'TRANSFERS' },
   { label: 'Shorts', value: 'SHORTS' },
 ];
+const NEWS_ITEMS_PER_PAGE = 8;
 const playerHoverCache = new Map<number, PlayerHoverCacheEntry>();
 const playerHoverRequests = new Map<number, Promise<PlayerHoverCacheEntry>>();
 const teamHoverCache = new Map<number, TeamHoverCacheEntry>();
@@ -230,6 +249,28 @@ function asComments(value: unknown): NewsComment[] {
           score: Number.isFinite(Number(item.score)) ? Number(item.score) : 0,
         }))
         .filter((item) => item.message.trim())
+    : [];
+}
+
+function asTopPlayerRanking(value: unknown): TopPlayerRankingEntry[] {
+  return Array.isArray(value)
+    ? value
+        .filter(isRecord)
+        .map((item) => ({
+          analysis: typeof item.analysis === 'string' ? item.analysis : null,
+          bigEventMaps: Number.isFinite(Number(item.bigEventMaps))
+            ? Number(item.bigEventMaps)
+            : null,
+          flagCode: typeof item.flagCode === 'string' ? item.flagCode : null,
+          maps: Number.isFinite(Number(item.maps)) ? Number(item.maps) : null,
+          playerAvatar: typeof item.playerAvatar === 'string' ? item.playerAvatar : null,
+          playerId: Number.isFinite(Number(item.playerId)) ? Number(item.playerId) : null,
+          playerName: typeof item.playerName === 'string' ? item.playerName : null,
+          rank: Number.isFinite(Number(item.rank)) ? Number(item.rank) : null,
+          rating: Number.isFinite(Number(item.rating)) ? Number(item.rating) : null,
+          teamName: typeof item.teamName === 'string' ? item.teamName : null,
+        }))
+        .filter((item) => item.rank && item.playerId)
     : [];
 }
 
@@ -769,6 +810,23 @@ function getTopicLabel(item: NewsItem) {
   return item.topic.charAt(0) + item.topic.slice(1).toLowerCase();
 }
 
+function isTopStoryItem(item: NewsItem) {
+  return item.type === 'ARTICLE';
+}
+
+function hasGoldenNewsHue(item?: NewsItem | null) {
+  if (!item) {
+    return false;
+  }
+
+  const payload = parsePayload(item);
+
+  return (
+    (Array.isArray(payload.mapUsage) && payload.mapUsage.length > 0) ||
+    (Array.isArray(payload.ranking) && payload.ranking.length > 0)
+  );
+}
+
 function asWelcomeGraphic(value: unknown): WelcomeGraphic | null {
   if (!isRecord(value)) {
     return null;
@@ -813,6 +871,7 @@ function asWelcomeGraphic(value: unknown): WelcomeGraphic | null {
     template,
     textColor: typeof value.textColor === 'string' ? value.textColor : null,
     textGradient: typeof value.textGradient === 'string' ? value.textGradient : null,
+    textShadow: typeof value.textShadow === 'boolean' ? value.textShadow : null,
     textStroke: typeof value.textStroke === 'string' ? value.textStroke : null,
   };
 }
@@ -859,7 +918,10 @@ function WelcomeGraphicImage(props: { graphic: WelcomeGraphic }) {
         }}
       />
       <figcaption
-        className="absolute overflow-visible text-center leading-[1.16] font-black tracking-normal whitespace-nowrap uppercase drop-shadow-[0_8px_12px_rgba(0,0,0,0.9)]"
+        className={cx(
+          'absolute overflow-visible text-center leading-[1.16] font-black tracking-normal whitespace-nowrap uppercase',
+          props.graphic.textShadow !== false && 'drop-shadow-[0_8px_12px_rgba(0,0,0,0.9)]',
+        )}
         style={{
           color: props.graphic.textColor || '#ffffff',
           fontFamily,
@@ -1027,6 +1089,7 @@ function MapUsageChart(props: { item?: NewsItem }) {
 
 function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
   const payload = props.item ? parsePayload(props.item) : {};
+  const topPlayerRanking = asTopPlayerRanking(payload.ranking);
   const payloadCompetitionId =
     typeof payload.competitionId === 'number' ? payload.competitionId : null;
   const headlineTournamentName = getHeadlineTournamentName(props.headline);
@@ -1168,6 +1231,77 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
         .map((block, index) => {
           const blockLines = block.split('\n');
           const mapImage = block.match(/^::map-image\{map="([^"]+)" icon="([^"]+)"\}$/);
+          const topPlayerRankingBlock = block.match(/^::top-player-ranking\{rank=(\d+)\}$/);
+
+          if (topPlayerRankingBlock) {
+            const rank = Number(topPlayerRankingBlock[1]);
+            const entry = topPlayerRanking.find((item) => item.rank === rank);
+
+            if (!entry) {
+              return null;
+            }
+
+            return (
+              <article
+                key={`${index}__top_player_ranking`}
+                className="border-base-content/10 bg-base-100/40 grid grid-cols-[7.5rem_1fr] gap-4 border p-3"
+              >
+                <button
+                  type="button"
+                  className="border-base-content/10 bg-base-200 h-36 overflow-hidden border"
+                  onClick={() =>
+                    entry.playerId &&
+                    api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                      target: '/transfer',
+                      payload: entry.playerId,
+                    })
+                  }
+                >
+                  <img
+                    src={entry.playerAvatar || 'resources://avatars/empty.png'}
+                    className="h-full w-full object-cover object-top"
+                  />
+                </button>
+                <section className="min-w-0">
+                  <header className="mb-2 flex flex-wrap items-center gap-2 leading-5">
+                    <Flag code={entry.flagCode} className="opacity-100" />
+                    <span className="font-black">#{entry.rank}</span>
+                    <PlayerHoverCard playerId={entry.playerId || 0}>
+                      <button
+                        type="button"
+                        className="link-hover text-base-content font-black"
+                        onClick={() =>
+                          entry.playerId &&
+                          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                            target: '/transfer',
+                            payload: entry.playerId,
+                          })
+                        }
+                      >
+                        {entry.playerName || `Player #${entry.playerId}`}
+                      </button>
+                    </PlayerHoverCard>
+                    <span className="text-base-content/60">
+                      - {entry.rating?.toFixed(2) || '-'} rating
+                    </span>
+                    {entry.teamName && (
+                      <span className="text-base-content/50 text-xs font-bold uppercase">
+                        {entry.teamName}
+                      </span>
+                    )}
+                  </header>
+                  <div className="text-sm leading-6">
+                    <ReactMarkdown
+                      components={blockMarkdownComponents}
+                      transformLinkUri={preserveMarkdownUri}
+                    >
+                      {normalizeBodyMarkdown(entry.analysis || '')}
+                    </ReactMarkdown>
+                  </div>
+                </section>
+              </article>
+            );
+          }
 
           if (mapImage) {
             return (
@@ -1502,17 +1636,22 @@ function NewsComments(props: { fmtDate: (date: Date | string) => string; item: N
  */
 export default function () {
   const fmtDate = useFormatAppDate();
+  const location = useLocation();
+  const routeState = (location.state || {}) as NewsRouteState;
+  const routeArticleId = typeof routeState.articleId === 'number' ? routeState.articleId : null;
+  const [requestedArticleId, setRequestedArticleId] = React.useState<number | null>(routeArticleId);
   const [items, setItems] = React.useState<NewsItem[]>([]);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [filter, setFilter] = React.useState<NewsTopic>('ALL');
+  const [page, setPage] = React.useState(1);
   const [working, setWorking] = React.useState(false);
 
   const refresh = React.useCallback(() => {
     api.news.all().then((data) => {
       setItems(data);
-      setSelectedId((current) => current || data[0]?.id || null);
+      setSelectedId((current) => requestedArticleId || current || data[0]?.id || null);
     });
-  }, []);
+  }, [requestedArticleId]);
 
   React.useEffect(() => {
     refresh();
@@ -1526,9 +1665,52 @@ export default function () {
     };
   }, [refresh]);
 
+  React.useEffect(() => {
+    setRequestedArticleId(routeArticleId);
+  }, [routeArticleId, location.key]);
+
+  React.useEffect(() => {
+    const removeWindowSendListener = api.ipc.on(
+      Constants.IPCRoute.WINDOW_SEND,
+      (payload: number | (ModalRequest<NewsRouteState> & { inAppModal?: boolean })) => {
+        if (
+          typeof payload !== 'number' &&
+          payload?.target === '/news' &&
+          typeof payload.payload?.articleId === 'number'
+        ) {
+          setRequestedArticleId(payload.payload.articleId);
+        }
+      },
+    );
+
+    return () => {
+      removeWindowSendListener();
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!requestedArticleId || !items.length) {
+      return;
+    }
+
+    const requestedItem = items.find((item) => item.id === requestedArticleId);
+    if (!requestedItem) {
+      return;
+    }
+
+    setSelectedId(requestedItem.id);
+    setFilter(
+      requestedItem.type === 'SHORT'
+        ? 'SHORTS'
+        : requestedItem.topic === 'TRANSFERS'
+          ? 'TRANSFERS'
+          : 'ALL',
+    );
+  }, [items, requestedArticleId]);
+
   const filteredItems = React.useMemo(() => {
     if (filter === 'ALL') {
-      return items;
+      return items.filter(isTopStoryItem);
     }
 
     if (filter === 'SHORTS') {
@@ -1537,14 +1719,18 @@ export default function () {
 
     return items.filter((item) => item.topic === filter);
   }, [filter, items]);
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / NEWS_ITEMS_PER_PAGE));
+  const visibleItems = React.useMemo(
+    () => filteredItems.slice((page - 1) * NEWS_ITEMS_PER_PAGE, page * NEWS_ITEMS_PER_PAGE),
+    [filteredItems, page],
+  );
 
   const selected = React.useMemo(
     () =>
       filteredItems.find((item) => item.id === selectedId) ||
-      items.find((item) => item.id === selectedId) ||
       filteredItems[0] ||
       null,
-    [filteredItems, items, selectedId],
+    [filteredItems, selectedId],
   );
   const selectedPayload = React.useMemo(() => (selected ? parsePayload(selected) : {}), [selected]);
   const selectedWelcomeGraphic = React.useMemo(
@@ -1558,10 +1744,33 @@ export default function () {
   const selectedCompetitionId =
     typeof selectedPayload.competitionId === 'number' ? selectedPayload.competitionId : null;
   const selectedMvpLogo = selectedMvpGraphic?.tournamentLogo || null;
+  const selectedHasTopPlayerRanking =
+    Array.isArray(selectedPayload.ranking) && selectedPayload.ranking.length > 0;
   const selectedWelcomeBody = React.useMemo(
     () => (selectedWelcomeGraphic && selected ? splitOpeningBlock(selected.body) : null),
     [selected?.body, selectedWelcomeGraphic],
   );
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [filter]);
+
+  React.useEffect(() => {
+    setPage((current) => Math.min(Math.max(1, current), totalPages));
+  }, [totalPages]);
+
+  React.useEffect(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    const selectedIndex = filteredItems.findIndex((item) => item.id === selectedId);
+    if (selectedIndex < 0) {
+      return;
+    }
+
+    setPage(Math.floor(selectedIndex / NEWS_ITEMS_PER_PAGE) + 1);
+  }, [filteredItems, selectedId]);
 
   React.useEffect(() => {
     if (!selected || selected.read) {
@@ -1600,7 +1809,7 @@ export default function () {
       .finally(() => setWorking(false));
 
   return (
-    <div id="news" className="dashboard">
+    <div id="news" className="dashboard news-hltv-theme">
       <header>
         <button disabled={working} onClick={refresh}>
           <FaSyncAlt />
@@ -1630,7 +1839,10 @@ export default function () {
                     'btn join-item btn-sm flex-1',
                     filter === item.value && 'btn-primary',
                   )}
-                  onClick={() => setFilter(item.value)}
+                  onClick={() => {
+                    setFilter(item.value);
+                    setSelectedId(null);
+                  }}
                 >
                   {item.label}
                 </button>
@@ -1643,12 +1855,14 @@ export default function () {
               <p className="text-muted">No stories yet. Run the generator to test the feed.</p>
             </article>
           )}
-          {filteredItems.map((item) => (
+          {visibleItems.map((item) => (
             <article
               key={`${item.id}__news_item`}
               className={cx(
-                'hover:bg-base-content/5 cursor-pointer p-4',
+                'hover:bg-base-content/5 cursor-pointer border border-transparent p-4',
                 selected?.id === item.id && 'bg-base-200',
+                hasGoldenNewsHue(item) &&
+                  'border-orange-300/10 bg-orange-500/[0.025] shadow-[inset_0_0_0_1px_rgba(251,146,60,0.03)]',
               )}
               onClick={() => setSelectedId(item.id)}
             >
@@ -1672,6 +1886,19 @@ export default function () {
               </footer>
             </article>
           ))}
+          {filteredItems.length > NEWS_ITEMS_PER_PAGE && (
+            <footer className="border-base-content/10 bg-base-100 sticky bottom-0 z-10 flex items-center justify-between border-t px-3 py-2">
+              <Pagination
+                numPage={page}
+                totalPages={totalPages}
+                onChange={setPage}
+                onClick={setPage}
+              />
+              <span className="text-base-content/60 font-mono text-xs">
+                {filteredItems.length} Stories
+              </span>
+            </footer>
+          )}
         </section>
         <section className="bg-base-100 overflow-y-auto p-6">
           {!selected && (
@@ -1747,12 +1974,12 @@ export default function () {
                 <div
                   className={cx(
                     'grid gap-6 px-7 py-6',
-                    selectedPayload.hideArticleImage === true
+                    selectedPayload.hideArticleImage === true || selectedHasTopPlayerRanking
                       ? 'grid-cols-1'
                       : 'grid-cols-[9rem_1fr]',
                   )}
                 >
-                  {selectedPayload.hideArticleImage !== true && (
+                  {selectedPayload.hideArticleImage !== true && !selectedHasTopPlayerRanking && (
                     <aside className="pt-1">
                       {selectedMvpGraphic ? (
                         <MvpArticleImage graphic={selectedMvpGraphic} image={selected.image} />

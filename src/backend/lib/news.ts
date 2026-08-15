@@ -19,6 +19,9 @@ const PLAYER_HONOR_TIER_SLUGS = [
   ),
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
 ];
+const TOP_PLAYERS_OF_YEAR_SIZE = 20;
+const TOP_PLAYERS_OF_YEAR_MIN_MAPS = 12;
+const TOP_PLAYERS_OF_YEAR_MIN_BIG_EVENT_MAPS = 8;
 
 type NewsDraft = {
   type: 'ARTICLE' | 'SHORT';
@@ -50,6 +53,143 @@ type MvpContenderGameRow = {
   kills: bigint | number;
   assists: bigint | number;
   deaths: bigint | number;
+};
+type TopPlayerOfYearGameRow = {
+  playerId: number;
+  playerName: string;
+  playerAvatar: string | null;
+  playerCountryCode: string | null;
+  playerAge: number | null;
+  playerRole: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  teamBlazon: string | null;
+  competitionId: number;
+  competitionLocation: string | null;
+  competitionOrganizer: string | null;
+  competitionSeason: number | null;
+  federationSlug: string;
+  tierSlug: string;
+  matchId: number;
+  matchDate: Date;
+  totalRounds: number | null;
+  gameKey: number;
+  round: number | null;
+  placement: number | null;
+  ownResult: number | null;
+  ownScore: number | null;
+  opponentTeamId: number | null;
+  opponentTeamName: string | null;
+  opponentScore: number | null;
+  kills: bigint | number;
+  assists: bigint | number;
+  deaths: bigint | number;
+  opponentElo: bigint | number | null;
+};
+type TopPlayerOfYearTrophyRow = {
+  playerId: number;
+  teamId: number | null;
+  teamName: string | null;
+  competitionId: number;
+  competitionLocation: string | null;
+  competitionOrganizer: string | null;
+  competitionSeason: number | null;
+  federationSlug: string;
+  tierSlug: string;
+};
+type TopPlayerOfYearCandidate = {
+  playerId: number;
+  playerName: string;
+  playerAvatar: string | null;
+  playerCountryCode: string | null;
+  playerAge: number | null;
+  playerRole: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  teamBlazon: string | null;
+  maps: number;
+  actualMaps: number;
+  actualRating: number;
+  notableRating: number;
+  score: number;
+  mvpCount: number;
+  eliteMaps: number;
+  bigEventMaps: number;
+  bigEventRating: number;
+  pressureRating: number;
+  strongEventCount: number;
+  weakEventCount: number;
+  bestEvent?: {
+    competitionId: number;
+    name: string;
+    maps: number;
+    placement: number | null;
+    rating: number;
+    date?: Date | null;
+  } | null;
+  weakEvent?: {
+    competitionId: number;
+    name: string;
+    maps: number;
+    placement: number | null;
+    rating: number;
+    date?: Date | null;
+  } | null;
+  rmrEvent?: {
+    competitionId: number;
+    name: string;
+    maps: number;
+    placement: number | null;
+    rating: number;
+    date?: Date | null;
+  } | null;
+  signatureMatch?: {
+    competitionId: number;
+    name: string;
+    opponentTeamId: number | null;
+    opponentTeamName: string | null;
+    round: number | null;
+    totalRounds: number | null;
+    maps: number;
+    rating: number;
+    teamScore: number | null;
+    opponentScore: number | null;
+    won: boolean | null;
+    date?: Date | null;
+  } | null;
+  teams: Array<{
+    id: number;
+    name: string;
+    blazon: string | null;
+    maps: number;
+  }>;
+  mvpTournaments: Array<{
+    competitionId: number;
+    name: string;
+    weight: number;
+  }>;
+  trophies: Array<{
+    competitionId: number;
+    name: string;
+    teamId: number | null;
+    teamName: string | null;
+    weight: number;
+  }>;
+};
+type TopPlayerOfYearHistory = {
+  appearances: number;
+  bestRank: number;
+  firstYear: number;
+  lastAppearance?: {
+    rank: number;
+    year: number;
+  };
+  previousYearRank?: number | null;
+  years: number[];
+};
+type TopPlayerOfYearComparison = {
+  above?: TopPlayerOfYearCandidate | null;
+  below?: TopPlayerOfYearCandidate | null;
 };
 type MapPoolNewsEntry = {
   id: number;
@@ -1505,6 +1645,2117 @@ async function getCompetitionMvpSeedsForNews(publishedAt: Date) {
         b.competitionId - a.competitionId ||
         b.id - a.id,
     );
+}
+
+function isTopPlayersOfYearDate(publishedAt: Date) {
+  return publishedAt.getMonth() === 11 && publishedAt.getDate() === 31;
+}
+
+function getTopPlayersOfYearEventWeight(tierSlug?: string | null, federationSlug?: string | null) {
+  if (!tierSlug || tierSlug.includes('qualifier') || tierSlug.includes('rmr')) {
+    return 0;
+  }
+
+  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) return 2.25;
+  if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) return 1.65;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) return 1.45;
+  if (
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+  ) {
+    return 1.9;
+  }
+  if (
+    tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.BLAST_FINALS
+  ) {
+    return 1.65;
+  }
+  if (
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A ||
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_A ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_B ||
+    tierSlug === Constants.TierSlug.LEAGUE_PRO
+  ) {
+    return 1.2;
+  }
+  if (tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS) return 0.65;
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS) return 0.6;
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER) return 0.42;
+  if (tierSlug === Constants.TierSlug.CCT_SERIES_PLAYOFFS) return 0.38;
+  if (tierSlug === Constants.TierSlug.CCT_SERIES) return 0.26;
+  if (tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS) return 0.35;
+  if (tierSlug === Constants.TierSlug.CCT_OCE_SERIES) return 0.25;
+
+  const regionalLeagueWeights: Record<string, number> = {
+    [Constants.FederationSlug.ESPORTS_EUROPA]: 0.5,
+    [Constants.FederationSlug.ESPORTS_AMERICAS]: 0.36,
+    [Constants.FederationSlug.ESPORTS_ASIA]: 0.25,
+    [Constants.FederationSlug.ESPORTS_OCE]: 0.18,
+  };
+
+  if (tierSlug.includes('league:') || tierSlug === Constants.TierSlug.ESEA_CASH_CUP) {
+    const base = regionalLeagueWeights[federationSlug || ''] || 0.12;
+    return tierSlug.includes('playoffs') ? base * 1.25 : base;
+  }
+
+  return 0;
+}
+
+function isTopPlayersOfYearBigEvent(tierSlug?: string | null) {
+  return Boolean(
+    tierSlug &&
+      [
+        Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+        Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+        Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+        Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+        Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+        Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+        Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+        Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+        Constants.TierSlug.LEAGUE_PRO,
+        Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+        Constants.TierSlug.BLAST_FINALS,
+      ].includes(tierSlug as Constants.TierSlug),
+  );
+}
+
+function isTopPlayersOfYearRmrTier(tierSlug?: string | null) {
+  return Boolean(tierSlug && tierSlug.includes(':rmr') && !tierSlug.includes('open-qualifier'));
+}
+
+function isTopPlayersOfYearPressureTier(tierSlug?: string | null, placement?: number | null) {
+  return Boolean(
+    tierSlug &&
+      (tierSlug.includes('playoffs') ||
+        tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE ||
+        tierSlug === Constants.TierSlug.BLAST_FINALS ||
+        (tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS && placement != null && placement <= 2)),
+  );
+}
+
+function getTopPlayersOfYearEventName(tierSlug?: string | null) {
+  if (
+    tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A ||
+    tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
+  ) {
+    return tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A ? 'Europe RMR A' : 'Europe RMR B';
+  }
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_RMR) return 'Americas RMR';
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_RMR) return 'Asia RMR';
+  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) return 'the Major';
+  if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) return 'the Major Legends Stage';
+  if (tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) {
+    return 'the Major Challengers Stage';
+  }
+  if (
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A ||
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B ||
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS
+  ) {
+    return 'IEM Cologne';
+  }
+  if (
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_A ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_B ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+  ) {
+    return 'IEM Krakow';
+  }
+  if (
+    tierSlug === Constants.TierSlug.LEAGUE_PRO ||
+    tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
+  ) {
+    return 'ESL Pro League';
+  }
+  if (tierSlug === Constants.TierSlug.BLAST_FINALS) return 'BLAST Finals';
+  if (tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS) return 'CCT Global Finals';
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS) return 'ESL Challenger';
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER) return 'ESL Challenger groups';
+  if (tierSlug === Constants.TierSlug.CCT_SERIES_PLAYOFFS) return 'CCT playoffs';
+  if (tierSlug === Constants.TierSlug.CCT_SERIES) return 'CCT regional play';
+  if (tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS) return 'CCT Oceania playoffs';
+  if (tierSlug === Constants.TierSlug.CCT_OCE_SERIES) return 'CCT Oceania';
+  if (tierSlug?.includes('league:advanced')) return 'Advanced';
+  if (tierSlug?.includes('league:main')) return 'Main';
+  if (tierSlug?.includes('league:intermediate')) return 'Intermediate';
+  if (tierSlug?.includes('league:open')) return 'Open';
+
+  return 'notable events';
+}
+
+function getTopPlayersOfYearEventKey(row: {
+  competitionId: number;
+  competitionLocation?: string | null;
+  competitionOrganizer?: string | null;
+  competitionSeason?: number | null;
+  federationSlug?: string | null;
+  tierSlug?: string | null;
+}) {
+  const stageGroup = (() => {
+    if (Util.isMajorStageTier(row.tierSlug)) return 'major';
+    if (
+      row.tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A ||
+      row.tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B ||
+      row.tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS
+    ) {
+      return 'iem-cologne';
+    }
+    if (
+      row.tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_A ||
+      row.tierSlug === Constants.TierSlug.IEM_KRAKOW_GROUP_B ||
+      row.tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+    ) {
+      return 'iem-krakow';
+    }
+    if (
+      row.tierSlug === Constants.TierSlug.LEAGUE_PRO ||
+      row.tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
+    ) {
+      return 'esl-pro-league';
+    }
+
+    return row.tierSlug || `competition-${row.competitionId}`;
+  })();
+
+  return [
+    row.federationSlug,
+    row.competitionSeason,
+    row.competitionLocation,
+    row.competitionOrganizer,
+    stageGroup,
+  ]
+    .filter((part) => part != null && part !== '')
+    .join(':');
+}
+
+function getTopPlayersOfYearPrimaryCompetitionId(
+  currentCompetitionId: number,
+  currentTierSlug?: string | null,
+  nextCompetitionId?: number,
+  nextTierSlug?: string | null,
+) {
+  const currentWeight = getTopPlayersOfYearEventWeight(currentTierSlug);
+  const nextWeight = getTopPlayersOfYearEventWeight(nextTierSlug);
+
+  if (nextCompetitionId && nextWeight > currentWeight) {
+    return nextCompetitionId;
+  }
+
+  return currentCompetitionId;
+}
+
+function topPlayersCompetitionLink(competitionId: number, name: string) {
+  return `[**${escapeMarkdownLinkText(name)}**](/competitions?competitionId=${competitionId})`;
+}
+
+function getTopPlayersOfYearMvpWeight(mvp: CompetitionMvpSeed) {
+  const eventWeight = getTopPlayersOfYearEventWeight(
+    mvp.competition.tier.slug,
+    mvp.competition.federation.slug,
+  );
+
+  return Math.round(eventWeight * 16);
+}
+
+async function getTopPlayersOfYearCandidates(
+  publishedAt: Date,
+  allMvps: CompetitionMvpSeed[],
+): Promise<TopPlayerOfYearCandidate[]> {
+  const year = publishedAt.getFullYear();
+  const season = year - 2025;
+  const rows = await DatabaseClient.prisma.$queryRaw<TopPlayerOfYearGameRow[]>`
+    SELECT
+      "MatchPlayerGameStat"."playerId" AS "playerId",
+      "Player"."name" AS "playerName",
+      "Player"."avatar" AS "playerAvatar",
+      "Country"."code" AS "playerCountryCode",
+      "Player"."age" AS "playerAge",
+      "Player"."role" AS "playerRole",
+      "OwnTeam"."teamId" AS "teamId",
+      "Team"."name" AS "teamName",
+      "Team"."blazon" AS "teamBlazon",
+      "Competition"."id" AS "competitionId",
+      "Competition"."location" AS "competitionLocation",
+      "Competition"."organizer" AS "competitionOrganizer",
+      "Competition"."season" AS "competitionSeason",
+      "Federation"."slug" AS "federationSlug",
+      "Tier"."slug" AS "tierSlug",
+      "Match"."id" AS "matchId",
+      "Match"."date" AS "matchDate",
+      "Match"."totalRounds" AS "totalRounds",
+      "MatchPlayerGameStat"."gameKey" AS "gameKey",
+      "Match"."round" AS "round",
+      "Placement"."position" AS "placement",
+      "OwnTeam"."result" AS "ownResult",
+      "OwnTeam"."score" AS "ownScore",
+      "Opponent"."teamId" AS "opponentTeamId",
+      "OpponentTeam"."name" AS "opponentTeamName",
+      "Opponent"."score" AS "opponentScore",
+      "MatchPlayerGameStat"."kills" AS "kills",
+      "MatchPlayerGameStat"."assists" AS "assists",
+      "MatchPlayerGameStat"."deaths" AS "deaths",
+      AVG("OpponentTeam"."elo") AS "opponentElo"
+    FROM "MatchPlayerGameStat"
+    INNER JOIN "Match"
+      ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+    INNER JOIN "Competition"
+      ON "Competition"."id" = "Match"."competitionId"
+    INNER JOIN "Tier"
+      ON "Tier"."id" = "Competition"."tierId"
+    INNER JOIN "Federation"
+      ON "Federation"."id" = "Competition"."federationId"
+    INNER JOIN "Player"
+      ON "Player"."id" = "MatchPlayerGameStat"."playerId"
+    LEFT JOIN "Country"
+      ON "Country"."id" = "Player"."countryId"
+    LEFT JOIN "CareerStint"
+      ON "CareerStint"."playerId" = "MatchPlayerGameStat"."playerId"
+      AND "CareerStint"."startedAt" <= "Match"."date"
+      AND (
+        "CareerStint"."endedAt" IS NULL
+        OR "CareerStint"."endedAt" >= "Match"."date"
+      )
+      AND "CareerStint"."starter" = true
+    INNER JOIN "MatchToTeam" AS "OwnTeam"
+      ON "OwnTeam"."matchId" = "Match"."id"
+      AND "OwnTeam"."teamId" = COALESCE("CareerStint"."teamId", "Player"."teamId")
+    LEFT JOIN "Team"
+      ON "Team"."id" = "OwnTeam"."teamId"
+    LEFT JOIN "CompetitionToTeam" AS "Placement"
+      ON "Placement"."competitionId" = "Competition"."id"
+      AND "Placement"."teamId" = "OwnTeam"."teamId"
+    LEFT JOIN "MatchToTeam" AS "Opponent"
+      ON "Opponent"."matchId" = "Match"."id"
+      AND "Opponent"."teamId" IS NOT NULL
+      AND "Opponent"."teamId" <> "OwnTeam"."teamId"
+    LEFT JOIN "Team" AS "OpponentTeam"
+      ON "OpponentTeam"."id" = "Opponent"."teamId"
+    WHERE "Competition"."season" = ${season}
+      AND "Match"."date" <= ${endOfDay(publishedAt)}
+      AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+      AND "Match"."matchType" <> 'FACEIT_PUG'
+    GROUP BY
+      "MatchPlayerGameStat"."playerId",
+      "Player"."name",
+      "Player"."avatar",
+      "Country"."code",
+      "Player"."age",
+      "Player"."role",
+      "OwnTeam"."teamId",
+      "Team"."name",
+      "Team"."blazon",
+      "Competition"."id",
+      "Competition"."location",
+      "Competition"."organizer",
+      "Competition"."season",
+      "Federation"."slug",
+      "Tier"."slug",
+      "Match"."id",
+      "Match"."date",
+      "Match"."totalRounds",
+      "MatchPlayerGameStat"."gameKey",
+      "Match"."round",
+      "Placement"."position",
+      "OwnTeam"."result",
+      "OwnTeam"."score",
+      "Opponent"."teamId",
+      "OpponentTeam"."name",
+      "Opponent"."score",
+      "MatchPlayerGameStat"."kills",
+      "MatchPlayerGameStat"."assists",
+      "MatchPlayerGameStat"."deaths"
+  `;
+  const eventStats = new Map<
+    string,
+    {
+      competitionId: number;
+      firstDate: Date | null;
+      federationSlug: string;
+      impact: number;
+      latestDate: Date | null;
+      maps: number;
+      placement: number | null;
+      playerId: number;
+      primaryTierSlug: string;
+      ratingSum: number;
+      tierSlug: string;
+    }
+  >();
+  const rmrEventStats = new Map<
+    string,
+    {
+      competitionId: number;
+      date: Date | null;
+      maps: number;
+      placement: number | null;
+      playerId: number;
+      ratingSum: number;
+      tierSlug: string;
+    }
+  >();
+  const pressureMatchStats = new Map<
+    string,
+    {
+      competitionId: number;
+      date: Date | null;
+      maps: number;
+      opponentScore: number | null;
+      opponentTeamId: number | null;
+      opponentTeamName: string | null;
+      playerId: number;
+      ratingSum: number;
+      round: number | null;
+      teamScore: number | null;
+      tierSlug: string;
+      totalRounds: number | null;
+      won: boolean | null;
+    }
+  >();
+  const playerStats = new Map<
+    number,
+    TopPlayerOfYearCandidate & {
+      rawRatingSum: number;
+      weightedRatingSum: number;
+      weightedRatingMaps: number;
+      weightedMaps: number;
+      pressureRatingSum: number;
+      pressureMaps: number;
+      bigEventRatingSum: number;
+      bigEventRatingMaps: number;
+      actualRatingSum: number;
+      actualMaps: number;
+      opponentEloSum: number;
+      opponentEloMaps: number;
+      teamsById: Map<
+        number,
+        {
+          id: number;
+          name: string;
+          blazon: string | null;
+          maps: number;
+        }
+      >;
+      trophyByCompetitionId: Map<
+        number,
+        {
+          competitionId: number;
+          name: string;
+          teamId: number | null;
+          teamName: string | null;
+          weight: number;
+        }
+      >;
+    }
+  >();
+
+  rows.forEach((row) => {
+    const impact = getTopPlayersOfYearEventWeight(row.tierSlug, row.federationSlug);
+    const rating = Util.getPlayerRating(Number(row.kills), Number(row.deaths), Number(row.assists));
+
+    if (!Number.isFinite(rating)) {
+      return;
+    }
+
+    const player =
+      playerStats.get(row.playerId) ||
+      ({
+        playerId: row.playerId,
+        playerName: row.playerName,
+        playerAvatar: row.playerAvatar,
+        playerCountryCode: row.playerCountryCode,
+        playerAge: row.playerAge,
+        playerRole: row.playerRole,
+        teamId: row.teamId,
+        teamName: row.teamName,
+        teamBlazon: row.teamBlazon,
+        maps: 0,
+        actualMaps: 0,
+        actualRating: 0,
+        notableRating: 0,
+        score: 0,
+        mvpCount: 0,
+        eliteMaps: 0,
+        bigEventMaps: 0,
+        bigEventRating: 0,
+        pressureRating: 0,
+        strongEventCount: 0,
+        weakEventCount: 0,
+        bestEvent: null as TopPlayerOfYearCandidate['bestEvent'],
+        weakEvent: null as TopPlayerOfYearCandidate['weakEvent'],
+        teams: [] as TopPlayerOfYearCandidate['teams'],
+        mvpTournaments: [] as TopPlayerOfYearCandidate['mvpTournaments'],
+        trophies: [] as TopPlayerOfYearCandidate['trophies'],
+        rawRatingSum: 0,
+        weightedRatingSum: 0,
+        weightedRatingMaps: 0,
+        weightedMaps: 0,
+        pressureRatingSum: 0,
+        pressureMaps: 0,
+        bigEventRatingSum: 0,
+        bigEventRatingMaps: 0,
+        actualRatingSum: 0,
+        opponentEloSum: 0,
+        opponentEloMaps: 0,
+        teamsById: new Map(),
+        trophyByCompetitionId: new Map(),
+      } satisfies TopPlayerOfYearCandidate & {
+        rawRatingSum: number;
+        weightedRatingSum: number;
+        weightedRatingMaps: number;
+        weightedMaps: number;
+        pressureRatingSum: number;
+        pressureMaps: number;
+        bigEventRatingSum: number;
+        bigEventRatingMaps: number;
+        actualRatingSum: number;
+        actualMaps: number;
+        opponentEloSum: number;
+        opponentEloMaps: number;
+        teamsById: Map<
+          number,
+          {
+            id: number;
+            name: string;
+            blazon: string | null;
+            maps: number;
+          }
+        >;
+        trophyByCompetitionId: Map<
+          number,
+          {
+            competitionId: number;
+            name: string;
+            teamId: number | null;
+            teamName: string | null;
+            weight: number;
+          }
+        >;
+      });
+
+    player.actualMaps += 1;
+    player.actualRatingSum += rating;
+
+    if (row.teamId && row.teamName) {
+      const teamEntry = player.teamsById.get(row.teamId) || {
+        id: row.teamId,
+        name: row.teamName,
+        blazon: row.teamBlazon,
+        maps: 0,
+      };
+
+      teamEntry.maps += 1;
+      player.teamsById.set(row.teamId, teamEntry);
+    }
+
+    playerStats.set(row.playerId, player);
+
+    if (isTopPlayersOfYearRmrTier(row.tierSlug)) {
+      const rmrKey = `${row.playerId}:${row.competitionId}`;
+      const rmrEntry =
+        rmrEventStats.get(rmrKey) ||
+        ({
+          competitionId: row.competitionId,
+          date: row.matchDate || null,
+          maps: 0,
+          placement: row.placement,
+          playerId: row.playerId,
+          ratingSum: 0,
+          tierSlug: row.tierSlug,
+        } satisfies {
+          competitionId: number;
+          date: Date | null;
+          maps: number;
+          placement: number | null;
+          playerId: number;
+          ratingSum: number;
+          tierSlug: string;
+        });
+
+      if (!rmrEntry.date || row.matchDate > rmrEntry.date) {
+        rmrEntry.date = row.matchDate;
+      }
+      rmrEntry.maps += 1;
+      rmrEntry.placement =
+        rmrEntry.placement == null || row.placement == null
+          ? (rmrEntry.placement ?? row.placement)
+          : Math.min(rmrEntry.placement, row.placement);
+      rmrEntry.ratingSum += rating;
+      rmrEventStats.set(rmrKey, rmrEntry);
+    }
+
+    if (impact <= 0) {
+      return;
+    }
+
+    const opponentElo = row.opponentElo == null ? null : Number(row.opponentElo);
+    const opponentFactor =
+      opponentElo == null || !Number.isFinite(opponentElo)
+        ? 1
+        : 1 + Math.max(-0.08, Math.min(0.12, (opponentElo - 1800) / 2500));
+    const isPressureTier = isTopPlayersOfYearPressureTier(row.tierSlug, row.placement);
+    const pressureFactor = isPressureTier ? 1.12 : 1;
+    const isBigEvent = isTopPlayersOfYearBigEvent(row.tierSlug);
+    const key = `${row.playerId}:${getTopPlayersOfYearEventKey(row)}`;
+    const eventEntry =
+      eventStats.get(key) ||
+      ({
+        competitionId: row.competitionId,
+        firstDate: row.matchDate || null,
+        federationSlug: row.federationSlug,
+        impact,
+        latestDate: row.matchDate || null,
+        maps: 0,
+        placement: row.placement,
+        playerId: row.playerId,
+        primaryTierSlug: row.tierSlug,
+        ratingSum: 0,
+        tierSlug: row.tierSlug,
+      } satisfies {
+        competitionId: number;
+        firstDate: Date | null;
+        federationSlug: string;
+        impact: number;
+        latestDate: Date | null;
+        maps: number;
+        placement: number | null;
+        playerId: number;
+        primaryTierSlug: string;
+        ratingSum: number;
+        tierSlug: string;
+      });
+    if (!eventEntry.firstDate || row.matchDate < eventEntry.firstDate) {
+      eventEntry.firstDate = row.matchDate;
+    }
+    if (!eventEntry.latestDate || row.matchDate > eventEntry.latestDate) {
+      eventEntry.latestDate = row.matchDate;
+    }
+    eventEntry.competitionId = getTopPlayersOfYearPrimaryCompetitionId(
+      eventEntry.competitionId,
+      eventEntry.primaryTierSlug,
+      row.competitionId,
+      row.tierSlug,
+    );
+    eventEntry.impact = Math.max(eventEntry.impact, impact);
+    eventEntry.maps += 1;
+    eventEntry.placement =
+      eventEntry.placement == null || row.placement == null
+        ? (eventEntry.placement ?? row.placement)
+        : Math.min(eventEntry.placement, row.placement);
+    eventEntry.ratingSum += rating;
+    if (
+      getTopPlayersOfYearEventWeight(row.tierSlug) >=
+      getTopPlayersOfYearEventWeight(eventEntry.primaryTierSlug)
+    ) {
+      eventEntry.primaryTierSlug = row.tierSlug;
+      eventEntry.tierSlug = row.tierSlug;
+    }
+    eventStats.set(key, eventEntry);
+
+    player.maps += 1;
+    player.rawRatingSum += rating;
+    player.weightedRatingSum += rating * impact * pressureFactor * opponentFactor;
+    player.weightedRatingMaps += impact * pressureFactor * opponentFactor;
+    player.weightedMaps += impact;
+
+    if (pressureFactor > 1) {
+      player.pressureRatingSum += rating;
+      player.pressureMaps += 1;
+
+      const ownScore = row.ownScore == null ? null : Number(row.ownScore);
+      const opponentScore = row.opponentScore == null ? null : Number(row.opponentScore);
+      const ownResult = row.ownResult == null ? null : Number(row.ownResult);
+      const matchWon =
+        ownResult == null || !Number.isFinite(ownResult)
+          ? ownScore != null && opponentScore != null
+            ? ownScore > opponentScore
+            : null
+          : ownResult === Constants.MatchResult.WIN;
+      const pressureKey = `${row.playerId}:${row.matchId}`;
+      const pressureEntry =
+        pressureMatchStats.get(pressureKey) ||
+        ({
+          competitionId: row.competitionId,
+          date: row.matchDate || null,
+          maps: 0,
+          opponentScore:
+            opponentScore != null && Number.isFinite(opponentScore) ? opponentScore : null,
+          opponentTeamId: row.opponentTeamId,
+          opponentTeamName: row.opponentTeamName,
+          playerId: row.playerId,
+          ratingSum: 0,
+          round: row.round,
+          teamScore: ownScore != null && Number.isFinite(ownScore) ? ownScore : null,
+          tierSlug: row.tierSlug,
+          totalRounds: row.totalRounds,
+          won: matchWon,
+        } satisfies {
+          competitionId: number;
+          date: Date | null;
+          maps: number;
+          opponentScore: number | null;
+          opponentTeamId: number | null;
+          opponentTeamName: string | null;
+          playerId: number;
+          ratingSum: number;
+          round: number | null;
+          teamScore: number | null;
+          tierSlug: string;
+          totalRounds: number | null;
+          won: boolean | null;
+        });
+
+      pressureEntry.maps += 1;
+      pressureEntry.ratingSum += rating;
+      pressureMatchStats.set(pressureKey, pressureEntry);
+    }
+
+    if (impact >= 1.2) {
+      player.eliteMaps += 1;
+    }
+
+    if (isBigEvent) {
+      player.bigEventMaps += 1;
+      player.bigEventRatingSum += rating;
+      player.bigEventRatingMaps += 1;
+    }
+
+    if (opponentElo != null && Number.isFinite(opponentElo)) {
+      player.opponentEloSum += opponentElo;
+      player.opponentEloMaps += 1;
+    }
+
+    playerStats.set(row.playerId, player);
+  });
+
+  const eventConsistency = new Map<number, number>();
+  const eventSummary = new Map<
+    number,
+    {
+      bestEvent: TopPlayerOfYearCandidate['bestEvent'];
+      bestEventScore: number;
+      weakEvent: TopPlayerOfYearCandidate['weakEvent'];
+      strongEventCount: number;
+      weakEventCount: number;
+    }
+  >();
+  eventStats.forEach((eventEntry, key) => {
+    const playerId = Number(key.split(':')[0]);
+    const rating = eventEntry.maps ? eventEntry.ratingSum / eventEntry.maps : 0;
+    const currentSummary =
+      eventSummary.get(playerId) ||
+      ({
+        bestEvent: null,
+        bestEventScore: 0,
+        weakEvent: null,
+        strongEventCount: 0,
+        weakEventCount: 0,
+      } satisfies {
+        bestEvent: TopPlayerOfYearCandidate['bestEvent'];
+        bestEventScore: number;
+        weakEvent: TopPlayerOfYearCandidate['weakEvent'];
+        strongEventCount: number;
+        weakEventCount: number;
+      });
+    const eventScore = rating * eventEntry.impact * Math.min(1, eventEntry.maps / 4);
+
+    if (eventEntry.impact >= 0.7 && eventEntry.maps >= 2 && rating >= 1.05) {
+      eventConsistency.set(playerId, (eventConsistency.get(playerId) || 0) + 1);
+    }
+
+    if (eventEntry.impact >= 0.7 && eventEntry.maps >= 2) {
+      if (rating >= 1.1) {
+        currentSummary.strongEventCount += 1;
+      } else if (rating < 1) {
+        currentSummary.weakEventCount += 1;
+      }
+
+      if (!currentSummary.weakEvent || rating < currentSummary.weakEvent.rating) {
+        currentSummary.weakEvent = {
+          competitionId: eventEntry.competitionId,
+          date: eventEntry.latestDate,
+          name: getTopPlayersOfYearEventName(eventEntry.tierSlug),
+          maps: eventEntry.maps,
+          placement: eventEntry.placement,
+          rating,
+        };
+      }
+    }
+
+    if (
+      eventEntry.maps >= 2 &&
+      (!currentSummary.bestEvent || eventScore > currentSummary.bestEventScore)
+    ) {
+      currentSummary.bestEventScore = eventScore;
+      currentSummary.bestEvent = {
+        competitionId: eventEntry.competitionId,
+        date: eventEntry.latestDate,
+        name: getTopPlayersOfYearEventName(eventEntry.tierSlug),
+        maps: eventEntry.maps,
+        placement: eventEntry.placement,
+        rating,
+      };
+    }
+
+    eventSummary.set(playerId, currentSummary);
+  });
+
+  const rmrEventByPlayer = new Map<number, TopPlayerOfYearCandidate['rmrEvent']>();
+  rmrEventStats.forEach((eventEntry) => {
+    if (eventEntry.maps < 2) {
+      return;
+    }
+
+    const rating = eventEntry.ratingSum / eventEntry.maps;
+    const candidate = {
+      competitionId: eventEntry.competitionId,
+      date: eventEntry.date,
+      name: getTopPlayersOfYearEventName(eventEntry.tierSlug),
+      maps: eventEntry.maps,
+      placement: eventEntry.placement,
+      rating,
+    } satisfies NonNullable<TopPlayerOfYearCandidate['rmrEvent']>;
+    const current = rmrEventByPlayer.get(eventEntry.playerId);
+    const currentPlacement = current?.placement ?? Number.POSITIVE_INFINITY;
+    const candidatePlacement = candidate.placement ?? Number.POSITIVE_INFINITY;
+
+    if (
+      !current ||
+      candidatePlacement < currentPlacement ||
+      (candidatePlacement === currentPlacement && candidate.rating > current.rating)
+    ) {
+      rmrEventByPlayer.set(eventEntry.playerId, candidate);
+    }
+  });
+
+  const pressureMatchByPlayer = new Map<number, TopPlayerOfYearCandidate['signatureMatch']>();
+  const pressureMatchScore = (match: NonNullable<TopPlayerOfYearCandidate['signatureMatch']>) =>
+    match.rating * Math.min(1.3, Math.max(1, match.maps / 2)) +
+    (match.won ? 0.08 : 0) +
+    (match.round != null && match.totalRounds != null
+      ? Math.max(0, match.round / Math.max(1, match.totalRounds)) * 0.05
+      : 0);
+
+  pressureMatchStats.forEach((matchEntry) => {
+    if (matchEntry.maps < 1) {
+      return;
+    }
+
+    const rating = matchEntry.ratingSum / matchEntry.maps;
+
+    if (rating < 1.05) {
+      return;
+    }
+
+    const candidate = {
+      competitionId: matchEntry.competitionId,
+      date: matchEntry.date,
+      maps: matchEntry.maps,
+      name: getTopPlayersOfYearEventName(matchEntry.tierSlug),
+      opponentScore: matchEntry.opponentScore,
+      opponentTeamId: matchEntry.opponentTeamId,
+      opponentTeamName: matchEntry.opponentTeamName,
+      rating,
+      round: matchEntry.round,
+      teamScore: matchEntry.teamScore,
+      totalRounds: matchEntry.totalRounds,
+      won: matchEntry.won,
+    } satisfies NonNullable<TopPlayerOfYearCandidate['signatureMatch']>;
+    const current = pressureMatchByPlayer.get(matchEntry.playerId);
+
+    if (!current || pressureMatchScore(candidate) > pressureMatchScore(current)) {
+      pressureMatchByPlayer.set(matchEntry.playerId, candidate);
+    }
+  });
+
+  allMvps
+    .filter((mvp) => getCompetitionYear(mvp.competition) === year)
+    .forEach((mvp) => {
+      const player = playerStats.get(mvp.playerId);
+
+      if (!player) {
+        return;
+      }
+
+      player.mvpCount += 1;
+      const weight = getTopPlayersOfYearMvpWeight(mvp);
+
+      player.score += weight;
+      player.mvpTournaments.push({
+        competitionId: mvp.competitionId,
+        name: getMvpTournamentLabel(mvp.competition),
+        weight,
+      });
+    });
+
+  const trophyRows = await DatabaseClient.prisma.$queryRaw<TopPlayerOfYearTrophyRow[]>`
+    WITH "ChampionshipMatch" AS (
+      SELECT
+        "Match"."competitionId" AS "competitionId",
+        MAX("Match"."date") AS "championshipDate"
+      FROM "Match"
+      WHERE "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+        AND "Match"."competitionId" IS NOT NULL
+      GROUP BY "Match"."competitionId"
+    )
+    SELECT
+      "CareerStint"."playerId" AS "playerId",
+      "Winner"."teamId" AS "teamId",
+      "Team"."name" AS "teamName",
+      "Competition"."id" AS "competitionId",
+      "Competition"."location" AS "competitionLocation",
+      "Competition"."organizer" AS "competitionOrganizer",
+      "Competition"."season" AS "competitionSeason",
+      "Federation"."slug" AS "federationSlug",
+      "Tier"."slug" AS "tierSlug"
+    FROM "CompetitionToTeam" AS "Winner"
+    INNER JOIN "Competition"
+      ON "Competition"."id" = "Winner"."competitionId"
+    INNER JOIN "Tier"
+      ON "Tier"."id" = "Competition"."tierId"
+    INNER JOIN "Federation"
+      ON "Federation"."id" = "Competition"."federationId"
+    INNER JOIN "ChampionshipMatch"
+      ON "ChampionshipMatch"."competitionId" = "Competition"."id"
+    INNER JOIN "CareerStint"
+      ON "CareerStint"."teamId" = "Winner"."teamId"
+      AND "CareerStint"."starter" = true
+      AND "CareerStint"."startedAt" <= "ChampionshipMatch"."championshipDate"
+      AND (
+        "CareerStint"."endedAt" IS NULL
+        OR "CareerStint"."endedAt" >= "ChampionshipMatch"."championshipDate"
+      )
+    LEFT JOIN "Team"
+      ON "Team"."id" = "Winner"."teamId"
+    WHERE "Competition"."season" = ${season}
+      AND "Competition"."status" = ${Constants.CompetitionStatus.COMPLETED}
+      AND "Winner"."position" = 1
+      AND "Winner"."teamId" IS NOT NULL
+      AND "Tier"."slug" IN (${Prisma.join(PLAYER_HONOR_TIER_SLUGS)})
+      AND "ChampionshipMatch"."championshipDate" <= ${endOfDay(publishedAt)}
+  `;
+
+  trophyRows.forEach((row) => {
+    const player = playerStats.get(row.playerId);
+
+    if (!player) {
+      return;
+    }
+
+    player.trophyByCompetitionId.set(row.competitionId, {
+      competitionId: row.competitionId,
+      name: getMvpTournamentLabel({
+        id: row.competitionId,
+        location: row.competitionLocation,
+        organizer: row.competitionOrganizer,
+        season: row.competitionSeason,
+        tier: { slug: row.tierSlug },
+      }),
+      teamId: row.teamId,
+      teamName: row.teamName,
+      weight: getTopPlayersOfYearEventWeight(row.tierSlug, row.federationSlug),
+    });
+  });
+
+  return [...playerStats.values()]
+    .filter(
+      (player) =>
+        player.maps >= TOP_PLAYERS_OF_YEAR_MIN_MAPS &&
+        player.bigEventMaps >= TOP_PLAYERS_OF_YEAR_MIN_BIG_EVENT_MAPS,
+    )
+    .map((player) => {
+      const notableRating = player.weightedRatingMaps
+        ? player.weightedRatingSum / player.weightedRatingMaps
+        : player.maps
+          ? player.rawRatingSum / player.maps
+          : 0;
+      const actualRating = player.actualMaps ? player.actualRatingSum / player.actualMaps : 0;
+      const pressureRating = player.pressureMaps
+        ? player.pressureRatingSum / player.pressureMaps
+        : notableRating;
+      const bigEventRating = player.bigEventRatingMaps
+        ? player.bigEventRatingSum / player.bigEventRatingMaps
+        : notableRating;
+      const summary = eventSummary.get(player.playerId);
+      const sampleFactor = Math.min(1, player.maps / 45);
+      const bigEventSampleFactor = Math.min(1, player.bigEventMaps / 28);
+      const eliteSampleFactor = Math.min(1, player.eliteMaps / 24);
+      const consistency = Math.min(1, (eventConsistency.get(player.playerId) || 0) / 6);
+      const oppositionFactor = player.opponentEloMaps
+        ? Math.max(-6, Math.min(8, (player.opponentEloSum / player.opponentEloMaps - 1800) / 45))
+        : 0;
+      const candidate = {
+        ...player,
+        actualRating,
+        bigEventRating,
+      } as TopPlayerOfYearCandidate;
+      const bestEvent =
+        summary?.bestEvent && isTopPlayersOfYearMeaningfulPeak(summary.bestEvent, candidate)
+          ? summary.bestEvent
+          : null;
+      const weakEvent =
+        summary?.weakEvent && isTopPlayersOfYearMeaningfulWeakness(summary.weakEvent, candidate)
+          ? summary.weakEvent
+          : null;
+
+      return {
+        playerId: player.playerId,
+        playerName: player.playerName,
+        playerAvatar: player.playerAvatar,
+        playerCountryCode: player.playerCountryCode,
+        playerAge: player.playerAge,
+        playerRole: player.playerRole,
+        teamId: player.teamId,
+        teamName: player.teamName,
+        teamBlazon: player.teamBlazon,
+        maps: player.maps,
+        actualMaps: player.actualMaps,
+        actualRating,
+        notableRating,
+        mvpCount: player.mvpCount,
+        eliteMaps: player.eliteMaps,
+        bigEventMaps: player.bigEventMaps,
+        bigEventRating,
+        pressureRating,
+        strongEventCount: summary?.strongEventCount || 0,
+        weakEventCount: summary?.weakEventCount || 0,
+        bestEvent,
+        weakEvent,
+        rmrEvent: rmrEventByPlayer.get(player.playerId) || null,
+        signatureMatch: pressureMatchByPlayer.get(player.playerId) || null,
+        teams: [...player.teamsById.values()].sort(
+          (a, b) => b.maps - a.maps || a.name.localeCompare(b.name),
+        ),
+        mvpTournaments: player.mvpTournaments.sort(
+          (a, b) => b.weight - a.weight || a.name.localeCompare(b.name),
+        ),
+        trophies: [...player.trophyByCompetitionId.values()].sort(
+          (a, b) => b.weight - a.weight || a.name.localeCompare(b.name),
+        ),
+        score:
+          player.score +
+          (bigEventRating - 1) * 185 +
+          (notableRating - 1) * 45 +
+          (pressureRating - 1) * 35 +
+          sampleFactor * 6 +
+          bigEventSampleFactor * 28 +
+          eliteSampleFactor * 16 +
+          consistency * 16 +
+          oppositionFactor +
+          Math.min(6, player.weightedMaps / 22),
+      } satisfies TopPlayerOfYearCandidate;
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.notableRating - a.notableRating ||
+        b.mvpCount - a.mvpCount ||
+        b.eliteMaps - a.eliteMaps ||
+        a.playerName.localeCompare(b.playerName),
+    )
+    .slice(0, TOP_PLAYERS_OF_YEAR_SIZE);
+}
+
+function formatTopPlayersLinkedCompetitionList(
+  competitions: Array<{ competitionId: number; name: string }>,
+  maxItems = 3,
+) {
+  return formatLinkedList(
+    competitions
+      .slice(0, maxItems)
+      .map((competition) => topPlayersCompetitionLink(competition.competitionId, competition.name)),
+  );
+}
+
+export function isTopPlayersOfYearMeaningfulPeak(
+  event: TopPlayerOfYearCandidate['bestEvent'],
+  player: TopPlayerOfYearCandidate,
+) {
+  if (!event || event.maps < 2) {
+    return false;
+  }
+
+  const hasMatchingMvp = player.mvpTournaments.some(
+    (mvp) => mvp.competitionId === event.competitionId,
+  );
+  const clearsBaseline = event.rating >= player.actualRating + 0.04;
+  const clearsStandaloneLevel = event.rating >= 1.15;
+
+  return clearsStandaloneLevel && (clearsBaseline || hasMatchingMvp);
+}
+
+export function isTopPlayersOfYearMeaningfulWeakness(
+  event: TopPlayerOfYearCandidate['weakEvent'],
+  player: TopPlayerOfYearCandidate,
+) {
+  if (!event || event.maps < 2) {
+    return false;
+  }
+
+  return event.rating <= player.actualRating - 0.1 || event.rating < 0.98;
+}
+
+function getTopPlayerRankingPayloadYear(
+  item: { eventKey?: string | null; payload?: string | null },
+  payload: Record<string, unknown>,
+) {
+  const payloadYear = Number(payload.year);
+
+  if (Number.isFinite(payloadYear)) {
+    return payloadYear;
+  }
+
+  const eventYear = item.eventKey?.match(/:top-players:(\d+)$/)?.[1];
+
+  return eventYear ? Number(eventYear) : null;
+}
+
+async function getTopPlayersOfYearHistory(year: number) {
+  const items = await DatabaseClient.prisma.newsItem.findMany({
+    orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      eventKey: true,
+      payload: true,
+    },
+    where: {
+      eventKey: {
+        startsWith: `${AUTO_EVENT_PREFIX}:top-players:`,
+      },
+    },
+  });
+  const history = new Map<number, TopPlayerOfYearHistory>();
+
+  items.forEach((item) => {
+    if (!item.payload) {
+      return;
+    }
+
+    let payload: Record<string, unknown>;
+
+    try {
+      payload = JSON.parse(item.payload) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+
+    const itemYear = getTopPlayerRankingPayloadYear(item, payload);
+
+    if (!itemYear || itemYear >= year || !Array.isArray(payload.ranking)) {
+      return;
+    }
+
+    payload.ranking.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+
+      const playerId = Number((entry as { playerId?: unknown }).playerId);
+      const rank = Number((entry as { rank?: unknown }).rank);
+
+      if (!Number.isFinite(playerId) || !Number.isFinite(rank)) {
+        return;
+      }
+
+      const current =
+        history.get(playerId) ||
+        ({
+          appearances: 0,
+          bestRank: rank,
+          firstYear: itemYear,
+          years: [],
+        } satisfies TopPlayerOfYearHistory);
+
+      current.appearances += 1;
+      current.bestRank = Math.min(current.bestRank, rank);
+      current.firstYear = Math.min(current.firstYear, itemYear);
+      current.years = [...new Set([...current.years, itemYear])].sort((a, b) => a - b);
+
+      if (!current.lastAppearance || itemYear > current.lastAppearance.year) {
+        current.lastAppearance = { rank, year: itemYear };
+      }
+
+      if (itemYear === year - 1) {
+        current.previousYearRank = rank;
+      }
+
+      history.set(playerId, current);
+    });
+  });
+
+  return history;
+}
+
+function getTopPlayersOfYearRankTone(rank: number) {
+  if (rank === 1) return 'the top of the list';
+  if (rank <= 3) return 'the podium';
+  if (rank <= 7) return 'the Player of the Year chasing pack';
+  if (rank <= 12) return 'the upper half';
+  if (rank <= 16) return 'the No. 13-16 range';
+
+  return 'the cutoff fight';
+}
+
+function getTopPlayersOfYearPlacementContext(event?: { placement?: number | null } | null) {
+  if (event?.placement == null) {
+    return null;
+  }
+
+  if (event.placement === 1) return 'during a title run';
+  if (event.placement === 2) return 'as his team reached the final';
+  if (event.placement <= 4) return 'during a deep run';
+  if (event.placement >= 9) return 'as his team exited early';
+
+  return null;
+}
+
+function getTopPlayersOfYearRatingColorLabel(rating: number) {
+  return rating < 1 ? `a red ${formatRating(rating)}` : `a ${formatRating(rating)}`;
+}
+
+function getTopPlayersOfYearComparisonSentence(
+  player: TopPlayerOfYearCandidate,
+  rank: number,
+  comparison: TopPlayerOfYearComparison | undefined,
+  seed: number,
+) {
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+  const above = comparison?.above;
+  const below = comparison?.below;
+  const target = rank === 1 ? below : above || below;
+
+  if (!target) {
+    return `${playerLabel}'s final place came down to the balance of peak, sample, trophies and late-event form.`;
+  }
+
+  const targetLabel = playerLink({ id: target.playerId, name: target.playerName });
+  const isAbove = target.playerId === above?.playerId;
+  const relation = isAbove ? `behind ${targetLabel}` : `ahead of ${targetLabel}`;
+  const sameTeam =
+    player.teamId != null && target.teamId != null && player.teamId === target.teamId
+      ? teamLink({ id: player.teamId, name: player.teamName })
+      : null;
+  const evidence = (() => {
+    if (sameTeam) {
+      return `the split inside ${sameTeam}, where ${formatRating(player.bigEventRating)} at big events sat next to ${targetLabel}'s ${formatRating(target.bigEventRating)}`;
+    }
+
+    if (player.weakEvent && target.bestEvent?.name === player.weakEvent.name) {
+      return `${targetLabel}'s cleaner ${target.bestEvent.name} showing against ${playerLabel}'s ${formatRating(player.weakEvent.rating)}`;
+    }
+
+    if (isAbove && target.bigEventRating >= player.bigEventRating + 0.03) {
+      return `${targetLabel}'s stronger big-event line, ${formatRating(target.bigEventRating)} to ${formatRating(player.bigEventRating)}`;
+    }
+
+    if (!isAbove && player.bigEventRating >= target.bigEventRating + 0.03) {
+      return `${playerLabel}'s stronger big-event line, ${formatRating(player.bigEventRating)} to ${formatRating(target.bigEventRating)}`;
+    }
+
+    if (isAbove && target.mvpTournaments.length > player.mvpTournaments.length) {
+      return `${targetLabel}'s heavier MVP record`;
+    }
+
+    if (!isAbove && player.mvpTournaments.length > target.mvpTournaments.length) {
+      return `${playerLabel}'s heavier MVP record`;
+    }
+
+    if (isAbove && target.bestEvent && !player.bestEvent) {
+      return `${targetLabel}'s clearer tournament peak`;
+    }
+
+    if (!isAbove && player.bestEvent && !target.bestEvent) {
+      return `${playerLabel}'s clearer tournament peak`;
+    }
+
+    return `${playerLabel}'s mix of event strength, sample size and playoff form`;
+  })();
+
+  return pickVariant(
+    [
+      `The comparison ${relation} came down to ${evidence}.`,
+      `That is where the gap ${relation} was drawn: ${evidence}.`,
+      `Placed ${relation}, ${playerLabel}'s case was ultimately judged through ${evidence}.`,
+      `${targetLabel} was the natural comparison point, and ${evidence} decided the order.`,
+      `The nearby name on the list matters here: ${relation}, ${playerLabel} was separated by ${evidence}.`,
+      `The final ordering around No. ${rank} leaned on ${evidence}.`,
+      `Against ${targetLabel}, the decisive part of ${playerLabel}'s case was ${evidence}.`,
+      `The head-to-head ranking read was less about one stat and more about ${evidence}.`,
+      `${playerLabel}'s position ${relation} makes most sense through ${evidence}.`,
+      `The line between the two players was thin enough that ${evidence} became important.`,
+      `What kept ${playerLabel} ${relation} was ${evidence}.`,
+      `The deciding argument near this part of the list was ${evidence}.`,
+      `For this slot, ${evidence} mattered more than a simple full-year rating comparison.`,
+      `That comparison is also why the rank stops here: ${evidence}.`,
+      `The order around ${playerLabel} was shaped by ${evidence}.`,
+      `In the end, ${evidence} was the cleanest way to separate ${playerLabel} from ${targetLabel}.`,
+      `${playerLabel} did not land ${relation} by accident; ${evidence} gave the placement its logic.`,
+      `The adjacent-player argument points back to ${evidence}.`,
+      `${targetLabel}'s presence nearby puts the focus on ${evidence}.`,
+      `The ranking call was close enough that ${evidence} had to carry real weight.`,
+      `The comparison with ${targetLabel} is useful because it highlights ${evidence}.`,
+      `${playerLabel}'s case ${relation} was built around ${evidence}.`,
+      `The difference between the two resumes was not huge, but ${evidence} was hard to ignore.`,
+      `The nearby slot was decided by the detail HLTV-style rankings usually care about most: ${evidence}.`,
+      `Compared with ${targetLabel}, ${playerLabel}'s year was defined by ${evidence}.`,
+      `The last layer of the argument was ${evidence}, which explains the order around him.`,
+      `The ranking did not need a vague tiebreaker; ${evidence} provided a concrete one.`,
+      `${playerLabel}'s place ${relation} follows from ${evidence}.`,
+      `The surrounding names make the decision clearer, because ${evidence} stands out.`,
+      `There was enough overlap with ${targetLabel}'s case that ${evidence} became the separator.`,
+      `The article ends up pointing back to ${evidence} as the simplest explanation for No. ${rank}.`,
+      `The slot is best understood through ${evidence}, especially next to ${targetLabel}.`,
+      `The final comparison reads cleanly through ${evidence}.`,
+      `The order was less about a single table line and more about ${evidence}.`,
+      `${playerLabel}'s year holds this position because ${evidence}.`,
+    ],
+    seed,
+  );
+}
+
+function getTopPlayersOfYearRoleNoun(player: TopPlayerOfYearCandidate) {
+  return isAwper({ role: player.playerRole }) ? 'AWPer' : 'rifler';
+}
+
+function getTopPlayersOfYearCareerArcSentence(
+  player: TopPlayerOfYearCandidate,
+  rank: number,
+  year: number,
+  history: TopPlayerOfYearHistory | undefined,
+  seed: number,
+  canMentionFirstAppearance: boolean,
+) {
+  const playerLabel = playerLink({
+    id: player.playerId,
+    name: player.playerName,
+  });
+  const agePrefix = player.playerAge ? `${player.playerAge}-year-old ` : '';
+  const roleNoun = getTopPlayersOfYearRoleNoun(player);
+
+  if (!history) {
+    if (!canMentionFirstAppearance) {
+      return null;
+    }
+
+    return pickVariant(
+      [
+        `${playerLabel} makes his first LIGA Top 20 appearance, entering at No. ${rank} after a year that moved the ${agePrefix}${roleNoun} into sharper focus.`,
+        `${playerLabel} reaches the year-end list for the first time, arriving at No. ${rank} after turning scattered promise into a full-season breakthrough.`,
+        `${playerLabel} is a fresh name in the Top 20, with his No. ${rank} finish marking the first year his output demanded a place among the season's best.`,
+      ],
+      seed,
+    );
+  }
+
+  const appearanceNumber = history.appearances + 1;
+  const last = history.lastAppearance;
+  const previousRank = history.previousYearRank;
+  const previousBest = history.bestRank;
+  const bestYear = history.years.find((pastYear) => {
+    if (!last) return false;
+
+    return pastYear === last.year && last.rank === previousBest;
+  });
+  const personalBest =
+    rank < previousBest
+      ? `a new personal best, beating his previous high of No. ${previousBest}${
+          bestYear ? ` from ${bestYear}` : ''
+        }`
+      : rank === previousBest
+        ? `matching his personal best of No. ${previousBest}`
+        : null;
+
+  if (previousRank) {
+    const movement = previousRank - rank;
+
+    if (movement > 0) {
+      return pickVariant(
+        [
+          `${playerLabel} returns to the Top 20 for the ${Util.toOrdinalSuffix(
+            appearanceNumber,
+          )} time, climbing ${movement} place${movement === 1 ? '' : 's'} from No. ${previousRank} in ${year - 1} to No. ${rank}.`,
+          `${playerLabel}'s latest appearance is an upgrade on last year: No. ${previousRank} in ${year - 1}, No. ${rank} now${personalBest ? `, and ${personalBest}` : ''}.`,
+          `After landing No. ${previousRank} last year, ${playerLabel} pushes further up the list to No. ${rank}.`,
+        ],
+        seed + 1,
+      );
+    }
+
+    if (movement < 0) {
+      return pickVariant(
+        [
+          `${playerLabel} stays in the Top 20 for another year, slipping from No. ${previousRank} in ${year - 1} to No. ${rank} but keeping his place among the season's elite.`,
+          `The ${agePrefix}${roleNoun} could not quite repeat last year's No. ${previousRank} finish, but No. ${rank} keeps him on the list for a ${Util.toOrdinalSuffix(
+            appearanceNumber,
+          )} time.`,
+          `${playerLabel} takes a lower slot than his No. ${previousRank} finish from ${year - 1}, though another Top 20 year still underlines his staying power.`,
+        ],
+        seed + 2,
+      );
+    }
+
+    return pickVariant(
+      [
+        `${playerLabel} repeats last year's No. ${rank} finish, giving him back-to-back seasons in the same lane of the Top 20.`,
+        `For the second year running, ${playerLabel} lands at No. ${rank}, a rare bit of symmetry in a list that usually shifts around him.`,
+        `${playerLabel} holds steady from ${year - 1}, matching his No. ${rank} finish with another year at the same level.`,
+      ],
+      seed + 3,
+    );
+  }
+
+  if (last) {
+    const yearsAway = year - last.year - 1;
+
+    return pickVariant(
+      [
+        `${playerLabel} is back on the list for the first time since ${last.year}, returning at No. ${rank}${
+          personalBest ? ` with ${personalBest}` : ''
+        }.`,
+        `After ${yearsAway > 0 ? `${yearsAway} year${yearsAway === 1 ? '' : 's'} away from` : 'missing'} the Top 20, ${playerLabel} reappears at No. ${rank}.`,
+        `${playerLabel}'s ${Util.toOrdinalSuffix(
+          appearanceNumber,
+        )} Top 20 appearance arrives at No. ${rank}, ${last.year < year - 1 ? `ending a gap that stretched back to ${last.year}` : `one year after his previous run`}.`,
+      ],
+      seed + 4,
+    );
+  }
+
+  return pickVariant(
+    [
+      `${playerLabel} adds another Top 20 year to his record, landing at No. ${rank}${
+        personalBest ? ` and ${personalBest}` : ''
+      }.`,
+      `${playerLabel}'s ${Util.toOrdinalSuffix(
+        appearanceNumber,
+      )} appearance on the list comes at No. ${rank}.`,
+    ],
+    seed + 5,
+  );
+}
+
+function getTopPlayersOfYearTeamStory(player: TopPlayerOfYearCandidate, seed: number) {
+  const playerLabel = playerLink({
+    id: player.playerId,
+    name: player.playerName,
+  });
+  const teams = player.teams.slice(0, 3);
+
+  if (!teams.length) {
+    return pickVariant(
+      [
+        `${playerLabel}'s year did not belong to one long-running team story, which put the spotlight squarely on his own level.`,
+        `${playerLabel}'s year was less about one club's rise and more about how often he delivered from server to server.`,
+        `There was no single trophy run behind ${playerLabel}, only a season of performances that kept pulling attention back to him.`,
+      ],
+      seed,
+    );
+  }
+
+  const teamList = formatLinkedList(
+    teams.map((team) => teamLink({ id: team.id, name: team.name })),
+  );
+
+  if (player.teams.length > 1) {
+    const primaryTeam = teams[0];
+    const secondaryTeams = teams.slice(1);
+    const secondaryList = formatLinkedList(
+      secondaryTeams.map((team) => teamLink({ id: team.id, name: team.name })),
+    );
+    const primaryShare = player.actualMaps
+      ? Math.round((primaryTeam.maps / player.actualMaps) * 100)
+      : 0;
+
+    return pickVariant(
+      [
+        `${playerLabel}'s year crossed team lines, with the form following him through spells at ${teamList}.`,
+        `There was more than one badge attached to the year: ${playerLabel} played most often for ${teamLink(
+          primaryTeam,
+        )}${secondaryList ? ` and still left a mark for ${secondaryList}` : ''}.`,
+        `${playerLabel} changed surroundings during the year, but the production did not disappear between ${teamList}.`,
+        `${playerLabel} played most of his maps for ${teamLink(primaryTeam)}${
+          primaryShare >= 60 ? `, roughly ${primaryShare}% of his maps` : ''
+        }, with ${secondaryList || 'another stop'} giving the year a split-roster wrinkle.`,
+      ],
+      seed + player.teams.length,
+    );
+  }
+
+  return pickVariant(
+    [
+      `Most of the evidence came in ${teamList} colors.`,
+      `In ${teamList} colors, ${playerLabel} gave the year a steady individual thread.`,
+      `${teamList} provided the backdrop, while ${playerLabel}'s best events supplied the headline material.`,
+    ],
+    seed,
+  );
+}
+
+function getTopPlayersOfYearPrimaryStrength(player: TopPlayerOfYearCandidate, rank: number) {
+  const bigEventDelta = player.bigEventRating - player.actualRating;
+  const pressureDelta = player.pressureRating - player.actualRating;
+
+  if (rank === 1 && player.bigEventRating >= player.actualRating - 0.02) return 'coronation';
+  if (player.mvpTournaments.length >= 2) return 'award-collector';
+  if (player.bestEvent && player.bestEvent.rating >= player.actualRating + 0.14)
+    return 'signature-peak';
+  if (pressureDelta >= 0.04) return 'big-stage-riser';
+  if (player.weakEventCount === 0 && player.strongEventCount >= 4) return 'metronome';
+  if (player.trophies.length >= 2) return 'trophy-engine';
+  if (player.teams.length > 1) return 'reinvention';
+  if (bigEventDelta >= 0.04) return 'big-event-proof';
+  if (!player.mvpTournaments.length && player.trophies.length <= 1)
+    return 'numbers-without-silverware';
+
+  return 'quietly-elite';
+}
+
+function getTopPlayersOfYearCeilingSentence(
+  player: TopPlayerOfYearCandidate,
+  rank: number,
+  seed: number,
+) {
+  const rankTone = getTopPlayersOfYearRankTone(rank);
+  const weakPlacementContext = getTopPlayersOfYearPlacementContext(player.weakEvent);
+
+  if (rank === 1) {
+    return pickVariant(
+      [
+        `That blend of peak, consistency and silverware is what carried him all the way to No. 1.`,
+        `The closest challengers could match one part of his year, but not the combination of big-event rating and award-winning tournaments.`,
+        `He had the best mix at the top: a strong enough baseline, the right trophies and a tournament peak that mattered.`,
+      ],
+      seed,
+    );
+  }
+
+  if (player.weakEvent) {
+    return pickVariant(
+      [
+        `${topPlayersCompetitionLink(
+          player.weakEvent.competitionId,
+          player.weakEvent.name,
+        )} was the roughest entry on the calendar, with ${getTopPlayersOfYearRatingColorLabel(
+          player.weakEvent.rating,
+        )} rating over ${mapCountLabel(
+          player.weakEvent.maps,
+        )}${weakPlacementContext ? ` ${weakPlacementContext}` : ''}.`,
+        `The most obvious missed opportunity came at ${topPlayersCompetitionLink(
+          player.weakEvent.competitionId,
+          player.weakEvent.name,
+        )}, where he slipped to ${getTopPlayersOfYearRatingColorLabel(
+          player.weakEvent.rating,
+        )} across ${mapCountLabel(
+          player.weakEvent.maps,
+        )}${weakPlacementContext ? ` ${weakPlacementContext}` : ''}.`,
+        `That low point did not undo the season, but ${formatRating(
+          player.weakEvent.rating,
+        )} at ${topPlayersCompetitionLink(
+          player.weakEvent.competitionId,
+          player.weakEvent.name,
+        )}${weakPlacementContext ? ` ${weakPlacementContext}` : ''} left him short of the players with cleaner elite-event records.`,
+      ],
+      seed + 1,
+    );
+  }
+
+  if (!player.mvpTournaments.length) {
+    return pickVariant(
+      [
+        `The missing piece was an MVP-level tournament, leaving the year solid but short on a single runaway peak.`,
+        `Without an MVP medal, he needed repeated quality rather than one defining award run.`,
+        `The year lacked the kind of runaway tournament that moved others higher, particularly against players with MVPs on elite stages.`,
+      ],
+      seed + 2,
+    );
+  }
+
+  if (!player.trophies.length) {
+    return pickVariant(
+      [
+        `His own level was stronger than the team results around it, which is why the ceiling stopped here.`,
+        `A thinner trophy record kept the season from reading like a full Player of the Year challenge.`,
+        `The numbers traveled further than the silverware, and that difference shaped the final slot.`,
+      ],
+      seed + 3,
+    );
+  }
+
+  return pickVariant(
+    [
+      `What he missed was one extra heavyweight argument, whether that was an MVP, a better Major or a trophy run built around his numbers.`,
+      `The players above him had one more thing to point to: a louder peak, a deeper playoff record or more silverware beside the same level.`,
+      `There were not many holes, but there also was not quite enough overwhelming evidence to break into the next tier.`,
+    ],
+    seed + 4,
+  );
+}
+
+function compactTopPlayersOfYearAnalysis(sentences: string[]) {
+  const seen = new Set<string>();
+
+  return sentences
+    .filter((sentence) => {
+      const normalized = sentence.trim();
+
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, 6)
+    .join(' ');
+}
+
+function getTopPlayersOfYearOpeningSentence(
+  player: TopPlayerOfYearCandidate,
+  rank: number,
+  year: number,
+  seed: number,
+) {
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+  const teamLabel = player.teamId ? teamLink({ id: player.teamId, name: player.teamName }) : null;
+  const roleNoun = getTopPlayersOfYearRoleNoun(player);
+  const ageRole = player.playerAge ? `${player.playerAge}-year-old ${roleNoun}` : roleNoun;
+  const placement = rank === 1 ? `finishes ${year} as LIGA's No. 1 player` : `places No. ${rank}`;
+  const listName = `LIGA's Top 20 players of ${year}`;
+  const shortReason = (() => {
+    if (player.mvpTournaments.length >= 2) return 'a year stacked with MVP-level peaks';
+    if (player.bestEvent) return `his standout run at ${player.bestEvent.name}`;
+    if (player.pressureRating >= player.actualRating + 0.03) return 'his late-tournament level';
+    if (player.trophies.length >= 2) return 'the trophies that came with his numbers';
+    if (player.bigEventRating >= player.actualRating + 0.03)
+      return 'how well his level held at bigger events';
+    if (!player.trophies.length)
+      return 'individual output that outgrew the team results around him';
+    return 'a season that kept producing useful evidence';
+  })();
+  const teamTail = teamLabel ? ` in ${teamLabel} colors` : '';
+  const roleTail = `, with the ${ageRole} leaning on ${shortReason}`;
+
+  return pickVariant(
+    [
+      `${playerLabel} ${placement} in ${listName}${teamTail}${roleTail}.`,
+      `${playerLabel} comes in at No. ${rank} in ${listName}${teamTail}, carried by ${shortReason}.`,
+      `${playerLabel}'s ${year} campaign earns him No. ${rank} in ${listName}, a spot built on ${shortReason}.`,
+      `No. ${rank} in ${listName} goes to ${playerLabel}, whose case rested on ${shortReason}.`,
+      `${playerLabel} takes the No. ${rank} spot on ${listName} after a season defined by ${shortReason}.`,
+      `${playerLabel} lands at No. ${rank} on the ${year} list, with ${shortReason} at the center of his argument.`,
+      `${playerLabel} is ranked No. ${rank} for ${year}, turning ${shortReason} into a Top 20 finish.`,
+      `${playerLabel} claims No. ${rank} in ${listName}${teamTail} after making ${shortReason} hard to ignore.`,
+      `${playerLabel} settles into No. ${rank} on the year-end list, his place secured by ${shortReason}.`,
+      `${playerLabel} reaches No. ${rank} in ${listName}, helped most by ${shortReason}.`,
+      `${playerLabel}'s name appears at No. ${rank} on ${listName}, the reward for ${shortReason}.`,
+      `${playerLabel} opens his article at No. ${rank} in ${listName}, where ${shortReason} did most of the lifting.`,
+      `${playerLabel} is the No. ${rank} player of ${year}, a finish shaped by ${shortReason}.`,
+      `${playerLabel} ends the year at No. ${rank}, with ${shortReason} separating him from the next group.`,
+      `${playerLabel} breaks into the No. ${rank} slot on ${listName} thanks to ${shortReason}.`,
+      `${playerLabel} holds No. ${rank} in the ${year} Top 20, his season pushed forward by ${shortReason}.`,
+      `${playerLabel} makes No. ${rank} on ${listName}, and the route there began with ${shortReason}.`,
+      `${playerLabel}'s final position is No. ${rank}, a ranking backed by ${shortReason}.`,
+      `${playerLabel} finishes No. ${rank} among ${year}'s best, with ${shortReason} giving the year its shape.`,
+      `${playerLabel} takes his place at No. ${rank}, where ${shortReason} outweighed the flaws around the year.`,
+      `${playerLabel} arrives at No. ${rank} after building a case around ${shortReason}.`,
+      `${playerLabel} slots in at No. ${rank} on ${listName}, the product of ${shortReason}.`,
+      `${playerLabel} is placed No. ${rank} after a year whose strongest argument was ${shortReason}.`,
+      `${playerLabel} finishes the countdown in No. ${rank}, leaning on ${shortReason}.`,
+      `${playerLabel} earns the No. ${rank} position as ${shortReason} kept him in the Top 20 conversation.`,
+      `${playerLabel}'s No. ${rank} finish comes from ${shortReason}, not from volume alone.`,
+      `${playerLabel} takes No. ${rank} in ${listName} after giving the season a clear thread through ${shortReason}.`,
+      `${playerLabel} places No. ${rank}, with ${shortReason} making his year read like more than steady numbers.`,
+      `${playerLabel} is No. ${rank} for ${year}, a ranking made convincing by ${shortReason}.`,
+      `${playerLabel} reaches the No. ${rank} rung after a campaign anchored by ${shortReason}.`,
+      `${playerLabel} finishes at No. ${rank} in ${listName}; the headline was ${shortReason}.`,
+      `${playerLabel} occupies No. ${rank} after a year in which ${shortReason} kept coming back into view.`,
+      `${playerLabel} is the No. ${rank} name on the list, backed first by ${shortReason}.`,
+      `${playerLabel} ends up No. ${rank}, with ${shortReason} doing more for his case than volume alone.`,
+      `${playerLabel} makes the No. ${rank} spot his own through ${shortReason}.`,
+      `${playerLabel} is listed at No. ${rank}, his season held together by ${shortReason}.`,
+      `${playerLabel} reaches No. ${rank} after turning ${shortReason} into a year-end argument.`,
+      `${playerLabel} closes ${year} at No. ${rank}, with ${shortReason} carrying the clearest weight.`,
+      `${playerLabel} is placed No. ${rank} on the year-end ranking after a campaign powered by ${shortReason}.`,
+      `${playerLabel} takes the No. ${rank} line in ${listName}${teamTail}, and ${shortReason} explains why.`,
+    ],
+    seed,
+  );
+}
+
+function getTopPlayersOfYearRmrSentence(player: TopPlayerOfYearCandidate, seed: number) {
+  if (!player.rmrEvent) {
+    return null;
+  }
+
+  const event = player.rmrEvent;
+  const eventLabel = topPlayersCompetitionLink(event.competitionId, event.name);
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+  const placementLabel =
+    event.placement != null
+      ? `${Util.toOrdinalSuffix(event.placement)} place`
+      : 'their final place';
+  const ratingLabel = `${formatRating(event.rating)} over ${mapCountLabel(event.maps)}`;
+  const texture =
+    event.placement != null && event.placement <= 3 && event.rating >= 1.05
+      ? 'made qualification look controlled'
+      : event.placement != null && event.placement >= 8
+        ? 'left more tension in the route than the team would have wanted'
+        : event.rating < 1
+          ? 'was more about surviving than starring'
+          : 'kept the Major route on track';
+
+  return pickVariant(
+    [
+      `The Major path started at ${eventLabel}, where ${playerLabel} posted ${ratingLabel} as ${placementLabel} ${texture}.`,
+      `${eventLabel} was the first checkpoint, and ${playerLabel}'s ${ratingLabel} helped turn it into ${placementLabel}.`,
+      `Before the Major itself, ${playerLabel} came through ${eventLabel} with ${ratingLabel}, a run that ${texture}.`,
+      `${playerLabel}'s RMR did not disappear from the story: ${ratingLabel} at ${eventLabel}, ending in ${placementLabel}.`,
+      `The RMR stage gave the year its first pressure test, with ${playerLabel} putting up ${ratingLabel} at ${eventLabel}.`,
+      `At ${eventLabel}, ${playerLabel} gave his team ${ratingLabel}; whether smooth or tense, ${placementLabel} kept the campaign alive.`,
+      `${eventLabel} set up the Major run, and ${playerLabel}'s ${ratingLabel} meant the qualifier was part of the case rather than a footnote.`,
+      `The route through ${eventLabel} ${texture}, with ${playerLabel} averaging ${ratingLabel}.`,
+      `${playerLabel} did his RMR work at ${eventLabel}, where ${ratingLabel} was enough for ${placementLabel}.`,
+      `The year had an early Major checkpoint at ${eventLabel}: ${ratingLabel} from ${playerLabel} and ${placementLabel} for the team.`,
+      `${eventLabel} was not the headline event, but ${playerLabel}'s ${ratingLabel} there helped frame what came next.`,
+      `At the RMR, ${playerLabel} kept the story moving with ${ratingLabel} at ${eventLabel}.`,
+      `${playerLabel}'s ${eventLabel} showing, ${ratingLabel}, gave the Major campaign a base to work from.`,
+      `The Major route went through ${eventLabel}, where ${playerLabel} landed at ${ratingLabel} on the way to ${placementLabel}.`,
+      `${eventLabel} mattered because it set the table; ${playerLabel} answered with ${ratingLabel}.`,
+      `The qualifier was handled at ${eventLabel}, where ${playerLabel}'s ${ratingLabel} helped deliver ${placementLabel}.`,
+      `${playerLabel} came out of ${eventLabel} with ${ratingLabel}, a useful sign before the calendar grew heavier.`,
+      `There was RMR evidence too: ${playerLabel} averaged ${ratingLabel} at ${eventLabel}.`,
+      `${eventLabel} gave ${playerLabel} an early chance to steady the year, and ${ratingLabel} did the job.`,
+      `The first part of the Major story was ${eventLabel}, where ${playerLabel} turned in ${ratingLabel}.`,
+      `RMR form can vanish in a Top 20 case, but ${playerLabel}'s ${ratingLabel} at ${eventLabel} belongs in the recap.`,
+      `${playerLabel} helped get the Major route through ${eventLabel}, pairing ${ratingLabel} with ${placementLabel}.`,
+      `${eventLabel} was either the warning light or the springboard, depending on the read, but ${playerLabel}'s ${ratingLabel} kept it relevant.`,
+      `The road to the Major began with ${eventLabel}, and ${playerLabel}'s ${ratingLabel} made that step worth mentioning.`,
+      `${playerLabel} did not leave the RMR empty-handed, finishing ${eventLabel} with ${ratingLabel}.`,
+      `At ${eventLabel}, ${playerLabel} put down ${ratingLabel}; it was the kind of qualifier work that shaped the later Major story.`,
+      `${eventLabel} was not a glamour stop, but ${playerLabel}'s ${ratingLabel} there helped decide how clean the route looked.`,
+      `${playerLabel}'s year passed through ${eventLabel}, where ${ratingLabel} was attached to ${placementLabel}.`,
+      `The RMR chapter came at ${eventLabel}: ${ratingLabel} for ${playerLabel}, with ${texture}.`,
+      `${playerLabel} used ${eventLabel} to keep the Major door open, adding ${ratingLabel} before the bigger stage arrived.`,
+      `In the RMR, ${playerLabel} finished ${eventLabel} at ${ratingLabel}, a small but useful piece of the year.`,
+      `${eventLabel} gave the campaign its qualifier stress test, and ${playerLabel}'s ${ratingLabel} helped settle it.`,
+      `${playerLabel}'s RMR line at ${eventLabel} was ${ratingLabel}, enough to keep the season's Major thread intact.`,
+      `The qualifier piece was ${eventLabel}, where ${playerLabel} added ${ratingLabel} to the year-end file.`,
+      `${playerLabel} came through the ${eventLabel} checkpoint with ${ratingLabel}, making the route to the Major feel ${event.placement != null && event.placement <= 3 ? 'clean' : 'earned'}.`,
+    ],
+    seed,
+  );
+}
+
+function getTopPlayersOfYearWeakEventSentence(player: TopPlayerOfYearCandidate, seed: number) {
+  if (!player.weakEvent) {
+    return null;
+  }
+
+  const event = player.weakEvent;
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+  const eventLabel = topPlayersCompetitionLink(event.competitionId, event.name);
+  const placementContext = getTopPlayersOfYearPlacementContext(event);
+  const ratingLabel = `${formatRating(event.rating)} over ${mapCountLabel(event.maps)}`;
+
+  return pickVariant(
+    [
+      `The blemish was ${eventLabel}, where ${playerLabel} dropped to ${ratingLabel}${placementContext ? ` ${placementContext}` : ''}.`,
+      `${eventLabel} kept the year from looking spotless, with ${playerLabel} finishing that stop at ${ratingLabel}${placementContext ? ` ${placementContext}` : ''}.`,
+      `The low point came at ${eventLabel}: ${ratingLabel} from ${playerLabel}${placementContext ? ` ${placementContext}` : ''}.`,
+      `${playerLabel}'s roughest tournament was ${eventLabel}, a ${ratingLabel} run that checked the ceiling of his case.`,
+      `There was a dip to account for at ${eventLabel}, where ${playerLabel} managed ${ratingLabel}.`,
+      `${eventLabel} was the event that pulled against the rest of the resume, as ${playerLabel} posted ${ratingLabel}.`,
+      `The year was not clean all the way through; ${eventLabel} left ${playerLabel} with ${ratingLabel}.`,
+      `${playerLabel} still had to carry ${eventLabel} in the final read, a ${ratingLabel} showing${placementContext ? ` ${placementContext}` : ''}.`,
+      `If there was a counterargument, it started at ${eventLabel}, where ${playerLabel} ended on ${ratingLabel}.`,
+      `${eventLabel} gave the ranking a reason to pause, even if ${playerLabel}'s stronger events around it did enough.`,
+      `The clearest stumble was ${eventLabel}, where ${playerLabel}'s ${ratingLabel} sat below the rest of his year.`,
+      `${playerLabel}'s weaker side showed at ${eventLabel}, a ${ratingLabel} tournament that had to be weighed against his peaks.`,
+    ],
+    seed,
+  );
+}
+
+function getTopPlayersOfYearRoundLabel(
+  match: NonNullable<TopPlayerOfYearCandidate['signatureMatch']>,
+) {
+  if (match.round == null) {
+    return 'playoff series';
+  }
+
+  if (match.totalRounds != null) {
+    return Util.parseCupRounds(match.round, match.totalRounds).toLocaleLowerCase();
+  }
+
+  return `round ${match.round}`;
+}
+
+function getTopPlayersOfYearMatchResultLabel(
+  match: NonNullable<TopPlayerOfYearCandidate['signatureMatch']>,
+) {
+  const opponentLabel = match.opponentTeamName
+    ? teamLink({ id: match.opponentTeamId, name: match.opponentTeamName })
+    : 'the opposition';
+  const scoreline =
+    match.teamScore != null && match.opponentScore != null
+      ? `${match.teamScore}-${match.opponentScore}`
+      : null;
+
+  if (match.won === true) {
+    return scoreline ? `${scoreline} win over ${opponentLabel}` : `win over ${opponentLabel}`;
+  }
+
+  if (match.won === false) {
+    return scoreline ? `${scoreline} loss to ${opponentLabel}` : `loss to ${opponentLabel}`;
+  }
+
+  return scoreline
+    ? `${scoreline} series against ${opponentLabel}`
+    : `series against ${opponentLabel}`;
+}
+
+function getTopPlayersOfYearSignatureSentence(player: TopPlayerOfYearCandidate, seed: number) {
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+
+  if (player.signatureMatch) {
+    const match = player.signatureMatch;
+    const eventLabel = topPlayersCompetitionLink(match.competitionId, match.name);
+    const roundLabel = getTopPlayersOfYearRoundLabel(match);
+    const resultLabel = getTopPlayersOfYearMatchResultLabel(match);
+    const ratingLabel = `${formatRating(match.rating)} over ${mapCountLabel(match.maps)}`;
+
+    return pickVariant(
+      [
+        `The sharpest playoff snapshot came at ${eventLabel}, where ${playerLabel} posted ${ratingLabel} in a ${roundLabel} ${resultLabel}.`,
+        `${eventLabel} supplied the match-level highlight: ${ratingLabel} from ${playerLabel} in a ${roundLabel} ${resultLabel}.`,
+        `In the ${eventLabel} ${roundLabel}, ${playerLabel}'s ${ratingLabel} stood out from the ${resultLabel}.`,
+        `${playerLabel}'s most useful late-event evidence was a ${ratingLabel} showing in the ${eventLabel} ${roundLabel}, a ${resultLabel}.`,
+        `The playoffs gave him a clean reference point at ${eventLabel}: ${ratingLabel} in the ${roundLabel} ${resultLabel}.`,
+        `When the bracket tightened at ${eventLabel}, ${playerLabel} answered with ${ratingLabel} in the ${roundLabel} ${resultLabel}.`,
+        `${playerLabel} had a playoff line to point at too, putting up ${ratingLabel} during the ${eventLabel} ${roundLabel}.`,
+        `The heaviest single series in his case was the ${eventLabel} ${roundLabel}, where ${ratingLabel} came in a ${resultLabel}.`,
+        `${eventLabel} gave the article its match beat: ${playerLabel} at ${ratingLabel} in the ${roundLabel} ${resultLabel}.`,
+        `${playerLabel}'s late-tournament form showed up in the ${eventLabel} ${roundLabel}, a ${resultLabel} backed by ${ratingLabel}.`,
+        `There was a concrete playoff moment behind the numbers, with ${playerLabel} recording ${ratingLabel} in the ${eventLabel} ${roundLabel}.`,
+        `The clearest bracket-stage proof came in the ${eventLabel} ${roundLabel}: ${ratingLabel} from ${playerLabel}.`,
+        `${playerLabel} did some of his loudest work in a ${roundLabel} ${resultLabel} at ${eventLabel}, finishing it at ${ratingLabel}.`,
+        `The ${eventLabel} ${roundLabel} put his year under brighter lights, and ${playerLabel} responded with ${ratingLabel}.`,
+        `${playerLabel}'s best pressure series came at ${eventLabel}, where ${ratingLabel} framed the ${roundLabel} ${resultLabel}.`,
+        `The story had a playoff anchor in ${eventLabel}'s ${roundLabel}, where ${playerLabel} delivered ${ratingLabel}.`,
+        `${eventLabel} was where the match sample became more than background noise: ${ratingLabel} in a ${roundLabel} ${resultLabel}.`,
+        `In one of the year's heavier matches, ${playerLabel} hit ${ratingLabel} at ${eventLabel}.`,
+        `${playerLabel} found one of his best series under pressure at ${eventLabel}, posting ${ratingLabel} in the ${roundLabel}.`,
+        `The ${roundLabel} at ${eventLabel} gave ${playerLabel} a proper article moment, a ${ratingLabel} series in a ${resultLabel}.`,
+        `${playerLabel}'s playoff case included ${ratingLabel} at ${eventLabel}, the kind of series that keeps a ranking from feeling abstract.`,
+        `At ${eventLabel}, the ${roundLabel} became a showcase for ${playerLabel}: ${ratingLabel} in a ${resultLabel}.`,
+        `${playerLabel} added late-event weight with ${ratingLabel} in the ${eventLabel} ${roundLabel}.`,
+        `The standout series was not hidden in groups; it came at ${eventLabel}, where ${playerLabel} put up ${ratingLabel}.`,
+        `${playerLabel} gave the year a bracket-stage spike at ${eventLabel}, ending the ${roundLabel} at ${ratingLabel}.`,
+        `The ${eventLabel} ${roundLabel} was one of the cleaner examples of ${playerLabel}'s level traveling into pressure matches.`,
+        `${playerLabel}'s ${ratingLabel} in the ${eventLabel} ${roundLabel} was the sort of detail a Top 20 case needs.`,
+        `A ${ratingLabel} ${eventLabel} ${roundLabel} performance gave ${playerLabel}'s year a late-tournament scene.`,
+        `${playerLabel} turned the ${eventLabel} ${roundLabel} into a useful reference point with ${ratingLabel}.`,
+        `The pressure-match line that jumps out is ${ratingLabel} from ${playerLabel} in the ${eventLabel} ${roundLabel}.`,
+        `There was also a direct playoff hook: ${ratingLabel} at ${eventLabel} in a ${roundLabel} ${resultLabel}.`,
+        `${playerLabel} did not need the reader to guess at his bracket form; ${eventLabel} gave him ${ratingLabel} in the ${roundLabel}.`,
+        `The article's match beat comes from ${eventLabel}, where ${playerLabel}'s ${ratingLabel} carried real playoff weight.`,
+      ],
+      seed,
+    );
+  }
+
+  if (player.mvpTournaments.length) {
+    const mvpList = formatTopPlayersLinkedCompetitionList(player.mvpTournaments);
+
+    return pickVariant(
+      [
+        `${mvpList} gave ${playerLabel} award weight, turning his best stretches into more than just strong stat lines.`,
+        `The MVP recognition at ${mvpList} supplied the headline moment his season needed.`,
+        `${playerLabel}'s MVP work at ${mvpList} made the peak of the year easy to identify.`,
+        `The award trail ran through ${mvpList}, where ${playerLabel} converted form into silverware-level recognition.`,
+        `His year had an MVP chapter at ${mvpList}, the kind of named peak that separates Top 20 cases.`,
+        `${mvpList} was the tournament evidence with an award attached, and ${playerLabel} made it count.`,
+        `${playerLabel}'s MVP${player.mvpTournaments.length === 1 ? '' : 's'} at ${mvpList} gave the season its clearest high point.`,
+        `The difference between good form and a headline was ${mvpList}, where ${playerLabel} earned MVP honors.`,
+      ],
+      seed + 1,
+    );
+  }
+
+  if (player.trophies.length) {
+    return pickVariant(
+      [
+        `The team results gave the numbers weight too, especially the title run${player.trophies.length === 1 ? '' : 's'} at ${formatTopPlayersLinkedCompetitionList(player.trophies)}.`,
+        `${playerLabel}'s production came with winning attached, including ${formatTopPlayersLinkedCompetitionList(player.trophies)}.`,
+        `The trophy side of the case ran through ${formatTopPlayersLinkedCompetitionList(player.trophies)}, where his form had consequence.`,
+        `Winning helped the case, with ${playerLabel} lifting ${formatTopPlayersLinkedCompetitionList(player.trophies)} during the year.`,
+      ],
+      seed + 2,
+    );
+  }
+
+  return pickVariant(
+    [
+      `${playerLabel} did not have one trophy-lifting moment to lean on, so the case had to come from repeated high-level events.`,
+      `Without a single defining award run, ${playerLabel}'s year needed its better events to stack up cleanly.`,
+      `The thinner trophy record kept the ceiling in check, but ${playerLabel}'s own level still carried enough weight.`,
+      `There was no easy award shortcut here; ${playerLabel} made the list through the amount of usable form he produced.`,
+    ],
+    seed + 3,
+  );
+}
+
+function getTopPlayersOfYearSeasonSentence(player: TopPlayerOfYearCandidate, seed: number) {
+  const playerLabel = playerLink({ id: player.playerId, name: player.playerName });
+  const teamSentence = getTopPlayersOfYearTeamStory(player, seed + 1);
+  const bestEventLabel = player.bestEvent
+    ? topPlayersCompetitionLink(player.bestEvent.competitionId, player.bestEvent.name)
+    : null;
+  const bestEventText = player.bestEvent
+    ? `${formatRating(player.bestEvent.rating)} across ${mapCountLabel(player.bestEvent.maps)} at ${bestEventLabel}`
+    : `${formatRating(player.actualRating)} across ${mapCountLabel(player.actualMaps)}`;
+  const bigEventText = `${formatRating(player.bigEventRating)} over ${mapCountLabel(player.bigEventMaps)} at big events`;
+  const weakText = player.weakEvent
+    ? `${topPlayersCompetitionLink(player.weakEvent.competitionId, player.weakEvent.name)} was the low point at ${formatRating(player.weakEvent.rating)}`
+    : 'there was no single event that badly bent the year out of shape';
+
+  if (!player.bestEvent) {
+    return pickVariant(
+      [
+        `${teamSentence} Without one runaway tournament, ${playerLabel}'s case came from ${formatRating(player.actualRating)} across ${mapCountLabel(player.actualMaps)} and ${bigEventText}.`,
+        `${playerLabel} did not have a single event doing all the work, so the value came from how often he kept the level intact.`,
+        `The season was built more on repeat performances than one obvious spike, with ${bigEventText} giving the case its weight.`,
+        `There was no one-stop peak to point at, but ${playerLabel} stayed relevant through ${formatRating(player.actualRating)} across ${mapCountLabel(player.actualMaps)}.`,
+        `${playerLabel}'s year needed repeated good events to matter, and ${bigEventText} made that pattern credible.`,
+        `The appeal was not a single tournament explosion; it was the amount of useful form ${playerLabel} carried through the year.`,
+        `${weakText}, but the full read still had ${bigEventText} to support it.`,
+        `The case was steadier than spectacular, centered on ${bigEventText} rather than one standout week.`,
+        `${playerLabel} kept enough good maps on the board for the year to hold together without a named peak.`,
+        `No single event took over the article, which left ${playerLabel}'s full-year ${formatRating(player.actualRating)} and bigger-event form to tell the story.`,
+        `This was a volume-and-context case: ${formatRating(player.actualRating)} overall, ${bigEventText}, and enough late-event value to stay on the list.`,
+        `${teamSentence} The year then became a question of whether the steady output was enough, and ${bigEventText} answered most of it.`,
+      ],
+      seed + 4,
+    );
+  }
+
+  return pickVariant(
+    [
+      `${teamSentence} The season then found its strongest shape through ${bestEventText}, with ${bigEventText} keeping the wider case alive.`,
+      `${playerLabel}'s year reads best as a climb from steady team work into ${bestEventText}.`,
+      `The campaign did not rely on empty volume: ${bestEventText} gave it a peak, while ${bigEventText} kept it from being a one-event case.`,
+      `Across the year, ${playerLabel} mixed ${bestEventText} with ${bigEventText}.`,
+      `The main thread was simple enough: stay useful across the calendar, then spike with ${bestEventText}.`,
+      `${playerLabel}'s strongest stretch was ${bestEventText}, but the ranking survived because the bigger-event line stayed at ${bigEventText}.`,
+      `The year had a clear middle chapter in ${bestEventText}, and it was backed by ${bigEventText}.`,
+      `Rather than one stray hot week, ${playerLabel} paired ${bestEventText} with a bigger-event sample of ${bigEventText}.`,
+      `${playerLabel} gave the season a peak in ${bestEventText}; ${weakText}.`,
+      `The best version of the year arrived with ${bestEventText}, and the rest of the calendar did enough not to waste it.`,
+      `The case sharpened around ${bestEventText}, especially because ${bigEventText} held up behind it.`,
+      `${playerLabel}'s year was not perfectly clean, but ${bestEventText} gave it a point of focus.`,
+      `A Top 20 case needs a spine, and for ${playerLabel} it was ${bestEventText} plus ${bigEventText}.`,
+      `The season moved from baseline value into a real peak through ${bestEventText}.`,
+      `${playerLabel} was at his most convincing with ${bestEventText}, a stretch that made the rest of the numbers easier to trust.`,
+      `The calendar kept returning to the same idea: ${playerLabel} was useful often, and at his best he reached ${bestEventText}.`,
+      `The year did not ask readers to accept one flat rating line; ${bestEventText} was the clearest scene in it.`,
+      `${playerLabel}'s best tournament evidence was ${bestEventText}, with ${bigEventText} showing the level traveled beyond that stop.`,
+      `The story was strongest when the calendar reached ${bestEventLabel || 'his best events'}, where ${playerLabel} put together ${bestEventText}.`,
+      `From event to event, ${playerLabel} kept enough form on the board for ${bestEventText} to become decisive.`,
+      `${weakText}, but the better side of the year was still ${bestEventText}.`,
+      `The season had texture: ${weakText}, while the high point came through ${bestEventText}.`,
+      `${playerLabel}'s case worked because the best event was not isolated from everything else: ${bigEventText} backed it up.`,
+      `The strongest proof was ${bestEventText}, and the supporting proof was the ${bigEventText} line.`,
+      `The year had a natural peak at ${bestEventLabel || 'his best event'}, where ${playerLabel} reached ${bestEventText}.`,
+      `${playerLabel} kept the year moving through ${bigEventText}, then gave it a headline with ${bestEventText}.`,
+      `The stronger tournaments did not wash him away, as ${bigEventText} sat close enough to the full-year level.`,
+      `There was a proper event story behind the ranking: ${bestEventText}, then enough follow-up form to keep it relevant.`,
+      `${playerLabel}'s peak was not mysterious; it was ${bestEventText}.`,
+      `The year had more than volume behind it because ${bestEventText} gave it a tournament scene.`,
+      `${playerLabel} built his case around ${bestEventText}, while ${weakText}.`,
+      `The balance of the year was peak plus survival: ${bestEventText}, with ${weakText}.`,
+      `${teamSentence} From there, ${bestEventText} became the article's clearest performance marker.`,
+      `The ranking case started with consistency and became convincing through ${bestEventText}.`,
+      `${playerLabel}'s year had enough of a route to follow: team context first, ${bestEventText} as the peak, and ${bigEventText} as support.`,
+    ],
+    seed,
+  );
+}
+
+export function buildTopPlayersOfYearAnalysis(
+  player: TopPlayerOfYearCandidate,
+  rank: number,
+  year: number,
+  history?: TopPlayerOfYearHistory,
+  comparison?: TopPlayerOfYearComparison,
+) {
+  const seed = player.playerId * 31 + rank * 97;
+  const openingSentence = getTopPlayersOfYearOpeningSentence(player, rank, year, seed);
+  const comparisonSentence = getTopPlayersOfYearComparisonSentence(
+    player,
+    rank,
+    comparison,
+    seed + 15,
+  );
+  const careerSentence = getTopPlayersOfYearCareerArcSentence(
+    player,
+    rank,
+    year,
+    history,
+    seed,
+    year > 2026,
+  );
+  const rmrSentence = getTopPlayersOfYearRmrSentence(player, seed + 25);
+  const weakEventSentence = getTopPlayersOfYearWeakEventSentence(player, seed + 30);
+  const seasonSentence = getTopPlayersOfYearSeasonSentence(player, seed + 35);
+  const signatureSentence = getTopPlayersOfYearSignatureSentence(player, seed + 45);
+
+  return compactTopPlayersOfYearAnalysis([
+    openingSentence,
+    ...(careerSentence ? [careerSentence] : []),
+    ...(rmrSentence ? [rmrSentence] : []),
+    ...(weakEventSentence ? [weakEventSentence] : []),
+    seasonSentence,
+    signatureSentence,
+    comparisonSentence,
+  ]);
+}
+
+function buildTopPlayersOfYearEntry(_player: TopPlayerOfYearCandidate, rank: number) {
+  return `::top-player-ranking{rank=${rank}}`;
+}
+
+async function buildTopPlayersOfYearDraft(
+  publishedAt: Date,
+  allMvps: CompetitionMvpSeed[],
+): Promise<NewsDraft | null> {
+  if (!isTopPlayersOfYearDate(publishedAt)) {
+    return null;
+  }
+
+  const year = publishedAt.getFullYear();
+  const ranking = await getTopPlayersOfYearCandidates(publishedAt, allMvps);
+  const historyByPlayerId = await getTopPlayersOfYearHistory(year);
+
+  if (ranking.length < TOP_PLAYERS_OF_YEAR_SIZE) {
+    return null;
+  }
+
+  const leader = ranking[0];
+  const rankingEntries = ranking.map((player, index) =>
+    buildTopPlayersOfYearEntry(player, index + 1),
+  );
+
+  return {
+    type: 'ARTICLE',
+    topic: 'RANKINGS',
+    headline: `Top 20 players of ${year}`,
+    summary: `${leader.playerName} finishes the year as LIGA's number one player`,
+    body: rankingEntries.join('\n\n'),
+    image: playerImage(
+      { avatar: leader.playerAvatar },
+      { blazon: leader.teamBlazon || 'resources://blazonry/noteam.svg' },
+    ),
+    priority: 96,
+    eventKey: `${AUTO_EVENT_PREFIX}:top-players:${year}`,
+    payload: {
+      flagCode: 'other',
+      year,
+      methodology: {
+        minimumBigEventMaps: TOP_PLAYERS_OF_YEAR_MIN_BIG_EVENT_MAPS,
+        minimumMaps: TOP_PLAYERS_OF_YEAR_MIN_MAPS,
+        rankingSize: TOP_PLAYERS_OF_YEAR_SIZE,
+      },
+      relatedPlayers: ranking
+        .map((player) =>
+          toRelatedPlayer({
+            id: player.playerId,
+            name: player.playerName,
+            avatar: player.playerAvatar,
+            country: player.playerCountryCode ? { code: player.playerCountryCode } : null,
+          }),
+        )
+        .filter(Boolean),
+      relatedTeams: ranking
+        .map((player) =>
+          toRelatedTeam({
+            id: player.teamId,
+            name: player.teamName,
+            blazon: player.teamBlazon,
+          }),
+        )
+        .filter(Boolean),
+      ranking: ranking.map((player, index) => ({
+        rank: index + 1,
+        playerId: player.playerId,
+        playerName: player.playerName,
+        playerAvatar: player.playerAvatar,
+        teamId: player.teamId,
+        teamName: player.teamName,
+        rating: Number(formatRating(player.actualRating)),
+        notableRating: Number(formatRating(player.notableRating)),
+        bigEventRating: Number(formatRating(player.bigEventRating)),
+        pressureRating: Number(formatRating(player.pressureRating)),
+        score: Number(player.score.toFixed(2)),
+        maps: player.actualMaps,
+        notableMaps: player.maps,
+        bigEventMaps: player.bigEventMaps,
+        eliteMaps: player.eliteMaps,
+        mvps: player.mvpCount,
+        top20History: historyByPlayerId.get(player.playerId) || null,
+        teams: player.teams,
+        mvpTournaments: player.mvpTournaments.map((mvp) => ({
+          competitionId: mvp.competitionId,
+          name: mvp.name,
+        })),
+        trophies: player.trophies.map((trophy) => ({
+          competitionId: trophy.competitionId,
+          name: trophy.name,
+          teamId: trophy.teamId,
+          teamName: trophy.teamName,
+        })),
+        strongEvents: player.strongEventCount,
+        weakEvents: player.weakEventCount,
+        bestEvent: player.bestEvent
+          ? {
+              ...player.bestEvent,
+              rating: Number(formatRating(player.bestEvent.rating)),
+            }
+          : null,
+        weakEvent: player.weakEvent
+          ? {
+              ...player.weakEvent,
+              rating: Number(formatRating(player.weakEvent.rating)),
+            }
+          : null,
+        rmrEvent: player.rmrEvent
+          ? {
+              ...player.rmrEvent,
+              rating: Number(formatRating(player.rmrEvent.rating)),
+            }
+          : null,
+        signatureMatch: player.signatureMatch
+          ? {
+              ...player.signatureMatch,
+              rating: Number(formatRating(player.signatureMatch.rating)),
+            }
+          : null,
+        flagCode: toFlagCode(player.playerCountryCode),
+        analysis: buildTopPlayersOfYearAnalysis(
+          player,
+          index + 1,
+          year,
+          historyByPlayerId.get(player.playerId),
+          {
+            above: ranking[index - 1] || null,
+            below: ranking[index + 1] || null,
+          },
+        ),
+      })),
+    },
+    publishedAt: new Date(startOfDay(publishedAt).getTime() + 20),
+  };
 }
 
 async function getCompetitionMvpStoryDate(competitionId: number, fallback: Date) {
@@ -3759,8 +6010,11 @@ export async function generateAutomaticItems(date?: Date) {
   const mvpDrafts = (
     await Promise.all(mvpSeeds.map((mvp) => buildCompetitionMvpDraft(mvp, allMvps, publishedAt)))
   ).filter(Boolean) as NewsDraft[];
+  const topPlayersOfYearDraft = includeStatistics
+    ? await buildTopPlayersOfYearDraft(publishedAt, allMvps)
+    : null;
 
-  return createDrafts([...transferDrafts, ...mvpDrafts]);
+  return createDrafts([...transferDrafts, ...mvpDrafts, topPlayersOfYearDraft].filter(Boolean));
 }
 
 export async function generatePrototypeItems() {
@@ -3789,6 +6043,5 @@ export async function clearPrototypeItems() {
 export function getDefaultNewsQuery(): Prisma.NewsItemFindManyArgs {
   return {
     orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
-    take: 100,
   };
 }

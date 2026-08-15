@@ -52,6 +52,7 @@ type HonorOccurrence = {
   teamId: number;
   season: number;
   date: Date;
+  title: string;
   tierSlug: string;
   federationSlug: string;
   location: string | null;
@@ -72,6 +73,7 @@ type HonorGroup = {
   key: string;
   count: number;
   seasons: number[];
+  titles: string[];
   tierSlug: string;
   federationSlug: string;
   location: string | null;
@@ -92,6 +94,16 @@ type RatingGame = {
 type TooltipPosition = {
   left: number;
   top: number;
+};
+
+type ActiveTooltip = TooltipPosition & {
+  content: string;
+};
+
+type Top20Appearance = {
+  articleId: number;
+  rank: number;
+  year: number;
 };
 
 const FACEIT_LEVEL_IMAGES: Record<number, string> = {
@@ -205,14 +217,40 @@ function getCompetitionTitle(
     .join(' ');
 }
 
+function parseNewsPayload(payload?: string | null) {
+  if (!payload) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(payload) as Record<string, unknown>;
+  } catch (_) {
+    return {};
+  }
+}
+
+function getTop20Year(item: Awaited<ReturnType<typeof api.news.all>>[number], payload: Record<string, unknown>) {
+  if (Number.isFinite(Number(payload.year))) {
+    return Number(payload.year);
+  }
+
+  const headlineYear = item.headline.match(/\b(20\d{2})\b/)?.[1];
+  if (headlineYear) {
+    return Number(headlineYear);
+  }
+
+  return new Date(item.publishedAt).getFullYear();
+}
+
 export default function TransferModal() {
   const location = useLocation();
   const { state } = React.useContext(AppStateContext);
   const [player, setPlayer] = React.useState<Player>();
   const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
   const [mvps, setMvps] = React.useState<MvpOccurrence[]>([]);
-  const [mvpTooltipPosition, setMvpTooltipPosition] = React.useState<TooltipPosition | null>(null);
+  const [activeTooltip, setActiveTooltip] = React.useState<ActiveTooltip | null>(null);
   const [ratingGames, setRatingGames] = React.useState<RatingGame[]>([]);
+  const [top20Appearances, setTop20Appearances] = React.useState<Top20Appearance[]>([]);
 
   React.useEffect(() => {
     if (!location.state) return;
@@ -373,6 +411,7 @@ export default function TransferModal() {
             teamId: winnerTeamId,
             season: competition.season,
             date: championshipDate,
+            title: getCompetitionTitle(competition),
             tierSlug: competition.tier.slug,
             federationSlug: competition.federation.slug,
             location: competition.location,
@@ -386,6 +425,50 @@ export default function TransferModal() {
       });
   }, [player]);
 
+  React.useEffect(() => {
+    setTop20Appearances([]);
+
+    if (!player) {
+      return;
+    }
+
+    api.news
+      .all({
+        orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
+        where: {
+          topic: 'RANKINGS',
+          type: 'ARTICLE',
+        },
+      })
+      .then((items) => {
+        const appearances = items
+          .map((item): Top20Appearance | null => {
+            const payload = parseNewsPayload(item.payload);
+            const ranking = Array.isArray(payload.ranking) ? payload.ranking : [];
+            const entry = ranking.find(
+              (row) =>
+                row &&
+                typeof row === 'object' &&
+                Number((row as Record<string, unknown>).playerId) === player.id,
+            ) as Record<string, unknown> | undefined;
+            const rank = Number(entry?.rank);
+
+            if (!entry || !Number.isFinite(rank)) {
+              return null;
+            }
+
+            return {
+              articleId: item.id,
+              rank,
+              year: getTop20Year(item, payload),
+            };
+          })
+          .filter((item): item is Top20Appearance => Boolean(item));
+
+        setTop20Appearances(appearances);
+      });
+  }, [player]);
+
   const honorGroups = React.useMemo(() => {
     return honors.reduce<Record<string, HonorGroup>>((acc, honor) => {
       if (!acc[honor.key]) {
@@ -393,6 +476,7 @@ export default function TransferModal() {
           key: honor.key,
           count: 0,
           seasons: [],
+          titles: [],
           tierSlug: honor.tierSlug,
           federationSlug: honor.federationSlug,
           location: honor.location,
@@ -402,6 +486,9 @@ export default function TransferModal() {
 
       acc[honor.key].count += 1;
       acc[honor.key].seasons.push(honor.season);
+      if (!acc[honor.key].titles.includes(honor.title)) {
+        acc[honor.key].titles.push(honor.title);
+      }
       return acc;
     }, {});
   }, [honors]);
@@ -422,26 +509,29 @@ export default function TransferModal() {
 
     return ['MVP winner at:', ...mvps.map((mvp) => mvp.title)].join('\n');
   }, [mvps]);
-  const showMvpTooltip = React.useCallback(
-    (event: React.MouseEvent<HTMLElement>) => {
+  const showTooltip = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>, content: string) => {
       const rect = event.currentTarget.getBoundingClientRect();
       const tooltipWidth = 280;
-      const tooltipHeight = Math.min(320, 32 + mvpTooltip.split('\n').length * 20);
+      const tooltipHeight = Math.min(320, 32 + content.split('\n').length * 20);
       const top =
         rect.bottom + 8 + tooltipHeight <= window.innerHeight
           ? rect.bottom + 8
           : Math.max(12, rect.top - tooltipHeight - 8);
 
-      setMvpTooltipPosition({
+      setActiveTooltip({
+        content,
         left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
         top,
       });
     },
-    [mvpTooltip],
+    [],
   );
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
+  const hasTop20Appearances = top20Appearances.length > 0;
+  const hasHonors = mvps.length > 0 || Object.keys(honorGroups).length > 0;
   const openPlayerStatistics = React.useCallback(() => {
     if (!player) return;
 
@@ -468,6 +558,17 @@ export default function TransferModal() {
     );
     api.window.close(Constants.WindowIdentifier.Modal);
   }, []);
+  const openTop20Article = React.useCallback((articleId: number) => {
+    api.window.send<ModalRequest<{ articleId: number }>>(
+      Constants.WindowIdentifier.Main,
+      {
+        target: '/news',
+        payload: { articleId },
+      },
+      0,
+    );
+    api.window.close(Constants.WindowIdentifier.Modal);
+  }, []);
 
   if (!player) {
     return (
@@ -483,7 +584,14 @@ export default function TransferModal() {
     <main className="divide-base-content/10 flex h-screen w-screen flex-col divide-y">
       {/* PLAYER CARD */}
       <section className="flex">
-        <figure className="border-base-content/10 flex h-[246px] w-1/5 items-end justify-center overflow-hidden border-b p-0">
+        <figure
+          className={cx(
+            'flex w-1/5 items-end justify-center p-0',
+            hasTop20Appearances
+              ? 'h-[278px] overflow-hidden'
+              : 'border-base-content/10 h-[246px] overflow-hidden border-b',
+          )}
+        >
           <Image
             src={player.avatar || 'resources://avatars/empty.png'}
             className="mt-auto h-[390px] w-auto max-w-none object-contain"
@@ -524,6 +632,27 @@ export default function TransferModal() {
               </td>
               <td>{player.age ? `${player.age} years` : 'N/A'}</td>
             </tr>
+            {hasTop20Appearances && (
+              <tr className="border-base-content/10 border-l">
+                <td className="py-1.5 text-xs font-bold uppercase opacity-70">Top 20</td>
+                <td colSpan={3} className="py-1.5 text-right">
+                  <span className="inline-flex max-w-full justify-end gap-2 overflow-x-auto overflow-y-hidden text-xs font-semibold whitespace-nowrap">
+                    {top20Appearances.map((appearance) => (
+                      <button
+                        key={`${appearance.articleId}-${appearance.rank}-${appearance.year}`}
+                        type="button"
+                        className="link-hover text-base-content/70 hover:text-primary cursor-pointer underline-offset-2"
+                        title={`Open Top 20 players of ${appearance.year}`}
+                        data-interaction-sound="click"
+                        onClick={() => openTop20Article(appearance.articleId)}
+                      >
+                        #{appearance.rank} ('{String(appearance.year).slice(-2)})
+                      </button>
+                    ))}
+                  </span>
+                </td>
+              </tr>
+            )}
           </tbody>
 
           <thead>
@@ -626,40 +755,45 @@ export default function TransferModal() {
         </table>
       </section>
 
-      <section className="border-base-content/10 flex min-h-12 items-center gap-4 border-t px-4 py-2">
-        {mvps.length === 0 && Object.keys(honorGroups).length === 0 && (
-          <span className="text-sm opacity-60">No honors yet.</span>
+      <section className="border-base-content/10 flex min-h-12 max-w-full min-w-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-t px-4 py-2">
+        {!hasHonors && (
+          <span className="shrink-0 text-sm opacity-60">No honors yet.</span>
         )}
         {mvps.length > 0 && (
           <div
-            className="flex items-center gap-2"
+            className="flex shrink-0 items-center gap-2"
             aria-label={mvpTooltip}
-            onMouseEnter={showMvpTooltip}
-            onMouseLeave={() => setMvpTooltipPosition(null)}
+            onMouseEnter={(event) => showTooltip(event, mvpTooltip)}
+            onMouseLeave={() => setActiveTooltip(null)}
           >
             <Image className="h-9 w-9 object-contain" src={MVP_MEDAL_SRC} />
             {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
           </div>
         )}
-        {mvpTooltipPosition &&
+        {activeTooltip &&
           createPortal(
             <div
               className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
-              style={mvpTooltipPosition}
+              style={activeTooltip}
             >
-              {mvpTooltip}
+              {activeTooltip.content}
             </div>,
             document.body,
           )}
         {Object.values(honorGroups).map((honor) => {
-          const seasonsList = [...honor.seasons]
-            .sort((a, b) => a - b)
-            .map((season) => `Season ${season}`)
-            .join(', ');
+          const honorTooltip =
+            honor.titles.length === 1
+              ? honor.titles[0]
+              : ['Tournament wins at:', ...honor.titles].join('\n');
           const isMajor = Util.isMajorStageTier(honor.tierSlug);
 
           return (
-            <div key={honor.key} className="tooltip flex items-center gap-2" data-tip={seasonsList}>
+            <div
+              key={honor.key}
+              className="flex shrink-0 cursor-help items-center gap-2"
+              onMouseEnter={(event) => showTooltip(event, honorTooltip)}
+              onMouseLeave={() => setActiveTooltip(null)}
+            >
               <span className="relative inline-flex">
                 <Image
                   className="h-12 w-12 object-contain"
@@ -754,12 +888,13 @@ export default function TransferModal() {
                     {stintHonors.length === 0 ? (
                       <span className="opacity-60">—</span>
                     ) : (
-                      <div className="flex flex-wrap items-center gap-1">
+                      <div className="flex max-w-full min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap py-1">
                         {stintHonors.map((honor, idx) => (
                           <div
                             key={`${stint.id}-${honor.key}-${honor.season}-${idx}`}
-                            className="tooltip"
-                            data-tip={`Season ${honor.season}`}
+                            className="shrink-0 cursor-help"
+                            onMouseEnter={(event) => showTooltip(event, honor.title)}
+                            onMouseLeave={() => setActiveTooltip(null)}
                           >
                             <span className="relative inline-flex">
                               <Image

@@ -427,10 +427,24 @@ function Root() {
     ['/inbox', t('navigation.inbox')],
     ['/players', t('navigation.players')],
   ];
+  const isFaceitRoute = location.pathname.startsWith('/faceit');
+
+  React.useEffect(() => {
+    document.documentElement.dataset.faceitRoute = String(isFaceitRoute);
+
+    return () => {
+      delete document.documentElement.dataset.faceitRoute;
+    };
+  }, [isFaceitRoute]);
 
   return (
     <React.StrictMode>
-      <header className="navbar border-base-content/10 bg-base-200 fixed top-0 z-50 h-16 border-b p-0">
+      <header
+        className={cx(
+          'navbar fixed top-0 z-50 h-16 border-b p-0',
+          isFaceitRoute ? 'border-[#ff7300] bg-[#0f0f0f]' : 'border-base-content/10 bg-base-200',
+        )}
+      >
         {/* HAMBURGER MENU DROPDOWN FOR SMALLER RESOLUTIONS */}
         <nav className="dropdown flex-1 p-2 xl:hidden">
           <section tabIndex={0} role="button" className="btn btn-ghost">
@@ -463,31 +477,52 @@ function Root() {
           </ul>
         </nav>
         <nav className="xl:stack-x hidden h-full w-full gap-0!">
-          {navItems.map(([id, name, isMatch]: [string, string, PathMatch | undefined]) => (
-            <button
-              key={id}
-              className={cx(
-                'btn relative h-full min-w-32',
-                'border-r-base-content/10 rounded-none border-0 border-r border-b-2 border-b-transparent',
-                'hover:border-b-primary disabled:bg-transparent!',
-                (isMatch || location.pathname === id) &&
-                  '!border-b-primary bg-base-300 cursor-default',
-              )}
-              disabled={state.working}
-              onClick={() => navigate(id)}
-            >
-              {name}
-              {id.includes('inbox') && state.emails.some((email) => !email.read) && (
-                <span className="badge-xxs badge badge-info absolute top-2 right-2" />
-              )}
-              {id.includes('news') && hasUnreadNews && (
-                <span className="badge-xxs badge badge-info absolute top-2 right-2" />
-              )}
-            </button>
-          ))}
+          {navItems.map(([id, name, isMatch]: [string, string, PathMatch | undefined]) => {
+            const isActive =
+              isMatch ||
+              location.pathname === id ||
+              (id !== '/' && location.pathname.startsWith(`${id}/`));
+
+            return (
+              <button
+                key={id}
+                className={cx(
+                  'btn relative h-full min-w-32',
+                  'border-r-base-content/10 rounded-none border-0 border-r border-b-2 border-b-transparent',
+                  isFaceitRoute && '!bg-[#0f0f0f] hover:!bg-[#111]',
+                  isFaceitRoute && '!text-[#f2f2f2] hover:!text-white',
+                  isFaceitRoute ? 'hover:border-b-[#ff7300]' : 'hover:border-b-primary',
+                  'disabled:bg-transparent!',
+                  isActive &&
+                    cx(
+                      isFaceitRoute ? '!border-b-[#ff7300]' : '!border-b-primary',
+                      isFaceitRoute ? '!bg-[#111]' : 'bg-base-300',
+                      'cursor-default',
+                    ),
+                )}
+                disabled={state.working}
+                onClick={() => navigate(id)}
+              >
+                {name}
+                {id.includes('inbox') && state.emails.some((email) => !email.read) && (
+                  <span className="badge-xxs badge badge-info absolute top-2 right-2" />
+                )}
+                {id.includes('news') && hasUnreadNews && (
+                  <span className="badge-xxs badge badge-info absolute top-2 right-2" />
+                )}
+              </button>
+            );
+          })}
         </nav>
         <section className="dropdown dropdown-end p-2">
-          <article tabIndex={0} role="button" className="btn btn-ghost">
+          <article
+            tabIndex={0}
+            role="button"
+            className={cx(
+              'btn btn-ghost',
+              isFaceitRoute && '!bg-[#0f0f0f] !text-[#f2f2f2] hover:!bg-neutral-800/70 hover:!text-white',
+            )}
+          >
             <Image
               src={
                 state.profile?.team?.blazon
@@ -501,7 +536,12 @@ function Root() {
 
           <ul
             tabIndex={-1}
-            className="menu dropdown-content bg-base-100 rounded-box w-64 shadow-sm"
+            className={cx(
+              'menu dropdown-content rounded-box w-64 shadow-sm',
+              isFaceitRoute
+                ? 'faceit-profile-menu border border-[#ffffff15] bg-[#0f0f0f] text-[#f2f2f2] shadow-black/40'
+                : 'bg-base-100',
+            )}
           >
             <>
               <li className="py-2">
