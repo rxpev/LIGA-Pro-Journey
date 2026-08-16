@@ -88,6 +88,13 @@ type SimulatedTeam = {
     };
   }>;
 };
+
+const IEM_QUALIFIER_SIZE: Partial<Record<Constants.FederationSlug, number>> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 111,
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 112,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 50,
+  [Constants.FederationSlug.ESPORTS_OCE]: 36,
+};
 type SimulatedCompetitor = {
   id: number;
   result?: number | null;
@@ -1694,7 +1701,10 @@ function seedTournamentCompetitors<T extends TournamentCompetitor>(
     return seedSwissPlayoffCompetitors(competitors);
   }
 
-  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS) {
+  if (
+    tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+  ) {
     return seedGroupPlayoffCompetitors(competitors, 2);
   }
 
@@ -1704,6 +1714,7 @@ function seedTournamentCompetitors<T extends TournamentCompetitor>(
 
   if (
     tierSlug === Constants.TierSlug.ESL_CHALLENGER ||
+    tierSlug === Constants.TierSlug.CCT_OCE_SERIES ||
     tierSlug === Constants.TierSlug.LEAGUE_PRO
   ) {
     return seedGroupsByWorldRanking(competitors, competition.tier.groupSize || competitors.length);
@@ -8536,8 +8547,13 @@ export async function onCompetitionStart(entry: Calendar) {
   }
 
   // create and start the tournament
-  const tierSize =
-    competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+  const isIemRegionalQualifier =
+    competition.tier.slug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER ||
+    competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER;
+  const tierSize = isIemRegionalQualifier
+    ? IEM_QUALIFIER_SIZE[competition.federation.slug as Constants.FederationSlug] ||
+      competition.tier.size
+    : competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
       ? Util.getLeagueTierSize(
           competition.tier.slug as Constants.TierSlug,
           competition.federation.slug as Constants.FederationSlug,

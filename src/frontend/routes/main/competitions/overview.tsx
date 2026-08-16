@@ -15,9 +15,11 @@ import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Brackets, Standings, Image, TeamBlazon } from '@liga/frontend/components';
 import {
   FaArrowRight,
+  FaArrowLeft,
   FaCalendarAlt,
   FaChartBar,
   FaChevronDown,
+  FaExternalLinkAlt,
   FaMapMarkerAlt,
   FaRandom,
   FaSitemap,
@@ -28,6 +30,7 @@ import CompetitionLocationTag from './competition-location-tag';
 import CompetitionNews from './news';
 import Participants from './participants';
 import Statistics from './statistics';
+import { SwissDetailedStandings } from './standings';
 
 enum TabIdentifier {
   OVERVIEW = '/competitions',
@@ -52,7 +55,6 @@ const WINNER_HISTORY_TIER_SLUGS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
   Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
   Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
-  Constants.TierSlug.ESEA_CASH_CUP,
   Constants.TierSlug.CCT_SERIES_PLAYOFFS,
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
   Constants.TierSlug.BLAST_FINALS,
@@ -77,6 +79,26 @@ const ESEA_FORMATS: Partial<Record<Constants.TierSlug, { playoffTier: Constants.
     playoffTier: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
   },
 };
+
+const isEseaCashCupTier = (tier: Constants.TierSlug) => tier === Constants.TierSlug.ESEA_CASH_CUP;
+const IEM_QUALIFIER_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+]);
+const ESEA_CASH_CUP_SIZE: Record<string, number> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 70,
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 70,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 42,
+  [Constants.FederationSlug.ESPORTS_OCE]: 27,
+};
+const IEM_QUALIFIER_SIZE: Record<string, number> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 111,
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 112,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 50,
+  [Constants.FederationSlug.ESPORTS_OCE]: 36,
+};
+const CCT_SERIES_SIZE = 16;
+const CCT_OCE_SERIES_SIZE = 8;
 
 const ESEA_DIVISION_ORDER: Array<{ label: string; tier: Constants.TierSlug }> = [
   { label: 'ESEA Open', tier: Constants.TierSlug.LEAGUE_OPEN },
@@ -201,6 +223,8 @@ export default function () {
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
   const [isPlayoffsOpen, setIsPlayoffsOpen] = React.useState(false);
+  const [isCashCupBracketModalOpen, setIsCashCupBracketModalOpen] = React.useState(false);
+  const [isCctDetailedStandingsOpen, setIsCctDetailedStandingsOpen] = React.useState(true);
   const tierSlug = competition.tier.slug as Constants.TierSlug;
   const hasTournamentStarted = [
     Constants.CompetitionStatus.STARTED,
@@ -211,6 +235,51 @@ export default function () {
     competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
       ? ESEA_FORMATS[tierSlug]
       : undefined;
+  const isEseaCashCup = isEseaCashCupTier(tierSlug);
+  const isIemQualifier = IEM_QUALIFIER_TIER_SLUGS.has(tierSlug);
+  const isCctRegionalSeries =
+    tierSlug === Constants.TierSlug.CCT_SERIES &&
+    [
+      Constants.FederationSlug.ESPORTS_AMERICAS,
+      Constants.FederationSlug.ESPORTS_ASIA,
+      Constants.FederationSlug.ESPORTS_EUROPA,
+    ].includes(competition.federation.slug as Constants.FederationSlug);
+  const isCctOceSeries =
+    tierSlug === Constants.TierSlug.CCT_OCE_SERIES &&
+    competition.federation.slug === Constants.FederationSlug.ESPORTS_OCE;
+  const isCctSeries = isCctRegionalSeries || isCctOceSeries;
+  const cctSeriesSize = isCctOceSeries ? CCT_OCE_SERIES_SIZE : CCT_SERIES_SIZE;
+  const cctPlayoffTier = isCctOceSeries
+    ? Constants.TierSlug.CCT_OCE_PLAYOFFS
+    : Constants.TierSlug.CCT_SERIES_PLAYOFFS;
+  const cctGlobalFinalsQualifiers =
+    competition.federation.slug === Constants.FederationSlug.ESPORTS_EUROPA
+      ? 4
+      : competition.federation.slug === Constants.FederationSlug.ESPORTS_AMERICAS
+        ? 2
+        : 1;
+  const cctQualificationLabel =
+    cctGlobalFinalsQualifiers === 1
+      ? 'Winner to CCT Global Finals'
+      : `Top ${cctGlobalFinalsQualifiers} to CCT Global Finals`;
+  const isFixedBracketQualifier = isEseaCashCup || isIemQualifier;
+  const eseaCashCupSize = ESEA_CASH_CUP_SIZE[competition.federation.slug] || 70;
+  const fixedBracketSize = isIemQualifier
+    ? IEM_QUALIFIER_SIZE[competition.federation.slug] || 112
+    : eseaCashCupSize;
+  const displayedCompetitorCount = isFixedBracketQualifier
+    ? fixedBracketSize
+    : isCctSeries
+      ? cctSeriesSize
+      : competition.competitors.length;
+  const qualifierDestination = tierSlug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER
+    ? 'IEM Cologne'
+    : tierSlug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER
+      ? 'IEM Krakow'
+      : null;
+  const linkedPlayoffTier = eseaFormat?.playoffTier ||
+    (isCctSeries ? cctPlayoffTier : undefined);
+  const iemOpeningRound = fixedBracketSize > 64 ? 128 : 64;
   const eseaPlayoffQualifiers = eseaFormat
     ? Util.getTierAdvancementEnd(
         eseaFormat.playoffTier,
@@ -261,12 +330,21 @@ export default function () {
 
     return eseaPlayoffEntrants;
   }, [eseaPlayoffEntrants, eseaPlayoffMatches]);
+  const linkedBracketSize = isCctSeries
+    ? eseaPlayoffCompetition?.tier.size || (isCctOceSeries ? 4 : 8)
+    : eseaBracketSize;
   const hasEseaPlayoffsStarted = Boolean(
     eseaPlayoffCompetition &&
       [Constants.CompetitionStatus.STARTED, Constants.CompetitionStatus.COMPLETED].includes(
         eseaPlayoffCompetition.status,
       ),
   );
+  const shouldPreviewCctPlayoffs = Boolean(
+    isCctSeries &&
+      (!eseaPlayoffCompetition ||
+        eseaPlayoffCompetition.status === Constants.CompetitionStatus.SCHEDULED),
+  );
+  const shouldPreviewEseaPlayoffs = Boolean(eseaFormat && !eseaPlayoffMatches.length);
   const locationDisplay = Util.getCompetitionDisplayLocation({
     federationName: competition.federation.name,
     federationSlug: competition.federation.slug,
@@ -283,7 +361,7 @@ export default function () {
     setEseaPlayoffCompetition(undefined);
     setEseaPlayoffMatches([]);
 
-    if (!eseaFormat) {
+    if (!linkedPlayoffTier) {
       return;
     }
 
@@ -296,7 +374,7 @@ export default function () {
           federationId: competition.federationId,
           season: competition.season,
           tier: {
-            slug: eseaFormat.playoffTier,
+            slug: linkedPlayoffTier,
           },
         },
       })
@@ -309,7 +387,7 @@ export default function () {
     return () => {
       isCurrent = false;
     };
-  }, [competition.federationId, competition.season, eseaFormat]);
+  }, [competition.federationId, competition.season, linkedPlayoffTier]);
 
   React.useEffect(() => {
     setEseaPlayoffMatches([]);
@@ -340,8 +418,14 @@ export default function () {
   }, [eseaPlayoffCompetition]);
 
   React.useEffect(() => {
-    setIsPlayoffsOpen(hasEseaPlayoffsStarted);
-  }, [competition.id, eseaPlayoffCompetition?.id, hasEseaPlayoffsStarted]);
+    setIsPlayoffsOpen(isFixedBracketQualifier || isCctSeries || hasEseaPlayoffsStarted);
+  }, [
+    competition.id,
+    eseaPlayoffCompetition?.id,
+    hasEseaPlayoffsStarted,
+    isCctSeries,
+    isFixedBracketQualifier,
+  ]);
 
   // fetch competition start and end
   // dates when the data comes in
@@ -421,18 +505,20 @@ export default function () {
         include: Eagers.match.include,
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         where: {
-          competitionId: competition.id,
+          competitionId: linkedPlayoffTier && eseaPlayoffCompetition
+            ? { in: [competition.id, eseaPlayoffCompetition.id] }
+            : competition.id,
           status: Constants.MatchStatus.COMPLETED,
         },
       })
       .then((result) => setResultMatches(result.filter(hasOpponent)));
-  }, [competition.id, isResultsView]);
+  }, [competition.id, eseaPlayoffCompetition?.id, isResultsView, linkedPlayoffTier]);
 
   // fetch stage matches for expandable standings rows
   React.useEffect(() => {
     setStandingMatches([]);
 
-    if (!competition.tier.groupSize && !Constants.TierSwissConfig[tierSlug]) {
+    if (!competition.tier.groupSize && !Constants.TierSwissConfig[tierSlug] && !isFixedBracketQualifier) {
       return;
     }
 
@@ -445,7 +531,7 @@ export default function () {
         },
       })
       .then(setStandingMatches);
-  }, [competition, tierSlug]);
+  }, [competition, isFixedBracketQualifier, tierSlug]);
 
   // fetch previous winners
   React.useEffect(() => {
@@ -480,6 +566,8 @@ export default function () {
   );
   const groupKeys = React.useMemo(() => Object.keys(groups), [groups]);
   const isLeagueStandings = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE;
+  const isStandaloneStandings =
+    isLeagueStandings || isFixedBracketQualifier || isCctSeries;
   const visibleStandingGroupKeys = React.useMemo(() => {
     if (!isLeagueStandings || groupKeys.length <= 1) {
       return groupKeys;
@@ -564,6 +652,10 @@ export default function () {
       ? latestScheduledMatchDate
       : calendarEndDate;
   }, [competitionDates, latestScheduledMatchDate]);
+  const cashCupYear = format(
+    competitionDates[0]?.date || state.profile?.date || new Date(),
+    'yyyy',
+  );
   const showPrizePool =
     competition.status === Constants.CompetitionStatus.COMPLETED &&
     Boolean(prizePool?.total) &&
@@ -599,6 +691,147 @@ export default function () {
     }));
   }, [eseaFormat, eseaPlayoffQualifiers, prizePoolCards]);
   const outcomeCards = React.useMemo<OutcomeCard[]>(() => {
+    if (isEseaCashCup) {
+      return [...competition.competitors]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position)
+        .map((competitor, index) => ({
+          competitor: competition.status === Constants.CompetitionStatus.COMPLETED ? competitor : undefined,
+          detail:
+            competition.status === Constants.CompetitionStatus.COMPLETED && prizePool?.distribution[index]
+              ? Util.formatCurrency(prizePool.total * (prizePool.distribution[index] / 100))
+              : '',
+          label: getPlacementLabel(index + 1, index + 1),
+        }));
+    }
+    if (isIemQualifier) {
+      const positionedCompetitors = [...competition.competitors]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position)
+      const placementCounts = positionedCompetitors.reduce((counts, competitor) => {
+        counts.set(competitor.position, (counts.get(competitor.position) || 0) + 1);
+        return counts;
+      }, new Map<number, number>());
+
+      return positionedCompetitors.map((competitor, index) => {
+        const placement = competitor.position || index + 1;
+        const count = placementCounts.get(competitor.position) || 1;
+
+        return {
+          competitor: competition.status === Constants.CompetitionStatus.COMPLETED ? competitor : undefined,
+          detail: placement === 1 ? qualifierDestination || '' : '',
+          label: getPlacementLabel(placement, placement + count - 1),
+        };
+      });
+    }
+    if (isCctSeries) {
+      const playoffPrizePool = Constants.PrizePool[cctPlayoffTier];
+      const positionedCompetitors = [...(eseaPlayoffCompetition?.competitors || [])]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position);
+      const playoffPlacements = new Map<number, CompetitionCompetitor>();
+
+      if (eseaPlayoffMatches[0]?.competition.tournament) {
+        try {
+          const tournament = Tournament.restore(
+            JSON.parse(eseaPlayoffMatches[0].competition.tournament),
+          );
+          tournament.standings.flat().forEach((standing) => {
+            const placement = standing.gpos || standing.pos;
+            const competitor = positionedCompetitors.find(
+              (entry) => entry.seed === standing.seed,
+            );
+            if (placement && competitor) {
+              playoffPlacements.set(placement, competitor);
+            }
+          });
+        } catch {
+          // Persisted placements below are used if the bracket snapshot is unavailable.
+        }
+      }
+      const claimedPlayoffCompetitorIds = new Set<number>();
+      const getPlayoffCompetitor = (placement: number) => {
+        const positioned =
+          playoffPlacements.get(placement) ||
+          positionedCompetitors.find(
+            (competitor) =>
+              competitor.position === placement && !claimedPlayoffCompetitorIds.has(competitor.id),
+          );
+        const fallback = positioned || positionedCompetitors.find(
+          (competitor) => !claimedPlayoffCompetitorIds.has(competitor.id),
+        );
+
+        if (fallback) {
+          claimedPlayoffCompetitorIds.add(fallback.id);
+        }
+        return fallback;
+      };
+      const swissRoundDifferenceByTeamId = new Map<number, number>();
+      standingMatches.forEach((match) => {
+        if (match.status !== Constants.MatchStatus.COMPLETED) return;
+        const [home, away] = match.competitors.filter((competitor) => competitor.teamId != null);
+        if (!home || !away || home.teamId == null || away.teamId == null) return;
+        const difference = (home.score || 0) - (away.score || 0);
+        swissRoundDifferenceByTeamId.set(
+          home.teamId,
+          (swissRoundDifferenceByTeamId.get(home.teamId) || 0) + difference,
+        );
+        swissRoundDifferenceByTeamId.set(
+          away.teamId,
+          (swissRoundDifferenceByTeamId.get(away.teamId) || 0) - difference,
+        );
+      });
+
+      const playoffCards = getKnockoutPlacementRanges(linkedBracketSize).flatMap(([start, end]) =>
+        Array.from({ length: end - start + 1 }, (_, index) => {
+          const placement = start + index;
+          const prize = playoffPrizePool?.distribution[placement - 1]
+            ? Util.formatCurrency(
+                playoffPrizePool.total * (playoffPrizePool.distribution[placement - 1] / 100),
+              )
+            : '';
+
+          return {
+            competitor:
+              eseaPlayoffCompetition?.status === Constants.CompetitionStatus.COMPLETED
+                ? getPlayoffCompetitor(placement)
+                : undefined,
+            detail: [
+              placement <= cctGlobalFinalsQualifiers ? 'CCT Global Finals' : '',
+              prize,
+            ]
+              .filter(Boolean)
+              .join(' + '),
+            label: getPlacementLabel(start, end),
+          };
+        }),
+      );
+      const swissCompetitors = [...competition.competitors]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort(
+          (a, b) =>
+            b.win - a.win ||
+            a.loss - b.loss ||
+            (swissRoundDifferenceByTeamId.get(b.team.id) || 0) -
+              (swissRoundDifferenceByTeamId.get(a.team.id) || 0) ||
+            a.position - b.position,
+        );
+
+      return [
+        ...playoffCards,
+        ...Array.from({ length: Math.max(0, swissCompetitors.length - linkedBracketSize) }, (_, index) => {
+          const placement = linkedBracketSize + index + 1;
+          return {
+            competitor:
+              competition.status === Constants.CompetitionStatus.COMPLETED
+                ? swissCompetitors[placement - 1]
+                : undefined,
+            detail: '',
+            label: getPlacementLabel(placement, placement),
+          };
+        }),
+      ];
+    }
     if (eseaFormat) {
       const playoffPrizePool = Constants.PrizePool[eseaFormat.playoffTier];
       const showPlayoffPlacements = hasEseaPlayoffsStarted;
@@ -821,6 +1054,17 @@ export default function () {
     prizePoolCards.length,
     standingMatches,
     tierSlug,
+    isEseaCashCup,
+    isIemQualifier,
+    qualifierDestination,
+    isCctSeries,
+    cctPlayoffTier,
+    cctGlobalFinalsQualifiers,
+    linkedBracketSize,
+    eseaPlayoffCompetition?.competitors,
+    eseaPlayoffCompetition?.status,
+    eseaPlayoffMatches,
+    standingMatches,
   ]);
   const resultMatchGroups = React.useMemo(
     () =>
@@ -858,8 +1102,22 @@ export default function () {
     [location.search, navigate],
   );
 
+  React.useEffect(() => {
+    if (!isCashCupBracketModalOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCashCupBracketModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isCashCupBracketModalOpen]);
+
   return (
-    <section className="divide-base-content/10 grid grid-cols-[minmax(0,3fr)_minmax(26rem,2fr)] divide-x pt-4">
+    <section className="divide-base-content/10 grid grid-cols-[minmax(0,9fr)_minmax(26rem,7fr)] divide-x pt-4">
       <article className="px-4">
         <section className="border-base-content/10 bg-base-200/45 overflow-hidden rounded-lg border shadow-lg">
           <aside className="flex gap-4 p-4">
@@ -909,28 +1167,81 @@ export default function () {
                 <div className="flex items-center gap-2">
                   <FaUsers className="text-base-content/50 shrink-0" />
                   <dd>
-                    {competition.competitors.length}{' '}
-                    {competition.competitors.length === 1 ? 'team' : 'teams'}
+                    {displayedCompetitorCount} {displayedCompetitorCount === 1 ? 'team' : 'teams'}
                   </dd>
                 </div>
               </dl>
-              {eseaFormat && (
+              {(eseaFormat || isFixedBracketQualifier || isCctSeries) && (
                 <section className="border-base-content/10 mt-2 border-t pt-3">
                   <p className="text-base-content/70 mb-1 text-xs font-bold">Format</p>
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
+                  {isCctSeries ? (
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaRandom /></span>
+                        <span className="min-w-0"><strong className="block truncate text-xs">Group Stage</strong><small className="text-base-content/60 block leading-tight">{isCctOceSeries ? 'Two groups of 4 · Best of 3' : '16-team Swiss · Bo1 (advancement / elimination Bo3)'}</small></span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaSitemap /></span>
+                        <span className="min-w-0"><strong className="block truncate text-xs">Playoffs</strong><small className="text-base-content/60 block leading-tight">Single elimination · Best of 3</small></span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaTrophy /></span>
+                        <span className="min-w-0"><strong className="block truncate text-xs">Qualification</strong><small className="text-base-content/60 block leading-tight">{cctQualificationLabel}</small></span>
+                      </article>
+                    </div>
+                  ) : isIemQualifier ? (
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaSitemap />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Opening bracket</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            Round of {iemOpeningRound} to Round of 32 · Best of 1
+                          </small>
+                        </span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaSitemap />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Final bracket</strong>
+                          <small className="text-base-content/60 block leading-tight">Round of 16 to Final · Best of 3</small>
+                        </span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaTrophy />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Qualification</strong>
+                          <small className="text-base-content/60 block leading-tight">Winner to {qualifierDestination}</small>
+                        </span>
+                      </article>
+                    </div>
+                  ) : (
+                  <div className={cx('grid items-start gap-1.5', isFixedBracketQualifier ? 'grid-cols-[minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]')}>
                     <article className="flex min-w-0 items-start gap-2">
                       <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
-                        <FaRandom />
+                        {isFixedBracketQualifier ? <FaSitemap /> : <FaRandom />}
                       </span>
                       <span className="min-w-0">
-                        <strong className="block truncate text-xs">Group Stage</strong>
+                        <strong className="block truncate text-xs">{isFixedBracketQualifier ? 'Single elimination' : 'Group Stage'}</strong>
                         <small className="text-base-content/60 block leading-tight whitespace-normal">
-                          Round robin · Best of 1
+                          {isIemQualifier
+                            ? `Best of 1 through Round of 32 · Best of 3 from Round of 16 · Winner to ${qualifierDestination}`
+                            : isEseaCashCup ? 'Best of 1' : 'Round robin · Best of 1'}
                         </small>
                       </span>
                     </article>
-                    <FaArrowRight className="text-base-content/35 mt-2.5" />
-                    <article className="flex min-w-0 items-start gap-2">
+                    {!isFixedBracketQualifier && <FaArrowRight className="text-base-content/35 mt-2.5" />}
+                    {!isFixedBracketQualifier && <article className="flex min-w-0 items-start gap-2">
                       <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
                         <FaSitemap />
                       </span>
@@ -941,9 +1252,9 @@ export default function () {
                           {Constants.TierMatchConfig[eseaFormat.playoffTier]?.[0] || 3}
                         </small>
                       </span>
-                    </article>
-                    <FaArrowRight className="text-base-content/35 mt-2.5" />
-                    <article className="flex min-w-0 items-start gap-2">
+                    </article>}
+                    {!isFixedBracketQualifier && <FaArrowRight className="text-base-content/35 mt-2.5" />}
+                    {!isFixedBracketQualifier && <article className="flex min-w-0 items-start gap-2">
                       <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
                         <FaTrophy />
                       </span>
@@ -955,8 +1266,9 @@ export default function () {
                             : `Top ${eseaPlayoffQualifiers} to ${eseaFormatAdvancement}`}
                         </small>
                       </span>
-                    </article>
+                    </article>}
                   </div>
+                  )}
                 </section>
               )}
             </section>
@@ -987,7 +1299,7 @@ export default function () {
             <div className="m-3 mt-5">
               <header className="mb-3 grid grid-cols-[86px_minmax(0,1fr)] px-2 text-xs font-bold text-[#75899d]">
                 <span>Date</span>
-                <span className="text-center">Matches</span>
+                <span aria-hidden="true" />
               </header>
               {resultMatchGroups.map((group) => (
                 <section key={group.label} className="mb-6 last:mb-0">
@@ -1018,7 +1330,10 @@ export default function () {
                         >
                           <time className="text-[#8392a1]">{format(match.date, 'dd/MM')}</time>
                           <span
-                            className="truncate text-right text-[#8392a1]"
+                            className={cx(
+                              'truncate text-right text-[#8392a1]',
+                              home.result === Constants.MatchResult.LOSS && 'opacity-45',
+                            )}
                             title={home.team.name}
                           >
                             <Link
@@ -1032,24 +1347,31 @@ export default function () {
                           <TeamBlazon
                             src={home.team.blazon}
                             title={home.team.name}
-                            className="mx-auto size-6"
+                            className={cx(
+                              'mx-auto size-6',
+                              home.result === Constants.MatchResult.LOSS && 'opacity-45',
+                            )}
                             blur="blur-xs"
                           />
-                          <span
-                            className={cx(
-                              'text-center font-bold tracking-wide',
-                              Util.getResultTextColor(home.result),
-                            )}
-                          >
+                          <span className="text-base-content/70 text-center font-bold tracking-wide">
                             {home.score ?? '-'} : {away.score ?? '-'}
                           </span>
                           <TeamBlazon
                             src={away.team.blazon}
                             title={away.team.name}
-                            className="mx-auto size-6 opacity-70"
+                            className={cx(
+                              'mx-auto size-6',
+                              away.result === Constants.MatchResult.LOSS && 'opacity-45',
+                            )}
                             blur="blur-xs"
                           />
-                          <span className="truncate text-[#8392a1]" title={away.team.name}>
+                          <span
+                            className={cx(
+                              'truncate text-[#8392a1]',
+                              away.result === Constants.MatchResult.LOSS && 'opacity-45',
+                            )}
+                            title={away.team.name}
+                          >
                             <Link
                               to={`/teams?teamId=${away.team.id}`}
                               className="link-hover"
@@ -1089,7 +1411,7 @@ export default function () {
           <CompetitionNews />
         ) : (
           <>
-            {eseaFormat && (
+            {(eseaFormat || isFixedBracketQualifier || isCctSeries) && (
               <section className="border-base-content/10 bg-base-200/45 mt-4 overflow-hidden rounded-lg border shadow-lg">
                 <button
                   type="button"
@@ -1098,23 +1420,55 @@ export default function () {
                   aria-expanded={isPlayoffsOpen}
                 >
                   <span>
-                    <strong className="block text-sm">Playoffs</strong>
+                    <strong className="block text-xl leading-none font-black">
+                      {isFixedBracketQualifier ? 'Bracket' : 'Playoffs'}
+                    </strong>
                     <span className="text-base-content/60 block pt-0.5 text-xs">
-                      {eseaPlayoffFormat} Bracket
+                      {isCctSeries
+                        ? 'Single elimination · Best of 3'
+                        : isIemQualifier
+                        ? `Single elimination · Bo1 through Round of 32 · Bo3 from Round of 16`
+                        : isEseaCashCup ? 'Single elimination · Best of 1' : `${eseaPlayoffFormat} Bracket`}
                     </span>
                   </span>
-                  <FaChevronDown
-                    className={cx(
-                      'text-base-content/55 shrink-0 transition-transform',
-                      isPlayoffsOpen && 'rotate-180',
+                  <span className="flex shrink-0 items-center gap-2">
+                    {isFixedBracketQualifier && (
+                      <button
+                        type="button"
+                        aria-label="View full bracket"
+                        title="View full bracket"
+                        className="btn btn-ghost btn-sm btn-square border-base-content/10 bg-base-100/60 rounded border shadow-none"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setIsCashCupBracketModalOpen(true);
+                        }}
+                      >
+                        <FaExternalLinkAlt />
+                      </button>
                     )}
-                  />
+                    <FaChevronDown
+                      className={cx(
+                        'text-base-content/55 shrink-0 transition-transform',
+                        isPlayoffsOpen && 'rotate-180',
+                      )}
+                    />
+                  </span>
                 </button>
                 {isPlayoffsOpen && (
                   <div
                     className={cx(
                       'border-base-content/10 border-t',
-                      isDoubleEseaPlayoffs
+                      isFixedBracketQualifier
+                        ? eseaBracketSize >= 16
+                          ? 'h-[43rem]'
+                          : eseaBracketSize >= 8
+                            ? 'h-[31rem]'
+                            : 'h-[30rem]'
+                        : isCctSeries
+                          ? linkedBracketSize >= 8
+                            ? 'h-[31rem]'
+                            : 'h-[30rem]'
+                          : isDoubleEseaPlayoffs
                         ? 'h-[32rem]'
                         : eseaBracketSize >= 16
                           ? 'h-[43rem]'
@@ -1124,12 +1478,30 @@ export default function () {
                     )}
                   >
                     <Brackets
-                      fitToContainer
-                      matches={eseaPlayoffMatches}
-                      preview={{
-                        doubleElimination: isDoubleEseaPlayoffs,
-                        size: eseaBracketSize,
-                      }}
+                      fitToContainer={!isFixedBracketQualifier}
+                      matches={
+                        (isFixedBracketQualifier &&
+                          competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                        shouldPreviewCctPlayoffs ||
+                        shouldPreviewEseaPlayoffs
+                          ? []
+                          : isFixedBracketQualifier
+                            ? standingMatches
+                            : eseaPlayoffMatches
+                      }
+                      preview={
+                        ((isFixedBracketQualifier &&
+                          competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                          shouldPreviewCctPlayoffs ||
+                          shouldPreviewEseaPlayoffs)
+                          ? {
+                              doubleElimination: isFixedBracketQualifier ? false : isDoubleEseaPlayoffs,
+                              size: isFixedBracketQualifier
+                                ? fixedBracketSize
+                                : isCctSeries ? linkedBracketSize : eseaBracketSize,
+                            }
+                          : undefined
+                      }
                       onMatchClick={(match) =>
                         api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
                           target: '/postgame',
@@ -1143,11 +1515,15 @@ export default function () {
               </section>
             )}
             {!hasTournamentStarted && <Participants />}
-            {hasTournamentStarted && outcomeCards.length > 0 && (
+            {(hasTournamentStarted || isIemQualifier) && outcomeCards.length > 0 && (
               <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
                 <header className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="text-xl font-black">
-                    {eseaFormat ? 'Qualification & Prize Pool' : t('main.competitions.prizePool')}
+                    {isIemQualifier || isCctSeries
+                      ? 'Qualification'
+                      : eseaFormat
+                        ? 'Qualification & Prize Pool'
+                        : t('main.competitions.prizePool')}
                   </h2>
                   {!eseaFormat && prizePoolCards.length > 0 && (
                     <span className="text-base-content/60 text-sm">
@@ -1195,7 +1571,7 @@ export default function () {
                 </div>
               </section>
             )}
-            {showWinners && (
+            {showWinners && !isEseaCashCup && (
               <aside>
                 <header className="heading prose max-w-none">
                   <h2>{t('main.competitions.pastWinners')}</h2>
@@ -1236,17 +1612,31 @@ export default function () {
       </article>
       <article
         className={cx(
-          isLeagueStandings &&
+          isStandaloneStandings &&
             'border-base-content/10 bg-base-200/45 mx-3 mb-3 overflow-hidden rounded-lg border shadow-lg',
         )}
       >
         <header
           className={cx(
             'heading max-w-none border-t-0!',
-            isLeagueStandings && 'relative flex h-12 items-center px-4 py-0',
+            isStandaloneStandings && 'relative flex h-12 items-center px-4 py-0',
           )}
         >
-          <h2 className="m-0 text-xl leading-none font-black">{t('shared.standings')}</h2>
+          <h2 className="m-0 text-xl leading-none font-black">
+            {isCctRegionalSeries ? 'Swiss Stage' : t('shared.standings')}
+          </h2>
+          {isCctRegionalSeries && (
+            <button
+              type="button"
+              className={cx(
+                'btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 absolute top-1.5 right-3 rounded border text-xs font-semibold shadow-none',
+                !isCctDetailedStandingsOpen && 'btn-primary border-primary bg-primary text-primary-content',
+              )}
+              onClick={() => setIsCctDetailedStandingsOpen((value) => !value)}
+            >
+              Detailed view
+            </button>
+          )}
           {isLeagueStandings && groupKeys.length > 1 && (
             <nav className="absolute top-1.5 right-3 flex gap-1" aria-label="Standings group">
               {groupKeys.map((groupKey) => (
@@ -1266,13 +1656,36 @@ export default function () {
             </nav>
           )}
         </header>
-        {!!competition.tier.groupSize &&
+        {isCctRegionalSeries && isCctDetailedStandingsOpen && (
+          <>
+            <div className="h-[36rem] overflow-hidden">
+              <SwissDetailedStandings
+                compact
+                competition={competition}
+                highlight={state.profile.teamId}
+                matches={standingMatches}
+                onTeamClick={(team) => navigate(`/teams?teamId=${team.id}`)}
+              />
+            </div>
+            <footer className="border-base-content/10 flex gap-4 border-t px-4 py-3 text-xs">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-4 w-1 rounded bg-green-500" />
+                Qualified to Playoffs
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="h-4 w-1 rounded bg-red-500" />
+                Eliminated
+              </span>
+            </footer>
+          </>
+        )}
+        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !!competition.tier.groupSize &&
           visibleStandingGroupKeys.map((groupKey) => (
             <Standings
               key={groupKey + '__overview_standings'}
               highlight={state.profile.teamId}
               hidePoints={isLeagueStandings || hideSmallGroupPoints}
-              dense={isLeagueStandings}
+            dense={isStandaloneStandings}
               competitors={groups[groupKey]}
               matches={standingMatches}
               teamLink={(team) => `/teams?teamId=${team.id}`}
@@ -1294,31 +1707,65 @@ export default function () {
               }
             />
           ))}
-        {!competition.tier.groupSize && (
+        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !competition.tier.groupSize && isFixedBracketQualifier && competition.status === Constants.CompetitionStatus.SCHEDULED ? (
+          <p className="text-base-content/60 px-4 py-8 text-center text-sm">No teams registered yet.</p>
+        ) : (!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !competition.tier.groupSize && (
           <Standings
             highlight={state.profile.teamId}
+            dense={isStandaloneStandings}
             competitors={competition.competitors}
+            placeholderCount={
+              isCctRegionalSeries && competition.status === Constants.CompetitionStatus.SCHEDULED
+                ? CCT_SERIES_SIZE
+                : undefined
+            }
             matches={isSwiss ? standingMatches : undefined}
             mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
+            hidePoints={isFixedBracketQualifier || isBracketStandings}
             teamLink={(team) => `/teams?teamId=${team.id}`}
-            zones={isBracketStandings || isSwiss ? advancementZones : undefined}
+            zones={isCctRegionalSeries
+              ? [[1, 8], [9, 16]]
+              : isFixedBracketQualifier && competition.status !== Constants.CompetitionStatus.SCHEDULED
+              ? [[1, 1], [2, Math.max(2, competition.competitors.length)]]
+              : isBracketStandings || isSwiss ? advancementZones : undefined}
+            zoneColors={
+              isCctRegionalSeries
+                ? [
+                    'border-l-4 border-l-green-500',
+                    'border-l-4 border-l-red-500 bg-red-800/10',
+                  ]
+                : isFixedBracketQualifier
+                  ? ['border-l-4 border-l-green-500', 'border-l-4 border-l-red-500 bg-red-800/10']
+                  : undefined
+            }
           />
         )}
-        {isLeagueStandings && (
+        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && isStandaloneStandings && (
           <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
-            {groupZones[0]?.[0] > 0 && groupZones[0][1] >= groupZones[0][0] && (
+            {isFixedBracketQualifier || isCctSeries ? (
+              <>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-1 rounded bg-green-500" />
+                  {isCctSeries ? 'Qualified to Playoffs' : 'Winner'}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-1 rounded bg-red-500" />
+                  Eliminated
+                </span>
+              </>
+            ) : groupZones[0]?.[0] > 0 && groupZones[0][1] >= groupZones[0][0] && (
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-green-500" />
                 Advanced
               </span>
             )}
-            {groupZones[1]?.[0] > 0 && groupZones[1][1] >= groupZones[1][0] && (
+            {!isFixedBracketQualifier && !isCctSeries && groupZones[1]?.[0] > 0 && groupZones[1][1] >= groupZones[1][0] && (
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-green-500" />
                 Qualified to Playoffs
               </span>
             )}
-            {groupZones[2]?.[0] > 0 && groupZones[2][1] >= groupZones[2][0] && (
+            {!isFixedBracketQualifier && !isCctSeries && groupZones[2]?.[0] > 0 && groupZones[2][1] >= groupZones[2][0] && (
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-red-500" />
                 Relegated
@@ -1327,6 +1774,53 @@ export default function () {
           </footer>
         )}
       </article>
+      {isCashCupBracketModalOpen && (
+        <div
+          className="bg-base-300/70 fixed inset-0 z-50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${competitionTitle} bracket`}
+        >
+          <FaArrowLeft
+            aria-label="Back"
+            data-interaction-sound="back"
+            className="fixed z-[110] size-5 cursor-pointer"
+            style={{ right: '2rem', top: '1.8rem' }}
+            onClick={() => setIsCashCupBracketModalOpen(false)}
+          />
+          <section className="border-base-content/10 bg-base-100 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border shadow-2xl">
+            <header className="border-base-content/10 relative border-b px-5 py-4">
+              <div>
+                <h2 className="text-lg font-black">{competitionTitle} {cashCupYear} Bracket</h2>
+                <p className="text-base-content/60 text-xs">
+                  {isIemQualifier
+                    ? 'Single elimination · Bo1 through Round of 32 · Bo3 from Round of 16'
+                    : 'Single elimination · Best of 1'}
+                </p>
+              </div>
+            </header>
+            <div className="min-h-0">
+              <Brackets
+                matches={
+                  competition.status === Constants.CompetitionStatus.SCHEDULED ? [] : standingMatches
+                }
+                preview={
+                  competition.status === Constants.CompetitionStatus.SCHEDULED
+                    ? { doubleElimination: false, size: fixedBracketSize }
+                    : undefined
+                }
+                onMatchClick={(match) =>
+                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                    target: '/postgame',
+                    payload: match.id,
+                  })
+                }
+                onPartyClick={(party) => navigate(`/teams?teamId=${party.id}`)}
+              />
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

@@ -933,6 +933,18 @@ const CARD_SLOT_HEIGHT_CLASS = 'h-32';
  */
 export default function () {
   const { competition } = useOutletContext<RouteContextCompetitions>();
+  const isPreTournamentFixedBracketQualifier =
+    [
+      Constants.TierSlug.ESEA_CASH_CUP,
+      Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
+      Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+    ].includes(competition.tier.slug as Constants.TierSlug) &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentCctSeries =
+    [Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_OCE_SERIES].includes(
+      competition.tier.slug as Constants.TierSlug,
+    ) &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
 
   const [hoveredTeamId, setHoveredTeamId] = React.useState<number | null>(null);
   const [isLineupsVisible, setIsLineupsVisible] = React.useState(false);
@@ -1072,6 +1084,17 @@ export default function () {
       return a.name.localeCompare(b.name);
     });
   }, [baseParticipants, worldRankingByTeamId]);
+
+  if (isPreTournamentFixedBracketQualifier || isPreTournamentCctSeries) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-8 text-center shadow-lg">
+        <h2 className="text-xl font-black">Participants</h2>
+        <p className="text-base-content/60 mt-2 text-sm">
+          {isPreTournamentCctSeries ? 'No teams invited yet.' : 'No teams registered yet.'}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">

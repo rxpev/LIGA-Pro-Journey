@@ -294,6 +294,7 @@ export const data: Array<LeagueSeedData> = [
         name: 'CCT Oceania Series',
         slug: Constants.TierSlug.CCT_OCE_SERIES,
         size: 8,
+        groupSize: 4,
         triggerTierSlug: Constants.TierSlug.CCT_OCE_PLAYOFFS,
       },
       {

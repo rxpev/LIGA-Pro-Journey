@@ -545,7 +545,10 @@ export function getTierGroupZones(
   federationSlug: Constants.FederationSlug,
   groupSize: number,
 ) {
-  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER) {
+  if (
+    tierSlug === Constants.TierSlug.ESL_CHALLENGER ||
+    tierSlug === Constants.TierSlug.CCT_OCE_SERIES
+  ) {
     return [
       [1, 2],
       [0, 0],
