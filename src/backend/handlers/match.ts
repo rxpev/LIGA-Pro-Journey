@@ -18,6 +18,7 @@ type MatchVetoInput = {
 
 type GlobalPlayerStatsParams = {
   competitionId?: number;
+  competitionIds?: number[];
   currentDate?: Date | string;
   federationSlug?: string;
   name?: string;
@@ -57,6 +58,7 @@ const globalPlayerStatsCache = new Map<
 function getGlobalPlayerStatsCacheKey(params: GlobalPlayerStatsParams) {
   return JSON.stringify({
     competitionId: params.competitionId || 0,
+    competitionIds: [...new Set(params.competitionIds || [])].sort((a, b) => a - b),
     currentDate: params.currentDate ? new Date(params.currentDate).toISOString() : '',
     federationSlug: params.federationSlug || '',
     name: params.name || '',
@@ -323,9 +325,20 @@ export default function () {
               ];
               const matchParams: unknown[] = [Constants.MatchStatus.COMPLETED];
 
-              if (params.competitionId) {
-                matchWhere.push('"Match"."competitionId" = ?');
-                matchParams.push(params.competitionId);
+              const competitionIds = [
+                ...new Set(
+                  (params.competitionIds?.length
+                    ? params.competitionIds
+                    : [params.competitionId]
+                  ).filter((id): id is number => Number.isFinite(id) && id > 0),
+                ),
+              ];
+
+              if (competitionIds.length) {
+                matchWhere.push(
+                  `"Match"."competitionId" IN (${competitionIds.map(() => '?').join(',')})`,
+                );
+                matchParams.push(...competitionIds);
               }
 
               if (params.year) {
@@ -505,7 +518,7 @@ export default function () {
                 };
               });
 
-              if (params.competitionId && players.length) {
+              if (competitionIds.length && players.length) {
                 const playerIds = players.map((player) => player.id);
                 const teamRows = await DatabaseClient.prisma.$queryRawUnsafe<
                   Array<{

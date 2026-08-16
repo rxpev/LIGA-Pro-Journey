@@ -10,7 +10,11 @@ export const competition = {
   include: {
     competitors: {
       include: {
-        team: true,
+        team: {
+          include: {
+            country: true,
+          },
+        },
       },
     },
     federation: true,

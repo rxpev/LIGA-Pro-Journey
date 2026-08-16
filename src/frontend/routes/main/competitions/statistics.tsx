@@ -6,7 +6,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useOutletContext } from 'react-router-dom';
-import { Constants, Util } from '@liga/shared';
+import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 
 const MVP_MEDAL_SRC = 'resources://competitions/mvp.png';
@@ -18,7 +18,14 @@ type TooltipPosition = {
   top: number;
 };
 
-const PageSize = 15;
+const PageSize = 14;
+
+const ESEA_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.TierSlug>> = {
+  [Constants.TierSlug.LEAGUE_OPEN]: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  [Constants.TierSlug.LEAGUE_INTERMEDIATE]: Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  [Constants.TierSlug.LEAGUE_MAIN]: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  [Constants.TierSlug.LEAGUE_ADVANCED]: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+};
 
 enum Rating {
   LOW = 0.95,
@@ -85,6 +92,7 @@ export default function Statistics(): JSX.Element {
   const [search, setSearch] = React.useState('');
   const [sort, setSort] = React.useState<PlayerSort>('rating');
   const [loading, setLoading] = React.useState(false);
+  const [competitionIds, setCompetitionIds] = React.useState<number[]>([competition.id]);
   const [mvpTooltipPosition, setMvpTooltipPosition] = React.useState<TooltipPosition | null>(null);
   const mvpTooltip = React.useMemo(
     () => `MVP winner at:\n${getCompetitionTitle(competition)}`,
@@ -96,12 +104,44 @@ export default function Statistics(): JSX.Element {
   }, [competition.id, search, sort]);
 
   React.useEffect(() => {
+    const playoffTier = ESEA_PLAYOFF_TIER_BY_TIER[competition.tier.slug as Constants.TierSlug];
+
+    setCompetitionIds([competition.id]);
+
+    if (!playoffTier) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: {
+          federationId: competition.federationId,
+          season: competition.season,
+          tier: { slug: playoffTier },
+        },
+      })
+      .then((playoffCompetition) => {
+        if (isCurrent && playoffCompetition) {
+          setCompetitionIds([competition.id, playoffCompetition.id]);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition.federationId, competition.id, competition.season, competition.tier.slug]);
+
+  React.useEffect(() => {
     let isCurrent = true;
 
     setLoading(true);
     api.matches
       .globalPlayerStats({
         competitionId: competition.id,
+        competitionIds,
         name: search || undefined,
         page,
         pageSize: PageSize,
@@ -124,7 +164,7 @@ export default function Statistics(): JSX.Element {
     return () => {
       isCurrent = false;
     };
-  }, [competition.id, page, search, sort]);
+  }, [competition.id, competitionIds, page, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(numPlayers / PageSize));
   const showMvpTooltip = React.useCallback((event: React.MouseEvent<HTMLElement>) => {

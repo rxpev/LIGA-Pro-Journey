@@ -1074,15 +1074,19 @@ export default function () {
   }, [baseParticipants, worldRankingByTeamId]);
 
   return (
-    <section>
-      <header className="heading prose flex max-w-none items-center justify-between border-t-0!">
-        <h2>Participants</h2>
-        <button type="button" className="btn btn-sm btn-primary" onClick={onToggleLineups}>
+    <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+      <header className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-xl font-black">Participants</h2>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+          onClick={onToggleLineups}
+        >
           {isLineupsVisible ? 'Hide lineups' : 'Show lineups'}
         </button>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 p-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {participants.map((team) => {
           const isExpanded = isLineupsVisible || hoveredTeamId === team.id;
           const isLoading = loadingByTeamId[team.id] === true;

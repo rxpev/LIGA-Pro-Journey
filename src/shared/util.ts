@@ -808,6 +808,38 @@ export function getCompetitionLogo(
   return `${protocol}${slug}-${federationSlug}.png`;
 }
 
+export function getCompetitionHonorThumbnail(options: {
+  tierSlug: Constants.TierSlug | string;
+  federationSlug?: Constants.FederationSlug | string;
+  organizer?: string | null;
+}) {
+  const tier = options.tierSlug.toLowerCase();
+  const organizer = (options.organizer || '').toLowerCase();
+  const federation = options.federationSlug?.toLowerCase() || '';
+  let file: string | null = null;
+
+  if (isMajorStageTier(options.tierSlug)) {
+    file = organizer.includes('blast')
+      ? 'major-blast.png'
+      : organizer.includes('perfect')
+        ? 'major-pw.png'
+        : organizer.includes('starladder')
+          ? 'major-starladder.png'
+          : organizer.includes('iem')
+            ? 'major-iem.png'
+            : 'major-pgl.png';
+  } else if (tier.includes('cash')) {
+    file = 'cashcup.png';
+  } else if (tier.includes('cct')) {
+    file = tier.includes('global') ? 'cct-global-finals.png' :
+      federation.includes('amer') ? 'cct-am.png' :
+        federation.includes('asia') ? 'cct-as.png' :
+          federation.includes('oce') ? 'cct-oce.png' : 'cct-eu.png';
+  }
+
+  return file ? `resources://competitions/thumbnail/${file}` : null;
+}
+
 export function formatCompetitionHostingLocation(location: Constants.CompetitionHostingLocation) {
   return `${location.city}, ${location.countryCode}`;
 }

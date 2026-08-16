@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { compact, inRange } from 'lodash';
+import { inRange } from 'lodash';
 import { format } from 'date-fns';
 import { FaCaretDown, FaChartBar } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
@@ -18,9 +18,9 @@ import { cx } from '@liga/frontend/lib';
  * @constant
  */
 const ZoneColors = [
-  'bg-green-800/10', // automatic promotion
-  'bg-blue-800/10', // playoffs
-  'bg-red-800/10', // relegation
+  'border-l-4 border-l-green-500 bg-green-800/10', // automatic promotion
+  'border-l-4 border-l-sky-500 bg-blue-800/10', // playoffs
+  'border-l-4 border-l-red-500 bg-red-800/10', // relegation
 ];
 
 /**
@@ -31,6 +31,7 @@ interface Props {
     ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
   >[number]['competitors'];
   compact?: boolean;
+  dense?: boolean;
   highlight?: number;
   hidePoints?: boolean;
   limit?: number;
@@ -41,6 +42,10 @@ interface Props {
   title?: React.ReactNode;
   zones?: Array<number[]>;
   onClick?: (competitor: Props['competitors'][number]) => void;
+  separateZones?: boolean;
+  showRoundDifference?: boolean;
+  sortByWorldRanking?: boolean;
+  zoneColors?: string[];
 }
 
 type Match = NonNullable<Props['matches']>[number];
@@ -72,16 +77,17 @@ function getPlacementLabel(position: number, count: number) {
   return `${position}-${rangeEnd}${getOrdinalSuffix(rangeEnd)}`;
 }
 
-function getZoneColorValue(value: number, zones?: Props['zones']) {
+function getZoneIndex(value: number, zones?: Props['zones']) {
   if (!zones) {
     return null;
   }
 
-  return compact(
-    zones.map((zone, zoneIdx) =>
-      inRange(value + 1, zone[0], zone[1] + 1) ? ZoneColors[zoneIdx] : null,
-    ),
-  )[0];
+  return zones.findIndex((zone) => inRange(value + 1, zone[0], zone[1] + 1));
+}
+
+function getZoneColorValue(value: number, zones?: Props['zones'], zoneColors = ZoneColors) {
+  const zoneIndex = getZoneIndex(value, zones);
+  return zoneIndex == null || zoneIndex < 0 ? null : zoneColors[zoneIndex];
 }
 
 function getMatchTeams(match: Match) {
@@ -94,6 +100,19 @@ function hasTeam(match: Match, teamId: number) {
 
 function hasOpponent(match: Match) {
   return match.competitors.filter((competitor) => competitor.teamId != null).length > 1;
+}
+
+function getRoundDifference(competitor: Props['competitors'][number], matches: Props['matches']) {
+  return (matches || []).reduce((difference, match) => {
+    if (match.status !== Constants.MatchStatus.COMPLETED || !hasOpponent(match)) {
+      return difference;
+    }
+
+    const team = match.competitors.find((item) => item.teamId === competitor.team.id);
+    const opponent = match.competitors.find((item) => item.teamId !== competitor.team.id);
+
+    return team && opponent ? difference + (team.score || 0) - (opponent.score || 0) : difference;
+  }, 0);
 }
 
 function getMatchDateTime(match: Match) {
@@ -112,9 +131,7 @@ function StandingsMatchRows(props: {
   const fmtShortDate = useFormatAppShortDate();
 
   if (!props.matches.length) {
-    return (
-      <div className="text-muted px-4 py-3 text-center text-xs">No matches scheduled.</div>
-    );
+    return <div className="text-muted px-4 py-3 text-center text-xs">No matches scheduled.</div>;
   }
 
   return (
@@ -143,9 +160,7 @@ function StandingsMatchRows(props: {
             )}
             onClick={onClick || undefined}
           >
-            <span title={format(match.date, 'PPPP')}>
-              {fmtShortDate(match.date)}
-            </span>
+            <span title={format(match.date, 'PPPP')}>{fmtShortDate(match.date)}</span>
             <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1fr)] items-center gap-3">
               <span className="truncate text-right" title={team?.team?.name}>
                 {!!team?.team && (
@@ -221,11 +236,20 @@ function StandingsMatchRows(props: {
 
 export default function (props: Props) {
   const [expandedTeamId, setExpandedTeamId] = React.useState<number | null>(null);
+  const [worldRankingByTeamId, setWorldRankingByTeamId] = React.useState<Record<number, number>>(
+    {},
+  );
   const isSwiss = props.mode === 'swiss';
   const isRanking = props.mode === 'ranking';
   const hasMatchDetails = Boolean(props.matches) && !isRanking;
   const showPlacementOrPoints = !isSwiss && (isRanking || !props.hidePoints);
-  const columnCount = 2 + (!isRanking ? 1 : 0) + (showPlacementOrPoints ? 1 : 0);
+  const showRoundDifference = Boolean(props.showRoundDifference && !isSwiss && !isRanking);
+  const shouldSortByWorldRanking = Boolean(
+    props.sortByWorldRanking &&
+      !props.matches?.some((match) => match.status === Constants.MatchStatus.COMPLETED),
+  );
+  const columnCount =
+    2 + (!isRanking ? 1 : 0) + (showRoundDifference ? 1 : 0) + (showPlacementOrPoints ? 1 : 0);
   const positionCounts = React.useMemo(
     () =>
       props.competitors.reduce((acc, competitor) => {
@@ -234,23 +258,84 @@ export default function (props: Props) {
       }, new Map<number, number>()),
     [props.competitors],
   );
-  const sortedCompetitors = React.useMemo(
-    () =>
-      [...props.competitors]
-        .sort((a, b) => a.position - b.position)
-        .slice(
-          props.offset || 0,
-          props.limit ? (props.offset || 0) + props.limit : props.competitors.length,
-        ),
-    [props.competitors, props.limit, props.offset],
-  );
+  const sortedCompetitors = React.useMemo(() => {
+    const getRanking = (teamId: number) => {
+      const ranking = worldRankingByTeamId[teamId];
+      return ranking && Number.isFinite(ranking) && ranking > 0
+        ? ranking
+        : Number.POSITIVE_INFINITY;
+    };
+
+    return [...props.competitors]
+      .sort((a, b) => {
+        if (shouldSortByWorldRanking) {
+          const rankingDelta = getRanking(a.team.id) - getRanking(b.team.id);
+          if (rankingDelta) return rankingDelta;
+          return a.team.name.localeCompare(b.team.name);
+        }
+
+        const winDelta = b.win - a.win;
+        if (winDelta) return winDelta;
+
+        const lossDelta = a.loss - b.loss;
+        if (lossDelta) return lossDelta;
+
+        const roundDifferenceDelta =
+          getRoundDifference(b, props.matches) - getRoundDifference(a, props.matches);
+        if (roundDifferenceDelta) return roundDifferenceDelta;
+
+        return a.position - b.position;
+      })
+      .slice(
+        props.offset || 0,
+        props.limit ? (props.offset || 0) + props.limit : props.competitors.length,
+      );
+  }, [
+    props.competitors,
+    props.limit,
+    props.offset,
+    shouldSortByWorldRanking,
+    worldRankingByTeamId,
+  ]);
 
   React.useEffect(() => {
     setExpandedTeamId(null);
   }, [props.competitors, props.matches]);
 
+  React.useEffect(() => {
+    if (!shouldSortByWorldRanking) {
+      setWorldRankingByTeamId({});
+      return;
+    }
+
+    let isCurrent = true;
+
+    Promise.all(
+      props.competitors.map(async (competitor) => {
+        try {
+          return [competitor.team.id, await api.team.worldRanking(competitor.team.id)] as const;
+        } catch {
+          return [competitor.team.id, 0] as const;
+        }
+      }),
+    ).then((rankings) => {
+      if (isCurrent) {
+        setWorldRankingByTeamId(Object.fromEntries(rankings));
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [props.competitors, shouldSortByWorldRanking]);
+
   return (
-    <table className="table table-fixed">
+    <table
+      className={cx(
+        'table table-fixed',
+        props.dense && 'text-xs [&_td]:h-9 [&_td]:px-3! [&_td]:py-1.5! [&_th]:px-3! [&_th]:py-2!',
+      )}
+    >
       {!!props.title && <caption>{props.title}</caption>}
       <thead>
         <tr>
@@ -259,10 +344,18 @@ export default function (props: Props) {
           </th>
           <th
             className={cx(
-              isRanking ? 'w-8/12' : props.hidePoints ? 'w-8/12' : isSwiss ? 'w-9/12' : 'w-8/12',
+              isRanking
+                ? 'w-8/12'
+                : showRoundDifference
+                  ? 'w-7/12'
+                  : props.hidePoints
+                    ? 'w-8/12'
+                    : isSwiss
+                      ? 'w-9/12'
+                      : 'w-8/12',
             )}
           >
-            Name
+            Team
           </th>
           {!isRanking && !!props.compact && (
             <th
@@ -292,6 +385,11 @@ export default function (props: Props) {
               </th>
             </>
           )}
+          {showRoundDifference && (
+            <th className="w-1/12 text-right">
+              <p title="Round Difference">RD</p>
+            </th>
+          )}
           {showPlacementOrPoints && (
             <th className={cx(isRanking ? 'w-3/12 text-right' : 'w-1/12 text-right')}>
               <p title={isRanking ? 'Finishing Position' : 'Total Points'}>
@@ -303,6 +401,17 @@ export default function (props: Props) {
       </thead>
       <tbody>
         {sortedCompetitors.map((competitor, idx) => {
+          const standingPosition = idx + (props.offset || 0);
+          const zoneIndex = getZoneIndex(standingPosition, props.zones);
+          const nextZoneIndex =
+            idx < sortedCompetitors.length - 1
+              ? getZoneIndex(standingPosition + 1, props.zones)
+              : zoneIndex;
+          const showZoneDivider = Boolean(
+            props.separateZones &&
+              idx < sortedCompetitors.length - 1 &&
+              zoneIndex !== nextZoneIndex,
+          );
           const detailMatches = (props.matches || [])
             .filter((match) => hasTeam(match, competitor.team.id) && hasOpponent(match))
             .sort(
@@ -312,6 +421,7 @@ export default function (props: Props) {
                 a.id - b.id,
             );
           const isExpanded = expandedTeamId === competitor.team.id;
+          const roundDifference = getRoundDifference(competitor, props.matches);
 
           return (
             <React.Fragment key={competitor.team.id}>
@@ -319,7 +429,8 @@ export default function (props: Props) {
                 data-interaction-hover-sound="none"
                 className={cx(
                   'group',
-                  getZoneColorValue(idx + (props.offset || 0), props.zones),
+                  getZoneColorValue(standingPosition, props.zones, props.zoneColors),
+                  showZoneDivider && '[&>td]:shadow-[inset_0_-1px_0_rgba(148,163,184,0.28)]',
                   props.onClick ? 'cursor-pointer' : 'cursor-default',
                   competitor.team.id === props.highlight && 'bg-base-content/10',
                 )}
@@ -336,14 +447,26 @@ export default function (props: Props) {
                           className="link link-hover inline-flex min-w-0 items-center"
                         >
                           {!!competitor.team.blazon && (
-                            <img src={competitor.team.blazon} className="mr-2 inline-block size-4" />
+                            <img
+                              src={competitor.team.blazon}
+                              className={cx(
+                                'mr-2 inline-block',
+                                props.dense ? 'size-3.5' : 'size-4',
+                              )}
+                            />
                           )}
                           <span className="truncate">{competitor.team.name}</span>
                         </Link>
                       ) : (
                         <>
                           {!!competitor.team.blazon && (
-                            <img src={competitor.team.blazon} className="mr-2 inline-block size-4" />
+                            <img
+                              src={competitor.team.blazon}
+                              className={cx(
+                                'mr-2 inline-block',
+                                props.dense ? 'size-3.5' : 'size-4',
+                              )}
+                            />
                           )}
                           {competitor.team.name}
                         </>
@@ -397,6 +520,11 @@ export default function (props: Props) {
                     )}
                   >
                     {`${competitor.win}-${competitor.loss}`}
+                  </td>
+                )}
+                {showRoundDifference && (
+                  <td className="text-right">
+                    {roundDifference > 0 ? `+${roundDifference}` : roundDifference}
                   </td>
                 )}
                 {showPlacementOrPoints && (

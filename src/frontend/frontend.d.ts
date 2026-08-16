@@ -21,6 +21,10 @@ declare interface RouteContextCompetitions {
   competition: Awaited<
     ReturnType<typeof api.competitions.find<typeof import('../shared/eagers').competition>>
   >;
+  competitionTitle?: string;
+  competitionLocationCountryCode?: string | null;
+  competitionLocationDisplay?: string | null;
+  canViewStatistics?: boolean;
 }
 
 /** @interface */

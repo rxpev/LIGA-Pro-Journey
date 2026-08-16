@@ -379,8 +379,7 @@ export default function () {
     0,
     PLAYING_STATUS_STEPS.findIndex((step) => step === playingStatus),
   );
-  const playingProgressValue =
-    ((playingStatusIndex + 1) / PLAYING_STATUS_STEPS.length) * 100;
+  const playingProgressValue = ((playingStatusIndex + 1) / PLAYING_STATUS_STEPS.length) * 100;
   const playError = React.useMemo(() => {
     if (!state.playError?.status) {
       return null;
@@ -719,7 +718,7 @@ export default function () {
                       ] ? (
                         <Link
                           className="btn btn-block rounded-none border-x-0"
-                          to={`/competitions/standings?federationId=${standings.competition.federationId}&season=${standings.competition.season}&tierId=${standings.competition.tier.id}`}
+                          to={`/competitions?federationId=${standings.competition.federationId}&season=${standings.competition.season}&tierId=${standings.competition.tier.id}`}
                         >
                           View Standings
                         </Link>

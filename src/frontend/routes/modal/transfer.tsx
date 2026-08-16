@@ -805,7 +805,7 @@ export default function TransferModal() {
               <span className="relative inline-flex">
                 <Image
                   className="h-12 w-12 object-contain"
-                  src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                  src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
                     location: honor.location,
                     organizer: honor.organizer,
                   })}
@@ -907,7 +907,7 @@ export default function TransferModal() {
                             <span className="relative inline-flex">
                               <Image
                                 className="h-9 w-9 object-contain"
-                                src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
                                   location: honor.location,
                                   organizer: honor.organizer,
                                 })}

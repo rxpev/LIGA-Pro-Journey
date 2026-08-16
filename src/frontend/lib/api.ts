@@ -418,6 +418,7 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_COUNT, where) as Promise<number>,
     globalPlayerStats: (params: {
       competitionId?: number;
+      competitionIds?: number[];
       currentDate?: Date | string;
       federationSlug?: string;
       name?: string;

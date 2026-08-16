@@ -222,7 +222,7 @@ function TeamHonorStrip(props: { honors: TeamHonor[] }) {
             <Image
               alt={honor.title}
               className="max-h-10 max-w-14 object-contain drop-shadow"
-              src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+              src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
                 location: honor.location,
                 organizer: honor.organizer,
               })}

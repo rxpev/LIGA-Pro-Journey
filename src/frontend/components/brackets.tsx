@@ -14,9 +14,14 @@ import { ParticipantType } from '@g-loot/react-tournament-brackets/dist/esm';
 type BracketMatches = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
 
 interface Props {
+  fitToContainer?: boolean;
   matches: BracketMatches;
   onMatchClick?: (match: BracketMatches[number]) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
+  preview?: {
+    doubleElimination?: boolean;
+    size: number;
+  };
 }
 
 const MATCH_WIDTH = 300;
@@ -95,6 +100,27 @@ function createPlaceholderMatch(matchId: BracketMatchId): BracketDisplayMatch {
   } as unknown as BracketDisplayMatch;
 }
 
+function createPreviewMatches(preview: NonNullable<Props['preview']>): BracketMatches {
+  const tourney = new Tournament(
+    preview.size,
+    preview.doubleElimination
+      ? { last: Constants.BracketIdentifier.LOWER, short: true }
+      : { short: true },
+  );
+  tourney.start();
+  const tournament = JSON.stringify(tourney.save());
+
+  return tourney.brackets
+    .rounds()
+    .flat()
+    .map((match, index) =>
+      Object.assign(createPlaceholderMatch(match.id), {
+        id: -(index + 1),
+        competition: { tournament },
+      }),
+    ) as BracketMatches;
+}
+
 function getVisualWinnerTarget(
   matchId: BracketMatchId,
   isIemGroup: boolean,
@@ -148,12 +174,15 @@ function getVisualWinnerTarget(
 }
 
 function BracketCard(props: {
+  compact?: boolean;
+  height?: number;
   highlightedTeamId?: number;
   match: BracketDisplayMatch;
   fmtDate: (value: Date | number | string) => string;
   onMatchClick?: (match: BracketDisplayMatch) => void;
   onPartyClick?: Props['onPartyClick'];
   onTeamHover: (teamId?: number) => void;
+  width?: number;
 }) {
   const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
   const isMatchHighlighted = matchHasTeam(props.match, props.highlightedTeamId);
@@ -167,23 +196,42 @@ function BracketCard(props: {
   return (
     <article
       className={cx(
-        'bg-base-200 h-[92px] w-[300px] overflow-hidden border text-xs shadow-sm transition-colors duration-150',
+        'bg-base-200 grid grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)] overflow-hidden border text-xs shadow-sm transition-colors duration-150',
+        props.compact && 'text-[13px]',
         canOpenMatch && 'cursor-pointer',
         isMatchHighlighted ? 'border-info/70 shadow-info/20' : 'border-base-content/15',
       )}
       onClick={handleMatchClick}
+      style={{ height: props.height || MATCH_HEIGHT, width: props.width || MATCH_WIDTH }}
     >
-      <header className="text-info/70 bg-base-100 border-base-content/10 border-b px-3 py-1 font-semibold">
+      <header
+        className={cx(
+          'text-base-content bg-base-100 border-base-content/10 shrink-0 border-b leading-none font-semibold',
+          props.compact ? 'px-2 py-0.5' : 'px-3 py-1',
+        )}
+      >
         {props.match.isPlaceholder ? 'TBD' : props.fmtDate(props.match.date)}
       </header>
       {props.match.isPlaceholder &&
         [0, 1].map((idx) => (
           <div
             key={`${props.match.payload}-${idx}`}
-            className="text-base-content/35 bg-base-100/65 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left"
+            className={cx(
+              'text-base-content/35 bg-base-100/65 flex w-full items-center justify-between gap-2 pr-0 text-left',
+              '!h-auto min-h-0 px-2',
+              !props.compact && 'px-3',
+            )}
           >
-            <span>TBD</span>
-            <span className="bg-base-300 flex h-full w-12 shrink-0 items-center justify-center">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="text-base-content/35 text-lg leading-none font-bold">?</span>
+              <span>TBD</span>
+            </span>
+            <span
+              className={cx(
+                'bg-base-300 flex h-full shrink-0 items-center justify-center',
+                props.compact ? 'w-10' : 'w-12',
+              )}
+            >
               -
             </span>
           </div>
@@ -197,7 +245,9 @@ function BracketCard(props: {
           <div
             key={competitor.id}
             className={cx(
-              'hover:bg-base-300 flex h-8 w-full items-center justify-between gap-2 px-3 pr-0 text-left transition-colors duration-150',
+              'hover:bg-base-300 flex w-full items-center justify-between gap-2 pr-0 text-left transition-colors duration-150',
+              '!h-auto min-h-0 px-2',
+              !props.compact && 'px-3',
               isHighlighted
                 ? 'bg-info/15 text-base-content'
                 : won
@@ -237,7 +287,8 @@ function BracketCard(props: {
             </span>
             <span
               className={cx(
-                'bg-base-300 flex h-full w-12 shrink-0 items-center justify-center tabular-nums',
+                'bg-base-300 flex h-full shrink-0 items-center justify-center tabular-nums',
+                props.compact ? 'w-10' : 'w-12',
                 isHighlighted
                   ? 'text-info'
                   : won
@@ -257,15 +308,24 @@ function BracketCard(props: {
 }
 
 function ManualBracket(props: {
-  matches: Props['matches'];
+  fitToContainer?: boolean;
+  matches: BracketDisplayMatch[];
   tourney: Tournament;
   onMatchClick?: Props['onMatchClick'];
   onPartyClick?: Props['onPartyClick'];
 }) {
   const fmtDate = useFormatAppDate();
+  const matchWidth = props.fitToContainer ? 220 : MATCH_WIDTH;
+  const matchHeight = props.fitToContainer ? 76 : MATCH_HEIGHT;
+  const roundGap = props.fitToContainer ? 32 : ROUND_GAP;
+  const matchGap = props.fitToContainer ? 22 : MATCH_GAP;
+  const headerHeight = props.fitToContainer ? 30 : HEADER_HEIGHT;
+  const bracketTopOffset = props.fitToContainer ? 46 : 58;
   const [zoom, setZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const [highlightedTeamId, setHighlightedTeamId] = React.useState<number>();
+  const viewportRef = React.useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = React.useState({ height: 0, width: 0 });
   const skipUpperFinal = Boolean(props.tourney.iemGroup?.metadata().options.skipUpperFinal);
   const [dragStart, setDragStart] = React.useState<{
     mouseX: number;
@@ -273,17 +333,24 @@ function ManualBracket(props: {
     x: number;
     y: number;
   }>();
-  const handleWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const direction = event.deltaY > 0 ? -1 : 1;
-    setZoom((value) => {
-      const next = value + direction * 0.08;
-      return Math.min(1.35, Math.max(0.45, Number(next.toFixed(2))));
-    });
-  }, []);
+  const handleWheel = React.useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (props.fitToContainer) {
+        return;
+      }
+
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? -1 : 1;
+      setZoom((value) => {
+        const next = value + direction * 0.08;
+        return Math.min(1.35, Math.max(0.45, Number(next.toFixed(2))));
+      });
+    },
+    [props.fitToContainer],
+  );
   const handleMouseDown = React.useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
+      if (props.fitToContainer || event.button !== 0) {
         return;
       }
 
@@ -295,7 +362,7 @@ function ManualBracket(props: {
         y: pan.y,
       });
     },
-    [pan.x, pan.y],
+    [pan.x, pan.y, props.fitToContainer],
   );
   const handleMouseMove = React.useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -324,7 +391,10 @@ function ManualBracket(props: {
         acc[section][matchId.r].push(match);
         return acc;
       },
-      { lower: {}, upper: {} } as Record<'lower' | 'upper', Record<number, Props['matches']>>,
+      {
+        lower: {},
+        upper: {},
+      } as Record<'lower' | 'upper', Record<number, BracketDisplayMatch[]>>,
     );
 
     if (props.tourney.iemGroup) {
@@ -373,7 +443,7 @@ function ManualBracket(props: {
       ...roundNumbers.map((round) => rounds[round]?.length || 0),
     );
     const sectionHeight =
-      HEADER_HEIGHT + 58 + maxMatches * MATCH_HEIGHT + (maxMatches - 1) * MATCH_GAP;
+      headerHeight + bracketTopOffset + maxMatches * matchHeight + (maxMatches - 1) * matchGap;
     const positions = new Map<
       string,
       { hidden: boolean; match: BracketDisplayMatch; x: number; y: number }
@@ -401,21 +471,23 @@ function ManualBracket(props: {
       matches.forEach((match, matchIndex) => {
         const matchId = parseMatchId(match);
         const matchKey = getMatchKey(matchId);
-        const x = roundIndex * (MATCH_WIDTH + ROUND_GAP);
+        const x = roundIndex * (matchWidth + roundGap);
         const childCenters = (incoming.get(matchKey) || [])
           .map((key) => positions.get(key))
           .filter(Boolean)
-          .map((position) => position!.y + MATCH_HEIGHT / 2);
-        const fallbackY = top + HEADER_HEIGHT + 58 + matchIndex * (MATCH_HEIGHT + MATCH_GAP);
+          .map((position) => position!.y + matchHeight / 2);
+        const fallbackY =
+          top + headerHeight + bracketTopOffset + matchIndex * (matchHeight + matchGap);
         const isFirstRound = matchId.r === firstRound;
         const isHiddenBye =
+          !match.isPlaceholder &&
           sectionKey === 'upper' &&
           isFirstRound &&
           match.competitors.length < 2 &&
           roundNumbers.length > 1;
         const y = childCenters.length
           ? childCenters.reduce((sum, center) => sum + center, 0) / childCenters.length -
-            MATCH_HEIGHT / 2
+            matchHeight / 2
           : fallbackY;
         positions.set(matchKey, { hidden: isHiddenBye, x, y, match });
       });
@@ -428,7 +500,7 @@ function ManualBracket(props: {
       top,
       roundNumbers,
       positions,
-      width: roundNumbers.length * MATCH_WIDTH + Math.max(0, roundNumbers.length - 1) * ROUND_GAP,
+      width: roundNumbers.length * matchWidth + Math.max(0, roundNumbers.length - 1) * roundGap,
     };
   };
 
@@ -455,14 +527,45 @@ function ManualBracket(props: {
     if (upperFinal && lowerFinal && grandFinal) {
       upperFinal.x = lowerFinal.x;
       grandFinal.y =
-        (upperFinal.y + MATCH_HEIGHT / 2 + lowerFinal.y + MATCH_HEIGHT / 2) / 2 - MATCH_HEIGHT / 2;
+        (upperFinal.y + matchHeight / 2 + lowerFinal.y + matchHeight / 2) / 2 - matchHeight / 2;
     }
   }
 
   const sections = lower.nodes.length ? [upper, lower] : [upper];
-  const width = Math.max(...sections.map((section) => section.width));
+  const width = Math.max(
+    ...sections.flatMap((section) => section.nodes.map((node) => node.x + matchWidth)),
+  );
   const height = sections.reduce((max, section) => Math.max(max, section.top + section.height), 0);
   const allPositions = new Map(sections.flatMap((section) => [...section.positions.entries()]));
+
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+
+    if (!viewport) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setViewportSize({
+        height: entry.contentRect.height,
+        width: entry.contentRect.width,
+      });
+    });
+
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!props.fitToContainer || !viewportSize.width || !viewportSize.height) {
+      return;
+    }
+
+    const fitZoom = (viewportSize.width - 40) / width;
+    const minimumZoom = lower.nodes.length ? 0.65 : 0.7;
+    setZoom(Number(Math.max(minimumZoom, fitZoom).toFixed(2)));
+    setPan({ x: 0, y: 0 });
+  }, [height, props.fitToContainer, viewportSize.height, viewportSize.width, width]);
 
   const connectors = sections.flatMap((section) =>
     section.nodes.flatMap(({ match }) => {
@@ -481,10 +584,10 @@ function ManualBracket(props: {
         return [];
       }
 
-      const startX = from.x + MATCH_WIDTH;
-      const startY = from.y + MATCH_HEIGHT / 2;
+      const startX = from.x + matchWidth;
+      const startY = from.y + matchHeight / 2;
       const endX = to.x;
-      const endY = to.y + MATCH_HEIGHT / 2;
+      const endY = to.y + matchHeight / 2;
       const midX = startX + (endX - startX) / 2;
 
       return [
@@ -550,7 +653,7 @@ function ManualBracket(props: {
   };
   const roundLeft = (section: BracketSection, round: number, roundIndex: number) =>
     section.nodes.find(({ match }) => parseMatchId(match).r === round)?.x ??
-    roundIndex * (MATCH_WIDTH + ROUND_GAP);
+    roundIndex * (matchWidth + roundGap);
   const roundTop = (section: BracketSection, round: number) =>
     hasStandardDoubleElimFinals && section.title === 'Lower Bracket' && round === 5
       ? upper.top
@@ -560,8 +663,9 @@ function ManualBracket(props: {
     <div
       className={cx(
         'bg-base-100 relative h-full w-full overflow-hidden p-5 select-none',
-        dragStart ? 'cursor-grabbing' : 'cursor-grab',
+        props.fitToContainer ? 'cursor-default' : dragStart ? 'cursor-grabbing' : 'cursor-grab',
       )}
+      ref={viewportRef}
       onMouseDown={handleMouseDown}
       onMouseLeave={handleMouseLeave}
       onMouseMove={handleMouseMove}
@@ -593,22 +697,16 @@ function ManualBracket(props: {
           </svg>
           {sections.map((section) => (
             <React.Fragment key={section.title}>
-              {section.title === 'Lower Bracket' && (
-                <h3
-                  className="text-base-content/70 absolute text-lg font-black uppercase"
-                  style={{ top: section.top - 30, left: 0 }}
-                >
-                  {section.title}
-                </h3>
-              )}
               {section.roundNumbers.map((round, roundIndex) => (
                 <header
                   key={`${section.title}-${round}`}
-                  className="text-info bg-base-200 border-base-content/10 absolute h-9 border text-center text-sm leading-9 font-bold"
+                  className="text-base-content bg-base-200 border-base-content/10 absolute border text-center text-sm font-bold"
                   style={{
                     top: roundTop(section, round),
                     left: roundLeft(section, round, roundIndex),
-                    width: MATCH_WIDTH,
+                    width: matchWidth,
+                    height: headerHeight,
+                    lineHeight: `${headerHeight}px`,
                   }}
                 >
                   {roundTitle(section, round)}
@@ -619,11 +717,14 @@ function ManualBracket(props: {
                   <div key={match.id} className="absolute" style={{ left: x, top: y }}>
                     <BracketCard
                       highlightedTeamId={highlightedTeamId}
+                      compact={props.fitToContainer}
+                      height={matchHeight}
                       match={match}
                       fmtDate={fmtDate}
                       onMatchClick={props.onMatchClick}
                       onPartyClick={props.onPartyClick}
                       onTeamHover={setHighlightedTeamId}
+                      width={matchWidth}
                     />
                   </div>
                 ),
@@ -644,19 +745,32 @@ function ManualBracket(props: {
  * @exports
  */
 export default function (props: Props) {
+  const displayMatches = React.useMemo(
+    () =>
+      props.matches.length
+        ? props.matches
+        : props.preview
+          ? createPreviewMatches(props.preview)
+          : [],
+    [props.matches, props.preview],
+  );
   const tourney = React.useMemo(
-    () => Tournament.restore(JSON.parse(props.matches[0].competition.tournament)),
-    [props.matches],
+    () =>
+      displayMatches[0]
+        ? Tournament.restore(JSON.parse(displayMatches[0].competition.tournament))
+        : undefined,
+    [displayMatches],
   );
 
-  if (!tourney.brackets) {
+  if (!tourney?.brackets) {
     return null;
   }
 
   return (
     <ManualBracket
-      matches={props.matches}
+      matches={displayMatches}
       tourney={tourney}
+      fitToContainer={props.fitToContainer}
       onMatchClick={props.onMatchClick}
       onPartyClick={props.onPartyClick}
     />

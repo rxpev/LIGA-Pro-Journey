@@ -470,7 +470,7 @@ export default function () {
                                     (isSwiss ? (
                                       <Link
                                         className="btn join-item btn-sm flex-1 rounded-none"
-                                        to={`/competitions/standings?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`}
+                                        to={`/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`}
                                       >
                                         View Standings
                                       </Link>
