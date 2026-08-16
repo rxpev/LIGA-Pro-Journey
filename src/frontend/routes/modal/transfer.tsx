@@ -208,13 +208,23 @@ function getCompetitionTitle(
     return ['ESL Pro League', city, year].filter(Boolean).join(' ');
   }
 
-  return [
-    Util.getCompetitionDisplayName(competition.tier.league.name, competition.tier.slug),
-    city,
-    year,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const displayName = Util.getCompetitionDisplayName(
+    competition.tier.league.name,
+    competition.tier.slug,
+  ).replace(/\s+Playoffs$/i, '');
+  const federationSlug = competition.federation.slug;
+  const region =
+    federationSlug === Constants.FederationSlug.ESPORTS_OCE
+      ? 'Oceania'
+      : federationSlug === Constants.FederationSlug.ESPORTS_ASIA
+        ? 'Asia'
+        : federationSlug === Constants.FederationSlug.ESPORTS_AMERICAS
+          ? 'Americas'
+          : federationSlug === Constants.FederationSlug.ESPORTS_EUROPA
+            ? 'Europe'
+            : city;
+
+  return [displayName, region, year].filter(Boolean).join(' ');
 }
 
 function parseNewsPayload(payload?: string | null) {
@@ -229,7 +239,10 @@ function parseNewsPayload(payload?: string | null) {
   }
 }
 
-function getTop20Year(item: Awaited<ReturnType<typeof api.news.all>>[number], payload: Record<string, unknown>) {
+function getTop20Year(
+  item: Awaited<ReturnType<typeof api.news.all>>[number],
+  payload: Record<string, unknown>,
+) {
   if (Number.isFinite(Number(payload.year))) {
     return Number(payload.year);
   }
@@ -509,24 +522,21 @@ export default function TransferModal() {
 
     return ['MVP winner at:', ...mvps.map((mvp) => mvp.title)].join('\n');
   }, [mvps]);
-  const showTooltip = React.useCallback(
-    (event: React.MouseEvent<HTMLElement>, content: string) => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const tooltipWidth = 280;
-      const tooltipHeight = Math.min(320, 32 + content.split('\n').length * 20);
-      const top =
-        rect.bottom + 8 + tooltipHeight <= window.innerHeight
-          ? rect.bottom + 8
-          : Math.max(12, rect.top - tooltipHeight - 8);
+  const showTooltip = React.useCallback((event: React.MouseEvent<HTMLElement>, content: string) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 280;
+    const tooltipHeight = Math.min(320, 32 + content.split('\n').length * 20);
+    const top =
+      rect.bottom + 8 + tooltipHeight <= window.innerHeight
+        ? rect.bottom + 8
+        : Math.max(12, rect.top - tooltipHeight - 8);
 
-      setActiveTooltip({
-        content,
-        left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
-        top,
-      });
-    },
-    [],
-  );
+    setActiveTooltip({
+      content,
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
+      top,
+    });
+  }, []);
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
   const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
@@ -756,9 +766,7 @@ export default function TransferModal() {
       </section>
 
       <section className="border-base-content/10 flex min-h-12 max-w-full min-w-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-t px-4 py-2">
-        {!hasHonors && (
-          <span className="shrink-0 text-sm opacity-60">No honors yet.</span>
-        )}
+        {!hasHonors && <span className="shrink-0 text-sm opacity-60">No honors yet.</span>}
         {mvps.length > 0 && (
           <div
             className="flex shrink-0 items-center gap-2"
@@ -857,7 +865,7 @@ export default function TransferModal() {
                     {formatStintDate(stint.startedAt)} -{' '}
                     {stint.endedAt ? formatStintDate(stint.endedAt) : 'Present'}
                   </td>
-                  <td>
+                  <td className="h-12">
                     {stint.team ? (
                       <div className="flex items-center gap-2">
                         <img src={stint.team.blazon} className="inline-block size-6" />
@@ -888,7 +896,7 @@ export default function TransferModal() {
                     {stintHonors.length === 0 ? (
                       <span className="opacity-60">—</span>
                     ) : (
-                      <div className="flex max-w-full min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap py-1">
+                      <div className="flex h-10 max-w-full min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap">
                         {stintHonors.map((honor, idx) => (
                           <div
                             key={`${stint.id}-${honor.key}-${honor.season}-${idx}`}

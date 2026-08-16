@@ -157,16 +157,32 @@ const routes = createMemoryRouter([
         element: <Routes.Main.Teams.Teams />,
         children: [
           {
-            element: <Routes.Main.Teams.Overview />,
+            element: <Routes.Main.Teams.Roster />,
             index: true,
+          },
+          {
+            path: 'roster',
+            element: <Routes.Main.Teams.Roster />,
+          },
+          {
+            path: 'matches',
+            element: <Routes.Main.Teams.Matches />,
+          },
+          {
+            path: 'events',
+            element: <Routes.Main.Teams.Events />,
+          },
+          {
+            path: 'achievements',
+            element: <Routes.Main.Teams.Achievements />,
           },
           {
             path: 'history',
             element: <Routes.Main.Teams.History />,
           },
           {
-            path: 'results',
-            element: <Routes.Main.Teams.Results />,
+            path: 'news',
+            element: <Routes.Main.Teams.News />,
           },
         ],
       },
@@ -520,7 +536,8 @@ function Root() {
             role="button"
             className={cx(
               'btn btn-ghost',
-              isFaceitRoute && '!bg-[#0f0f0f] !text-[#f2f2f2] hover:!bg-neutral-800/70 hover:!text-white',
+              isFaceitRoute &&
+                '!bg-[#0f0f0f] !text-[#f2f2f2] hover:!bg-neutral-800/70 hover:!text-white',
             )}
           >
             <Image

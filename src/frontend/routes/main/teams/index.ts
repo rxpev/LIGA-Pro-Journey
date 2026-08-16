@@ -3,9 +3,13 @@
  *
  * @module
  */
+import Achievements from './achievements';
+import Events from './events';
 import History from './history';
+import Matches from './matches';
+import News from './news';
 import Overview from './overview';
-import Results from './results';
+import Roster from './roster';
 import Teams from './teams';
 
 /**
@@ -14,8 +18,12 @@ import Teams from './teams';
  * @exports
  */
 export default {
+  Achievements,
+  Events,
   History,
+  Matches,
+  News,
   Overview,
-  Results,
+  Roster,
   Teams,
 };

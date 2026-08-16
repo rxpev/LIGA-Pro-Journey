@@ -115,8 +115,7 @@ export default function (props: PlayerCardProps) {
     String(roleRaw).toLowerCase() === 'awper' ||
     String(roleRaw).toLowerCase() === 'sniper';
 
-  const isIgl =
-    roleRaw === Constants.UserRole.IGL
+  const isIgl = roleRaw === Constants.UserRole.IGL;
 
   const t = useTranslation('components');
   if (props.compact) {
@@ -151,7 +150,9 @@ export default function (props: PlayerCardProps) {
             <span
               className={cx(
                 'inline-flex h-6 min-w-[76px] items-center justify-center rounded px-2 text-[10px] leading-none font-semibold tracking-wide uppercase',
-                props.player.starter ? 'bg-[#2f4660] text-[#9fc9f3]' : 'bg-[#7a2430] text-[#ffdce3]',
+                props.player.starter
+                  ? 'bg-[#2f4660] text-[#9fc9f3]'
+                  : 'bg-[#7a2430] text-[#ffdce3]',
               )}
             >
               {props.player.starter ? 'STARTER' : 'BENCHED'}
