@@ -842,7 +842,7 @@ export default function () {
     setRatings({});
     setRatingGamesByPlayer({});
 
-    if (!timelinePlayers.length) {
+    if (!state.profile?.simulateNpcMatchStats || !timelinePlayers.length) {
       return;
     }
 
@@ -868,7 +868,7 @@ export default function () {
       );
       setRatings(Object.fromEntries(rows.map(([playerId, , rating]) => [playerId, rating])));
     });
-  }, [team.id, timelinePlayers]);
+  }, [state.profile?.simulateNpcMatchStats, team.id, timelinePlayers]);
 
   const sortedPlayers = React.useMemo(
     () =>
@@ -899,14 +899,15 @@ export default function () {
             <th>Player</th>
             <th className="w-2/12 text-center">Status</th>
             <th className="w-2/12 text-center">Time on team</th>
-            <th className="w-2/12 text-center">Maps played</th>
-            <th className="w-2/12 text-center">Rating</th>
+            {state.profile?.simulateNpcMatchStats && (
+              <th className="w-2/12 text-center">Maps played</th>
+            )}
+            <th className="w-2/12 text-center">XP</th>
           </tr>
         </thead>
         <tbody>
           {sortedPlayers.map((player) => {
             const playerRating = ratings[player.id];
-            const ratingValue = playerRating?.maps ? playerRating.rating.toFixed(2) : '-';
             const status = statusLabel(player);
 
             return (
@@ -944,21 +945,19 @@ export default function () {
                 <td className="text-muted text-center whitespace-pre-line">
                   {formatTimeOnTeam(player, team.id, now)}
                 </td>
-                <td className="text-center">{playerRating?.maps ?? 0}</td>
-                <td
-                  className={cx(
-                    'text-center text-lg font-black',
-                    playerRating?.maps ? getRatingColorClass(playerRating.rating) : 'text-muted',
-                  )}
-                >
-                  {ratingValue}
-                </td>
+                {state.profile?.simulateNpcMatchStats && (
+                  <td className="text-center">{playerRating?.maps ?? 0}</td>
+                )}
+                <td className="text-center text-lg font-black text-[#a8d8ff]">{player.xp ?? 0}</td>
               </tr>
             );
           })}
           {!sortedPlayers.length && (
             <tr>
-              <td colSpan={5} className="h-32 text-center">
+              <td
+                colSpan={state.profile?.simulateNpcMatchStats ? 5 : 4}
+                className="h-32 text-center"
+              >
                 <b>{team.name}</b> {t('shared.noBench')}
               </td>
             </tr>

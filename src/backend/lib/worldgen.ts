@@ -5050,7 +5050,13 @@ export async function recordMatchResults() {
       await Promise.all([
         sendUserAward(competition, tournament),
         distributePrizePool(competition, tournament),
-        isCompetitionDone ? upsertCompetitionMvp(Number(competitionId)) : Promise.resolve(),
+        isCompetitionDone
+          ? DatabaseClient.prisma.profile
+              .findFirst({ select: { simulateNpcMatchStats: true } })
+              .then((profile) =>
+                profile?.simulateNpcMatchStats ? upsertCompetitionMvp(Number(competitionId)) : null,
+              )
+          : Promise.resolve(),
       ]);
 
       return updatedCompetition;
@@ -5588,7 +5594,8 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     identity.type === 'cis-core'
       ? compatibleCandidates.filter(
           (candidate) =>
-            candidate.countryId !== identity.dominantCountryId && isNpcTransferCisCountry(candidate),
+            candidate.countryId !== identity.dominantCountryId &&
+            isNpcTransferCisCountry(candidate),
         )
       : [];
   const cohesion = getTeamNationalityCohesion(team as any);

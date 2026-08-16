@@ -213,7 +213,9 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   await Worldgen.recalculateAllTeamCountryIdentities();
 
   let profile = await DatabaseClient.prisma.profile.findFirst();
-  const newsItems = await News.generateAutomaticItems(profile.date);
+  const newsItems = profile.simulateNpcMatchStats
+    ? await News.generateAutomaticItems(profile.date)
+    : [];
   if (newsItems.length > 0) {
     WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents.send(
       Constants.IPCRoute.NEWS_ITEMS_UPDATED,

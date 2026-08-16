@@ -5981,6 +5981,11 @@ async function createDrafts(drafts: NewsDraft[]) {
 
 export async function generateAutomaticItems(date?: Date) {
   const profile = await DatabaseClient.prisma.profile.findFirst();
+
+  if (!profile?.simulateNpcMatchStats) {
+    return [];
+  }
+
   const publishedAt = date || profile?.date || new Date();
   const topTeamIds = await getTopTeamIds();
   const transferShortTeamIds = await getTransferShortTeamIds();

@@ -659,10 +659,21 @@ export default function () {
     [navigate],
   );
 
-  const rankingFederations = React.useMemo(
-    () => [...federations].sort((a, b) => a.id - b.id),
-    [federations],
-  );
+  const rankingFederations = React.useMemo(() => {
+    const order = [
+      Constants.FederationSlug.ESPORTS_EUROPA,
+      Constants.FederationSlug.ESPORTS_AMERICAS,
+      Constants.FederationSlug.ESPORTS_ASIA,
+      Constants.FederationSlug.ESPORTS_OCE,
+    ];
+
+    return [...federations].sort(
+      (a, b) =>
+        (order.indexOf(a.slug as Constants.FederationSlug) + 1 || Number.MAX_SAFE_INTEGER) -
+          (order.indexOf(b.slug as Constants.FederationSlug) + 1 || Number.MAX_SAFE_INTEGER) ||
+        a.id - b.id,
+    );
+  }, [federations]);
 
   const selectedRankingFederation = React.useMemo(
     () => federations.find((federation) => federation.id === selectedRankingFederationId),
@@ -784,9 +795,13 @@ export default function () {
         },
       })
       .then(setSquad);
-    api.news
-      .all()
-      .then((items) => setTeamNewsItems(items.filter((item) => isRelatedTeamNews(item, team.id))));
+    if (state.profile?.simulateNpcMatchStats) {
+      api.news
+        .all()
+        .then((items) =>
+          setTeamNewsItems(items.filter((item) => isRelatedTeamNews(item, team.id))),
+        );
+    }
     api.team.worldRanking(team.id).then(setWorldRanking);
     // Fetch a buffer because the rail removes byes/incomplete opponent records
     // before selecting the five matches it displays.
@@ -853,7 +868,7 @@ export default function () {
           })),
         ),
       );
-  }, [team]);
+  }, [state.profile?.simulateNpcMatchStats, team]);
 
   React.useEffect(() => {
     setStandingMatches([]);
@@ -1152,15 +1167,17 @@ export default function () {
                   >
                     Achievements
                   </button>
-                  <button
-                    className={cx(
-                      'btn hover:bg-base-200 flex-1 rounded-none border-0 font-normal shadow-none',
-                      location.pathname === TabIdentifier.NEWS && 'btn-active!',
-                    )}
-                    onClick={() => navigate(TabIdentifier.NEWS)}
-                  >
-                    News
-                  </button>
+                  {state.profile?.simulateNpcMatchStats && (
+                    <button
+                      className={cx(
+                        'btn hover:bg-base-200 flex-1 rounded-none border-0 font-normal shadow-none',
+                        location.pathname === TabIdentifier.NEWS && 'btn-active!',
+                      )}
+                      onClick={() => navigate(TabIdentifier.NEWS)}
+                    >
+                      News
+                    </button>
+                  )}
                 </div>
               </nav>
               <section className="min-h-0 w-full flex-1 overflow-y-auto">

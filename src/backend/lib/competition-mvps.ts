@@ -124,6 +124,14 @@ export const CompetitionMvpEligibleTierSlugs = [
   Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
 ] as string[];
 
+async function isMvpSimulationEnabled() {
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { simulateNpcMatchStats: true },
+  });
+
+  return Boolean(profile?.simulateNpcMatchStats);
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -320,6 +328,10 @@ export async function ensureCompetitionMvpTable() {
 }
 
 export async function calculateCompetitionMvp(competitionId: number) {
+  if (!(await isMvpSimulationEnabled())) {
+    return null;
+  }
+
   await backfillMissingMatchPlayerGameStats();
 
   const competition = await DatabaseClient.prisma.competition.findFirst({
@@ -538,6 +550,10 @@ export async function calculateCompetitionMvp(competitionId: number) {
 }
 
 export async function upsertCompetitionMvp(competitionId: number) {
+  if (!(await isMvpSimulationEnabled())) {
+    return null;
+  }
+
   await ensureCompetitionMvpTable();
   const mvp = await calculateCompetitionMvp(competitionId);
 
@@ -576,6 +592,10 @@ export async function upsertCompetitionMvp(competitionId: number) {
 }
 
 export async function backfillMissingCompetitionMvps(competitionId?: number) {
+  if (!(await isMvpSimulationEnabled())) {
+    return;
+  }
+
   await ensureCompetitionMvpTable();
 
   const candidates = await DatabaseClient.prisma.$queryRawUnsafe<CompetitionCandidate[]>(
@@ -607,6 +627,10 @@ export async function backfillMissingCompetitionMvps(competitionId?: number) {
 }
 
 export async function findCompetitionMvps(options: { competitionId?: number; playerId?: number }) {
+  if (!(await isMvpSimulationEnabled())) {
+    return [];
+  }
+
   await backfillMissingCompetitionMvps(options.competitionId);
 
   const where: string[] = [];

@@ -433,7 +433,7 @@ function Root() {
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],
-    ['/news', 'News'],
+    ...(state.profile?.simulateNpcMatchStats ? [['/news', 'News']] : []),
     ['/faceit', 'FACEIT'],
     ['/squad', t('navigation.squadHub')],
     ['/stats', 'Statistics'],
