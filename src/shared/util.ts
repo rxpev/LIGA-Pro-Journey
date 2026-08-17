@@ -831,8 +831,21 @@ export function getCompetitionHonorThumbnail(options: {
           : organizer.includes('iem')
             ? 'major-iem.png'
             : 'major-pgl.png';
+  } else if (tier === Constants.TierSlug.BLAST_FINALS) {
+    file = 'blast-finals.png';
   } else if (tier.includes('cash')) {
     file = 'cashcup.png';
+  } else if (tier === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    file = 'iem-cologne-trophy.png';
+  } else if (tier === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    file = 'iem-krakow-trophy.png';
+  } else if (
+    tier === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS
+  ) {
+    file = 'esea.png';
   } else if (tier.includes('cct')) {
     file = tier.includes('global') ? 'cct-global-finals.png' :
       federation.includes('amer') ? 'cct-am.png' :

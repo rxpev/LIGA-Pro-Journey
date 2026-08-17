@@ -765,58 +765,62 @@ export default function TransferModal() {
         </table>
       </section>
 
-      <section className="border-base-content/10 flex min-h-12 max-w-full min-w-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-t px-4 py-2">
-        {!hasHonors && <span className="shrink-0 text-sm opacity-60">No honors yet.</span>}
-        {mvps.length > 0 && (
-          <div
-            className="flex shrink-0 items-center gap-2"
-            aria-label={mvpTooltip}
-            onMouseEnter={(event) => showTooltip(event, mvpTooltip)}
-            onMouseLeave={() => setActiveTooltip(null)}
-          >
-            <Image className="h-9 w-9 object-contain" src={MVP_MEDAL_SRC} />
-            {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
-          </div>
-        )}
-        {activeTooltip &&
-          createPortal(
+      {hasHonors && (
+        <section className="border-base-content/10 flex min-h-12 max-w-full min-w-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-t px-4 py-2">
+          {mvps.length > 0 && (
             <div
-              className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
-              style={activeTooltip}
-            >
-              {activeTooltip.content}
-            </div>,
-            document.body,
-          )}
-        {Object.values(honorGroups).map((honor) => {
-          const honorTooltip =
-            honor.titles.length === 1
-              ? honor.titles[0]
-              : ['Tournament wins at:', ...honor.titles].join('\n');
-          const isMajor = Util.isMajorStageTier(honor.tierSlug);
-
-          return (
-            <div
-              key={honor.key}
-              className="flex shrink-0 cursor-help items-center gap-2"
-              onMouseEnter={(event) => showTooltip(event, honorTooltip)}
+              className="flex shrink-0 items-center gap-2"
+              aria-label={mvpTooltip}
+              onMouseEnter={(event) => showTooltip(event, mvpTooltip)}
               onMouseLeave={() => setActiveTooltip(null)}
             >
-              <span className="relative inline-flex">
-                <Image
-                  className="h-12 w-12 object-contain"
-                  src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                    location: honor.location,
-                    organizer: honor.organizer,
-                  })}
-                />
-                {isMajor && <MajorHonorBadge />}
-              </span>
-              {honor.count > 1 && <span className="text-base font-bold">x{honor.count}</span>}
+              <Image className="h-9 w-9 object-contain" src={MVP_MEDAL_SRC} />
+              {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
             </div>
-          );
-        })}
-      </section>
+          )}
+          {activeTooltip &&
+            createPortal(
+              <div
+                className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
+                style={activeTooltip}
+              >
+                {activeTooltip.content}
+              </div>,
+              document.body,
+            )}
+          {Object.values(honorGroups).map((honor) => {
+            const honorTooltip =
+              honor.titles.length === 1
+                ? honor.titles[0]
+                : ['Tournament wins at:', ...honor.titles].join('\n');
+            const isMajor = Util.isMajorStageTier(honor.tierSlug);
+
+            return (
+              <div
+                key={honor.key}
+                className="flex shrink-0 cursor-help items-center gap-2"
+                onMouseEnter={(event) => showTooltip(event, honorTooltip)}
+                onMouseLeave={() => setActiveTooltip(null)}
+              >
+                <span className="relative inline-flex">
+                  <Image
+                    className="h-12 w-12 object-contain"
+                    src={
+                      Util.getCompetitionHonorThumbnail(honor) ||
+                      Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                        location: honor.location,
+                        organizer: honor.organizer,
+                      })
+                    }
+                  />
+                  {isMajor && <MajorHonorBadge />}
+                </span>
+                {honor.count > 1 && <span className="text-base font-bold">x{honor.count}</span>}
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       <section className="flex-1 overflow-y-auto">
         <table className="table-pin-rows table table-fixed">
