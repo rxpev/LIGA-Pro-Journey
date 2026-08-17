@@ -7,6 +7,7 @@ import React from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { cx } from '@liga/frontend/lib';
 import { Constants, Eagers, Util } from '@liga/shared';
+import swissTeamPlaceholder from '@liga/frontend/assets/swiss/teamplaceholder.svg';
 
 type Competition = RouteContextCompetitions['competition'];
 
@@ -25,6 +26,17 @@ const DIRECT_INVITE_LABELS: Partial<Record<string, string>> = {
   [Constants.TierSlug.IEM_KRAKOW_GROUP_A]: 'World Ranking',
   [Constants.TierSlug.IEM_KRAKOW_GROUP_B]: 'World Ranking',
 };
+
+const CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES = [
+  'CCT Series Europe',
+  'CCT Series Europe',
+  'CCT Series Europe',
+  'CCT Series Europe',
+  'CCT Series Americas',
+  'CCT Series Americas',
+  'CCT Series Asia',
+  'CCT Series Oceania',
+];
 
 type SourceRule = {
   target: Constants.TierSlug;
@@ -941,10 +953,18 @@ export default function () {
     ].includes(competition.tier.slug as Constants.TierSlug) &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
   const isPreTournamentCctSeries =
-    [Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_OCE_SERIES].includes(
+    [
+      Constants.TierSlug.CCT_SERIES,
+      Constants.TierSlug.CCT_OCE_SERIES,
+    ].includes(
       competition.tier.slug as Constants.TierSlug,
     ) &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentCctGlobalFinals =
+    competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const preTournamentCctPlaceholderCount =
+    competition.tier.slug === Constants.TierSlug.CCT_OCE_SERIES ? 8 : 16;
 
   const [hoveredTeamId, setHoveredTeamId] = React.useState<number | null>(null);
   const [isLineupsVisible, setIsLineupsVisible] = React.useState(false);
@@ -1085,12 +1105,51 @@ export default function () {
     });
   }, [baseParticipants, worldRankingByTeamId]);
 
-  if (isPreTournamentFixedBracketQualifier || isPreTournamentCctSeries) {
+  if (isPreTournamentCctGlobalFinals) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <h2 className="mb-4 text-xl font-black">Participants</h2>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES.map((source, index) => (
+            <article
+              key={`${source}:${index}`}
+              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
+              <strong className="mt-3">TBD</strong>
+              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentCctSeries) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <h2 className="mb-4 text-xl font-black">Participants</h2>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {Array.from({ length: preTournamentCctPlaceholderCount }, (_, index) => (
+            <article
+              key={`cct-participant-placeholder:${index}`}
+              className="bg-base-200/40 flex min-h-40 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-14 object-contain" />
+              <strong className="text-base-content/65 mt-3">TBD</strong>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentFixedBracketQualifier) {
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-8 text-center shadow-lg">
         <h2 className="text-xl font-black">Participants</h2>
         <p className="text-base-content/60 mt-2 text-sm">
-          {isPreTournamentCctSeries ? 'No teams invited yet.' : 'No teams registered yet.'}
+          No teams registered yet.
         </p>
       </section>
     );

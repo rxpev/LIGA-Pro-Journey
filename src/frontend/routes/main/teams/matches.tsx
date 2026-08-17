@@ -328,13 +328,22 @@ export default function () {
                       onClick={onClick}
                     >
                       <time className="text-[#8392a1]">{fmtShortDate(match.date)}</time>
-                      <span className="truncate text-right text-[#8392a1]" title={rowTeam.name}>
+                      <span
+                        className={cx(
+                          'truncate text-right text-[#8392a1]',
+                          teamCompetitor?.result === Constants.MatchResult.LOSS && 'opacity-45',
+                        )}
+                        title={rowTeam.name}
+                      >
                         {rowTeam.name}
                       </span>
                       <TeamBlazon
                         src={rowTeam.blazon}
                         title={rowTeam.name}
-                        className="mx-auto size-6"
+                        className={cx(
+                          'mx-auto size-6',
+                          teamCompetitor?.result === Constants.MatchResult.LOSS && 'opacity-45',
+                        )}
                         blur="blur-xs"
                       />
                       <span
@@ -349,14 +358,20 @@ export default function () {
                         <TeamBlazon
                           src={opponent.team.blazon}
                           title={opponent.team.name}
-                          className="mx-auto size-6 opacity-70"
+                          className={cx(
+                            'mx-auto size-6',
+                            opponent.result === Constants.MatchResult.LOSS && 'opacity-45',
+                          )}
                           blur="blur-xs"
                         />
                       ) : (
                         <span />
                       )}
                       <span
-                        className="truncate text-[#8392a1]"
+                        className={cx(
+                          'truncate text-[#8392a1]',
+                          opponent?.result === Constants.MatchResult.LOSS && 'opacity-45',
+                        )}
                         title={opponent?.team.name || 'BYE'}
                       >
                         {opponent?.team ? (

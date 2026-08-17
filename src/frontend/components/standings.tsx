@@ -11,6 +11,7 @@ import { FaCaretDown, FaChartBar } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { useFormatAppShortDate } from '@liga/frontend/hooks';
 import { cx } from '@liga/frontend/lib';
+import swissTeamPlaceholder from '@liga/frontend/assets/swiss/teamplaceholder.svg';
 
 /**
  * Promotion and relegation zone colors.
@@ -37,6 +38,8 @@ interface Props {
   limit?: number;
   mode?: 'default' | 'swiss' | 'ranking';
   offset?: number;
+  /** Number of unassigned team rows to show when the competition has no competitors yet. */
+  placeholderCount?: number;
   matches?: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
   teamLink?: (team: Props['competitors'][number]['team']) => string;
   title?: React.ReactNode;
@@ -297,6 +300,7 @@ export default function (props: Props) {
     shouldSortByWorldRanking,
     worldRankingByTeamId,
   ]);
+  const placeholderCount = sortedCompetitors.length ? 0 : props.placeholderCount || 0;
 
   React.useEffect(() => {
     setExpandedTeamId(null);
@@ -550,6 +554,38 @@ export default function (props: Props) {
                 </tr>
               )}
             </React.Fragment>
+          );
+        })}
+        {Array.from({ length: placeholderCount }).map((_, idx) => {
+          const standingPosition = idx + (props.offset || 0);
+
+          return (
+            <tr
+              key={`standings-placeholder:${standingPosition}`}
+              className={cx(
+                'text-base-content/55',
+                getZoneColorValue(standingPosition, props.zones, props.zoneColors),
+              )}
+            >
+              <td>{standingPosition + 1}.</td>
+              <td>
+                <div className="flex min-w-0 items-center gap-2">
+                  <img
+                    src={swissTeamPlaceholder}
+                    alt="?"
+                    className="size-4 shrink-0"
+                  />
+                  <span>TBD</span>
+                </div>
+              </td>
+              {!isRanking && (
+                <td className={cx(isSwiss || props.hidePoints ? 'pr-6 text-right' : 'pr-1 text-right')}>
+                  —
+                </td>
+              )}
+              {showRoundDifference && <td className="text-right">—</td>}
+              {showPlacementOrPoints && <td className="text-right">—</td>}
+            </tr>
           );
         })}
       </tbody>

@@ -62,7 +62,6 @@ const WINNER_HISTORY_TIER_SLUGS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
   Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
   Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
-  Constants.TierSlug.CCT_GLOBAL_FINALS,
 ]);
 
 const ESEA_FORMATS: Partial<Record<Constants.TierSlug, { playoffTier: Constants.TierSlug }>> = {
@@ -237,6 +236,7 @@ export default function () {
       : undefined;
   const isEseaCashCup = isEseaCashCupTier(tierSlug);
   const isIemQualifier = IEM_QUALIFIER_TIER_SLUGS.has(tierSlug);
+  const isCctGlobalFinals = tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS;
   const isCctRegionalSeries =
     tierSlug === Constants.TierSlug.CCT_SERIES &&
     [
@@ -269,6 +269,8 @@ export default function () {
     : eseaCashCupSize;
   const displayedCompetitorCount = isFixedBracketQualifier
     ? fixedBracketSize
+    : isCctGlobalFinals
+      ? 8
     : isCctSeries
       ? cctSeriesSize
       : competition.competitors.length;
@@ -418,12 +420,15 @@ export default function () {
   }, [eseaPlayoffCompetition]);
 
   React.useEffect(() => {
-    setIsPlayoffsOpen(isFixedBracketQualifier || isCctSeries || hasEseaPlayoffsStarted);
+    setIsPlayoffsOpen(
+      isFixedBracketQualifier || isCctSeries || isCctGlobalFinals || hasEseaPlayoffsStarted,
+    );
   }, [
     competition.id,
     eseaPlayoffCompetition?.id,
     hasEseaPlayoffsStarted,
     isCctSeries,
+    isCctGlobalFinals,
     isFixedBracketQualifier,
   ]);
 
@@ -518,7 +523,13 @@ export default function () {
   React.useEffect(() => {
     setStandingMatches([]);
 
-    if (!competition.tier.groupSize && !Constants.TierSwissConfig[tierSlug] && !isFixedBracketQualifier) {
+    if (
+      !competition.tier.groupSize &&
+      !isCctOceSeries &&
+      !isCctGlobalFinals &&
+      !Constants.TierSwissConfig[tierSlug] &&
+      !isFixedBracketQualifier
+    ) {
       return;
     }
 
@@ -531,7 +542,7 @@ export default function () {
         },
       })
       .then(setStandingMatches);
-  }, [competition, isFixedBracketQualifier, tierSlug]);
+  }, [competition, isCctGlobalFinals, isCctOceSeries, isFixedBracketQualifier, tierSlug]);
 
   // fetch previous winners
   React.useEffect(() => {
@@ -560,14 +571,34 @@ export default function () {
   }, [competition]);
 
   // group standings tables
-  const groups = React.useMemo(
-    () => groupBy(competition.competitors, 'group'),
-    [competition.competitors],
-  );
+  const effectiveGroupSize = competition.tier.groupSize || (isCctOceSeries ? 4 : undefined);
+  const groups = React.useMemo(() => {
+    const persistedGroups = groupBy(competition.competitors, 'group');
+
+    if (!isCctOceSeries || Object.keys(persistedGroups).length > 1) {
+      return persistedGroups;
+    }
+
+    if (!competition.competitors.length) {
+      return { 1: [], 2: [] };
+    }
+
+    // Older saves can contain a CCT OCE event created before it became a group stage.
+    // Keep the view useful by applying the same 1/4/5/8 and 2/3/6/7 snake split as new events.
+    return [...competition.competitors]
+      .sort((a, b) => a.seed - b.seed)
+      .reduce<Record<string, CompetitionCompetitor[]>>((result, competitor, index) => {
+        const group = Math.floor(index / 2) % 2 === 0
+          ? index % 2 === 0 ? '1' : '2'
+          : index % 2 === 0 ? '2' : '1';
+        (result[group] ||= []).push(competitor);
+        return result;
+      }, {});
+  }, [competition.competitors, isCctOceSeries]);
   const groupKeys = React.useMemo(() => Object.keys(groups), [groups]);
   const isLeagueStandings = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE;
   const isStandaloneStandings =
-    isLeagueStandings || isFixedBracketQualifier || isCctSeries;
+    isLeagueStandings || isFixedBracketQualifier || isCctSeries || isCctGlobalFinals;
   const visibleStandingGroupKeys = React.useMemo(() => {
     if (!isLeagueStandings || groupKeys.length <= 1) {
       return groupKeys;
@@ -587,8 +618,8 @@ export default function () {
   }, [competition.id, groupKeys]);
   const groupZones = React.useMemo(() => {
     if (
-      !(isLeagueStandings || Util.shouldShowStandingsZones(competition.status)) ||
-      !competition.tier.groupSize
+      !(isLeagueStandings || isCctOceSeries || Util.shouldShowStandingsZones(competition.status)) ||
+      !effectiveGroupSize
     ) {
       return undefined;
     }
@@ -597,15 +628,16 @@ export default function () {
       tierSlug,
       competition.federation.slug as Constants.FederationSlug,
       groupKeys.length,
-      competition.tier.groupSize,
+      effectiveGroupSize,
     );
 
     return zones;
   }, [
     competition.status,
-    competition.tier.groupSize,
+    effectiveGroupSize,
     competition.federation.slug,
     groupKeys.length,
+    isCctOceSeries,
     isLeagueStandings,
     tierSlug,
   ]);
@@ -806,6 +838,33 @@ export default function () {
           };
         }),
       );
+
+      if (isCctOceSeries) {
+        const sortByGroupStanding = (a: CompetitionCompetitor, b: CompetitionCompetitor) =>
+          b.win - a.win ||
+          a.loss - b.loss ||
+          (swissRoundDifferenceByTeamId.get(b.team.id) || 0) -
+            (swissRoundDifferenceByTeamId.get(a.team.id) || 0) ||
+          a.position - b.position;
+
+        const groupPlacementCards = [3, 4].flatMap((groupPlacement) => {
+          const [start, end] = groupPlacement === 3 ? [5, 6] : [7, 8];
+
+          return groupKeys.map((groupKey) => ({
+            competitor:
+              competition.status === Constants.CompetitionStatus.COMPLETED
+                ? [...(groups[groupKey] || [])]
+                    .filter((competitor) => Boolean(competitor.team))
+                    .sort(sortByGroupStanding)[groupPlacement - 1]
+                : undefined,
+            detail: '',
+            label: getPlacementLabel(start, end),
+          }));
+        });
+
+        return [...playoffCards, ...groupPlacementCards];
+      }
+
       const swissCompetitors = [...competition.competitors]
         .filter((competitor) => Boolean(competitor.team))
         .sort(
@@ -817,19 +876,26 @@ export default function () {
             a.position - b.position,
         );
 
-      return [
-        ...playoffCards,
-        ...Array.from({ length: Math.max(0, swissCompetitors.length - linkedBracketSize) }, (_, index) => {
-          const placement = linkedBracketSize + index + 1;
-          return {
+      const terminalSwissPlacementCards = [
+        { losses: 3, start: 9, end: 11, wins: 2 },
+        { losses: 3, start: 12, end: 14, wins: 1 },
+        { losses: 3, start: 15, end: 16, wins: 0 },
+      ].flatMap(({ end, losses, start, wins }) =>
+        swissCompetitors
+          .filter((competitor) => competitor.win === wins && competitor.loss === losses)
+          .map((competitor) => ({
             competitor:
               competition.status === Constants.CompetitionStatus.COMPLETED
-                ? swissCompetitors[placement - 1]
+                ? competitor
                 : undefined,
             detail: '',
-            label: getPlacementLabel(placement, placement),
-          };
-        }),
+            label: getPlacementLabel(start, end),
+          })),
+      );
+
+      return [
+        ...playoffCards,
+        ...terminalSwissPlacementCards,
       ];
     }
     if (eseaFormat) {
@@ -1015,6 +1081,27 @@ export default function () {
       return playoffCards;
     }
 
+    if (isCctGlobalFinals) {
+      const positionedCompetitors = [...competition.competitors]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position || a.seed - b.seed);
+
+      return getKnockoutPlacementRanges(8).flatMap(([start, end]) => {
+        const amount = prizePool.distribution[start - 1]
+          ? Util.formatCurrency(prizePool.total * (prizePool.distribution[start - 1] / 100))
+          : '';
+
+        return Array.from({ length: end - start + 1 }, (_, index) => ({
+          competitor:
+            competition.status === Constants.CompetitionStatus.COMPLETED
+              ? positionedCompetitors[start + index - 1]
+              : undefined,
+          detail: amount,
+          label: getPlacementLabel(start, end),
+        }));
+      });
+    }
+
     if (!prizePoolCards.length) {
       return [];
     }
@@ -1058,6 +1145,8 @@ export default function () {
     isIemQualifier,
     qualifierDestination,
     isCctSeries,
+    isCctOceSeries,
+    isCctGlobalFinals,
     cctPlayoffTier,
     cctGlobalFinalsQualifiers,
     linkedBracketSize,
@@ -1083,7 +1172,7 @@ export default function () {
   const showWinners = showWinnerHistory && validWinners.length > 0;
 
   const isSwiss = Boolean(Constants.TierSwissConfig[tierSlug]);
-  const isBracketStandings = !competition.tier.groupSize && !isSwiss;
+  const isBracketStandings = !effectiveGroupSize && !isSwiss;
   const advancementZones = React.useMemo(
     () =>
       Util.shouldShowStandingsZones(competition.status) &&
@@ -1095,7 +1184,7 @@ export default function () {
     [competition.competitors.length, competition.federation.slug, competition.status, tierSlug],
   );
   const hideSmallGroupPoints = Boolean(
-    competition.tier.groupSize && competition.tier.groupSize <= 4,
+    effectiveGroupSize && effectiveGroupSize <= 4,
   );
   const navigateTab = React.useCallback(
     (pathname: TabIdentifier) => navigate({ pathname, search: location.search }),
@@ -1171,14 +1260,14 @@ export default function () {
                   </dd>
                 </div>
               </dl>
-              {(eseaFormat || isFixedBracketQualifier || isCctSeries) && (
+              {(eseaFormat || isFixedBracketQualifier || isCctSeries || isCctGlobalFinals) && (
                 <section className="border-base-content/10 mt-2 border-t pt-3">
                   <p className="text-base-content/70 mb-1 text-xs font-bold">Format</p>
                   {isCctSeries ? (
                     <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
                       <article className="flex min-w-0 items-start gap-2">
                         <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaRandom /></span>
-                        <span className="min-w-0"><strong className="block truncate text-xs">Group Stage</strong><small className="text-base-content/60 block leading-tight">{isCctOceSeries ? 'Two groups of 4 · Best of 3' : '16-team Swiss · Bo1 (advancement / elimination Bo3)'}</small></span>
+                        <span className="min-w-0"><strong className="block truncate text-xs">Group Stage</strong><small className="text-base-content/60 block leading-tight">{isCctOceSeries ? 'Two 4-team Swiss groups · Best of 3' : '16-team Swiss · Bo1 (advancement / elimination Bo3)'}</small></span>
                       </article>
                       <FaArrowRight className="text-base-content/35 mt-2.5" />
                       <article className="flex min-w-0 items-start gap-2">
@@ -1189,6 +1278,13 @@ export default function () {
                       <article className="flex min-w-0 items-start gap-2">
                         <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaTrophy /></span>
                         <span className="min-w-0"><strong className="block truncate text-xs">Qualification</strong><small className="text-base-content/60 block leading-tight">{cctQualificationLabel}</small></span>
+                      </article>
+                    </div>
+                  ) : isCctGlobalFinals ? (
+                    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-1.5">
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full"><FaSitemap /></span>
+                        <span className="min-w-0"><strong className="block truncate text-xs">Single elimination</strong><small className="text-base-content/60 block leading-tight">Best of 3</small></span>
                       </article>
                     </div>
                   ) : isIemQualifier ? (
@@ -1411,7 +1507,7 @@ export default function () {
           <CompetitionNews />
         ) : (
           <>
-            {(eseaFormat || isFixedBracketQualifier || isCctSeries) && (
+            {(eseaFormat || isFixedBracketQualifier || isCctSeries || isCctGlobalFinals) && (
               <section className="border-base-content/10 bg-base-200/45 mt-4 overflow-hidden rounded-lg border shadow-lg">
                 <button
                   type="button"
@@ -1421,10 +1517,10 @@ export default function () {
                 >
                   <span>
                     <strong className="block text-xl leading-none font-black">
-                      {isFixedBracketQualifier ? 'Bracket' : 'Playoffs'}
+                      {isFixedBracketQualifier || isCctGlobalFinals ? 'Bracket' : 'Playoffs'}
                     </strong>
                     <span className="text-base-content/60 block pt-0.5 text-xs">
-                      {isCctSeries
+                      {isCctGlobalFinals || isCctSeries
                         ? 'Single elimination · Best of 3'
                         : isIemQualifier
                         ? `Single elimination · Bo1 through Round of 32 · Bo3 from Round of 16`
@@ -1464,10 +1560,14 @@ export default function () {
                           : eseaBracketSize >= 8
                             ? 'h-[31rem]'
                             : 'h-[30rem]'
-                        : isCctSeries
-                          ? linkedBracketSize >= 8
-                            ? 'h-[31rem]'
-                            : 'h-[30rem]'
+                        : isCctGlobalFinals
+                          ? 'h-[31rem]'
+                          : isCctSeries
+                          ? isCctOceSeries
+                            ? 'h-[22rem]'
+                            : linkedBracketSize >= 8
+                              ? 'h-[31rem]'
+                              : 'h-[30rem]'
                           : isDoubleEseaPlayoffs
                         ? 'h-[32rem]'
                         : eseaBracketSize >= 16
@@ -1479,26 +1579,36 @@ export default function () {
                   >
                     <Brackets
                       fitToContainer={!isFixedBracketQualifier}
+                      maxFitZoom={isCctOceSeries ? 1.1 : undefined}
                       matches={
                         (isFixedBracketQualifier &&
+                          competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                        (isCctGlobalFinals &&
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
                         shouldPreviewCctPlayoffs ||
                         shouldPreviewEseaPlayoffs
                           ? []
-                          : isFixedBracketQualifier
+                          : isFixedBracketQualifier || isCctGlobalFinals
                             ? standingMatches
                             : eseaPlayoffMatches
                       }
                       preview={
                         ((isFixedBracketQualifier &&
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                          (isCctGlobalFinals &&
+                            competition.status === Constants.CompetitionStatus.SCHEDULED) ||
                           shouldPreviewCctPlayoffs ||
                           shouldPreviewEseaPlayoffs)
                           ? {
-                              doubleElimination: isFixedBracketQualifier ? false : isDoubleEseaPlayoffs,
+                              doubleElimination:
+                                isFixedBracketQualifier || isCctGlobalFinals
+                                  ? false
+                                  : isDoubleEseaPlayoffs,
                               size: isFixedBracketQualifier
                                 ? fixedBracketSize
-                                : isCctSeries ? linkedBracketSize : eseaBracketSize,
+                                : isCctGlobalFinals
+                                  ? 8
+                                  : isCctSeries ? linkedBracketSize : eseaBracketSize,
                             }
                           : undefined
                       }
@@ -1623,7 +1733,11 @@ export default function () {
           )}
         >
           <h2 className="m-0 text-xl leading-none font-black">
-            {isCctRegionalSeries ? 'Swiss Stage' : t('shared.standings')}
+            {isCctRegionalSeries
+              ? 'Swiss Stage'
+              : isCctOceSeries
+                ? 'Group Stage'
+                : t('shared.standings')}
           </h2>
           {isCctRegionalSeries && (
             <button
@@ -1679,14 +1793,19 @@ export default function () {
             </footer>
           </>
         )}
-        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !!competition.tier.groupSize &&
+        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !!effectiveGroupSize &&
           visibleStandingGroupKeys.map((groupKey) => (
             <Standings
               key={groupKey + '__overview_standings'}
               highlight={state.profile.teamId}
               hidePoints={isLeagueStandings || hideSmallGroupPoints}
-            dense={isStandaloneStandings}
+              dense={isStandaloneStandings}
               competitors={groups[groupKey]}
+              placeholderCount={
+                isCctOceSeries && competition.status === Constants.CompetitionStatus.SCHEDULED
+                  ? 4
+                  : undefined
+              }
               matches={standingMatches}
               teamLink={(team) => `/teams?teamId=${team.id}`}
               title={
@@ -1697,19 +1816,27 @@ export default function () {
               showRoundDifference={Boolean(state.profile?.simulateNpcMatchStats)}
               sortByWorldRanking={isLeagueStandings}
               zoneColors={
-                isLeagueStandings
+              isLeagueStandings
                   ? [
                       'border-l-4 border-l-green-500',
                       'border-l-4 border-l-green-500',
                       'border-l-4 border-l-red-500 bg-red-800/10',
                     ]
-                  : undefined
+                  : isCctOceSeries
+                    ? [
+                        'border-l-4 border-l-green-500',
+                        '',
+                        'border-l-4 border-l-red-500 bg-red-800/10',
+                      ]
+                    : undefined
               }
             />
           ))}
-        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !competition.tier.groupSize && isFixedBracketQualifier && competition.status === Constants.CompetitionStatus.SCHEDULED ? (
-          <p className="text-base-content/60 px-4 py-8 text-center text-sm">No teams registered yet.</p>
-        ) : (!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !competition.tier.groupSize && (
+        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !effectiveGroupSize && (isFixedBracketQualifier || isCctGlobalFinals) && competition.status === Constants.CompetitionStatus.SCHEDULED ? (
+          <p className="text-base-content/60 px-4 py-8 text-center text-sm">
+            {isCctGlobalFinals ? 'TBD' : 'No teams registered yet.'}
+          </p>
+        ) : (!isCctRegionalSeries || !isCctDetailedStandingsOpen) && !effectiveGroupSize && (
           <Standings
             highlight={state.profile.teamId}
             dense={isStandaloneStandings}
@@ -1723,13 +1850,15 @@ export default function () {
             mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
             hidePoints={isFixedBracketQualifier || isBracketStandings}
             teamLink={(team) => `/teams?teamId=${team.id}`}
-            zones={isCctRegionalSeries
+            zones={isCctGlobalFinals
+              ? [[1, 1], [2, Math.max(2, competition.competitors.length)]]
+              : isCctRegionalSeries
               ? [[1, 8], [9, 16]]
               : isFixedBracketQualifier && competition.status !== Constants.CompetitionStatus.SCHEDULED
               ? [[1, 1], [2, Math.max(2, competition.competitors.length)]]
               : isBracketStandings || isSwiss ? advancementZones : undefined}
             zoneColors={
-              isCctRegionalSeries
+              isCctGlobalFinals || isCctRegionalSeries
                 ? [
                     'border-l-4 border-l-green-500',
                     'border-l-4 border-l-red-500 bg-red-800/10',
@@ -1742,7 +1871,7 @@ export default function () {
         )}
         {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && isStandaloneStandings && (
           <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
-            {isFixedBracketQualifier || isCctSeries ? (
+            {isFixedBracketQualifier || isCctSeries || isCctGlobalFinals ? (
               <>
                 <span className="inline-flex items-center gap-2">
                   <span className="h-4 w-1 rounded bg-green-500" />
@@ -1759,13 +1888,13 @@ export default function () {
                 Advanced
               </span>
             )}
-            {!isFixedBracketQualifier && !isCctSeries && groupZones[1]?.[0] > 0 && groupZones[1][1] >= groupZones[1][0] && (
+            {!isFixedBracketQualifier && !isCctSeries && !isCctGlobalFinals && groupZones[1]?.[0] > 0 && groupZones[1][1] >= groupZones[1][0] && (
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-green-500" />
                 Qualified to Playoffs
               </span>
             )}
-            {!isFixedBracketQualifier && !isCctSeries && groupZones[2]?.[0] > 0 && groupZones[2][1] >= groupZones[2][0] && (
+            {!isFixedBracketQualifier && !isCctSeries && !isCctGlobalFinals && groupZones[2]?.[0] > 0 && groupZones[2][1] >= groupZones[2][0] && (
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-red-500" />
                 Relegated

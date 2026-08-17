@@ -15,6 +15,7 @@ type BracketMatches = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.ma
 
 interface Props {
   fitToContainer?: boolean;
+  maxFitZoom?: number;
   matches: BracketMatches;
   onMatchClick?: (match: BracketMatches[number]) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
@@ -309,6 +310,7 @@ function BracketCard(props: {
 
 function ManualBracket(props: {
   fitToContainer?: boolean;
+  maxFitZoom?: number;
   matches: BracketDisplayMatch[];
   tourney: Tournament;
   onMatchClick?: Props['onMatchClick'];
@@ -556,16 +558,31 @@ function ManualBracket(props: {
     return () => observer.disconnect();
   }, []);
 
+  // React's delegated wheel handler cannot reliably cancel native page scrolling in every
+  // embedded view. Use a non-passive listener for the interactive bracket instead.
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+
+    if (!viewport || props.fitToContainer) {
+      return;
+    }
+
+    const preventPageScroll = (event: WheelEvent) => event.preventDefault();
+    viewport.addEventListener('wheel', preventPageScroll, { passive: false });
+
+    return () => viewport.removeEventListener('wheel', preventPageScroll);
+  }, [props.fitToContainer]);
+
   React.useLayoutEffect(() => {
     if (!props.fitToContainer || !viewportSize.width || !viewportSize.height) {
       return;
     }
 
-    const fitZoom = (viewportSize.width - 40) / width;
+    const fitZoom = Math.min(props.maxFitZoom || Number.POSITIVE_INFINITY, (viewportSize.width - 40) / width);
     const minimumZoom = lower.nodes.length ? 0.65 : 0.7;
     setZoom(Number(Math.max(minimumZoom, fitZoom).toFixed(2)));
     setPan({ x: 0, y: 0 });
-  }, [height, props.fitToContainer, viewportSize.height, viewportSize.width, width]);
+  }, [height, props.fitToContainer, props.maxFitZoom, viewportSize.height, viewportSize.width, width]);
 
   const connectors = sections.flatMap((section) =>
     section.nodes.flatMap(({ match }) => {
@@ -771,6 +788,7 @@ export default function (props: Props) {
       matches={displayMatches}
       tourney={tourney}
       fitToContainer={props.fitToContainer}
+      maxFitZoom={props.maxFitZoom}
       onMatchClick={props.onMatchClick}
       onPartyClick={props.onPartyClick}
     />

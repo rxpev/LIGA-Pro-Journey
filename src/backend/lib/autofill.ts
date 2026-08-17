@@ -22,6 +22,26 @@ export enum Action {
   INCLUDE = 'include',
 }
 
+const IEM_QUALIFIER_SIZE: Partial<Record<Constants.FederationSlug, number>> = {
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 111,
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 112,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 50,
+  [Constants.FederationSlug.ESPORTS_OCE]: 36,
+};
+
+function getTierSize(tier: Prisma.TierGetPayload<typeof Eagers.tier>, federationSlug: Constants.FederationSlug) {
+  if (
+    tier.slug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER ||
+    tier.slug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER
+  ) {
+    return IEM_QUALIFIER_SIZE[federationSlug] || tier.size;
+  }
+
+  return tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+    ? Util.getLeagueTierSize(tier.slug as Constants.TierSlug, federationSlug, tier.size)
+    : tier.size;
+}
+
 /** @interface */
 export interface Entry {
   action: Action;
@@ -2701,14 +2721,7 @@ export async function parse(
   tier: Prisma.TierGetPayload<typeof Eagers.tier>,
   federation: Prisma.FederationGetPayload<unknown>,
 ) {
-  const tierSize =
-    tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
-      ? Util.getLeagueTierSize(
-          tier.slug as Constants.TierSlug,
-          federation.slug as Constants.FederationSlug,
-          tier.size,
-        )
-      : tier.size;
+  const tierSize = getTierSize(tier, federation.slug as Constants.FederationSlug);
 
   // fill competitors list using this autofill item's entries
   const competitors = [] as Array<Team>;

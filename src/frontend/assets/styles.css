@@ -475,6 +475,16 @@ meter::-webkit-meter-bar {
   }
 }
 
+@utility competitions-dashboard {
+  main {
+    @apply grid-cols-5;
+  }
+
+  main > :nth-child(2) {
+    @apply col-span-4;
+  }
+}
+
 @utility news-hltv-theme {
   & {
     --color-primary: #445870;

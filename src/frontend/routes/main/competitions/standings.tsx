@@ -424,7 +424,12 @@ function SwissArrows(props: { className: string; paths: SwissArrowPath[] }) {
             alt=""
             draggable={false}
             src={SwissArrowImages[arrow.tone][arrow.single ? 'single' : 'multi']}
-            className="absolute max-w-none select-none"
+            className={cx(
+              'absolute max-w-none select-none',
+              arrow.tone === 'win'
+                ? '[filter:brightness(0)_saturate(100%)_invert(67%)_sepia(79%)_saturate(483%)_hue-rotate(90deg)_brightness(87%)_contrast(88%)]'
+                : '[filter:brightness(0)_saturate(100%)_invert(42%)_sepia(86%)_saturate(1180%)_hue-rotate(327deg)_brightness(96%)_contrast(96%)]',
+            )}
             style={{
               left: placement.left,
               top: placement.top,
@@ -460,7 +465,7 @@ function SwissRecordColumn(props: {
       style={{ left: props.x, top: props.y }}
       className="absolute z-10 min-h-0 w-[118px]"
     >
-      <h3 className="text-info/70 mb-1 text-xs font-bold">{recordKey}</h3>
+      <h3 className="text-base-content mb-1 text-xs font-bold">{recordKey}</h3>
       <div className="flex flex-col gap-1.5">
         {[
           ...matches,
@@ -554,7 +559,7 @@ function SwissAdvancedBox(props: {
 }) {
   return (
     <aside aria-label="Advanced" className={cx('absolute z-10 text-white', props.className)}>
-      <div className="absolute top-0 left-0 h-[72px] w-[120px] rounded-tl-sm bg-green-700 p-2">
+      <div className="absolute top-0 left-0 h-[72px] w-[120px] rounded-tl-sm bg-green-500/80 p-2">
         <SwissTerminalColumn
           compact
           highlightedTeamId={props.highlightedTeamId}
@@ -567,7 +572,7 @@ function SwissAdvancedBox(props: {
       </div>
       <div
         className={cx(
-          'absolute top-0 left-[120px] grid h-full gap-2 rounded-r-sm rounded-bl-sm bg-green-700 p-2',
+          'absolute top-0 left-[120px] grid h-full gap-2 rounded-r-sm rounded-bl-sm bg-green-500/80 p-2',
           props.buckets.length > 2 ? 'w-[152px] grid-cols-2' : 'w-[92px] grid-cols-1',
         )}
       >
@@ -663,10 +668,10 @@ function SwissEliminatedBox(props: {
 
     return (
       <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
-        <div className="absolute top-[310px] left-0 h-[30px] w-[346px] rounded-br-sm bg-red-900" />
-        <div className="absolute top-[214px] left-0 h-[96px] w-[139px] rounded-tl-sm bg-red-900" />
-        <div className="absolute top-[120px] left-[139px] h-[190px] w-[115px] bg-red-900" />
-        <div className="absolute top-0 left-[254px] h-[328px] w-[92px] rounded-t-sm rounded-r-sm bg-red-900" />
+        <div className="absolute top-[310px] left-0 h-[30px] w-[346px] rounded-br-sm bg-red-500/80" />
+        <div className="absolute top-[214px] left-0 h-[96px] w-[139px] rounded-tl-sm bg-red-500/80" />
+        <div className="absolute top-[120px] left-[139px] h-[190px] w-[115px] bg-red-500/80" />
+        <div className="absolute top-0 left-[254px] h-[328px] w-[92px] rounded-t-sm rounded-r-sm bg-red-500/80" />
         {renderBucket(zeroTwo, 'top-[226px] left-[23px] w-[92px]')}
         {renderBucket(oneTwo, 'top-[122px] left-[146px] w-[92px]')}
         {renderBucket(twoTwo, 'top-[10px] left-[254px] w-[92px]', 'column')}
@@ -676,7 +681,7 @@ function SwissEliminatedBox(props: {
 
   return (
     <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
-      <div className="absolute bottom-0 left-0 h-[72px] w-[120px] rounded-bl-sm bg-red-900 p-2">
+      <div className="absolute bottom-0 left-0 h-[72px] w-[120px] rounded-bl-sm bg-red-500/80 p-2">
         <SwissTerminalColumn
           compact
           highlightedTeamId={props.highlightedTeamId}
@@ -689,7 +694,7 @@ function SwissEliminatedBox(props: {
       </div>
       <div
         className={cx(
-          'absolute bottom-0 left-[120px] grid h-full gap-2 rounded-tl-sm rounded-r-sm bg-red-900 p-2',
+          'absolute bottom-0 left-[120px] grid h-full gap-2 rounded-tl-sm rounded-r-sm bg-red-500/80 p-2',
           props.buckets.length > 3 ? 'w-[212px] grid-cols-3' : 'w-[152px] grid-cols-2',
         )}
       >
@@ -709,7 +714,8 @@ function SwissEliminatedBox(props: {
   );
 }
 
-function SwissDetailedStandings(props: {
+export function SwissDetailedStandings(props: {
+  compact?: boolean;
   competition: Competition;
   highlight?: number;
   matches?: Match[];
@@ -723,7 +729,10 @@ function SwissDetailedStandings(props: {
     () => getSwissMatchViews(props.matches || [], props.competition),
     [props.competition, props.matches],
   );
-  const showPlaceholders = props.competition.status === Constants.CompetitionStatus.STARTED;
+  const showPlaceholders =
+    props.competition.status === Constants.CompetitionStatus.STARTED ||
+    (props.competition.tier.slug === Constants.TierSlug.CCT_SERIES &&
+      props.competition.status === Constants.CompetitionStatus.SCHEDULED);
 
   if (!props.matches) {
     return (
@@ -742,8 +751,16 @@ function SwissDetailedStandings(props: {
   }
 
   return (
-    <section className="bg-base-300 h-full w-full overflow-auto p-4">
-      <div className={cx('relative', layout.frameClassName)}>
+    <section
+      className={cx(
+        'h-full w-full p-4',
+        props.compact ? 'overflow-hidden p-2' : 'overflow-auto',
+      )}
+    >
+      <div
+        className={cx('relative', layout.frameClassName, props.compact && 'origin-top-left')}
+        style={props.compact ? { transform: 'scale(0.9)' } : undefined}
+      >
         <SwissArrows className={layout.arrowFrameClassName} paths={layout.arrowPaths} />
         {layout.bucketLayouts.map((bucketLayout) => (
           <SwissRecordColumn
@@ -815,6 +832,7 @@ export default function () {
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const [swissMatches, setSwissMatches] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
+  const [isSwissDetailedView, setIsSwissDetailedView] = React.useState(false);
   const groups = React.useMemo(
     () => groupBy(competition.competitors, 'group'),
     [competition.competitors],
@@ -909,6 +927,64 @@ export default function () {
   }
 
   if (isSwiss) {
+    if (competition.tier.slug === Constants.TierSlug.CCT_SERIES) {
+      return (
+        <section
+          className={cx(
+            'border-base-content/10 bg-base-200/45 mx-3 mb-3 flex flex-col overflow-hidden rounded-lg border shadow-lg',
+            isSwissDetailedView && 'h-full',
+          )}
+        >
+          <header className="border-base-content/10 flex h-12 shrink-0 items-center justify-between border-b px-4">
+            <h2 className="text-xl leading-none font-black">{t('shared.standings')}</h2>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+              onClick={() => setIsSwissDetailedView((value) => !value)}
+            >
+              {isSwissDetailedView ? 'Standings view' : 'Detailed view'}
+            </button>
+          </header>
+          {isSwissDetailedView ? (
+            <div className="min-h-0 flex-1">
+              <SwissDetailedStandings
+                competition={competition}
+                highlight={state.profile.teamId}
+                matches={swissMatches}
+                onTeamClick={(team) => navigate(`/teams?teamId=${team.id}`)}
+              />
+            </div>
+          ) : (
+            <>
+              <Standings
+                highlight={state.profile.teamId}
+                dense
+                competitors={competition.competitors}
+                matches={swissMatches || []}
+                mode="swiss"
+                teamLink={(team) => `/teams?teamId=${team.id}`}
+                zones={[[1, 8], [9, 16]]}
+                zoneColors={[
+                  'border-l-4 border-l-green-500',
+                  'border-l-4 border-l-red-500 bg-red-800/10',
+                ]}
+              />
+              <footer className="border-base-content/10 flex gap-4 border-t px-4 py-3 text-xs">
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-1 rounded bg-green-500" />
+                  Qualified to Playoffs
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-1 rounded bg-red-500" />
+                  Eliminated
+                </span>
+              </footer>
+            </>
+          )}
+        </section>
+      );
+    }
+
     return (
       <section className="h-full w-full overflow-hidden">
         <SwissDetailedStandings

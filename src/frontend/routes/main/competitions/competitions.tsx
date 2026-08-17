@@ -63,8 +63,8 @@ function getTournamentThumbnail(
 
   let file = 'major-pgl.png';
 
-  if (name.includes('esea')) file = 'esea.png';
-  else if (name.includes('cash cup')) file = 'cashcup.png';
+  if (name.includes('cash cup')) file = 'cashcup.png';
+  else if (name.includes('esea')) file = 'esea.png';
   else if (name.includes('rmr')) {
     const region = federation?.includes('amer')
       ? 'am'
@@ -1110,7 +1110,7 @@ export default function () {
   const seasons = React.useMemo(() => [...Array(state?.profile?.season || 0)], [state.profile]);
 
   return (
-    <div className="dashboard">
+    <div className="dashboard competitions-dashboard">
       <main>
         <form className="form-ios">
           <fieldset className="gap-0!">

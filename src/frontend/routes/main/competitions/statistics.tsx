@@ -20,11 +20,13 @@ type TooltipPosition = {
 
 const PageSize = 14;
 
-const ESEA_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.TierSlug>> = {
+const LINKED_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.TierSlug>> = {
   [Constants.TierSlug.LEAGUE_OPEN]: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
   [Constants.TierSlug.LEAGUE_INTERMEDIATE]: Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
   [Constants.TierSlug.LEAGUE_MAIN]: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
   [Constants.TierSlug.LEAGUE_ADVANCED]: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  [Constants.TierSlug.CCT_SERIES]: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  [Constants.TierSlug.CCT_OCE_SERIES]: Constants.TierSlug.CCT_OCE_PLAYOFFS,
 };
 
 enum Rating {
@@ -104,7 +106,9 @@ export default function Statistics(): JSX.Element {
   }, [competition.id, search, sort]);
 
   React.useEffect(() => {
-    const playoffTier = ESEA_PLAYOFF_TIER_BY_TIER[competition.tier.slug as Constants.TierSlug];
+    const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[
+      competition.tier.slug as Constants.TierSlug
+    ];
 
     setCompetitionIds([competition.id]);
 

@@ -1505,6 +1505,7 @@ const IEM_GROUP_TIERS = new Set<Constants.TierSlug>([
 ]);
 
 const GROUP_SWISS_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.CCT_OCE_SERIES,
   Constants.TierSlug.ESL_CHALLENGER,
   Constants.TierSlug.LEAGUE_PRO,
 ]);
