@@ -17,7 +17,7 @@ interface Props {
   fitToContainer?: boolean;
   maxFitZoom?: number;
   matches: BracketMatches;
-  onMatchClick?: (match: BracketMatches[number]) => void;
+  onMatchClick?: (match: BracketMatches[number], position: { x: number; y: number }) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
   preview?: {
     doubleElimination?: boolean;
@@ -180,7 +180,7 @@ function BracketCard(props: {
   highlightedTeamId?: number;
   match: BracketDisplayMatch;
   fmtDate: (value: Date | number | string) => string;
-  onMatchClick?: (match: BracketDisplayMatch) => void;
+  onMatchClick?: (match: BracketDisplayMatch, position: { x: number; y: number }) => void;
   onPartyClick?: Props['onPartyClick'];
   onTeamHover: (teamId?: number) => void;
   width?: number;
@@ -188,9 +188,9 @@ function BracketCard(props: {
   const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
   const isMatchHighlighted = matchHasTeam(props.match, props.highlightedTeamId);
   const canOpenMatch = !props.match.isPlaceholder && props.match._count?.events > 0;
-  const handleMatchClick = () => {
+  const handleMatchClick = (event: React.MouseEvent<HTMLElement>) => {
     if (canOpenMatch) {
-      props.onMatchClick?.(props.match);
+      props.onMatchClick?.(props.match, { x: event.clientX, y: event.clientY });
     }
   };
 

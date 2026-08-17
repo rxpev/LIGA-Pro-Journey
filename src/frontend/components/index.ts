@@ -7,6 +7,7 @@ export { default as Standings } from './standings';
 export { default as Brackets } from './brackets';
 export { default as Image } from './image';
 export { default as MatchLaunchModal } from './match-launch-modal';
+export { default as MatchPreviewModal } from './match-preview-modal';
 export { default as MatchAbandonedPrompt } from './match-abandoned-prompt';
 export { default as TeamBlazon } from './team-blazon';
 export { default as Historial } from './historial';
