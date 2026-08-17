@@ -217,6 +217,43 @@ function getTournamentMeta(
     const isRmr = slug.includes(':rmr');
 
     if (isQualifier) {
+      const qualifier =
+        slug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1
+          ? { region: 'Oceania', number: 1 }
+          : slug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2
+            ? { region: 'Oceania', number: 2 }
+            : slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1
+              ? { region: 'Asia', number: 1 }
+              : slug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2
+                ? { region: 'Asia', number: 2 }
+                : slug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1
+                  ? { region: 'China', number: 1 }
+                  : slug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2
+                    ? { region: 'China', number: 2 }
+                    : slug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1
+                      ? { region: 'Americas', number: 1 }
+                      : slug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2
+                        ? { region: 'Americas', number: 2 }
+                        : slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1
+                          ? { region: 'Europe', number: 1 }
+                          : slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2
+                            ? { region: 'Europe', number: 2 }
+                            : slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3
+                              ? { region: 'Europe', number: 3 }
+                              : slug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4
+                                ? { region: 'Europe', number: 4 }
+                                : null;
+
+      if (qualifier) {
+        return {
+          key: `major:${qualifier.region.toLowerCase()}:qualifier:${qualifier.number}`,
+          name: `${qualifier.region} RMR Open Qualifier #${qualifier.number}`,
+          eyebrow: 'Open qualifier',
+          family: 'qualifiers',
+          accent: 'from-amber-500/25',
+        };
+      }
+
       return {
         key: `major:qualifiers:${slug.includes(':china:') ? 'china' : 'regional'}`,
         name: slug.includes(':china:') ? 'China RMR Qualifiers' : 'Major RMR Qualifiers',
@@ -385,6 +422,9 @@ export default function () {
     ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
   > | null>(null);
   const [competitionDates, setCompetitionDates] = React.useState<Record<number, string>>({});
+  const [competitionStartDates, setCompetitionStartDates] = React.useState<Record<number, number>>(
+    {},
+  );
 
   const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
@@ -527,6 +567,7 @@ export default function () {
   React.useEffect(() => {
     if (!seasonCompetitions?.length) {
       setCompetitionDates({});
+      setCompetitionStartDates({});
       return;
     }
     Promise.all(
@@ -548,13 +589,17 @@ export default function () {
           startDate && endDate && startValue?.getFullYear() === endValue?.getFullYear()
             ? `${startDate} – ${format(endValue, 'MMM d')}, ${endValue.getFullYear()}`
             : [startDate, endDate].filter(Boolean).join(' – ');
-        return [item.tierId, dateLabel] as const;
+        return [item.tierId, dateLabel, startValue?.getTime() ?? Number.POSITIVE_INFINITY] as const;
       }),
-    ).then((entries) =>
+    ).then((entries) => {
+      const datedEntries = entries.filter(Boolean) as Array<readonly [number, string, number]>;
       setCompetitionDates(
-        Object.fromEntries(entries.filter(Boolean) as Array<readonly [number, string]>),
-      ),
-    );
+        Object.fromEntries(datedEntries.map(([tierId, label]) => [tierId, label])),
+      );
+      setCompetitionStartDates(
+        Object.fromEntries(datedEntries.map(([tierId, , startDate]) => [tierId, startDate])),
+      );
+    });
   }, [seasonCompetitions]);
 
   // Initial data fetch
@@ -868,8 +913,13 @@ export default function () {
       ),
     [allTournamentCards, selectedFamily],
   );
+  const isCurrentSeason = selectedSeasonId === state.profile?.season;
 
   const orderedTournamentCards = React.useMemo(() => {
+    if (!isCurrentSeason) {
+      return tournamentCards;
+    }
+
     const getStatus = (card: TournamentCard) => {
       const tournament = seasonCompetitions?.find((item) =>
         card.tiers.some((tier) => tier.id === item.tierId),
@@ -881,9 +931,22 @@ export default function () {
           : 'upcoming';
     };
     const order = { live: 0, upcoming: 1, completed: 2 } as const;
-    return [...tournamentCards].sort((a, b) => order[getStatus(a)] - order[getStatus(b)]);
-  }, [seasonCompetitions, tournamentCards]);
-  const isCurrentSeason = selectedSeasonId === state.profile?.season;
+    const getStartDate = (card: TournamentCard) =>
+      Math.min(
+        ...card.tiers.map((tier) => competitionStartDates[tier.id] ?? Number.POSITIVE_INFINITY),
+      );
+
+    return [...tournamentCards].sort((a, b) => {
+      const statusDiff = order[getStatus(a)] - order[getStatus(b)];
+
+      if (statusDiff !== 0) {
+        return statusDiff;
+      }
+
+      const dateDiff = getStartDate(a) - getStartDate(b);
+      return dateDiff !== 0 ? dateDiff : tournamentCards.indexOf(a) - tournamentCards.indexOf(b);
+    });
+  }, [competitionStartDates, isCurrentSeason, seasonCompetitions, tournamentCards]);
 
   const selectedTournamentKey = React.useMemo(() => {
     const selectedTier = tiers.find((tier) => tier.id === selectedTierId);
@@ -900,20 +963,30 @@ export default function () {
 
     return allTournamentCards.find((card) => card.key === selectedTournamentKey)?.name ?? null;
   }, [allTournamentCards, selectedTournamentKey]);
+  const isChinaRmrOpenQualifier = competition
+    ? [
+        Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+      ].includes(competition.tier.slug as Constants.TierSlug)
+    : false;
   const competitionLocationDisplay = competition
-    ? Util.getCompetitionDisplayLocation({
-        federationName: competition.federation.name,
-        federationSlug: competition.federation.slug,
-        lan: competition.tier.lan,
-        location: competition.location,
-      })
+    ? isChinaRmrOpenQualifier
+      ? 'China (Online)'
+      : Util.getCompetitionDisplayLocation({
+          federationName: competition.federation.name,
+          federationSlug: competition.federation.slug,
+          lan: competition.tier.lan,
+          location: competition.location,
+        })
     : null;
   const competitionLocationCountryCode = competition
-    ? Util.getCompetitionDisplayLocationCountryCode({
-        federationSlug: competition.federation.slug,
-        lan: competition.tier.lan,
-        location: competition.location,
-      })
+    ? isChinaRmrOpenQualifier
+      ? 'cn'
+      : Util.getCompetitionDisplayLocationCountryCode({
+          federationSlug: competition.federation.slug,
+          lan: competition.tier.lan,
+          location: competition.location,
+        })
     : null;
   const competitionTitle = React.useMemo(() => {
     let title = '';
@@ -962,7 +1035,6 @@ export default function () {
     },
     [loadCompetition, selectedFederationId, selectedSeasonId],
   );
-
   React.useEffect(() => {
     if (selectedFederationId <= 0 || selectedSeasonId <= 0 || selectedTierId <= 0) {
       return;
@@ -1116,7 +1188,7 @@ export default function () {
           <fieldset className="gap-0!">
             <legend className="border-t-0! text-lg! font-black uppercase">Competitions</legend>
             <section className="block! py-2!">
-              <article className="grid! grid-cols-5 gap-1! p-2!">
+              <article className="grid! grid-cols-[1.35fr_1fr_1fr_1fr_1fr] gap-1! p-2!">
                 {federationTabs.map((federation) => (
                   <button
                     key={federation.id}
@@ -1177,6 +1249,8 @@ export default function () {
                   );
                   const dateLabel =
                     competitionDates[primaryTier.id] || `${2025 + selectedSeasonId}`;
+                  const rmrQualifierNumber =
+                    primaryTier.slug.match(/open-qualifier:(\d+)$/)?.[1] || null;
                   const isMajor = primaryTier.slug.toLowerCase().includes('major');
                   const isRmr =
                     primaryTier.slug.toLowerCase().includes('rmr') ||
@@ -1207,7 +1281,7 @@ export default function () {
                                 ]
                                   .filter(Boolean)
                                   .join(' ')
-                              : `${rmrRegionName || card.name} RMR Open Qualifiers`
+                              : `${rmrRegionName || card.name} RMR Open Qualifier${rmrQualifierNumber ? ` #${rmrQualifierNumber}` : 's'}`
                             : isMajor
                               ? Util.getMajorEventDisplayName(
                                   tournament.location,
@@ -1346,8 +1420,11 @@ export default function () {
                   <p className="flex items-center gap-2 text-xs font-bold uppercase">
                     <span className="text-base-content/50 truncate">
                       {selectedFederation
-                        ? FEDERATION_LABELS[selectedFederation.slug as Constants.FederationSlug] ||
-                          selectedFederation.name
+                        ? isChinaRmrOpenQualifier
+                          ? 'China'
+                          : FEDERATION_LABELS[
+                              selectedFederation.slug as Constants.FederationSlug
+                            ] || selectedFederation.name
                         : t('shared.competition')}
                     </span>
                     <CompetitionLocationTag tier={competition.tier} />

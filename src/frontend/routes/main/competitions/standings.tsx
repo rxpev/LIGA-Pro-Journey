@@ -9,7 +9,7 @@ import { groupBy } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useTranslation } from '@liga/frontend/hooks';
-import { Brackets, Standings } from '@liga/frontend/components';
+import { Brackets, MatchPreviewModal, Standings } from '@liga/frontend/components';
 import { cx } from '@liga/frontend/lib';
 import swissArrowGreen from '@liga/frontend/assets/swiss/arrowsgreen.png';
 import swissArrowRed from '@liga/frontend/assets/swiss/arrowsred.png';
@@ -91,18 +91,18 @@ const AmericasRmrSwissBucketLayouts = SwissBucketLayouts.filter(
 );
 
 const AmericasRmrSwissArrowPaths = [
-  { d: 'M108 122 L136 98', tone: 'win' },                // top 0:0 -> top 1:0
-  { d: 'M108 482 L136 506', tone: 'loss' },              // bottom 0:0 -> bottom 0:1
-  { d: 'M246 76 L274 52', tone: 'win' },                 // top 1:0 -> top 2:0
-  { d: 'M246 254 L274 278', tone: 'loss' },              // bottom 1:0 -> 1:1
-  { d: 'M246 350 L274 326', tone: 'win' },               // top 0:1 -> 1:1
-  { d: 'M245 528 L273 552', tone: 'loss' },              // bottom 0:1 -> 0:2
-  { d: 'M384 50 L412 26', tone: 'win' },                 // top 2:0 -> 3:0
-  { d: 'M384 114 L412 138', tone: 'loss' },              // bottom 2:0 -> 2:1
-  { d: 'M384 213 L412 189', tone: 'win' },               // top 1:1 -> 2:1
-  { d: 'M383 396 L411 420', tone: 'loss' },              // bottom 1:1 -> 1:2
+  { d: 'M108 122 L136 98', tone: 'win' }, // top 0:0 -> top 1:0
+  { d: 'M108 482 L136 506', tone: 'loss' }, // bottom 0:0 -> bottom 0:1
+  { d: 'M246 76 L274 52', tone: 'win' }, // top 1:0 -> top 2:0
+  { d: 'M246 254 L274 278', tone: 'loss' }, // bottom 1:0 -> 1:1
+  { d: 'M246 350 L274 326', tone: 'win' }, // top 0:1 -> 1:1
+  { d: 'M245 528 L273 552', tone: 'loss' }, // bottom 0:1 -> 0:2
+  { d: 'M384 50 L412 26', tone: 'win' }, // top 2:0 -> 3:0
+  { d: 'M384 114 L412 138', tone: 'loss' }, // bottom 2:0 -> 2:1
+  { d: 'M384 213 L412 189', tone: 'win' }, // top 1:1 -> 2:1
+  { d: 'M383 396 L411 420', tone: 'loss' }, // bottom 1:1 -> 1:2
   { d: 'M506 127 L534 103', single: true, tone: 'win' }, // top 2:1 -> 3:1
-  { d: 'M518 256 L546 280', tone: 'loss' },              // bottom 2:1 -> 2:2
+  { d: 'M518 256 L546 280', tone: 'loss' }, // bottom 2:1 -> 2:2
 ] satisfies SwissArrowPath[];
 
 const SwissArrowImages = {
@@ -335,51 +335,51 @@ function SwissLogo(props: { team: CompetitionTeam | null }) {
 
 function SwissTeamSlot(props: {
   highlightedTeamId?: number;
-  onTeamClick: (team: CompetitionTeam) => void;
   team: SwissMatchView['teams'][number];
 }) {
   const isHighlighted = props.team.team?.id === props.highlightedTeamId;
 
   return (
-    <button
-      type="button"
-      data-interaction-hover-sound="none"
-      disabled={!props.team.team}
+    <span
       title={props.team.team?.name}
       className={cx(
         'center relative min-h-9 flex-1 gap-1.5 rounded-md px-1.5 transition-colors',
         props.team.result === 'win' && 'bg-green-700 text-white',
         props.team.result === 'loss' && 'text-base-content/35 grayscale',
         props.team.result === 'pending' && 'text-base-content',
-        props.team.team && 'hover:bg-base-content/10',
         isHighlighted && 'ring-info ring-offset-base-200 ring-2 ring-offset-1',
       )}
-      onClick={() => props.team.team && props.onTeamClick(props.team.team)}
     >
       <SwissLogo team={props.team.team} />
-    </button>
+    </span>
   );
 }
 
 function SwissMatchCard(props: {
   highlightedTeamId?: number;
   matchView: SwissMatchView;
-  onTeamClick: (team: CompetitionTeam) => void;
+  onMatchClick?: (match: Match, position: { x: number; y: number }) => void;
 }) {
+  const canOpenMatch = Boolean(props.matchView.match);
+
   return (
-    <article className="bg-base-200/80 border-base-content/5 relative z-10 flex h-10 w-[104px] items-center gap-1 rounded-md border px-1.5 shadow-sm">
-      <SwissTeamSlot
-        highlightedTeamId={props.highlightedTeamId}
-        onTeamClick={props.onTeamClick}
-        team={props.matchView.teams[0]}
-      />
+    <button
+      type="button"
+      disabled={!canOpenMatch}
+      className={cx(
+        'bg-base-200/80 border-base-content/5 relative z-10 flex h-10 w-[104px] items-center gap-1 rounded-md border px-1.5 shadow-sm',
+        canOpenMatch && 'hover:bg-base-content/10 cursor-pointer',
+      )}
+      onClick={(event) => {
+        if (props.matchView.match && canOpenMatch) {
+          props.onMatchClick?.(props.matchView.match, { x: event.clientX, y: event.clientY });
+        }
+      }}
+    >
+      <SwissTeamSlot highlightedTeamId={props.highlightedTeamId} team={props.matchView.teams[0]} />
       <span className="text-base-content/45 shrink-0 text-[10px] font-semibold">vs</span>
-      <SwissTeamSlot
-        highlightedTeamId={props.highlightedTeamId}
-        onTeamClick={props.onTeamClick}
-        team={props.matchView.teams[1]}
-      />
-    </article>
+      <SwissTeamSlot highlightedTeamId={props.highlightedTeamId} team={props.matchView.teams[1]} />
+    </button>
   );
 }
 
@@ -446,7 +446,7 @@ function SwissArrows(props: { className: string; paths: SwissArrowPath[] }) {
 
 function SwissRecordColumn(props: {
   highlightedTeamId?: number;
-  onTeamClick: (team: CompetitionTeam) => void;
+  onMatchClick?: (match: Match, position: { x: number; y: number }) => void;
   record: SwissRecord;
   showPlaceholders: boolean;
   x: number;
@@ -477,7 +477,7 @@ function SwissRecordColumn(props: {
             key={matchView.key}
             highlightedTeamId={props.highlightedTeamId}
             matchView={matchView}
-            onTeamClick={props.onTeamClick}
+            onMatchClick={props.onMatchClick}
           />
         ))}
       </div>
@@ -520,7 +520,7 @@ function SwissTerminalColumn(props: {
             data-interaction-hover-sound="none"
             title={competitor.team.name}
             className={cx(
-              'center rounded-full bg-black/15 p-1 transition-colors hover:bg-black/25',
+              'center pointer-events-auto rounded-full bg-black/15 p-1 transition-colors hover:bg-black/25',
               props.compact ? 'size-8' : 'size-10',
               competitor.team.id === props.highlightedTeamId &&
                 'ring-info ring-2 ring-offset-1 ring-offset-transparent',
@@ -536,7 +536,7 @@ function SwissTerminalColumn(props: {
             key={`placeholder:${getRecordKey(props.record)}:${index}`}
             disabled
             className={cx(
-              'center rounded-full bg-black/15 p-1',
+              'center pointer-events-auto rounded-full bg-black/15 p-1',
               props.compact ? 'size-8' : 'size-10',
             )}
           >
@@ -558,7 +558,10 @@ function SwissAdvancedBox(props: {
   onTeamClick: (team: CompetitionTeam) => void;
 }) {
   return (
-    <aside aria-label="Advanced" className={cx('absolute z-10 text-white', props.className)}>
+    <aside
+      aria-label="Advanced"
+      className={cx('pointer-events-none absolute z-10 text-white', props.className)}
+    >
       <div className="absolute top-0 left-0 h-[72px] w-[120px] rounded-tl-sm bg-green-500/80 p-2">
         <SwissTerminalColumn
           compact
@@ -651,7 +654,7 @@ function SwissEliminatedBox(props: {
                 title={slot.team?.name}
                 disabled={!slot.team}
                 className={cx(
-                  'center size-8 rounded-full bg-black/15 p-1 transition-colors',
+                  'center pointer-events-auto size-8 rounded-full bg-black/15 p-1 transition-colors',
                   slot.team && 'hover:bg-black/25',
                   slot.team?.id === props.highlightedTeamId &&
                     'ring-info ring-2 ring-offset-1 ring-offset-transparent',
@@ -667,7 +670,10 @@ function SwissEliminatedBox(props: {
     };
 
     return (
-      <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
+      <aside
+        aria-label="Eliminated"
+        className={cx('pointer-events-none absolute z-10 text-white', props.className)}
+      >
         <div className="absolute top-[310px] left-0 h-[30px] w-[346px] rounded-br-sm bg-red-500/80" />
         <div className="absolute top-[214px] left-0 h-[96px] w-[139px] rounded-tl-sm bg-red-500/80" />
         <div className="absolute top-[120px] left-[139px] h-[190px] w-[115px] bg-red-500/80" />
@@ -680,7 +686,10 @@ function SwissEliminatedBox(props: {
   }
 
   return (
-    <aside aria-label="Eliminated" className={cx('absolute z-10 text-white', props.className)}>
+    <aside
+      aria-label="Eliminated"
+      className={cx('pointer-events-none absolute z-10 text-white', props.className)}
+    >
       <div className="absolute bottom-0 left-0 h-[72px] w-[120px] rounded-bl-sm bg-red-500/80 p-2">
         <SwissTerminalColumn
           compact
@@ -719,6 +728,7 @@ export function SwissDetailedStandings(props: {
   competition: Competition;
   highlight?: number;
   matches?: Match[];
+  onMatchClick?: (match: Match, position: { x: number; y: number }) => void;
   onTeamClick: (team: CompetitionTeam) => void;
 }) {
   const layout =
@@ -752,10 +762,7 @@ export function SwissDetailedStandings(props: {
 
   return (
     <section
-      className={cx(
-        'h-full w-full p-4',
-        props.compact ? 'overflow-hidden p-2' : 'overflow-auto',
-      )}
+      className={cx('h-full w-full p-4', props.compact ? 'overflow-hidden p-2' : 'overflow-auto')}
     >
       <div
         className={cx('relative', layout.frameClassName, props.compact && 'origin-top-left')}
@@ -771,7 +778,7 @@ export function SwissDetailedStandings(props: {
             views={views}
             x={bucketLayout.x}
             y={bucketLayout.y}
-            onTeamClick={props.onTeamClick}
+            onMatchClick={props.onMatchClick}
           />
         ))}
         <SwissAdvancedBox
@@ -833,6 +840,8 @@ export default function () {
   const [swissMatches, setSwissMatches] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const [isSwissDetailedView, setIsSwissDetailedView] = React.useState(false);
+  const [previewMatchId, setPreviewMatchId] = React.useState<number>();
+  const [previewPosition, setPreviewPosition] = React.useState({ x: 0, y: 0 });
   const groups = React.useMemo(
     () => groupBy(competition.competitors, 'group'),
     [competition.competitors],
@@ -951,6 +960,10 @@ export default function () {
                 competition={competition}
                 highlight={state.profile.teamId}
                 matches={swissMatches}
+                onMatchClick={(match, position) => {
+                  setPreviewMatchId(match.id);
+                  setPreviewPosition(position);
+                }}
                 onTeamClick={(team) => navigate(`/teams?teamId=${team.id}`)}
               />
             </div>
@@ -963,7 +976,10 @@ export default function () {
                 matches={swissMatches || []}
                 mode="swiss"
                 teamLink={(team) => `/teams?teamId=${team.id}`}
-                zones={[[1, 8], [9, 16]]}
+                zones={[
+                  [1, 8],
+                  [9, 16],
+                ]}
                 zoneColors={[
                   'border-l-4 border-l-green-500',
                   'border-l-4 border-l-red-500 bg-red-800/10',
@@ -991,6 +1007,10 @@ export default function () {
           competition={competition}
           highlight={state.profile.teamId}
           matches={swissMatches}
+          onMatchClick={(match, position) => {
+            setPreviewMatchId(match.id);
+            setPreviewPosition(position);
+          }}
           onTeamClick={(team) => navigate(`/teams?teamId=${team.id}`)}
         />
       </section>
@@ -1011,11 +1031,9 @@ export default function () {
       <PureBrackets
         key={`${competition.id}:${competition.tier.slug}`}
         matches={bracket}
-        onMatchClick={(match) => {
-          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-            target: '/postgame',
-            payload: match.id,
-          });
+        onMatchClick={(match, position) => {
+          setPreviewMatchId(match.id);
+          setPreviewPosition(position);
         }}
         onPartyClick={(party) => {
           const route = teamLinkById.get(Number(party.id));
@@ -1024,6 +1042,31 @@ export default function () {
           }
         }}
       />
+      {previewMatchId != null && (
+        <MatchPreviewModal
+          matchId={previewMatchId}
+          position={previewPosition}
+          onClose={() => setPreviewMatchId(undefined)}
+          onTeamClick={(teamId) => {
+            setPreviewMatchId(undefined);
+            navigate(`/teams?teamId=${teamId}`);
+          }}
+          onPlayerClick={(playerId) => {
+            setPreviewMatchId(undefined);
+            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+              target: '/transfer',
+              payload: playerId,
+            });
+          }}
+          onOpenMatch={() => {
+            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+              target: '/postgame',
+              payload: previewMatchId,
+            });
+            setPreviewMatchId(undefined);
+          }}
+        />
+      )}
     </section>
   );
 }

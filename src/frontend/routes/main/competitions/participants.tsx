@@ -950,16 +950,25 @@ export default function () {
       Constants.TierSlug.ESEA_CASH_CUP,
       Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
       Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+      Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1,
+      Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2,
+      Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+      Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+      Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+      Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+      Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1,
+      Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2,
+      Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
+      Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2,
+      Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3,
+      Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4,
     ].includes(competition.tier.slug as Constants.TierSlug) &&
-    competition.status === Constants.CompetitionStatus.SCHEDULED;
+    competition.status === Constants.CompetitionStatus.SCHEDULED &&
+    competition.competitors.length === 0;
   const isPreTournamentCctSeries =
-    [
-      Constants.TierSlug.CCT_SERIES,
-      Constants.TierSlug.CCT_OCE_SERIES,
-    ].includes(
+    [Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_OCE_SERIES].includes(
       competition.tier.slug as Constants.TierSlug,
-    ) &&
-    competition.status === Constants.CompetitionStatus.SCHEDULED;
+    ) && competition.status === Constants.CompetitionStatus.SCHEDULED;
   const isPreTournamentCctGlobalFinals =
     competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
@@ -1148,9 +1157,7 @@ export default function () {
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-8 text-center shadow-lg">
         <h2 className="text-xl font-black">Participants</h2>
-        <p className="text-base-content/60 mt-2 text-sm">
-          No teams registered yet.
-        </p>
+        <p className="text-base-content/60 mt-2 text-sm">No teams registered yet.</p>
       </section>
     );
   }
