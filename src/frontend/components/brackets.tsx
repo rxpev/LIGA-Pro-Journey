@@ -304,6 +304,32 @@ function BracketCard(props: {
           </div>
         );
       })}
+      {!props.match.isPlaceholder &&
+        Array.from({ length: Math.max(0, 2 - competitors.length) }, (_, index) => (
+          <div
+            key={`${props.match.id}__bye_${index}`}
+            className={cx(
+              'text-base-content/35 bg-base-100/65 flex w-full items-center justify-between gap-2 pr-0 text-left',
+              '!h-auto min-h-0 px-2',
+              !props.compact && 'px-3',
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="grid size-4 shrink-0 place-items-center text-sm leading-none font-bold">
+                ?
+              </span>
+              <span className="truncate">BYE</span>
+            </span>
+            <span
+              className={cx(
+                'bg-base-300 flex h-full shrink-0 items-center justify-center',
+                props.compact ? 'w-10' : 'w-12',
+              )}
+            >
+              -
+            </span>
+          </div>
+        ))}
     </article>
   );
 }
@@ -480,18 +506,11 @@ function ManualBracket(props: {
           .map((position) => position!.y + matchHeight / 2);
         const fallbackY =
           top + headerHeight + bracketTopOffset + matchIndex * (matchHeight + matchGap);
-        const isFirstRound = matchId.r === firstRound;
-        const isHiddenBye =
-          !match.isPlaceholder &&
-          sectionKey === 'upper' &&
-          isFirstRound &&
-          match.competitors.length < 2 &&
-          roundNumbers.length > 1;
         const y = childCenters.length
           ? childCenters.reduce((sum, center) => sum + center, 0) / childCenters.length -
             matchHeight / 2
           : fallbackY;
-        positions.set(matchKey, { hidden: isHiddenBye, x, y, match });
+        positions.set(matchKey, { hidden: false, x, y, match });
       });
     });
 
@@ -578,11 +597,21 @@ function ManualBracket(props: {
       return;
     }
 
-    const fitZoom = Math.min(props.maxFitZoom || Number.POSITIVE_INFINITY, (viewportSize.width - 40) / width);
+    const fitZoom = Math.min(
+      props.maxFitZoom || Number.POSITIVE_INFINITY,
+      (viewportSize.width - 40) / width,
+    );
     const minimumZoom = lower.nodes.length ? 0.65 : 0.7;
     setZoom(Number(Math.max(minimumZoom, fitZoom).toFixed(2)));
     setPan({ x: 0, y: 0 });
-  }, [height, props.fitToContainer, props.maxFitZoom, viewportSize.height, viewportSize.width, width]);
+  }, [
+    height,
+    props.fitToContainer,
+    props.maxFitZoom,
+    viewportSize.height,
+    viewportSize.width,
+    width,
+  ]);
 
   const connectors = sections.flatMap((section) =>
     section.nodes.flatMap(({ match }) => {
