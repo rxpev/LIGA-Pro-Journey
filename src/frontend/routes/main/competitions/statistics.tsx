@@ -27,6 +27,7 @@ const LINKED_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.
   [Constants.TierSlug.LEAGUE_ADVANCED]: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
   [Constants.TierSlug.CCT_SERIES]: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
   [Constants.TierSlug.CCT_OCE_SERIES]: Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  [Constants.TierSlug.ESL_CHALLENGER]: Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
 };
 
 enum Rating {
@@ -106,9 +107,7 @@ export default function Statistics(): JSX.Element {
   }, [competition.id, search, sort]);
 
   React.useEffect(() => {
-    const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[
-      competition.tier.slug as Constants.TierSlug
-    ];
+    const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[competition.tier.slug as Constants.TierSlug];
 
     setCompetitionIds([competition.id]);
 

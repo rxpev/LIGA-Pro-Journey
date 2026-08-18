@@ -986,6 +986,17 @@ const EUROPE_RMR_PLACEHOLDER_SOURCES: Record<
   ],
 };
 
+const ESL_CHALLENGER_PLACEHOLDER_SOURCES = [
+  'ESEA Main Playoffs Europe #1',
+  'ESEA Main Playoffs Europe #2',
+  'ESEA Main Playoffs Europe #3',
+  'ESEA Main Playoffs Europe #4',
+  'ESEA Advanced Playoffs Americas #1',
+  'ESEA Advanced Playoffs Americas #2',
+  'ESEA Advanced Playoffs Asia #1',
+  'ESEA Advanced Playoffs Oceania #1',
+];
+
 /**
  * Slot height for the card header area (logo/lineup). Must be fixed to avoid layout shift.
  *
@@ -1024,6 +1035,9 @@ export default function () {
     [Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_OCE_SERIES].includes(
       competition.tier.slug as Constants.TierSlug,
     ) && competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentEslChallenger =
+    competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
   const isPreTournamentCctGlobalFinals =
     competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
@@ -1235,6 +1249,26 @@ export default function () {
             >
               <img src={swissTeamPlaceholder} alt="TBD" className="size-14 object-contain" />
               <strong className="text-base-content/65 mt-3">TBD</strong>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentEslChallenger) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <h2 className="mb-4 text-xl font-black">Participants</h2>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {ESL_CHALLENGER_PLACEHOLDER_SOURCES.map((source, index) => (
+            <article
+              key={`${source}:${index}`}
+              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="?" className="size-16 object-contain" />
+              <strong className="mt-3">?</strong>
+              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
             </article>
           ))}
         </div>

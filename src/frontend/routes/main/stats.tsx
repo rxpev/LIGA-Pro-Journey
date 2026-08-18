@@ -93,6 +93,7 @@ type CompetitionGroupKey =
   | 'ESEA_OPEN'
   | 'CCT_SERIES'
   | 'CCT_OCEANIA_SERIES'
+  | 'ESL_CHALLENGER'
   | 'CCT_GLOBAL_FINALS'
   | 'IEM_COLOGNE'
   | 'IEM_COLOGNE_QUALIFIERS'
@@ -118,6 +119,7 @@ const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   ESEA_OPEN: 'ESEA Open (Groups + Playoffs)',
   CCT_SERIES: 'CCT Series (Groups + Playoffs)',
   CCT_OCEANIA_SERIES: 'CCT Oceania Series (Groups + Playoffs)',
+  ESL_CHALLENGER: 'ESL Challenger (Groups + Playoffs)',
   CCT_GLOBAL_FINALS: 'CCT Global Finals',
   IEM_COLOGNE: 'IEM Cologne (Groups + Playoffs)',
   IEM_COLOGNE_QUALIFIERS: 'IEM Cologne Qualifiers',
@@ -140,6 +142,7 @@ const CompetitionGroupOrder: CompetitionGroupKey[] = [
   'ESEA_OPEN',
   'CCT_SERIES',
   'CCT_OCEANIA_SERIES',
+  'ESL_CHALLENGER',
   'CCT_GLOBAL_FINALS',
   'IEM_COLOGNE',
   'IEM_COLOGNE_QUALIFIERS',
@@ -344,6 +347,10 @@ function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
     return 'CCT_OCEANIA_SERIES';
   }
 
+  if (tierSlug === 'esl-challenger:group-stage' || tierSlug === 'esl-challenger:playoffs') {
+    return 'ESL_CHALLENGER';
+  }
+
   if (tierSlug === 'cct:global-finals') {
     return 'CCT_GLOBAL_FINALS';
   }
@@ -436,6 +443,9 @@ function getCompetitionGroupTierWhere(group: string) {
       break;
     case 'CCT_OCEANIA_SERIES':
       tierSlugs.push(Constants.TierSlug.CCT_OCE_SERIES, Constants.TierSlug.CCT_OCE_PLAYOFFS);
+      break;
+    case 'ESL_CHALLENGER':
+      tierSlugs.push(Constants.TierSlug.ESL_CHALLENGER, Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS);
       break;
     case 'CCT_GLOBAL_FINALS':
       tierSlugs.push(Constants.TierSlug.CCT_GLOBAL_FINALS);
