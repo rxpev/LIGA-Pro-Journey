@@ -38,6 +38,8 @@ interface Props {
   limit?: number;
   mode?: 'default' | 'swiss' | 'ranking';
   offset?: number;
+  /** Placement ranges to display for knockout events, e.g. 5th–6th. */
+  placementRanges?: Array<[number, number]>;
   /** Number of unassigned team rows to show when the competition has no competitors yet. */
   placeholderCount?: number;
   matches?: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
@@ -78,6 +80,18 @@ function getPlacementLabel(position: number, count: number) {
 
   const rangeEnd = position + count - 1;
   return `${position}-${rangeEnd}${getOrdinalSuffix(rangeEnd)}`;
+}
+
+function getGroupedPlacementLabel(
+  position: number,
+  count: number,
+  ranges?: Array<[number, number]>,
+) {
+  const range = ranges?.find(([start, end]) => position >= start && position <= end);
+
+  return range
+    ? getPlacementLabel(range[0], range[1] - range[0] + 1)
+    : getPlacementLabel(position, count);
 }
 
 function getZoneIndex(value: number, zones?: Props['zones']) {
@@ -277,6 +291,10 @@ export default function (props: Props) {
           return a.team.name.localeCompare(b.team.name);
         }
 
+        if (isRanking) {
+          return a.position - b.position || a.seed - b.seed;
+        }
+
         const winDelta = b.win - a.win;
         if (winDelta) return winDelta;
 
@@ -294,6 +312,7 @@ export default function (props: Props) {
         props.limit ? (props.offset || 0) + props.limit : props.competitors.length,
       );
   }, [
+    isRanking,
     props.competitors,
     props.limit,
     props.offset,
@@ -534,9 +553,10 @@ export default function (props: Props) {
                 {showPlacementOrPoints && (
                   <td className={cx('text-right')}>
                     {isRanking
-                      ? getPlacementLabel(
+                      ? getGroupedPlacementLabel(
                           competitor.position,
                           positionCounts.get(competitor.position) || 1,
+                          props.placementRanges,
                         )
                       : competitor.win * 3 + competitor.draw}
                   </td>
@@ -570,16 +590,16 @@ export default function (props: Props) {
               <td>{standingPosition + 1}.</td>
               <td>
                 <div className="flex min-w-0 items-center gap-2">
-                  <img
-                    src={swissTeamPlaceholder}
-                    alt="?"
-                    className="size-4 shrink-0"
-                  />
+                  <img src={swissTeamPlaceholder} alt="?" className="size-4 shrink-0" />
                   <span>TBD</span>
                 </div>
               </td>
               {!isRanking && (
-                <td className={cx(isSwiss || props.hidePoints ? 'pr-6 text-right' : 'pr-1 text-right')}>
+                <td
+                  className={cx(
+                    isSwiss || props.hidePoints ? 'pr-6 text-right' : 'pr-1 text-right',
+                  )}
+                >
                   —
                 </td>
               )}

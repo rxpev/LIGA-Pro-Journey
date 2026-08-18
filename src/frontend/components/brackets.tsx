@@ -16,11 +16,15 @@ type BracketMatches = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.ma
 interface Props {
   fitToContainer?: boolean;
   maxFitZoom?: number;
+  fitZoomMultiplier?: number;
+  minFitZoom?: number;
   matches: BracketMatches;
   onMatchClick?: (match: BracketMatches[number], position: { x: number; y: number }) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
   preview?: {
     doubleElimination?: boolean;
+    iemGroup?: boolean;
+    skipUpperFinal?: boolean;
     size: number;
   };
 }
@@ -104,9 +108,16 @@ function createPlaceholderMatch(matchId: BracketMatchId): BracketDisplayMatch {
 function createPreviewMatches(preview: NonNullable<Props['preview']>): BracketMatches {
   const tourney = new Tournament(
     preview.size,
-    preview.doubleElimination
-      ? { last: Constants.BracketIdentifier.LOWER, short: true }
-      : { short: true },
+    preview.iemGroup
+      ? {
+          iemGroup: true,
+          last: Constants.BracketIdentifier.LOWER,
+          short: true,
+          skipUpperFinal: preview.skipUpperFinal,
+        }
+      : preview.doubleElimination
+        ? { last: Constants.BracketIdentifier.LOWER, short: true }
+        : { short: true },
   );
   tourney.start();
   const tournament = JSON.stringify(tourney.save());
@@ -186,6 +197,7 @@ function BracketCard(props: {
   width?: number;
 }) {
   const competitors = [...props.match.competitors].sort((a, b) => a.seed - b.seed);
+  const emptySlotLabel = props.match.status === Constants.MatchStatus.COMPLETED ? 'BYE' : 'TBD';
   const isMatchHighlighted = matchHasTeam(props.match, props.highlightedTeamId);
   const canOpenMatch = !props.match.isPlaceholder && props.match._count?.events > 0;
   const handleMatchClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -318,7 +330,7 @@ function BracketCard(props: {
               <span className="grid size-4 shrink-0 place-items-center text-sm leading-none font-bold">
                 ?
               </span>
-              <span className="truncate">BYE</span>
+              <span className="truncate">{emptySlotLabel}</span>
             </span>
             <span
               className={cx(
@@ -337,15 +349,21 @@ function BracketCard(props: {
 function ManualBracket(props: {
   fitToContainer?: boolean;
   maxFitZoom?: number;
+  fitZoomMultiplier?: number;
+  minFitZoom?: number;
   matches: BracketDisplayMatch[];
   tourney: Tournament;
   onMatchClick?: Props['onMatchClick'];
   onPartyClick?: Props['onPartyClick'];
 }) {
   const fmtDate = useFormatAppDate();
+  const isIemGroup = Boolean(props.tourney.iemGroup);
   const matchWidth = props.fitToContainer ? 220 : MATCH_WIDTH;
   const matchHeight = props.fitToContainer ? 76 : MATCH_HEIGHT;
-  const roundGap = props.fitToContainer ? 32 : ROUND_GAP;
+  // The dedicated eight-team IEM-style bracket has only three columns per
+  // section. Spread those columns across the same viewer width as a standard
+  // double-elimination bracket without altering card proportions.
+  const roundGap = props.fitToContainer ? (isIemGroup ? 170 : 32) : ROUND_GAP;
   const matchGap = props.fitToContainer ? 22 : MATCH_GAP;
   const headerHeight = props.fitToContainer ? 30 : HEADER_HEIGHT;
   const bracketTopOffset = props.fitToContainer ? 46 : 58;
@@ -557,6 +575,9 @@ function ManualBracket(props: {
     ...sections.flatMap((section) => section.nodes.map((node) => node.x + matchWidth)),
   );
   const height = sections.reduce((max, section) => Math.max(max, section.top + section.height), 0);
+  const contentHeight = Math.max(
+    ...sections.flatMap((section) => section.nodes.map((node) => node.y + matchHeight)),
+  );
   const allPositions = new Map(sections.flatMap((section) => [...section.positions.entries()]));
 
   React.useEffect(() => {
@@ -597,17 +618,23 @@ function ManualBracket(props: {
       return;
     }
 
+    const horizontalFitZoom = (viewportSize.width - 40) / width;
+    const verticalFitZoom = (viewportSize.height - 12) / contentHeight;
     const fitZoom = Math.min(
       props.maxFitZoom || Number.POSITIVE_INFINITY,
-      (viewportSize.width - 40) / width,
+      horizontalFitZoom,
+      verticalFitZoom,
     );
-    const minimumZoom = lower.nodes.length ? 0.65 : 0.7;
-    setZoom(Number(Math.max(minimumZoom, fitZoom).toFixed(2)));
+    const minimumZoom = props.minFitZoom ?? (lower.nodes.length ? 0.65 : 0.7);
+    setZoom(Number(Math.max(minimumZoom, fitZoom * (props.fitZoomMultiplier || 1)).toFixed(2)));
     setPan({ x: 0, y: 0 });
   }, [
     height,
+    contentHeight,
     props.fitToContainer,
+    props.fitZoomMultiplier,
     props.maxFitZoom,
+    props.minFitZoom,
     viewportSize.height,
     viewportSize.width,
     width,
@@ -817,7 +844,9 @@ export default function (props: Props) {
       matches={displayMatches}
       tourney={tourney}
       fitToContainer={props.fitToContainer}
+      fitZoomMultiplier={props.fitZoomMultiplier}
       maxFitZoom={props.maxFitZoom}
+      minFitZoom={props.minFitZoom}
       onMatchClick={props.onMatchClick}
       onPartyClick={props.onPartyClick}
     />

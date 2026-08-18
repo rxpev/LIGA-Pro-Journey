@@ -2051,6 +2051,16 @@ async function createMatchdays(
         }
       }
 
+      // The Asia RMR uses Bo1 opening matches; every subsequent series in its
+      // double-elimination bracket is Bo3.
+      if (
+        competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR &&
+        match.id.s === Constants.BracketIdentifier.UPPER &&
+        match.id.r === 1
+      ) {
+        num = 1;
+      }
+
       const seriesMapNames =
         !isUserMatch && num > 1
           ? shuffle(activeMapNames.length ? activeMapNames : [roundMapName]).slice(0, num)
@@ -8637,9 +8647,8 @@ export async function onCompetitionStart(entry: Calendar) {
               }
             : {
                 short: true,
-                ...((competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
-                  competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA) ||
-                competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+                ...(competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+                competition.federation.slug === Constants.FederationSlug.ESPORTS_ASIA
                   ? { last: Constants.BracketIdentifier.LOWER }
                   : {}),
               };

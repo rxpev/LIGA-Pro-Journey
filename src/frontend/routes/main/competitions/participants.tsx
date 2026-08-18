@@ -835,6 +835,28 @@ function getRmrSlotSourceLabel(competition: Competition, teamId: number) {
     return getRankingFallbackLabel(competition);
   }
 
+  if (competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR) {
+    if (
+      [
+        Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1,
+        Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2,
+      ].includes(rule.source)
+    ) {
+      return 'Asia Open Qualifier';
+    }
+
+    if (
+      [
+        Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
+        Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
+      ].includes(rule.source)
+    ) {
+      return 'China Open Qualifier';
+    }
+
+    return 'Oceania Open Qualifier';
+  }
+
   return getTierSourceLabel(
     rule.source,
     (rule.federation ?? competition.federation.slug) as Constants.FederationSlug,
@@ -931,6 +953,12 @@ function getQualificationSourceLabel(
  */
 const STARTERS_PREVIEW_LIMIT = 5;
 
+const ASIA_RMR_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 4 }, () => 'Asia Open Qualifier'),
+  ...Array.from({ length: 2 }, () => 'China Open Qualifier'),
+  ...Array.from({ length: 2 }, () => 'Oceania Open Qualifier'),
+];
+
 /**
  * Slot height for the card header area (logo/lineup). Must be fixed to avoid layout shift.
  *
@@ -972,6 +1000,10 @@ export default function () {
   const isPreTournamentCctGlobalFinals =
     competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentAsiaRmr =
+    competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED &&
+    competition.competitors.length === 0;
   const preTournamentCctPlaceholderCount =
     competition.tier.slug === Constants.TierSlug.CCT_OCE_SERIES ? 8 : 16;
 
@@ -1120,6 +1152,26 @@ export default function () {
         <h2 className="mb-4 text-xl font-black">Participants</h2>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
           {CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES.map((source, index) => (
+            <article
+              key={`${source}:${index}`}
+              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
+              <strong className="mt-3">TBD</strong>
+              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentAsiaRmr) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <h2 className="mb-4 text-xl font-black">Participants</h2>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {ASIA_RMR_PLACEHOLDER_SOURCES.map((source, index) => (
             <article
               key={`${source}:${index}`}
               className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"

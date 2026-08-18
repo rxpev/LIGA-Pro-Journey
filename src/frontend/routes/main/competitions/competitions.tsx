@@ -1069,6 +1069,37 @@ export default function () {
     selectedTierId,
   ]);
 
+  // Refresh an in-progress competition when the calendar advances. The selected
+  // competition identity does not change, so the selection-loading effect above
+  // otherwise leaves its standings and bracket snapshot stale for the rest of the
+  // tournament.
+  React.useEffect(() => {
+    if (
+      !competition ||
+      !state.profile?.date ||
+      competition.status !== Constants.CompetitionStatus.STARTED
+    ) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: { id: competition.id },
+      })
+      .then((result) => {
+        if (isCurrent && result) {
+          setCompetition(result);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition?.id, competition?.status, state.profile?.date]);
+
   React.useEffect(() => {
     if (selectedTierId <= 0 || !visibleTiers.length) {
       return;

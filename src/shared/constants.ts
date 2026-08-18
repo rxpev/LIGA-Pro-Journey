@@ -1351,7 +1351,7 @@ export const TierMatchConfig: Record<string, Array<number>> = {
   [TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2]: [1, 3, 1],
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1]: [3, 3, 1],
   [TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2]: [3, 3, 1],
-  [TierSlug.MAJOR_ASIA_RMR]: [1, 3, 3],
+  [TierSlug.MAJOR_ASIA_RMR]: [3],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1]: [3, 3, 1],
   [TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2]: [3, 3, 1],
   [TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1]: [1, 1, 3, 3, 1],
