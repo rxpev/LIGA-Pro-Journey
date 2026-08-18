@@ -267,10 +267,20 @@ function getTournamentMeta(
       const federationLabel = federationSlug
         ? FEDERATION_LABELS[federationSlug as Constants.FederationSlug]
         : null;
+      const europeRmrGroup =
+        slug === Constants.TierSlug.MAJOR_EUROPE_RMR_A
+          ? 'A'
+          : slug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
+            ? 'B'
+            : null;
 
       return {
-        key: 'major:rmr',
-        name: federationLabel ? `${federationLabel} RMR` : 'RMR',
+        // Europe has two concurrent RMR tournaments. They must remain separate
+        // cards so selecting one cannot silently load the other tier.
+        key: europeRmrGroup ? `major:rmr:europe:${europeRmrGroup.toLowerCase()}` : 'major:rmr',
+        name: federationLabel
+          ? `${federationLabel} RMR${europeRmrGroup ? ` ${europeRmrGroup}` : ''}`
+          : 'RMR',
         eyebrow: 'Regional major ranking',
         family: 'major',
         accent: 'from-red-500/25',
@@ -992,6 +1002,14 @@ export default function () {
     let title = '';
     if (competition && Util.isMajorStageTier(competition.tier.slug)) {
       title = Util.getMajorEventDisplayName(competition.location, competition.organizer);
+    } else if (
+      competition?.tier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_A ||
+      competition?.tier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
+    ) {
+      title = `${
+        Util.getHostedEventTitleDisplayName(competition.tier.slug, competition.location) ||
+        'Europe RMR'
+      } ${competition.tier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_A ? 'A' : 'B'}`;
     } else {
       const hostedEventLabel = competition
         ? Util.getHostedEventTitleDisplayName(competition.tier.slug, competition.location)
@@ -1286,6 +1304,12 @@ export default function () {
                   const isRmr =
                     primaryTier.slug.toLowerCase().includes('rmr') ||
                     card.name.toLowerCase().includes('rmr');
+                  const europeRmrGroup =
+                    primaryTier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_A
+                      ? 'A'
+                      : primaryTier.slug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
+                        ? 'B'
+                        : '';
                   const federationName =
                     FEDERATION_LABELS[selectedFederation?.slug as Constants.FederationSlug] ||
                     selectedFederation?.name;
@@ -1307,7 +1331,9 @@ export default function () {
                           isRmr
                             ? primaryTier.lan
                               ? [
-                                  `${federationName || card.name} RMR`,
+                                  `${federationName || card.name} RMR${
+                                    europeRmrGroup ? ` ${europeRmrGroup}` : ''
+                                  }`,
                                   Util.getCompetitionHostingLocationCity(tournament.location),
                                 ]
                                   .filter(Boolean)

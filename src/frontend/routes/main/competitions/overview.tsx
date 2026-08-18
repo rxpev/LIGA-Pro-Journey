@@ -362,6 +362,11 @@ export default function () {
     Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2,
   ].includes(tierSlug);
   const isAsiaRmr = tierSlug === Constants.TierSlug.MAJOR_ASIA_RMR;
+  const isAmericasRmr = tierSlug === Constants.TierSlug.MAJOR_AMERICAS_RMR;
+  const isEuropeRmrA = tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A;
+  const isEuropeRmrB = tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_B;
+  const isEuropeRmr = isEuropeRmrA || isEuropeRmrB;
+  const isMajorRmr = isAsiaRmr || isAmericasRmr || isEuropeRmr;
   const rmrQualificationLabel = rmrOpenQualifier
     ? rmrOpenQualifier.qualifiers === 1
       ? `Winner to ${rmrOpenQualifier.destination}`
@@ -407,9 +412,13 @@ export default function () {
     ? fixedBracketSize
     : isCctGlobalFinals
       ? 8
-      : isCctSeries
-        ? cctSeriesSize
-        : competition.competitors.length;
+      : isAmericasRmr
+        ? 16
+        : isEuropeRmr
+          ? 16
+          : isCctSeries
+            ? cctSeriesSize
+            : competition.competitors.length;
   const qualifierDestination =
     tierSlug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER
       ? 'IEM Cologne'
@@ -537,7 +546,7 @@ export default function () {
   React.useEffect(() => {
     setMajorEventName('Major');
 
-    if (!isAsiaRmr) {
+    if (!isMajorRmr) {
       return;
     }
 
@@ -561,7 +570,7 @@ export default function () {
     return () => {
       isCurrent = false;
     };
-  }, [competition.season, isAsiaRmr]);
+  }, [competition.season, isMajorRmr]);
 
   React.useEffect(() => {
     setEseaPlayoffMatches([]);
@@ -793,7 +802,12 @@ export default function () {
   const isLeagueStandings = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE;
   const isCashCupStyleStandings = isFixedBracketQualifier || isAsiaRmr;
   const isStandaloneStandings =
-    isLeagueStandings || isCashCupStyleStandings || isCctSeries || isCctGlobalFinals;
+    isLeagueStandings ||
+    isCashCupStyleStandings ||
+    isCctSeries ||
+    isCctGlobalFinals ||
+    isAmericasRmr ||
+    isEuropeRmr;
   const visibleStandingGroupKeys = React.useMemo(() => {
     if (!isLeagueStandings || groupKeys.length <= 1) {
       return groupKeys;
@@ -1387,8 +1401,9 @@ export default function () {
         .sort((a, b) => a.position - b.position || a.seed - b.seed);
 
       return getKnockoutPlacementRanges(8).flatMap(([start, end]) => {
-        const amount = prizePool.distribution[start - 1]
-          ? Util.formatCurrency(prizePool.total * (prizePool.distribution[start - 1] / 100))
+        const distribution = prizePool?.distribution || [];
+        const amount = distribution[start - 1]
+          ? Util.formatCurrency((prizePool?.total || 0) * (distribution[start - 1] / 100))
           : '';
 
         return Array.from({ length: end - start + 1 }, (_, index) => ({
@@ -1402,20 +1417,71 @@ export default function () {
       });
     }
 
-    if (isAsiaRmr) {
-      return getKnockoutPlacementRanges(8, true).flatMap(([start, end]) =>
-        Array.from({ length: end - start + 1 }, (_, index) => {
+    if (isAsiaRmr || isAmericasRmr || isEuropeRmr) {
+      const placementRanges = isAmericasRmr
+        ? [
+            [1, 1],
+            [2, 2],
+            [3, 5],
+            [6, 8],
+            [9, 12],
+            [13, 16],
+          ]
+        : isEuropeRmr
+          ? isEuropeRmrA
+            ? [
+                [1, 1],
+                [2, 2],
+                [3, 4],
+                [5, 5],
+                [6, 8],
+                [9, 11],
+                [12, 14],
+                [15, 16],
+              ]
+            : [
+                [1, 1],
+                [2, 2],
+                [3, 3],
+                [4, 5],
+                [6, 8],
+                [9, 11],
+                [12, 14],
+                [15, 16],
+              ]
+          : getKnockoutPlacementRanges(8, true);
+
+      return placementRanges.flatMap((range) => {
+        const start = range[0];
+        const end = range[1];
+
+        return Array.from({ length: end - start + 1 }, (_, index) => {
           const placement = start + index;
+          const detail = isAmericasRmr
+            ? placement === 1
+              ? majorEventName
+              : placement <= 5
+                ? `${majorEventName} Challengers Stage`
+                : ''
+            : isEuropeRmr
+              ? placement <= (isEuropeRmrA ? 4 : 3)
+                ? majorEventName
+                : placement <= 8
+                  ? `${majorEventName} Challengers Stage`
+                  : ''
+              : placement <= 3
+                ? `${majorEventName} Challengers Stage`
+                : '';
           return {
             competitor:
               competition.status === Constants.CompetitionStatus.COMPLETED
                 ? competition.competitors.find((competitor) => competitor.position === placement)
                 : undefined,
-            detail: placement <= 3 ? `To ${majorEventName}` : '',
+            detail,
             label: getPlacementLabel(start, end),
           };
-        }),
-      );
+        });
+      });
     }
 
     if (!prizePoolCards.length) {
@@ -1423,8 +1489,9 @@ export default function () {
     }
 
     return getKnockoutPlacementRanges(prizePoolCards.length).flatMap(([start, end]) => {
-      const amount = prizePool.distribution[start - 1]
-        ? Util.formatCurrency(prizePool.total * (prizePool.distribution[start - 1] / 100))
+      const distribution = prizePool?.distribution || [];
+      const amount = distribution[start - 1]
+        ? Util.formatCurrency((prizePool?.total || 0) * (distribution[start - 1] / 100))
         : '';
 
       return Array.from({ length: end - start + 1 }, (_, index) => {
@@ -1466,6 +1533,9 @@ export default function () {
     isCctOceSeries,
     isCctGlobalFinals,
     isAsiaRmr,
+    isAmericasRmr,
+    isEuropeRmr,
+    isEuropeRmrA,
     majorEventName,
     cctPlayoffTier,
     cctGlobalFinalsQualifiers,
@@ -1591,7 +1661,9 @@ export default function () {
                 isFixedBracketQualifier ||
                 isCctSeries ||
                 isCctGlobalFinals ||
-                isAsiaRmr) && (
+                isAsiaRmr ||
+                isAmericasRmr ||
+                isEuropeRmr) && (
                 <section className="border-base-content/10 mt-2 border-t pt-3">
                   <p className="text-base-content/70 mb-1 text-xs font-bold">Format</p>
                   {isCctSeries ? (
@@ -1644,6 +1716,34 @@ export default function () {
                           <strong className="block truncate text-xs">Single elimination</strong>
                           <small className="text-base-content/60 block leading-tight">
                             Best of 3
+                          </small>
+                        </span>
+                      </article>
+                    </div>
+                  ) : isAmericasRmr || isEuropeRmr ? (
+                    <div className="grid grid-cols-[minmax(12rem,auto)_auto_minmax(0,1fr)] items-start gap-3">
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaRandom />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Swiss Stage</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            16-team Swiss · Bo1 (advancement / elimination Bo3)
+                          </small>
+                        </span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaTrophy />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Qualification</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            {isEuropeRmr
+                              ? `Top 8 to ${majorEventName}`
+                              : `Top 5 to ${majorEventName}`}
                           </small>
                         </span>
                       </article>
@@ -2067,13 +2167,19 @@ export default function () {
             )}
             {!hasTournamentStarted && <Participants />}
             {((hasTournamentStarted &&
-              (!isAsiaRmr || competition.status === Constants.CompetitionStatus.COMPLETED)) ||
+              (!(isAsiaRmr || isAmericasRmr || isEuropeRmr) ||
+                competition.status === Constants.CompetitionStatus.COMPLETED)) ||
               isIemQualifier) &&
               outcomeCards.length > 0 && (
                 <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
                   <header className="mb-4 flex items-center justify-between gap-4">
                     <h2 className="text-xl font-black">
-                      {isIemQualifier || isAsiaRmrOpenQualifier || isCctSeries || isAsiaRmr
+                      {isIemQualifier ||
+                      isAsiaRmrOpenQualifier ||
+                      isCctSeries ||
+                      isAsiaRmr ||
+                      isAmericasRmr ||
+                      isEuropeRmr
                         ? 'Qualification'
                         : eseaFormat
                           ? 'Qualification & Prize Pool'
@@ -2177,13 +2283,13 @@ export default function () {
           )}
         >
           <h2 className="m-0 text-xl leading-none font-black">
-            {isCctRegionalSeries
+            {isCctRegionalSeries || isAmericasRmr || isEuropeRmr
               ? 'Swiss Stage'
               : isCctOceSeries
                 ? 'Group Stage'
                 : t('shared.standings')}
           </h2>
-          {isCctRegionalSeries && (
+          {(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) && (
             <button
               type="button"
               className={cx(
@@ -2215,7 +2321,7 @@ export default function () {
             </nav>
           )}
         </header>
-        {isCctRegionalSeries && isCctDetailedStandingsOpen && (
+        {(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) && isCctDetailedStandingsOpen && (
           <>
             <div className="h-[36rem] overflow-hidden">
               <SwissDetailedStandings
@@ -2233,7 +2339,9 @@ export default function () {
             <footer className="border-base-content/10 flex gap-4 border-t px-4 py-3 text-xs">
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-green-500" />
-                Qualified to Playoffs
+                {isAmericasRmr || isEuropeRmr
+                  ? `Qualified to ${majorEventName}`
+                  : 'Qualified to Playoffs'}
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-red-500" />
@@ -2242,7 +2350,7 @@ export default function () {
             </footer>
           </>
         )}
-        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) &&
+        {(!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
           !!effectiveGroupSize &&
           visibleStandingGroupKeys.map((groupKey) => (
             <Standings
@@ -2282,28 +2390,35 @@ export default function () {
               }
             />
           ))}
-        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) &&
+        {(!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
         !effectiveGroupSize &&
-        (isCashCupStyleStandings || isCctGlobalFinals) &&
+        ((isCashCupStyleStandings && !isAsiaRmr) || isCctGlobalFinals) &&
         competition.status === Constants.CompetitionStatus.SCHEDULED ? (
           <p className="text-base-content/60 px-4 py-8 text-center text-sm">
             {isCctGlobalFinals ? 'TBD' : 'No teams registered yet.'}
           </p>
         ) : (
-          (!isCctRegionalSeries || !isCctDetailedStandingsOpen) &&
+          (!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
           !effectiveGroupSize && (
             <Standings
               highlight={state.profile.teamId}
               dense={isStandaloneStandings}
               competitors={competition.competitors}
               placeholderCount={
-                isCctRegionalSeries && competition.status === Constants.CompetitionStatus.SCHEDULED
-                  ? CCT_SERIES_SIZE
+                (isCctRegionalSeries || isAsiaRmr || isAmericasRmr || isEuropeRmr) &&
+                competition.status === Constants.CompetitionStatus.SCHEDULED
+                  ? isAsiaRmr
+                    ? 8
+                    : CCT_SERIES_SIZE
                   : undefined
               }
               matches={isSwiss ? standingMatches : undefined}
               mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
-              placementRanges={isAsiaRmr ? getKnockoutPlacementRanges(8, true) : undefined}
+              placementRanges={
+                isAsiaRmr || isAmericasRmr
+                  ? getKnockoutPlacementRanges(isAmericasRmr ? 16 : 8, true)
+                  : undefined
+              }
               hidePoints={isCashCupStyleStandings || isBracketStandings}
               teamLink={(team) => `/teams?teamId=${team.id}`}
               zones={
@@ -2317,21 +2432,36 @@ export default function () {
                         [1, 8],
                         [9, 16],
                       ]
-                    : isCashCupStyleStandings &&
-                        competition.status !== Constants.CompetitionStatus.SCHEDULED
+                    : isAsiaRmr
                       ? [
-                          [1, isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1],
-                          [
-                            (isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1) + 1,
-                            Math.max(2, competition.competitors.length),
-                          ],
+                          [1, 3],
+                          [4, 8],
                         ]
-                      : isBracketStandings || isSwiss
-                        ? advancementZones
-                        : undefined
+                      : isAmericasRmr
+                        ? [
+                            [1, 5],
+                            [6, 16],
+                          ]
+                        : isEuropeRmr
+                          ? [
+                              [1, 8],
+                              [9, 16],
+                            ]
+                          : isCashCupStyleStandings &&
+                              competition.status !== Constants.CompetitionStatus.SCHEDULED
+                            ? [
+                                [1, isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1],
+                                [
+                                  (isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1) + 1,
+                                  Math.max(2, competition.competitors.length),
+                                ],
+                              ]
+                            : isBracketStandings || isSwiss
+                              ? advancementZones
+                              : undefined
               }
               zoneColors={
-                isCctGlobalFinals || isCctRegionalSeries
+                isCctGlobalFinals || isCctRegionalSeries || isAmericasRmr || isEuropeRmr
                   ? ['border-l-4 border-l-green-500', 'border-l-4 border-l-red-500 bg-red-800/10']
                   : isCashCupStyleStandings
                     ? ['border-l-4 border-l-green-500', 'border-l-4 border-l-red-500 bg-red-800/10']
@@ -2340,56 +2470,71 @@ export default function () {
             />
           )
         )}
-        {(!isCctRegionalSeries || !isCctDetailedStandingsOpen) && isStandaloneStandings && (
+        {!isAmericasRmr &&
+          !isEuropeRmr &&
+          (!isCctRegionalSeries || !isCctDetailedStandingsOpen) &&
+          isStandaloneStandings && (
+            <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
+              {isCashCupStyleStandings || isCctSeries || isCctGlobalFinals ? (
+                <>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-1 rounded bg-green-500" />
+                    {isCctSeries
+                      ? 'Qualified to Playoffs'
+                      : isAsiaRmr
+                        ? `Qualified to ${majorEventName}`
+                        : isAsiaRmrOpenQualifier
+                          ? `Qualified to ${rmrOpenQualifier?.destination}`
+                          : isIemQualifier
+                            ? `Qualified to ${qualifierDestination}`
+                            : 'Winner'}
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-1 rounded bg-red-500" />
+                    Eliminated
+                  </span>
+                </>
+              ) : (
+                groupZones[0]?.[0] > 0 &&
+                groupZones[0][1] >= groupZones[0][0] && (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-1 rounded bg-green-500" />
+                    Advanced
+                  </span>
+                )
+              )}
+              {!isCashCupStyleStandings &&
+                !isCctSeries &&
+                !isCctGlobalFinals &&
+                groupZones[1]?.[0] > 0 &&
+                groupZones[1][1] >= groupZones[1][0] && (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-1 rounded bg-green-500" />
+                    Qualified to Playoffs
+                  </span>
+                )}
+              {!isCashCupStyleStandings &&
+                !isCctSeries &&
+                !isCctGlobalFinals &&
+                groupZones[2]?.[0] > 0 &&
+                groupZones[2][1] >= groupZones[2][0] && (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-1 rounded bg-red-500" />
+                    Relegated
+                  </span>
+                )}
+            </footer>
+          )}
+        {(isAmericasRmr || isEuropeRmr) && !isCctDetailedStandingsOpen && (
           <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
-            {isCashCupStyleStandings || isCctSeries || isCctGlobalFinals ? (
-              <>
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-1 rounded bg-green-500" />
-                  {isCctSeries
-                    ? 'Qualified to Playoffs'
-                    : isAsiaRmr
-                      ? `Qualified to ${majorEventName}`
-                      : isAsiaRmrOpenQualifier
-                        ? `Qualified to ${rmrOpenQualifier?.destination}`
-                        : isIemQualifier
-                          ? `Qualified to ${qualifierDestination}`
-                          : 'Winner'}
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-1 rounded bg-red-500" />
-                  Eliminated
-                </span>
-              </>
-            ) : (
-              groupZones[0]?.[0] > 0 &&
-              groupZones[0][1] >= groupZones[0][0] && (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-1 rounded bg-green-500" />
-                  Advanced
-                </span>
-              )
-            )}
-            {!isCashCupStyleStandings &&
-              !isCctSeries &&
-              !isCctGlobalFinals &&
-              groupZones[1]?.[0] > 0 &&
-              groupZones[1][1] >= groupZones[1][0] && (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-1 rounded bg-green-500" />
-                  Qualified to Playoffs
-                </span>
-              )}
-            {!isCashCupStyleStandings &&
-              !isCctSeries &&
-              !isCctGlobalFinals &&
-              groupZones[2]?.[0] > 0 &&
-              groupZones[2][1] >= groupZones[2][0] && (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-1 rounded bg-red-500" />
-                  Relegated
-                </span>
-              )}
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-1 rounded bg-green-500" />
+              Qualified to {majorEventName}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-1 rounded bg-red-500" />
+              Eliminated
+            </span>
           </footer>
         )}
       </article>

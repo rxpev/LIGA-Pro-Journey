@@ -954,10 +954,37 @@ function getQualificationSourceLabel(
 const STARTERS_PREVIEW_LIMIT = 5;
 
 const ASIA_RMR_PLACEHOLDER_SOURCES = [
-  ...Array.from({ length: 4 }, () => 'Asia Open Qualifier'),
-  ...Array.from({ length: 2 }, () => 'China Open Qualifier'),
-  ...Array.from({ length: 2 }, () => 'Oceania Open Qualifier'),
+  'Asia Open Qualifier #1',
+  'Asia Open Qualifier #1',
+  'Asia Open Qualifier #2',
+  'Asia Open Qualifier #2',
+  'China Open Qualifier #1',
+  'China Open Qualifier #2',
+  'Oceania Open Qualifier #1',
+  'Oceania Open Qualifier #2',
 ];
+
+const AMERICAS_RMR_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 8 }, () => 'Americas Ranking'),
+  ...Array.from({ length: 4 }, () => 'Americas Open Qualifier #1'),
+  ...Array.from({ length: 4 }, () => 'Americas Open Qualifier #2'),
+];
+
+const EUROPE_RMR_PLACEHOLDER_SOURCES: Record<
+  Constants.TierSlug.MAJOR_EUROPE_RMR_A | Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+  string[]
+> = {
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_A]: [
+    ...Array.from({ length: 8 }, () => 'Europe Ranking'),
+    ...Array.from({ length: 4 }, () => 'Europe Open Qualifier #1'),
+    ...Array.from({ length: 4 }, () => 'Europe Open Qualifier #3'),
+  ],
+  [Constants.TierSlug.MAJOR_EUROPE_RMR_B]: [
+    ...Array.from({ length: 8 }, () => 'Europe Ranking'),
+    ...Array.from({ length: 4 }, () => 'Europe Open Qualifier #2'),
+    ...Array.from({ length: 4 }, () => 'Europe Open Qualifier #4'),
+  ],
+};
 
 /**
  * Slot height for the card header area (logo/lineup). Must be fixed to avoid layout shift.
@@ -1000,8 +1027,18 @@ export default function () {
   const isPreTournamentCctGlobalFinals =
     competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
-  const isPreTournamentAsiaRmr =
-    competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR &&
+  const preTournamentRmrPlaceholderSources =
+    competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
+      ? ASIA_RMR_PLACEHOLDER_SOURCES
+      : competition.tier.slug === Constants.TierSlug.MAJOR_AMERICAS_RMR
+        ? AMERICAS_RMR_PLACEHOLDER_SOURCES
+        : EUROPE_RMR_PLACEHOLDER_SOURCES[
+            competition.tier.slug as
+              | Constants.TierSlug.MAJOR_EUROPE_RMR_A
+              | Constants.TierSlug.MAJOR_EUROPE_RMR_B
+          ] || null;
+  const isPreTournamentRmr =
+    Boolean(preTournamentRmrPlaceholderSources) &&
     competition.status === Constants.CompetitionStatus.SCHEDULED &&
     competition.competitors.length === 0;
   const preTournamentCctPlaceholderCount =
@@ -1166,12 +1203,12 @@ export default function () {
     );
   }
 
-  if (isPreTournamentAsiaRmr) {
+  if (isPreTournamentRmr && preTournamentRmrPlaceholderSources) {
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
         <h2 className="mb-4 text-xl font-black">Participants</h2>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {ASIA_RMR_PLACEHOLDER_SOURCES.map((source, index) => (
+          {preTournamentRmrPlaceholderSources.map((source, index) => (
             <article
               key={`${source}:${index}`}
               className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"

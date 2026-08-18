@@ -741,7 +741,12 @@ export function SwissDetailedStandings(props: {
   );
   const showPlaceholders =
     props.competition.status === Constants.CompetitionStatus.STARTED ||
-    (props.competition.tier.slug === Constants.TierSlug.CCT_SERIES &&
+    ([
+      Constants.TierSlug.CCT_SERIES,
+      Constants.TierSlug.MAJOR_AMERICAS_RMR,
+      Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+      Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+    ].includes(props.competition.tier.slug as Constants.TierSlug) &&
       props.competition.status === Constants.CompetitionStatus.SCHEDULED);
 
   if (!props.matches) {
@@ -766,7 +771,13 @@ export function SwissDetailedStandings(props: {
     >
       <div
         className={cx('relative', layout.frameClassName, props.compact && 'origin-top-left')}
-        style={props.compact ? { transform: 'scale(0.9)' } : undefined}
+        style={
+          props.compact
+            ? {
+                transform: `scale(${props.competition.tier.slug === Constants.TierSlug.MAJOR_AMERICAS_RMR ? 0.92 : 0.9})`,
+              }
+            : undefined
+        }
       >
         <SwissArrows className={layout.arrowFrameClassName} paths={layout.arrowPaths} />
         {layout.bucketLayouts.map((bucketLayout) => (
