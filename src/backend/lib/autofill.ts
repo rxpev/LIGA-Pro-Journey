@@ -29,7 +29,10 @@ const IEM_QUALIFIER_SIZE: Partial<Record<Constants.FederationSlug, number>> = {
   [Constants.FederationSlug.ESPORTS_OCE]: 36,
 };
 
-function getTierSize(tier: Prisma.TierGetPayload<typeof Eagers.tier>, federationSlug: Constants.FederationSlug) {
+function getTierSize(
+  tier: Prisma.TierGetPayload<typeof Eagers.tier>,
+  federationSlug: Constants.FederationSlug,
+) {
   if (
     tier.slug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER ||
     tier.slug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER
@@ -1580,11 +1583,6 @@ export const Items: Array<Item> = [
   {
     tierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
     on: Constants.CalendarEntry.SEASON_START,
-    entries: [],
-  },
-  {
-    tierSlug: Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1,
-    on: Constants.CalendarEntry.COMPETITION_START,
     entries: [
       {
         action: Action.FALLBACK,
