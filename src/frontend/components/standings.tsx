@@ -125,10 +125,14 @@ function getRoundDifference(competitor: Props['competitors'][number], matches: P
       return difference;
     }
 
-    const team = match.competitors.find((item) => item.teamId === competitor.team.id);
-    const opponent = match.competitors.find((item) => item.teamId !== competitor.team.id);
+    return match.games.reduce((matchDifference, game) => {
+      const team = game.teams.find((item) => item.teamId === competitor.team.id);
+      const opponent = game.teams.find((item) => item.teamId !== competitor.team.id);
 
-    return team && opponent ? difference + (team.score || 0) - (opponent.score || 0) : difference;
+      return team && opponent
+        ? matchDifference + (team.score || 0) - (opponent.score || 0)
+        : matchDifference;
+    }, difference);
   }, 0);
 }
 
@@ -315,6 +319,7 @@ export default function (props: Props) {
     isRanking,
     props.competitors,
     props.limit,
+    props.matches,
     props.offset,
     shouldSortByWorldRanking,
     worldRankingByTeamId,

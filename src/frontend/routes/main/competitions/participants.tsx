@@ -1074,6 +1074,17 @@ const ESL_CHALLENGER_PLACEHOLDER_SOURCES = [
 ];
 
 /**
+ * EPL's remaining 16 slots are filled immediately before the group stage by the
+ * current season's regional ESEA Advanced Playoffs.
+ */
+const EPL_QUALIFIER_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 8 }, () => 'ESEA Advanced Europe'),
+  ...Array.from({ length: 4 }, () => 'ESEA Advanced Americas'),
+  ...Array.from({ length: 3 }, () => 'ESEA Advanced Asia'),
+  'ESEA Advanced Oceania',
+];
+
+/**
  * Slot height for the card header area (logo/lineup). Must be fixed to avoid layout shift.
  *
  * @constant
@@ -1113,6 +1124,9 @@ export default function () {
     ) && competition.status === Constants.CompetitionStatus.SCHEDULED;
   const isPreTournamentEslChallenger =
     competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentEpl =
+    competition.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
   const preTournamentFinalsPlaceholderSources =
     competition.tier.slug === Constants.TierSlug.BLAST_FINALS
@@ -1348,8 +1362,8 @@ export default function () {
               key={`${source}:${index}`}
               className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
             >
-              <img src={swissTeamPlaceholder} alt="?" className="size-16 object-contain" />
-              <strong className="mt-3">?</strong>
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
+              <strong className="mt-3">TBD</strong>
               <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
             </article>
           ))}
@@ -1491,6 +1505,17 @@ export default function () {
             </Link>
           );
         })}
+        {isPreTournamentEpl &&
+          EPL_QUALIFIER_PLACEHOLDER_SOURCES.map((source, index) => (
+            <article
+              key={`epl-participant-placeholder:${source}:${index}`}
+              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
+              <strong className="mt-3">TBD</strong>
+              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
+            </article>
+          ))}
       </div>
     </section>
   );
