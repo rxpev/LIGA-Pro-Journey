@@ -1211,7 +1211,10 @@ export default function () {
   ]);
 
   React.useEffect(() => {
-    if (!canViewStatistics && location.pathname === TabIdentifier.STATISTICS) {
+    if (
+      !canViewStatistics &&
+      [TabIdentifier.STATISTICS, TabIdentifier.NEWS].includes(location.pathname as TabIdentifier)
+    ) {
       navigate({ pathname: TabIdentifier.RESULTS, search: location.search });
     }
   }, [canViewStatistics, location.pathname, location.search, navigate]);

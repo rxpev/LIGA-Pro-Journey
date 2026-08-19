@@ -38,6 +38,8 @@ const CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES = [
   'CCT Series Oceania',
 ];
 
+const BLAST_FINALS_PLACEHOLDER_SOURCES = Array.from({ length: 8 }, () => 'World Ranking');
+
 type SourceRule = {
   target: Constants.TierSlug;
   source: Constants.TierSlug;
@@ -1038,8 +1040,14 @@ export default function () {
   const isPreTournamentEslChallenger =
     competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
-  const isPreTournamentCctGlobalFinals =
-    competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
+  const preTournamentFinalsPlaceholderSources =
+    competition.tier.slug === Constants.TierSlug.BLAST_FINALS
+      ? BLAST_FINALS_PLACEHOLDER_SOURCES
+      : competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS
+        ? CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES
+        : null;
+  const isPreTournamentFinals =
+    Boolean(preTournamentFinalsPlaceholderSources) &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
   const preTournamentRmrPlaceholderSources =
     competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
@@ -1197,12 +1205,12 @@ export default function () {
     });
   }, [baseParticipants, worldRankingByTeamId]);
 
-  if (isPreTournamentCctGlobalFinals) {
+  if (isPreTournamentFinals && preTournamentFinalsPlaceholderSources) {
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
         <h2 className="mb-4 text-xl font-black">Participants</h2>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES.map((source, index) => (
+          {preTournamentFinalsPlaceholderSources.map((source, index) => (
             <article
               key={`${source}:${index}`}
               className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
