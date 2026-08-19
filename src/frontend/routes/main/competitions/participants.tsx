@@ -40,6 +40,13 @@ const CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES = [
 
 const BLAST_FINALS_PLACEHOLDER_SOURCES = Array.from({ length: 8 }, () => 'World Ranking');
 
+const EPL_RETAINED_SLOTS_BY_FEDERATION_ID = {
+  1: 4, // Americas
+  2: 9, // Europe
+  3: 2, // Asia
+  4: 1, // Oceania
+} as const;
+
 type SourceRule = {
   target: Constants.TierSlug;
   source: Constants.TierSlug;
@@ -865,6 +872,63 @@ function getRmrSlotSourceLabel(competition: Competition, teamId: number) {
   );
 }
 
+function getEplRetentionSourceLabel(
+  competition: Competition,
+  seasonCompetitions: Competition[],
+  teamId: number,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.LEAGUE_PRO || competition.season <= 1) {
+    return null;
+  }
+
+  const previousEpl = seasonCompetitions.find(
+    (candidate) =>
+      candidate.season === competition.season - 1 &&
+      candidate.tier.slug === Constants.TierSlug.LEAGUE_PRO,
+  );
+  const previousPlayoffs = seasonCompetitions.find(
+    (candidate) =>
+      candidate.season === competition.season - 1 &&
+      candidate.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  );
+
+  if (!previousEpl) {
+    return null;
+  }
+
+  const sortByPosition = <T extends { position: number | null }>(competitors: T[]) =>
+    [...competitors].sort(
+      (a, b) => (a.position ?? Number.POSITIVE_INFINITY) - (b.position ?? Number.POSITIVE_INFINITY),
+    );
+  const previousPlayoffCompetitors = sortByPosition(previousPlayoffs?.competitors ?? []);
+  const previousCompetitors = [
+    ...previousPlayoffCompetitors,
+    ...sortByPosition(previousEpl.competitors).filter(
+      (competitor) =>
+        !previousPlayoffCompetitors.some((playoff) => playoff.teamId === competitor.teamId),
+    ),
+  ];
+  const retainedTeam = previousCompetitors.find((competitor) => competitor.teamId === teamId);
+  const federationId = retainedTeam?.team.competitionFederationId;
+  const retainedSlots = federationId
+    ? EPL_RETAINED_SLOTS_BY_FEDERATION_ID[
+        federationId as keyof typeof EPL_RETAINED_SLOTS_BY_FEDERATION_ID
+      ]
+    : undefined;
+
+  if (!retainedTeam || !retainedSlots) {
+    return null;
+  }
+
+  const regionalRank = previousCompetitors
+    .filter((competitor) => competitor.team.competitionFederationId === federationId)
+    .findIndex((competitor) => competitor.teamId === teamId);
+
+  return regionalRank >= 0 && regionalRank < retainedSlots
+    ? `${previousEpl.tier.league.name} S${previousEpl.season}`
+    : null;
+}
+
 function isLikelyQualificationSource(current: Competition, source: Competition, teamId: number) {
   if (source.id === current.id) {
     return false;
@@ -900,6 +964,16 @@ function getQualificationSourceLabel(
   seasonCompetitions: Competition[],
   teamId: number,
 ) {
+  const eplRetentionSourceLabel = getEplRetentionSourceLabel(
+    competition,
+    seasonCompetitions,
+    teamId,
+  );
+
+  if (eplRetentionSourceLabel) {
+    return eplRetentionSourceLabel;
+  }
+
   const rmrSlotSourceLabel = getRmrSlotSourceLabel(competition, teamId);
 
   if (rmrSlotSourceLabel) {
