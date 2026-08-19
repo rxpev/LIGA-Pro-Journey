@@ -27,8 +27,7 @@ export function getPlayerRating(kills: number, deaths: number, assists = 0) {
   const ratio = (effectiveKills + 1) / (deaths + 1);
   const plusMinus = effectiveKills - deaths;
 
-  const ratioScore =
-    ratio >= 1 ? baseline + Math.log(ratio) * 0.65 : baseline + (ratio - 1) * 0.75;
+  const ratioScore = ratio >= 1 ? baseline + Math.log(ratio) * 0.65 : baseline + (ratio - 1) * 0.75;
   const impactScore = Math.sign(plusMinus) * Math.sqrt(Math.abs(plusMinus)) * 0.045;
 
   return ratioScore + impactScore;
@@ -437,10 +436,9 @@ export function getTierZonesByGroup(
  * @function
  */
 export function shouldShowStandingsZones(status: Constants.CompetitionStatus) {
-  return [
-    Constants.CompetitionStatus.STARTED,
-    Constants.CompetitionStatus.COMPLETED,
-  ].includes(status);
+  return [Constants.CompetitionStatus.STARTED, Constants.CompetitionStatus.COMPLETED].includes(
+    status,
+  );
 }
 
 /**
@@ -840,6 +838,11 @@ export function getCompetitionHonorThumbnail(options: {
   } else if (tier === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
     file = 'iem-krakow-trophy.png';
   } else if (
+    tier === Constants.TierSlug.LEAGUE_PRO ||
+    tier === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
+  ) {
+    file = 'epl-trophy.png';
+  } else if (
     tier === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS ||
     tier === Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS ||
     tier === Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
@@ -847,10 +850,15 @@ export function getCompetitionHonorThumbnail(options: {
   ) {
     file = 'esea.png';
   } else if (tier.includes('cct')) {
-    file = tier.includes('global') ? 'cct-global-finals.png' :
-      federation.includes('amer') ? 'cct-am.png' :
-        federation.includes('asia') ? 'cct-as.png' :
-          federation.includes('oce') ? 'cct-oce.png' : 'cct-eu.png';
+    file = tier.includes('global')
+      ? 'cct-global-finals.png'
+      : federation.includes('amer')
+        ? 'cct-am.png'
+        : federation.includes('asia')
+          ? 'cct-as.png'
+          : federation.includes('oce')
+            ? 'cct-oce.png'
+            : 'cct-eu.png';
   }
 
   return file ? `resources://competitions/thumbnail/${file}` : null;
@@ -867,7 +875,7 @@ export function getCompetitionHostingLocationCountryCode(location?: string | nul
     uk: 'gb',
   };
 
-  return countryCode ? flagCodeAliases[countryCode] ?? countryCode : null;
+  return countryCode ? (flagCodeAliases[countryCode] ?? countryCode) : null;
 }
 
 export function getCompetitionOnlineLocationCountryCode(
@@ -957,20 +965,12 @@ export function getMajorMatchDisplayName(
   suffix = '',
 ) {
   const city = getCompetitionHostingLocationCity(location);
-  const stageName = tierSlug
-    ? Constants.IdiomaticTier[tierSlug]?.replace(/^Major\s+/i, '')
-    : null;
+  const stageName = tierSlug ? Constants.IdiomaticTier[tierSlug]?.replace(/^Major\s+/i, '') : null;
 
-  return [organizer || 'LIGA', 'Major', city, stageName, suffix.trim()]
-    .filter(Boolean)
-    .join(' ');
+  return [organizer || 'LIGA', 'Major', city, stageName, suffix.trim()].filter(Boolean).join(' ');
 }
 
-export function getLocationEventDisplayName(
-  name: string,
-  location?: string | null,
-  suffix = '',
-) {
+export function getLocationEventDisplayName(name: string, location?: string | null, suffix = '') {
   const city = getCompetitionHostingLocationCity(location);
 
   return [name, city, suffix.trim()].filter(Boolean).join(' ');

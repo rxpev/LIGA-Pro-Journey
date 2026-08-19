@@ -28,6 +28,7 @@ const LINKED_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.
   [Constants.TierSlug.CCT_SERIES]: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
   [Constants.TierSlug.CCT_OCE_SERIES]: Constants.TierSlug.CCT_OCE_PLAYOFFS,
   [Constants.TierSlug.ESL_CHALLENGER]: Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  [Constants.TierSlug.LEAGUE_PRO]: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
 };
 
 enum Rating {
