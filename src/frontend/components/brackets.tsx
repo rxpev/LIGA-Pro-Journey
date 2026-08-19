@@ -15,6 +15,7 @@ type BracketMatches = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.ma
 
 interface Props {
   fitToContainer?: boolean;
+  hideByeMatches?: boolean;
   maxFitZoom?: number;
   fitZoomMultiplier?: number;
   minFitZoom?: number;
@@ -23,6 +24,7 @@ interface Props {
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
   preview?: {
     doubleElimination?: boolean;
+    iemPlayoffs?: boolean;
     iemGroup?: boolean;
     skipUpperFinal?: boolean;
     size: number;
@@ -121,6 +123,27 @@ function createPreviewMatches(preview: NonNullable<Props['preview']>): BracketMa
   );
   tourney.start();
   const tournament = JSON.stringify(tourney.save());
+
+  if (preview.iemPlayoffs) {
+    const iemPlayoffMatchKeys = new Set([
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 1, m: 2 }),
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 1, m: 3 }),
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 2, m: 1 }),
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 2, m: 2 }),
+      getMatchKey({ s: Constants.BracketIdentifier.UPPER, r: 3, m: 1 }),
+    ]);
+
+    return tourney.brackets
+      .rounds()
+      .flat()
+      .filter((match) => iemPlayoffMatchKeys.has(getMatchKey(match.id)))
+      .map((match, index) =>
+        Object.assign(createPlaceholderMatch(match.id), {
+          id: -(index + 1),
+          competition: { tournament },
+        }),
+      ) as BracketMatches;
+  }
 
   return tourney.brackets
     .rounds()
@@ -348,6 +371,7 @@ function BracketCard(props: {
 
 function ManualBracket(props: {
   fitToContainer?: boolean;
+  hideByeMatches?: boolean;
   maxFitZoom?: number;
   fitZoomMultiplier?: number;
   minFitZoom?: number;
@@ -488,8 +512,18 @@ function ManualBracket(props: {
       firstRoundMatches.length,
       ...roundNumbers.map((round) => rounds[round]?.length || 0),
     );
+    const isIemPlayoffPreview =
+      props.hideByeMatches &&
+      sectionKey === 'upper' &&
+      firstRoundMatches.length === 2 &&
+      roundNumbers.length === 3;
+    const iemPreviewContentOffset = isIemPlayoffPreview ? 42 : 0;
+    const layoutMatchCount = isIemPlayoffPreview ? 4 : maxMatches;
     const sectionHeight =
-      headerHeight + bracketTopOffset + maxMatches * matchHeight + (maxMatches - 1) * matchGap;
+      headerHeight +
+      bracketTopOffset +
+      layoutMatchCount * matchHeight +
+      (layoutMatchCount - 1) * matchGap;
     const positions = new Map<
       string,
       { hidden: boolean; match: BracketDisplayMatch; x: number; y: number }
@@ -523,7 +557,12 @@ function ManualBracket(props: {
           .filter(Boolean)
           .map((position) => position!.y + matchHeight / 2);
         const fallbackY =
-          top + headerHeight + bracketTopOffset + matchIndex * (matchHeight + matchGap);
+          top +
+          headerHeight +
+          bracketTopOffset +
+          iemPreviewContentOffset +
+          (isIemPlayoffPreview && roundIndex === 0 ? (matchId.m === 2 ? 0 : 2) : matchIndex) *
+            (matchHeight + matchGap);
         const y = childCenters.length
           ? childCenters.reduce((sum, center) => sum + center, 0) / childCenters.length -
             matchHeight / 2
@@ -531,6 +570,42 @@ function ManualBracket(props: {
         positions.set(matchKey, { hidden: false, x, y, match });
       });
     });
+
+    // Six-team IEM playoffs use two automatic quarter-final advances. Hide those
+    // BYE cards and align each played quarter-final with its semi-final so its
+    // connector remains a straight line.
+    const shouldCondenseByeQuarterFinals =
+      props.hideByeMatches &&
+      sectionKey === 'upper' &&
+      firstRoundMatches.length === 4 &&
+      roundNumbers.length === 3 &&
+      (rounds[roundNumbers[1]]?.length || 0) === 2 &&
+      firstRoundMatches.some((match) => !match.isPlaceholder && match.competitors.length < 2);
+
+    if (shouldCondenseByeQuarterFinals) {
+      firstRoundMatches.forEach((match) => {
+        const matchId = parseMatchId(match);
+        const position = positions.get(getMatchKey(matchId));
+
+        if (!position) {
+          return;
+        }
+
+        if (!match.isPlaceholder && match.competitors.length < 2) {
+          position.hidden = true;
+          return;
+        }
+
+        const nextMatchId = props.tourney.brackets.right(matchId)?.[0];
+        const nextPosition = nextMatchId
+          ? positions.get(getMatchKey(nextMatchId as BracketMatchId))
+          : undefined;
+
+        if (nextPosition) {
+          position.y = nextPosition.y;
+        }
+      });
+    }
 
     return {
       height: sectionHeight,
@@ -668,7 +743,10 @@ function ManualBracket(props: {
           highlighted:
             matchHasTeam(from.match, highlightedTeamId) &&
             matchHasTeam(to.match, highlightedTeamId),
-          path: `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`,
+          path:
+            startY === endY
+              ? `M ${startX} ${startY} H ${endX}`
+              : `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`,
         },
       ];
     }),
@@ -844,6 +922,7 @@ export default function (props: Props) {
       matches={displayMatches}
       tourney={tourney}
       fitToContainer={props.fitToContainer}
+      hideByeMatches={props.hideByeMatches}
       fitZoomMultiplier={props.fitZoomMultiplier}
       maxFitZoom={props.maxFitZoom}
       minFitZoom={props.minFitZoom}

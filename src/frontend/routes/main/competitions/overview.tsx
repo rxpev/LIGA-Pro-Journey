@@ -89,6 +89,25 @@ const IEM_QUALIFIER_TIER_SLUGS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
   Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
 ]);
+const IEM_GROUP_STAGE_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+]);
+const IEM_PLAYOFF_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+]);
+const IEM_PRIZE_PLACEMENT_RANGES: Array<[number, number]> = [
+  [1, 1],
+  [2, 2],
+  [3, 4],
+  [5, 6],
+  [7, 8],
+  [9, 12],
+  [13, 16],
+];
 const ESEA_CASH_CUP_SIZE: Record<string, number> = {
   [Constants.FederationSlug.ESPORTS_EUROPA]: 70,
   [Constants.FederationSlug.ESPORTS_AMERICAS]: 70,
@@ -343,6 +362,12 @@ export default function () {
   const [eseaPlayoffMatches, setEseaPlayoffMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
+  const [iemEventCompetitions, setIemEventCompetitions] = React.useState<
+    Array<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>
+  >([]);
+  const [iemGroupStageMatches, setIemGroupStageMatches] = React.useState<
+    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
+  >([]);
   const [isPlayoffsOpen, setIsPlayoffsOpen] = React.useState(false);
   const [isCashCupBracketModalOpen, setIsCashCupBracketModalOpen] = React.useState(false);
   const [previewMatchId, setPreviewMatchId] = React.useState<number>();
@@ -361,6 +386,28 @@ export default function () {
       : undefined;
   const isEseaCashCup = isEseaCashCupTier(tierSlug);
   const isIemQualifier = IEM_QUALIFIER_TIER_SLUGS.has(tierSlug);
+  const isIemGroupStage = IEM_GROUP_STAGE_TIER_SLUGS.has(tierSlug);
+  const isIemPlayoffStage = IEM_PLAYOFF_TIER_SLUGS.has(tierSlug);
+  const isIemEvent = isIemGroupStage || isIemPlayoffStage;
+  const iemEventTierSlugs = React.useMemo(
+    () =>
+      isIemEvent
+        ? tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A ||
+          tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B ||
+          tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS
+          ? [
+              Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+              Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+              Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+            ]
+          : [
+              Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+              Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+              Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+            ]
+        : [],
+    [isIemEvent, tierSlug],
+  );
   const rmrOpenQualifier = ASIA_RMR_OPEN_QUALIFIERS[tierSlug];
   const isAsiaRmrOpenQualifier = Boolean(rmrOpenQualifier);
   const isChinaRmrOpenQualifier = [
@@ -425,17 +472,19 @@ export default function () {
       : eseaCashCupSize;
   const displayedCompetitorCount = isFixedBracketQualifier
     ? fixedBracketSize
-    : isBlastFinals || isCctGlobalFinals
-      ? 8
-      : isAmericasRmr
-        ? 16
-        : isEuropeRmr
+    : isIemEvent
+      ? 16
+      : isBlastFinals || isCctGlobalFinals
+        ? 8
+        : isAmericasRmr
           ? 16
-          : isEslProLeagueGroupStage
-            ? 32
-            : isCctSeries || isEslChallengerGroupStage
-              ? cctSeriesSize
-              : competition.competitors.length;
+          : isEuropeRmr
+            ? 16
+            : isEslProLeagueGroupStage
+              ? 32
+              : isCctSeries || isEslChallengerGroupStage
+                ? cctSeriesSize
+                : competition.competitors.length;
   const qualifierDestination =
     tierSlug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER
       ? 'IEM Cologne'
@@ -444,13 +493,38 @@ export default function () {
         : null;
   const linkedPlayoffTier =
     eseaFormat?.playoffTier ||
-    (isEslChallengerGroupStage
-      ? Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS
-      : isEslProLeagueGroupStage
-        ? Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
-        : isCctSeries
-          ? cctPlayoffTier
-          : undefined);
+    (isIemGroupStage
+      ? tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_A ||
+        tierSlug === Constants.TierSlug.IEM_COLOGNE_GROUP_B
+        ? Constants.TierSlug.IEM_COLOGNE_PLAYOFFS
+        : Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+      : isEslChallengerGroupStage
+        ? Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS
+        : isEslProLeagueGroupStage
+          ? Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
+          : isCctSeries
+            ? cctPlayoffTier
+            : undefined);
+  const iemEventCompetitionIds = React.useMemo(
+    () =>
+      Array.from(
+        new Set([competition.id, ...iemEventCompetitions.map((item) => item?.id).filter(Boolean)]),
+      ),
+    [competition.id, iemEventCompetitions],
+  );
+  const iemGroupBrackets = React.useMemo(
+    () =>
+      isIemEvent
+        ? iemEventTierSlugs.slice(0, 2).map((slug, index) => ({
+            competition:
+              iemEventCompetitions.find((item) => item?.tier.slug === slug) ||
+              (competition.tier.slug === slug ? competition : undefined),
+            label: `Group ${index === 0 ? 'A' : 'B'}`,
+            slug,
+          }))
+        : [],
+    [competition, iemEventCompetitions, iemEventTierSlugs, isIemEvent],
+  );
   const iemOpeningRound = fixedBracketSize > 64 ? 128 : 64;
   const eseaPlayoffQualifiers = eseaFormat
     ? Util.getTierAdvancementEnd(
@@ -522,6 +596,11 @@ export default function () {
     (eseaFormat || isEslChallengerGroupStage || isEslProLeagueGroupStage) &&
       !eseaPlayoffMatches.length,
   );
+  const shouldPreviewIemPlayoffs =
+    (isIemGroupStage &&
+      (!eseaPlayoffCompetition ||
+        eseaPlayoffCompetition.status === Constants.CompetitionStatus.SCHEDULED)) ||
+    (isIemPlayoffStage && competition.status === Constants.CompetitionStatus.SCHEDULED);
   // The RMR can enter its started state before its match list reaches this view.
   // Use its dedicated preview until the first bracket match is available.
   const shouldPreviewAsiaRmr = isAsiaRmr && !standingMatches.length;
@@ -540,6 +619,71 @@ export default function () {
         lan: competition.tier.lan,
         location: competition.location,
       });
+
+  React.useEffect(() => {
+    setIemEventCompetitions([]);
+
+    if (!isIemEvent) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    Promise.all(
+      iemEventTierSlugs.map((slug) =>
+        api.competitions.all({
+          ...Eagers.competition,
+          orderBy: { id: 'desc' },
+          where: { tier: { slug } },
+        }),
+      ),
+    ).then((resultSets) => {
+      if (isCurrent) {
+        const result = resultSets
+          .map(
+            (candidates) =>
+              candidates.find((candidate) => candidate.season === competition.season) ||
+              candidates[0],
+          )
+          .filter(Boolean);
+        setIemEventCompetitions(result);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition.federationId, competition.season, iemEventTierSlugs, isIemEvent]);
+
+  React.useEffect(() => {
+    setIemGroupStageMatches([]);
+
+    const groupCompetitionIds = iemGroupBrackets.flatMap((group) =>
+      group.competition ? [group.competition.id] : [],
+    );
+
+    if (!groupCompetitionIds.length) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    api.matches
+      .all({
+        include: Eagers.match.include,
+        orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        where: { competitionId: { in: groupCompetitionIds } },
+      })
+      .then((result) => {
+        if (isCurrent) {
+          setIemGroupStageMatches(result);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [iemGroupBrackets]);
 
   React.useEffect(() => {
     setEseaPlayoffCompetition(undefined);
@@ -639,6 +783,7 @@ export default function () {
         isCctGlobalFinals ||
         isBlastFinals ||
         isEslChallengerGroupStage ||
+        (isIemPlayoffStage && hasTournamentStarted) ||
         hasEseaPlayoffsStarted,
     );
   }, [
@@ -649,6 +794,7 @@ export default function () {
     isCctGlobalFinals,
     isBlastFinals,
     isEslChallengerGroupStage,
+    isIemPlayoffStage,
     isAsiaRmr,
     isFixedBracketQualifier,
     isAsiaRmrOpenQualifier,
@@ -687,14 +833,21 @@ export default function () {
           date: 'desc',
         },
         where: {
-          competitionId:
-            linkedPlayoffTier && eseaPlayoffCompetition
+          competitionId: isIemEvent
+            ? { in: iemEventCompetitionIds }
+            : linkedPlayoffTier && eseaPlayoffCompetition
               ? { in: [competition.id, eseaPlayoffCompetition.id] }
               : competition.id,
         },
       })
       .then(([match]) => setLatestScheduledMatchDate(match?.date ?? null));
-  }, [competition.id, eseaPlayoffCompetition?.id, linkedPlayoffTier]);
+  }, [
+    competition.id,
+    eseaPlayoffCompetition?.id,
+    iemEventCompetitionIds,
+    isIemEvent,
+    linkedPlayoffTier,
+  ]);
 
   // fetch recent match results
   React.useEffect(() => {
@@ -711,8 +864,9 @@ export default function () {
         },
         where: {
           status: Constants.MatchStatus.COMPLETED,
-          competitionId:
-            linkedPlayoffTier && eseaPlayoffCompetition
+          competitionId: isIemEvent
+            ? { in: iemEventCompetitionIds }
+            : linkedPlayoffTier && eseaPlayoffCompetition
               ? { in: [competition.id, eseaPlayoffCompetition.id] }
               : competition.id,
           date: {
@@ -721,7 +875,14 @@ export default function () {
         },
       })
       .then((result) => setMatches(result.filter(hasOpponent).slice(0, NUM_PREVIOUS)));
-  }, [competition.id, eseaPlayoffCompetition?.id, linkedPlayoffTier, state.profile]);
+  }, [
+    competition.id,
+    eseaPlayoffCompetition?.id,
+    iemEventCompetitionIds,
+    isIemEvent,
+    linkedPlayoffTier,
+    state.profile,
+  ]);
 
   React.useEffect(() => {
     setResultMatches([]);
@@ -735,15 +896,23 @@ export default function () {
         include: Eagers.match.include,
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         where: {
-          competitionId:
-            linkedPlayoffTier && eseaPlayoffCompetition
+          competitionId: isIemEvent
+            ? { in: iemEventCompetitionIds }
+            : linkedPlayoffTier && eseaPlayoffCompetition
               ? { in: [competition.id, eseaPlayoffCompetition.id] }
               : competition.id,
           status: Constants.MatchStatus.COMPLETED,
         },
       })
       .then((result) => setResultMatches(result.filter(hasOpponent)));
-  }, [competition.id, eseaPlayoffCompetition?.id, isResultsView, linkedPlayoffTier]);
+  }, [
+    competition.id,
+    eseaPlayoffCompetition?.id,
+    iemEventCompetitionIds,
+    isIemEvent,
+    isResultsView,
+    linkedPlayoffTier,
+  ]);
 
   // fetch stage matches for expandable standings rows
   React.useEffect(() => {
@@ -756,7 +925,8 @@ export default function () {
       !isBlastFinals &&
       !Constants.TierSwissConfig[tierSlug] &&
       !isFixedBracketQualifier &&
-      !isAsiaRmr
+      !isAsiaRmr &&
+      !isIemEvent
     ) {
       return;
     }
@@ -777,6 +947,7 @@ export default function () {
     isCctGlobalFinals,
     isCctOceSeries,
     isFixedBracketQualifier,
+    isIemEvent,
     tierSlug,
   ]);
 
@@ -862,6 +1033,7 @@ export default function () {
     isEslProLeagueGroupStage ||
     isCctGlobalFinals ||
     isBlastFinals ||
+    isIemEvent ||
     isAmericasRmr ||
     isEuropeRmr;
   const visibleStandingGroupKeys = React.useMemo(() => {
@@ -926,7 +1098,8 @@ export default function () {
   );
 
   // competition prize pool
-  const prizePool = React.useMemo(() => Constants.PrizePool[tierSlug], [tierSlug]);
+  const prizePoolTier = isIemGroupStage ? linkedPlayoffTier || tierSlug : tierSlug;
+  const prizePool = React.useMemo(() => Constants.PrizePool[prizePoolTier], [prizePoolTier]);
   const displayedPrizePool = isEslProLeagueGroupStage
     ? Constants.PrizePool[Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]
     : prizePool;
@@ -936,13 +1109,13 @@ export default function () {
         .filter(
           (competitor) =>
             Boolean(competitor.team) &&
-            Boolean(prizePool?.distribution[(competitor.position || 1) - 1]),
+            Boolean(prizePool?.distribution?.[(competitor.position || 1) - 1]),
         )
         .sort((a, b) => a.position - b.position)
         .map((competitor, idx) => ({
           competitor,
           placement: idx + 1,
-          percentage: prizePool.distribution[idx],
+          percentage: prizePool?.distribution?.[idx],
         })),
     [competition.competitors, prizePool],
   );
@@ -1017,6 +1190,55 @@ export default function () {
       };
     });
   }, [competition.competitors, competition.status, competition.tournament, prizePool]);
+  const iemPrizePoolCards = React.useMemo(() => {
+    if (!isIemEvent) {
+      return [];
+    }
+
+    const eventCompetitions = [competition, ...iemEventCompetitions].filter(
+      (item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index,
+    );
+    const playoffTeams = eventCompetitions
+      .filter((item) => IEM_PLAYOFF_TIER_SLUGS.has(item.tier.slug as Constants.TierSlug))
+      .flatMap((item) => item.competitors)
+      .filter((competitor) => Boolean(competitor.team))
+      .sort((a, b) => a.position - b.position || a.seed - b.seed)
+      .filter(
+        (competitor, index, all) =>
+          all.findIndex((candidate) => candidate.team.id === competitor.team.id) === index,
+      )
+      .slice(0, 6);
+    const playoffTeamIds = new Set(playoffTeams.map((competitor) => competitor.team.id));
+    const groupTeams = eventCompetitions
+      .filter((item) => IEM_GROUP_STAGE_TIER_SLUGS.has(item.tier.slug as Constants.TierSlug))
+      .flatMap((item) => item.competitors)
+      .filter((competitor) => Boolean(competitor.team) && !playoffTeamIds.has(competitor.team.id))
+      .sort((a, b) => a.position - b.position || a.seed - b.seed);
+    const teams = [...playoffTeams, ...groupTeams].filter(
+      (competitor, index, all) =>
+        all.findIndex((candidate) => candidate.team.id === competitor.team.id) === index,
+    ).slice(0, 16);
+
+    return Array.from({ length: 16 }, (_, index) => {
+      const percentage = prizePool?.distribution?.[index];
+
+      return {
+        amount: percentage == null ? null : prizePool.total * (percentage / 100),
+        competitor: teams[index],
+        placement: index + 1,
+      };
+    });
+  }, [competition, iemEventCompetitions, isIemEvent, prizePool]);
+  const displayedPrizePoolCards = isIemEvent ? iemPrizePoolCards : prizePoolCards;
+  const iemStandingsCompetitors = React.useMemo(
+    () =>
+      isIemEvent
+        ? iemPrizePoolCards.flatMap(({ competitor, placement }) =>
+            competitor ? [{ ...competitor, position: placement }] : [],
+          )
+        : competition.competitors,
+    [competition.competitors, iemPrizePoolCards, isIemEvent],
+  );
   const placementCards = React.useMemo(() => {
     if (prizePoolCards.length) {
       return prizePoolCards;
@@ -1155,8 +1377,8 @@ export default function () {
         .map((competitor, index) => ({
           competitor: isFinalizedCompetitor(competitor) ? competitor : undefined,
           detail:
-            isFinalizedCompetitor(competitor) && prizePool?.distribution[index]
-              ? Util.formatCurrency(prizePool.total * (prizePool.distribution[index] / 100))
+            isFinalizedCompetitor(competitor) && prizePool?.distribution?.[index]
+              ? Util.formatCurrency(prizePool.total * (prizePool.distribution?.[index] || 0) / 100)
               : '',
           label: getPlacementLabel(index + 1, index + 1),
         }));
@@ -1290,9 +1512,9 @@ export default function () {
         Array.from({ length: end - start + 1 }, (_, index) => {
           const placement = start + index;
           const competitor = getPlayoffCompetitor(placement);
-          const prize = playoffPrizePool?.distribution[placement - 1]
+          const prize = playoffPrizePool?.distribution?.[placement - 1]
             ? Util.formatCurrency(
-                playoffPrizePool.total * (playoffPrizePool.distribution[placement - 1] / 100),
+                playoffPrizePool.total * ((playoffPrizePool.distribution?.[placement - 1] || 0) / 100),
               )
             : '';
 
@@ -1457,9 +1679,9 @@ export default function () {
         eseaBracketSize,
         isDoubleEseaPlayoffs,
       ).flatMap(([start, end]) => {
-        const amount = playoffPrizePool?.distribution[start - 1]
+          const amount = playoffPrizePool?.distribution?.[start - 1]
           ? Util.formatCurrency(
-              playoffPrizePool.total * (playoffPrizePool.distribution[start - 1] / 100),
+              playoffPrizePool.total * ((playoffPrizePool.distribution?.[start - 1] || 0) / 100),
             )
           : null;
         const qualification = end <= (eseaPlayoffQualifiers || 0) ? eseaFormatAdvancement : null;
@@ -1636,6 +1858,9 @@ export default function () {
           : getKnockoutPlacementRanges(8, true);
 
       return placementRanges.flatMap((range) => {
+        if (!range) {
+          return [];
+        }
         const start = range[0];
         const end = range[1];
 
@@ -1668,22 +1893,28 @@ export default function () {
       });
     }
 
-    if (!prizePoolCards.length) {
+    if (!displayedPrizePoolCards.length) {
       return [];
     }
 
-    const prizePlacementRanges = isBlastFinals
-      ? [
-          [1, 1],
-          [2, 2],
-          [3, 3],
-          [4, 4],
-          [5, 6],
-          [7, 8],
-        ]
-      : getKnockoutPlacementRanges(prizePoolCards.length);
+    const prizePlacementRanges = isIemEvent
+      ? IEM_PRIZE_PLACEMENT_RANGES
+      : isBlastFinals
+        ? [
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [4, 4],
+            [5, 6],
+            [7, 8],
+          ]
+        : getKnockoutPlacementRanges(displayedPrizePoolCards.length);
 
-    return prizePlacementRanges.flatMap(([start, end]) => {
+    return prizePlacementRanges.flatMap((range) => {
+      if (!range) {
+        return [];
+      }
+      const [start, end] = range;
       const distribution = prizePool?.distribution || [];
       const amount = distribution[start - 1]
         ? Util.formatCurrency((prizePool?.total || 0) * (distribution[start - 1] / 100))
@@ -1694,7 +1925,7 @@ export default function () {
         return {
           competitor:
             competition.status === Constants.CompetitionStatus.COMPLETED
-              ? prizePoolCards[placement - 1]?.competitor
+              ? displayedPrizePoolCards[placement - 1]?.competitor
               : undefined,
           detail: amount,
           label: getPlacementLabel(start, end),
@@ -1716,7 +1947,7 @@ export default function () {
     groups,
     hasEseaPlayoffsStarted,
     prizePool,
-    prizePoolCards,
+    displayedPrizePoolCards,
     standingMatches,
     tierSlug,
     isEseaCashCup,
@@ -1865,12 +2096,51 @@ export default function () {
                 isEslProLeagueGroupStage ||
                 isCctGlobalFinals ||
                 isBlastFinals ||
+                isIemEvent ||
                 isAsiaRmr ||
                 isAmericasRmr ||
                 isEuropeRmr) && (
                 <section className="border-base-content/10 mt-2 border-t pt-3">
                   <p className="text-base-content/70 mb-1 text-xs font-bold">Format</p>
-                  {isCctSeries || isEslChallengerGroupStage || isEslProLeagueGroupStage ? (
+                  {isIemEvent ? (
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1.5">
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaRandom />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Group Stage</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            Double elimination bracket · Best of 3
+                          </small>
+                        </span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaSitemap />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Playoffs</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            Single elimination bracket · Best of 3
+                          </small>
+                        </span>
+                      </article>
+                      <FaArrowRight className="text-base-content/35 mt-2.5" />
+                      <article className="flex min-w-0 items-start gap-2">
+                        <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                          <FaTrophy />
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs">Final</strong>
+                          <small className="text-base-content/60 block leading-tight">
+                            Best of 5
+                          </small>
+                        </span>
+                      </article>
+                    </div>
+                  ) : isCctSeries || isEslChallengerGroupStage || isEslProLeagueGroupStage ? (
                     <div
                       className={cx(
                         'items-start gap-1.5',
@@ -2261,6 +2531,7 @@ export default function () {
               isEslProLeagueGroupStage ||
               isCctGlobalFinals ||
               isBlastFinals ||
+              isIemEvent ||
               isAsiaRmr) && (
               <section className="border-base-content/10 bg-base-200/45 mt-4 overflow-hidden rounded-lg border shadow-lg">
                 <button
@@ -2278,20 +2549,22 @@ export default function () {
                     <span className="text-base-content/60 block pt-0.5 text-xs">
                       {isBlastFinals
                         ? 'Double elimination · Best of 3'
-                        : isAsiaRmr
-                          ? 'Double elimination · Bo3 (opening round · Bo1)'
-                          : isCctGlobalFinals ||
-                              isCctSeries ||
-                              isEslChallengerGroupStage ||
-                              isEslProLeagueGroupStage
-                            ? 'Single elimination · Best of 3'
-                            : isAsiaRmrOpenQualifier
-                              ? rmrBracketDescription
-                              : isIemQualifier
-                                ? `Single elimination · Bo1 through Round of 32 · Bo3 from Round of 16`
-                                : isEseaCashCup
-                                  ? 'Single elimination · Best of 1'
-                                  : `${eseaPlayoffFormat} Bracket`}
+                        : isIemEvent
+                          ? 'Single elimination · Best of 3 · Final Best of 5'
+                          : isAsiaRmr
+                            ? 'Double elimination · Bo3 (opening round · Bo1)'
+                            : isCctGlobalFinals ||
+                                isCctSeries ||
+                                isEslChallengerGroupStage ||
+                                isEslProLeagueGroupStage
+                              ? 'Single elimination · Best of 3'
+                              : isAsiaRmrOpenQualifier
+                                ? rmrBracketDescription
+                                : isIemQualifier
+                                  ? `Single elimination · Bo1 through Round of 32 · Bo3 from Round of 16`
+                                  : isEseaCashCup
+                                    ? 'Single elimination · Best of 1'
+                                    : `${eseaPlayoffFormat} Bracket`}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
@@ -2325,33 +2598,36 @@ export default function () {
                         ? 'h-[31rem]'
                         : isBlastFinals
                           ? 'h-[32rem]'
-                          : isFixedBracketQualifier
-                            ? eseaBracketSize >= 16
-                              ? 'h-[43rem]'
-                              : eseaBracketSize >= 8
-                                ? 'h-[31rem]'
-                                : 'h-[30rem]'
-                            : isCctGlobalFinals
-                              ? 'h-[31rem]'
-                              : isEslProLeagueGroupStage
+                          : isIemEvent
+                            ? 'h-[31rem]'
+                            : isFixedBracketQualifier
+                              ? eseaBracketSize >= 16
                                 ? 'h-[43rem]'
-                                : isCctSeries || isEslChallengerGroupStage
-                                  ? isCctOceaniaStyleGroupStage
-                                    ? 'h-[22rem]'
-                                    : linkedBracketSize >= 8
-                                      ? 'h-[31rem]'
-                                      : 'h-[30rem]'
-                                  : isDoubleEseaPlayoffs
-                                    ? 'h-[32rem]'
-                                    : eseaBracketSize >= 16
-                                      ? 'h-[43rem]'
-                                      : eseaBracketSize >= 8
+                                : eseaBracketSize >= 8
+                                  ? 'h-[31rem]'
+                                  : 'h-[30rem]'
+                              : isCctGlobalFinals
+                                ? 'h-[31rem]'
+                                : isEslProLeagueGroupStage
+                                  ? 'h-[43rem]'
+                                  : isCctSeries || isEslChallengerGroupStage
+                                    ? isCctOceaniaStyleGroupStage
+                                      ? 'h-[22rem]'
+                                      : linkedBracketSize >= 8
                                         ? 'h-[31rem]'
-                                        : 'h-[30rem]',
+                                        : 'h-[30rem]'
+                                    : isDoubleEseaPlayoffs
+                                      ? 'h-[32rem]'
+                                      : eseaBracketSize >= 16
+                                        ? 'h-[43rem]'
+                                        : eseaBracketSize >= 8
+                                          ? 'h-[31rem]'
+                                          : 'h-[30rem]',
                     )}
                   >
                     <Brackets
                       fitToContainer={!isFixedBracketQualifier}
+                      hideByeMatches={isIemEvent}
                       fitZoomMultiplier={isAsiaRmr ? 1.07 : undefined}
                       maxFitZoom={isCctOceaniaStyleGroupStage ? 1.1 : undefined}
                       minFitZoom={isAsiaRmr ? 0.45 : undefined}
@@ -2363,12 +2639,14 @@ export default function () {
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
                         (isBlastFinals &&
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                        shouldPreviewIemPlayoffs ||
                         shouldPreviewCctPlayoffs ||
                         shouldPreviewEseaPlayoffs
                           ? []
                           : isFixedBracketQualifier ||
                               isCctGlobalFinals ||
                               isBlastFinals ||
+                              isIemPlayoffStage ||
                               isAsiaRmr
                             ? standingMatches
                             : eseaPlayoffMatches
@@ -2381,6 +2659,7 @@ export default function () {
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
                         (isBlastFinals &&
                           competition.status === Constants.CompetitionStatus.SCHEDULED) ||
+                        shouldPreviewIemPlayoffs ||
                         shouldPreviewCctPlayoffs ||
                         shouldPreviewEseaPlayoffs
                           ? {
@@ -2388,9 +2667,10 @@ export default function () {
                                 ? true
                                 : isBlastFinals
                                   ? true
-                                  : isFixedBracketQualifier || isCctGlobalFinals
+                                  : isFixedBracketQualifier || isCctGlobalFinals || isIemEvent
                                     ? false
                                     : isDoubleEseaPlayoffs,
+                              iemPlayoffs: isIemEvent,
                               iemGroup: isAsiaRmr,
                               skipUpperFinal: isAsiaRmr,
                               size: isAsiaRmr
@@ -2401,11 +2681,13 @@ export default function () {
                                     ? 8
                                     : isBlastFinals
                                       ? 8
-                                      : isCctSeries ||
-                                          isEslChallengerGroupStage ||
-                                          isEslProLeagueGroupStage
-                                        ? linkedBracketSize
-                                        : eseaBracketSize,
+                                      : isIemEvent
+                                        ? 6
+                                        : isCctSeries ||
+                                            isEslChallengerGroupStage ||
+                                            isEslProLeagueGroupStage
+                                          ? linkedBracketSize
+                                          : eseaBracketSize,
                             }
                           : undefined
                       }
@@ -2417,6 +2699,43 @@ export default function () {
                     />
                   </div>
                 )}
+              </section>
+            )}
+            {isIemEvent && (
+              <section className="mt-4 grid grid-cols-1 gap-4">
+                {iemGroupBrackets.map((group) => {
+                  const groupMatches = group.competition
+                    ? iemGroupStageMatches.filter(
+                        (match) => match.competitionId === group.competition?.id,
+                      )
+                    : [];
+
+                  return (
+                    <article
+                      key={group.slug}
+                      className="border-base-content/10 bg-base-200/45 overflow-hidden rounded-lg border shadow-lg"
+                    >
+                      <header className="border-base-content/10 border-b px-4 py-3">
+                        <h2 className="text-xl leading-none font-black">{group.label}</h2>
+                        <p className="text-base-content/60 mt-1 text-xs">
+                          Double elimination bracket · Best of 3
+                        </p>
+                      </header>
+                      <div className="h-[32rem]">
+                        <Brackets
+                          fitToContainer
+                          matches={groupMatches}
+                          preview={groupMatches.length ? undefined : { iemGroup: true, size: 8 }}
+                          onMatchClick={(match, position) => {
+                            setPreviewMatchId(match.id);
+                            setPreviewPosition(position);
+                          }}
+                          onPartyClick={(party) => navigate(`/teams?teamId=${party.id}`)}
+                        />
+                      </div>
+                    </article>
+                  );
+                })}
               </section>
             )}
             {!hasTournamentStarted && <Participants />}
@@ -2440,7 +2759,7 @@ export default function () {
                           : t('main.competitions.prizePool')}
                     </h2>
                     {!eseaFormat &&
-                      (prizePoolCards.length > 0 ||
+                      (displayedPrizePoolCards.length > 0 ||
                         isEslChallengerGroupStage ||
                         isEslProLeagueGroupStage) && (
                         <span className="text-base-content/60 text-sm">
@@ -2669,12 +2988,14 @@ export default function () {
             <Standings
               highlight={state.profile.teamId}
               dense={isStandaloneStandings}
-              competitors={competition.competitors}
+              competitors={isIemEvent ? iemStandingsCompetitors : competition.competitors}
               placeholderCount={
-                (isBlastFinals || isCctGlobalFinals) &&
+                (isBlastFinals || isCctGlobalFinals || isIemEvent) &&
                 competition.status === Constants.CompetitionStatus.SCHEDULED &&
-                competition.competitors.length === 0
-                  ? 8
+                iemStandingsCompetitors.length === 0
+                  ? isIemEvent
+                    ? 16
+                    : 8
                   : (isCctRegionalSeries || isAsiaRmr || isAmericasRmr || isEuropeRmr) &&
                       competition.status === Constants.CompetitionStatus.SCHEDULED
                     ? isAsiaRmr
@@ -2685,17 +3006,28 @@ export default function () {
               matches={isSwiss ? standingMatches : undefined}
               mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
               placementRanges={
-                isAsiaRmr || isAmericasRmr
+                isIemEvent
+                  ? [
+                      [1, 1],
+                      [2, 2],
+                      [3, 4],
+                      [5, 6],
+                      [7, 8],
+                      [9, 12],
+                      [13, 16],
+                    ]
+                  : isAsiaRmr || isAmericasRmr
                   ? getKnockoutPlacementRanges(isAmericasRmr ? 16 : 8, true)
                   : undefined
               }
               hidePoints={isCashCupStyleStandings || isBracketStandings}
               teamLink={(team) => `/teams?teamId=${team.id}`}
               zones={
-                isCctGlobalFinals || isBlastFinals
+                isCctGlobalFinals || isBlastFinals || isIemEvent
                   ? [
-                      [1, 1],
-                      [2, Math.max(8, competition.competitors.length)],
+                      ...(isIemEvent
+                        ? [[1, 1], [2, 16]]
+                        : [[1, 1], [2, Math.max(8, competition.competitors.length)]]),
                     ]
                   : isCctRegionalSeries
                     ? [
@@ -2733,6 +3065,7 @@ export default function () {
               zoneColors={
                 isCctGlobalFinals ||
                 isBlastFinals ||
+                isIemEvent ||
                 isCctRegionalSeries ||
                 isAmericasRmr ||
                 isEuropeRmr
@@ -2754,7 +3087,8 @@ export default function () {
               isEslChallengerGroupStage ||
               isEslProLeagueGroupStage ||
               isCctGlobalFinals ||
-              isBlastFinals ? (
+              isBlastFinals ||
+              isIemEvent ? (
                 <>
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-1 rounded bg-green-500" />
@@ -2774,7 +3108,7 @@ export default function () {
                   </span>
                 </>
               ) : (
-                groupZones[0]?.[0] > 0 &&
+                groupZones?.[0]?.[0] > 0 &&
                 groupZones[0][1] >= groupZones[0][0] && (
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-1 rounded bg-green-500" />
@@ -2786,7 +3120,7 @@ export default function () {
                 !isCctSeries &&
                 !isCctGlobalFinals &&
                 !isBlastFinals &&
-                groupZones[1]?.[0] > 0 &&
+                groupZones?.[1]?.[0] > 0 &&
                 groupZones[1][1] >= groupZones[1][0] && (
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-1 rounded bg-green-500" />
@@ -2799,7 +3133,7 @@ export default function () {
                 !isEslProLeagueGroupStage &&
                 !isCctGlobalFinals &&
                 !isBlastFinals &&
-                groupZones[2]?.[0] > 0 &&
+                groupZones?.[2]?.[0] > 0 &&
                 groupZones[2][1] >= groupZones[2][0] && (
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-1 rounded bg-red-500" />

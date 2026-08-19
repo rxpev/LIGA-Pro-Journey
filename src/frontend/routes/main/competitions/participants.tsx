@@ -40,6 +40,16 @@ const CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES = [
 
 const BLAST_FINALS_PLACEHOLDER_SOURCES = Array.from({ length: 8 }, () => 'World Ranking');
 
+const IEM_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 8 }, () => 'Europe Ranking'),
+  ...Array.from({ length: 2 }, () => 'Americas Ranking'),
+  ...Array.from({ length: 2 }, () => 'Asia Ranking'),
+  'Europe Qualifier',
+  'Americas Qualifier',
+  'Asia Qualifier',
+  'Oceania Qualifier',
+];
+
 const EPL_RETAINED_SLOTS_BY_FEDERATION_ID = {
   1: 4, // Americas
   2: 9, // Europe
@@ -1128,6 +1138,15 @@ export default function () {
   const isPreTournamentEpl =
     competition.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentIemGroupStage =
+    [
+      Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+      Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+      Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+      Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+    ].includes(competition.tier.slug as Constants.TierSlug) &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED &&
+    competition.competitors.length === 0;
   const preTournamentFinalsPlaceholderSources =
     competition.tier.slug === Constants.TierSlug.BLAST_FINALS
       ? BLAST_FINALS_PLACEHOLDER_SOURCES
@@ -1209,13 +1228,27 @@ export default function () {
 
   const baseParticipants = React.useMemo(() => {
     const teamMap = new Map<number, (typeof competition.competitors)[number]['team']>();
+    const isIemGroupStage = IEM_GROUP_TIER_SLUGS.has(competition.tier.slug);
+    const participantCompetitions = isIemGroupStage
+      ? [
+          competition,
+          ...seasonCompetitions.filter(
+            (item) =>
+              item.season === competition.season &&
+              IEM_GROUP_TIER_SLUGS.has(item.tier.slug) &&
+              item.id !== competition.id,
+          ),
+        ]
+      : [competition];
 
-    competition.competitors.forEach((competitor) => {
-      teamMap.set(competitor.team.id, competitor.team);
+    participantCompetitions.forEach((item) => {
+      item.competitors.forEach((competitor) => {
+        teamMap.set(competitor.team.id, competitor.team);
+      });
     });
 
     return Array.from(teamMap.values());
-  }, [competition.competitors]);
+  }, [competition, seasonCompetitions]);
 
   const fetchStarters = React.useCallback(
     (teamId: number) => {
@@ -1299,6 +1332,26 @@ export default function () {
         <h2 className="mb-4 text-xl font-black">Participants</h2>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
           {preTournamentFinalsPlaceholderSources.map((source, index) => (
+            <article
+              key={`${source}:${index}`}
+              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+            >
+              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
+              <strong className="mt-3">TBD</strong>
+              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentIemGroupStage) {
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <h2 className="mb-4 text-xl font-black">Participants</h2>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {IEM_PLACEHOLDER_SOURCES.map((source, index) => (
             <article
               key={`${source}:${index}`}
               className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"

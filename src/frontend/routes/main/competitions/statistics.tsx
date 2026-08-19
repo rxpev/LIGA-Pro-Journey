@@ -31,6 +31,39 @@ const LINKED_PLAYOFF_TIER_BY_TIER: Partial<Record<Constants.TierSlug, Constants.
   [Constants.TierSlug.LEAGUE_PRO]: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
 };
 
+const IEM_EVENT_TIER_SLUGS: Partial<Record<Constants.TierSlug, Constants.TierSlug[]>> = {
+  [Constants.TierSlug.IEM_COLOGNE_GROUP_A]: [
+    Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+    Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+    Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  ],
+  [Constants.TierSlug.IEM_COLOGNE_GROUP_B]: [
+    Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+    Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+    Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  ],
+  [Constants.TierSlug.IEM_COLOGNE_PLAYOFFS]: [
+    Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+    Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+    Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  ],
+  [Constants.TierSlug.IEM_KRAKOW_GROUP_A]: [
+    Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+    Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+    Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  ],
+  [Constants.TierSlug.IEM_KRAKOW_GROUP_B]: [
+    Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+    Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+    Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  ],
+  [Constants.TierSlug.IEM_KRAKOW_PLAYOFFS]: [
+    Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+    Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+    Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  ],
+};
+
 enum Rating {
   LOW = 0.95,
   HIGH = 1.05,
@@ -108,9 +141,34 @@ export default function Statistics(): JSX.Element {
   }, [competition.id, search, sort]);
 
   React.useEffect(() => {
-    const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[competition.tier.slug as Constants.TierSlug];
+    const tierSlug = competition.tier.slug as Constants.TierSlug;
+    const iemEventTierSlugs = IEM_EVENT_TIER_SLUGS[tierSlug];
+    const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[tierSlug];
 
     setCompetitionIds([competition.id]);
+
+    if (iemEventTierSlugs) {
+      let isCurrent = true;
+
+      api.competitions
+        .all({
+          ...Eagers.competition,
+          where: {
+            federationId: competition.federationId,
+            season: competition.season,
+            tier: { slug: { in: iemEventTierSlugs } },
+          },
+        })
+        .then((competitions) => {
+          if (isCurrent) {
+            setCompetitionIds(competitions.map((item) => item.id));
+          }
+        });
+
+      return () => {
+        isCurrent = false;
+      };
+    }
 
     if (!playoffTier) {
       return;
