@@ -13,7 +13,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import { useAudio, useLoopingAudio, useTheme, useTranslation } from '@liga/frontend/hooks';
-import { Confetti, Image } from '@liga/frontend/components';
+import { AnimatedOutlet, Confetti, Image } from '@liga/frontend/components';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import riflerIcon from '@liga/frontend/assets/rifler.png';
 import iglIcon from '@liga/frontend/assets/igl.png';
@@ -29,7 +29,6 @@ import {
 import {
   createMemoryRouter,
   RouterProvider,
-  Outlet,
   useLocation,
   useNavigate,
   useMatch,
@@ -664,7 +663,7 @@ function Root() {
           </ul>
         </section>
       </header>
-      <Outlet />
+      <AnimatedOutlet />
       <InAppModal />
       {calendarClosePromptVisible && (
         <section className="bg-base-300/80 fixed inset-0 z-[200] flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">

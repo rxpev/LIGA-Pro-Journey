@@ -101,6 +101,84 @@ body {
   @apply bg-base-100 h-full overflow-hidden;
 }
 
+/* Primary navigation transitions. The persistent navbar stays in place while
+ * each route moves beneath it, giving the content a full-screen swipe effect. */
+.route-transition-viewport {
+  position: relative;
+  /* The navbar is fixed, so reserve its 4rem height instead of letting it
+   * cover the beginning of every route. */
+  margin-top: 4rem;
+  height: calc(100vh - 4rem);
+  width: 100%;
+  overflow: hidden;
+}
+
+.route-transition-page {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.route-transition-enter.route-transition-forward {
+  animation: main-route-enter 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.route-transition-exit.route-transition-forward {
+  animation: main-route-exit-forward 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.route-transition-enter.route-transition-backward {
+  animation: main-route-enter-backward 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.route-transition-exit.route-transition-backward {
+  animation: main-route-exit-backward 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes main-route-enter {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes main-route-exit-forward {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes main-route-enter-backward {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes main-route-exit-backward {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition-enter,
+  .route-transition-exit {
+    animation-duration: 1ms;
+  }
+}
+
 * {
   scrollbar-color: color-mix(in srgb, var(--color-base-content) 28%, transparent)
     color-mix(in srgb, var(--color-base-100) 82%, black 18%);
