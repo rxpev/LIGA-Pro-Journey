@@ -42,6 +42,33 @@ const CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES = [
   'CCT Series Oceania',
 ];
 
+const CCT_GLOBAL_FINALS_FEEDER_RULES = [
+  {
+    source: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
+    source: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    start: 1,
+    end: 2,
+  },
+  {
+    source: Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 1,
+  },
+  {
+    source: Constants.TierSlug.CCT_OCE_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_OCE,
+    start: 1,
+    end: 1,
+  },
+] as const;
+
 const BLAST_FINALS_PLACEHOLDER_SOURCES = Array.from({ length: 8 }, () => 'World Ranking');
 
 const IEM_PLACEHOLDER_SOURCES = [
@@ -1087,6 +1114,33 @@ const ESL_CHALLENGER_PLACEHOLDER_SOURCES = [
   'ESEA Advanced Playoffs Oceania #1',
 ];
 
+const ESL_CHALLENGER_FEEDER_RULES = [
+  {
+    source: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 4,
+  },
+  {
+    source: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    start: 1,
+    end: 2,
+  },
+  {
+    source: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 1,
+  },
+  {
+    source: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+    federation: Constants.FederationSlug.ESPORTS_OCE,
+    start: 1,
+    end: 1,
+  },
+] as const;
+
 /**
  * EPL's remaining 16 slots are filled immediately before the group stage by the
  * current season's regional ESEA Advanced Playoffs.
@@ -1097,6 +1151,29 @@ const EPL_QUALIFIER_PLACEHOLDER_SOURCES = [
   ...Array.from({ length: 3 }, () => 'ESEA Advanced Asia'),
   'ESEA Advanced Oceania',
 ];
+
+const EPL_QUALIFIER_FEEDER_RULES = [
+  {
+    federation: Constants.FederationSlug.ESPORTS_EUROPA,
+    start: 1,
+    end: 8,
+  },
+  {
+    federation: Constants.FederationSlug.ESPORTS_AMERICAS,
+    start: 1,
+    end: 4,
+  },
+  {
+    federation: Constants.FederationSlug.ESPORTS_ASIA,
+    start: 1,
+    end: 3,
+  },
+  {
+    federation: Constants.FederationSlug.ESPORTS_OCE,
+    start: 1,
+    end: 1,
+  },
+] as const;
 
 /**
  * Slot height for the card header area (logo/lineup). Must be fixed to avoid layout shift.
@@ -1139,6 +1216,9 @@ export default function () {
   const isPreTournamentEslChallenger =
     competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentCctGlobalFinals =
+    competition.tier.slug === Constants.TierSlug.CCT_GLOBAL_FINALS &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED;
   const isPreTournamentMajorChallengers =
     competition.tier.slug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE &&
     competition.status === Constants.CompetitionStatus.SCHEDULED &&
@@ -1166,7 +1246,7 @@ export default function () {
         ? CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES
         : null;
   const isPreTournamentFinals =
-    Boolean(preTournamentFinalsPlaceholderSources) &&
+    competition.tier.slug === Constants.TierSlug.BLAST_FINALS &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
   const preTournamentRmrPlaceholderSources =
     competition.tier.slug === Constants.TierSlug.MAJOR_ASIA_RMR
@@ -1347,13 +1427,109 @@ export default function () {
       }));
     });
   }, [competition.season, isPreTournamentMajorChallengers, seasonCompetitions]);
+  const eslChallengerParticipantSlots = React.useMemo<ParticipantSlot[]>(() => {
+    if (!isPreTournamentEslChallenger) {
+      return [];
+    }
+
+    return ESL_CHALLENGER_FEEDER_RULES.flatMap(({ end, federation, source, start }, ruleIndex) => {
+      const feeder = seasonCompetitions.find(
+        (candidate) =>
+          candidate.season === competition.season &&
+          candidate.tier.slug === source &&
+          candidate.federation.slug === federation &&
+          candidate.status === Constants.CompetitionStatus.COMPLETED,
+      );
+      const qualifiedTeams = [...(feeder?.competitors || [])]
+        .filter((competitor) => competitor.position >= start && competitor.position <= end)
+        .sort((a, b) => a.position - b.position || a.seed - b.seed);
+
+      return Array.from({ length: end - start + 1 }, (_, index) => ({
+        source: ESL_CHALLENGER_PLACEHOLDER_SOURCES[
+          ESL_CHALLENGER_FEEDER_RULES.slice(0, ruleIndex).reduce(
+            (count, rule) => count + rule.end - rule.start + 1,
+            0,
+          ) + index
+        ],
+        team: qualifiedTeams[index]?.team,
+      }));
+    });
+  }, [competition.season, isPreTournamentEslChallenger, seasonCompetitions]);
+  const eplQualifierParticipantSlots = React.useMemo<ParticipantSlot[]>(() => {
+    if (!isPreTournamentEpl) {
+      return [];
+    }
+
+    return EPL_QUALIFIER_FEEDER_RULES.flatMap(({ end, federation, start }, ruleIndex) => {
+      const feeder = seasonCompetitions.find(
+        (candidate) =>
+          candidate.season === competition.season &&
+          candidate.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS &&
+          candidate.federation.slug === federation &&
+          candidate.status === Constants.CompetitionStatus.COMPLETED,
+      );
+      const qualifiedTeams = [...(feeder?.competitors || [])]
+        .filter((competitor) => competitor.position >= start && competitor.position <= end)
+        .sort((a, b) => a.position - b.position || a.seed - b.seed);
+
+      return Array.from({ length: end - start + 1 }, (_, index) => ({
+        source: EPL_QUALIFIER_PLACEHOLDER_SOURCES[
+          EPL_QUALIFIER_FEEDER_RULES.slice(0, ruleIndex).reduce(
+            (count, rule) => count + rule.end - rule.start + 1,
+            0,
+          ) + index
+        ],
+        team: qualifiedTeams[index]?.team,
+      }));
+    });
+  }, [competition.season, isPreTournamentEpl, seasonCompetitions]);
+  const cctGlobalFinalsParticipantSlots = React.useMemo<ParticipantSlot[]>(() => {
+    if (!isPreTournamentCctGlobalFinals) {
+      return [];
+    }
+
+    return CCT_GLOBAL_FINALS_FEEDER_RULES.flatMap(
+      ({ end, federation, source, start }, ruleIndex) => {
+        const feeder = seasonCompetitions.find(
+          (candidate) =>
+            candidate.season === competition.season &&
+            candidate.tier.slug === source &&
+            candidate.federation.slug === federation &&
+            candidate.status === Constants.CompetitionStatus.COMPLETED,
+        );
+        const qualifiedTeams = [...(feeder?.competitors || [])]
+          .filter((competitor) => competitor.position >= start && competitor.position <= end)
+          .sort((a, b) => a.position - b.position || a.seed - b.seed);
+
+        return Array.from({ length: end - start + 1 }, (_, index) => ({
+          source: CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES[
+            CCT_GLOBAL_FINALS_FEEDER_RULES.slice(0, ruleIndex).reduce(
+              (count, rule) => count + rule.end - rule.start + 1,
+              0,
+            ) + index
+          ],
+          team: qualifiedTeams[index]?.team,
+        }));
+      },
+    );
+  }, [competition.season, isPreTournamentCctGlobalFinals, seasonCompetitions]);
   const rankingParticipants = React.useMemo(
     () => [
       ...baseParticipants,
+      ...cctGlobalFinalsParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
+      ...eslChallengerParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
+      ...eplQualifierParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
       ...majorLegendsParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
       ...majorChallengersParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
     ],
-    [baseParticipants, majorChallengersParticipantSlots, majorLegendsParticipantSlots],
+    [
+      baseParticipants,
+      cctGlobalFinalsParticipantSlots,
+      eslChallengerParticipantSlots,
+      eplQualifierParticipantSlots,
+      majorChallengersParticipantSlots,
+      majorLegendsParticipantSlots,
+    ],
   );
 
   const fetchStarters = React.useCallback(
@@ -1533,6 +1709,31 @@ export default function () {
     );
   }
 
+  if (isPreTournamentCctGlobalFinals) {
+    const sortedSlots = sortPreConfirmedMajorSlots(cctGlobalFinalsParticipantSlots);
+    const hasConfirmedTeams = sortedSlots.some((slot) => slot.team);
+
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-xl font-black">Participants</h2>
+          {hasConfirmedTeams && (
+            <button
+              type="button"
+              onClick={onToggleLineups}
+              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+            >
+              {isLineupsVisible ? 'Hide lineups' : 'Show lineups'}
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {sortedSlots.map(renderPreConfirmedMajorCard)}
+        </div>
+      </section>
+    );
+  }
+
   if (isPreTournamentIemGroupStage) {
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
@@ -1593,20 +1794,25 @@ export default function () {
   }
 
   if (isPreTournamentEslChallenger) {
+    const sortedSlots = sortPreConfirmedMajorSlots(eslChallengerParticipantSlots);
+    const hasConfirmedTeams = sortedSlots.some((slot) => slot.team);
+
     return (
       <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
-        <h2 className="mb-4 text-xl font-black">Participants</h2>
-        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {ESL_CHALLENGER_PLACEHOLDER_SOURCES.map((source, index) => (
-            <article
-              key={`${source}:${index}`}
-              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-xl font-black">Participants</h2>
+          {hasConfirmedTeams && (
+            <button
+              type="button"
+              onClick={onToggleLineups}
+              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
             >
-              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
-              <strong className="mt-3">TBD</strong>
-              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
-            </article>
-          ))}
+              {isLineupsVisible ? 'Hide lineups' : 'Show lineups'}
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {sortedSlots.map(renderPreConfirmedMajorCard)}
         </div>
       </section>
     );
@@ -1796,16 +2002,9 @@ export default function () {
           );
         })}
         {isPreTournamentEpl &&
-          EPL_QUALIFIER_PLACEHOLDER_SOURCES.map((source, index) => (
-            <article
-              key={`epl-participant-placeholder:${source}:${index}`}
-              className="bg-base-200/40 flex min-h-48 flex-col items-center justify-center rounded-2xl p-4"
-            >
-              <img src={swissTeamPlaceholder} alt="TBD" className="size-16 object-contain" />
-              <strong className="mt-3">TBD</strong>
-              <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
-            </article>
-          ))}
+          sortPreConfirmedMajorSlots(eplQualifierParticipantSlots).map(
+            renderPreConfirmedMajorCard,
+          )}
       </div>
     </section>
   );
