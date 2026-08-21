@@ -120,6 +120,13 @@ body {
   width: 100%;
 }
 
+/* Most primary routes use the dashboard utility, which formerly filled the
+ * browser viewport. Make it fill the transition viewport instead so its
+ * column-level scrollbars keep their full available height. */
+.route-transition-page > .dashboard {
+  height: 100%;
+}
+
 .route-transition-enter.route-transition-forward {
   animation: main-route-enter 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }

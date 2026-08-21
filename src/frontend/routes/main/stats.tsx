@@ -2245,7 +2245,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   );
 
   return (
-    <section className="bg-base-300/40 fixed inset-0 box-border min-h-0 overflow-hidden">
+    <section className="bg-base-300/40 fixed inset-x-0 top-16 bottom-0 box-border min-h-0 overflow-hidden">
       <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
         {Object.values(StatsTab)
           .filter((tab) => tab !== StatsTab.GLOBAL_PLAYERS || canViewGlobalPlayerStats)
