@@ -42,6 +42,8 @@ interface Props {
   placementRanges?: Array<[number, number]>;
   /** Number of unassigned team rows to show when the competition has no competitors yet. */
   placeholderCount?: number;
+  /** Optional qualification source shown beneath each unassigned team row. */
+  placeholderLabels?: string[];
   matches?: Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>;
   teamLink?: (team: Props['competitors'][number]['team']) => string;
   title?: React.ReactNode;
@@ -596,7 +598,14 @@ export default function (props: Props) {
               <td>
                 <div className="flex min-w-0 items-center gap-2">
                   <img src={swissTeamPlaceholder} alt="?" className="size-4 shrink-0" />
-                  <span>TBD</span>
+                  <span className="min-w-0">
+                    <span className="block">TBD</span>
+                    {!!props.placeholderLabels?.[idx] && (
+                      <span className="text-base-content/45 block truncate text-[10px]">
+                        {props.placeholderLabels[idx]}
+                      </span>
+                    )}
+                  </span>
                 </div>
               </td>
               {!isRanking && (

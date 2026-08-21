@@ -746,6 +746,8 @@ export function SwissDetailedStandings(props: {
       Constants.TierSlug.MAJOR_AMERICAS_RMR,
       Constants.TierSlug.MAJOR_EUROPE_RMR_A,
       Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+      Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+      Constants.TierSlug.MAJOR_LEGENDS_STAGE,
     ].includes(props.competition.tier.slug as Constants.TierSlug) &&
       props.competition.status === Constants.CompetitionStatus.SCHEDULED);
 
@@ -850,7 +852,11 @@ export default function () {
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
   const [swissMatches, setSwissMatches] =
     React.useState<Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>>();
-  const [isSwissDetailedView, setIsSwissDetailedView] = React.useState(false);
+  const [isSwissDetailedView, setIsSwissDetailedView] = React.useState(
+    [Constants.TierSlug.MAJOR_CHALLENGERS_STAGE, Constants.TierSlug.MAJOR_LEGENDS_STAGE].includes(
+      competition.tier.slug as Constants.TierSlug,
+    ),
+  );
   const [previewMatchId, setPreviewMatchId] = React.useState<number>();
   const [previewPosition, setPreviewPosition] = React.useState({ x: 0, y: 0 });
   const groups = React.useMemo(
@@ -869,6 +875,10 @@ export default function () {
   );
 
   const isSwiss = Boolean(Constants.TierSwissConfig[competition.tier.slug as Constants.TierSlug]);
+  const isMajorSwissStage = [
+    Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+    Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+  ].includes(competition.tier.slug as Constants.TierSlug);
   const hideSmallGroupPoints = Boolean(
     competition.tier.groupSize && competition.tier.groupSize <= 4,
   );
@@ -947,7 +957,7 @@ export default function () {
   }
 
   if (isSwiss) {
-    if (competition.tier.slug === Constants.TierSlug.CCT_SERIES) {
+    if (competition.tier.slug === Constants.TierSlug.CCT_SERIES || isMajorSwissStage) {
       return (
         <section
           className={cx(
@@ -959,13 +969,40 @@ export default function () {
             <h2 className="text-xl leading-none font-black">{t('shared.standings')}</h2>
             <button
               type="button"
-              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+              className={cx(
+                'btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none',
+                isMajorSwissStage &&
+                  competition.status === Constants.CompetitionStatus.SCHEDULED &&
+                  !isSwissDetailedView &&
+                  'btn-primary border-primary bg-primary text-primary-content',
+              )}
               onClick={() => setIsSwissDetailedView((value) => !value)}
             >
-              {isSwissDetailedView ? 'Standings view' : 'Detailed view'}
+              Detailed view
             </button>
           </header>
-          {isSwissDetailedView ? (
+          {!isSwissDetailedView &&
+          isMajorSwissStage &&
+          competition.status === Constants.CompetitionStatus.SCHEDULED ? (
+            <Standings
+              highlight={state.profile.teamId}
+              dense
+              competitors={competition.competitors}
+              matches={swissMatches || []}
+              mode="swiss"
+              hidePoints
+              placeholderCount={16}
+              teamLink={(team) => `/teams?teamId=${team.id}`}
+              zones={[
+                [1, 8],
+                [9, 16],
+              ]}
+              zoneColors={[
+                'border-l-4 border-l-green-500',
+                'border-l-4 border-l-red-500 bg-red-800/10',
+              ]}
+            />
+          ) : isSwissDetailedView ? (
             <div className="min-h-0 flex-1">
               <SwissDetailedStandings
                 competition={competition}
@@ -986,6 +1023,11 @@ export default function () {
                 competitors={competition.competitors}
                 matches={swissMatches || []}
                 mode="swiss"
+                placeholderCount={
+                  isMajorSwissStage && competition.status === Constants.CompetitionStatus.SCHEDULED
+                    ? 16
+                    : undefined
+                }
                 teamLink={(team) => `/teams?teamId=${team.id}`}
                 zones={[
                   [1, 8],
@@ -999,7 +1041,9 @@ export default function () {
               <footer className="border-base-content/10 flex gap-4 border-t px-4 py-3 text-xs">
                 <span className="inline-flex items-center gap-2">
                   <span className="h-4 w-1 rounded bg-green-500" />
-                  Qualified to Playoffs
+                  {competition.tier.slug === Constants.TierSlug.MAJOR_LEGENDS_STAGE
+                    ? 'Qualified to Champions Stage'
+                    : 'Qualified to Playoffs'}
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="h-4 w-1 rounded bg-red-500" />

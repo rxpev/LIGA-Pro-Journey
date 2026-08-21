@@ -10,6 +10,10 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import swissTeamPlaceholder from '@liga/frontend/assets/swiss/teamplaceholder.svg';
 
 type Competition = RouteContextCompetitions['competition'];
+type ParticipantSlot = {
+  source: string;
+  team?: Competition['competitors'][number]['team'];
+};
 
 const FEDERATION_LABELS: Partial<Record<Constants.FederationSlug, string>> = {
   [Constants.FederationSlug.ESPORTS_AMERICAS]: 'Americas',
@@ -1135,6 +1139,14 @@ export default function () {
   const isPreTournamentEslChallenger =
     competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
+  const isPreTournamentMajorChallengers =
+    competition.tier.slug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED &&
+    competition.competitors.length === 0;
+  const isPreTournamentMajorLegends =
+    competition.tier.slug === Constants.TierSlug.MAJOR_LEGENDS_STAGE &&
+    competition.status === Constants.CompetitionStatus.SCHEDULED &&
+    competition.competitors.length === 0;
   const isPreTournamentEpl =
     competition.tier.slug === Constants.TierSlug.LEAGUE_PRO &&
     competition.status === Constants.CompetitionStatus.SCHEDULED;
@@ -1249,6 +1261,100 @@ export default function () {
 
     return Array.from(teamMap.values());
   }, [competition, seasonCompetitions]);
+  const majorLegendsParticipantSlots = React.useMemo<ParticipantSlot[]>(() => {
+    if (!isPreTournamentMajorLegends) {
+      return [];
+    }
+
+    const feederRules = [
+      { source: Constants.TierSlug.MAJOR_EUROPE_RMR_A, count: 4, label: 'Europe RMR A' },
+      { source: Constants.TierSlug.MAJOR_EUROPE_RMR_B, count: 3, label: 'Europe RMR B' },
+      { source: Constants.TierSlug.MAJOR_AMERICAS_RMR, count: 1, label: 'Americas RMR' },
+    ];
+    const rmrSlots = feederRules.flatMap(({ count, label, source }) => {
+      const qualifiedTeams = (
+        seasonCompetitions.find(
+          (candidate) =>
+            candidate.season === competition.season &&
+            candidate.tier.slug === source &&
+            candidate.status === Constants.CompetitionStatus.COMPLETED,
+        )?.competitors || []
+      )
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position || a.seed - b.seed)
+        .slice(0, count);
+
+      return Array.from({ length: count }, (_, index) => ({
+        source: label,
+        team: qualifiedTeams[index]?.team,
+      }));
+    });
+
+    return [
+      ...rmrSlots,
+      ...Array.from(
+        { length: 8 },
+        (): ParticipantSlot => ({
+          source: 'Challengers Stage',
+          team: undefined,
+        }),
+      ),
+    ];
+  }, [competition.season, isPreTournamentMajorLegends, seasonCompetitions]);
+  const majorChallengersParticipantSlots = React.useMemo<ParticipantSlot[]>(() => {
+    if (!isPreTournamentMajorChallengers) {
+      return [];
+    }
+
+    const feederRules = [
+      {
+        source: Constants.TierSlug.MAJOR_EUROPE_RMR_A,
+        start: 5,
+        end: 8,
+        label: 'Europe RMR A',
+      },
+      {
+        source: Constants.TierSlug.MAJOR_EUROPE_RMR_B,
+        start: 4,
+        end: 8,
+        label: 'Europe RMR B',
+      },
+      {
+        source: Constants.TierSlug.MAJOR_AMERICAS_RMR,
+        start: 2,
+        end: 5,
+        label: 'Americas RMR',
+      },
+      { source: Constants.TierSlug.MAJOR_ASIA_RMR, start: 1, end: 3, label: 'Asia RMR' },
+    ];
+
+    return feederRules.flatMap(({ end, label, source, start }) => {
+      const qualifiedTeams = (
+        seasonCompetitions.find(
+          (candidate) =>
+            candidate.season === competition.season &&
+            candidate.tier.slug === source &&
+            candidate.status === Constants.CompetitionStatus.COMPLETED,
+        )?.competitors || []
+      )
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position || a.seed - b.seed)
+        .filter((competitor) => competitor.position >= start && competitor.position <= end);
+
+      return Array.from({ length: end - start + 1 }, (_, index) => ({
+        source: label,
+        team: qualifiedTeams[index]?.team,
+      }));
+    });
+  }, [competition.season, isPreTournamentMajorChallengers, seasonCompetitions]);
+  const rankingParticipants = React.useMemo(
+    () => [
+      ...baseParticipants,
+      ...majorLegendsParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
+      ...majorChallengersParticipantSlots.flatMap((slot) => (slot.team ? [slot.team] : [])),
+    ],
+    [baseParticipants, majorChallengersParticipantSlots, majorLegendsParticipantSlots],
+  );
 
   const fetchStarters = React.useCallback(
     (teamId: number) => {
@@ -1287,19 +1393,100 @@ export default function () {
    */
   React.useEffect(() => {
     if (!isLineupsVisible) return;
-    baseParticipants.forEach((team) => fetchStarters(team.id));
-  }, [isLineupsVisible, baseParticipants, fetchStarters]);
+    rankingParticipants.forEach((team) => fetchStarters(team.id));
+  }, [fetchStarters, isLineupsVisible, rankingParticipants]);
 
   /**
    * Eager-load world ranking for all teams so the grid can be ordered by ranking.
    */
   React.useEffect(() => {
-    baseParticipants.forEach((team) => fetchWorldRanking(team.id));
-  }, [baseParticipants, fetchWorldRanking]);
+    rankingParticipants.forEach((team) => fetchWorldRanking(team.id));
+  }, [fetchWorldRanking, rankingParticipants]);
 
   const onToggleLineups = React.useCallback(() => {
     setIsLineupsVisible((prev) => !prev);
   }, []);
+  const sortPreConfirmedMajorSlots = React.useCallback(
+    (slots: ParticipantSlot[]) =>
+      [...slots].sort((a, b) => {
+        if (a.team && b.team) {
+          const aRank = worldRankingByTeamId[a.team.id] ?? Number.POSITIVE_INFINITY;
+          const bRank = worldRankingByTeamId[b.team.id] ?? Number.POSITIVE_INFINITY;
+          return aRank - bRank || a.team.name.localeCompare(b.team.name);
+        }
+
+        if (a.team) return -1;
+        if (b.team) return 1;
+        return 0;
+      }),
+    [worldRankingByTeamId],
+  );
+  const renderPreConfirmedMajorCard = React.useCallback(
+    ({ source, team }: ParticipantSlot, index: number) => {
+      const isLoading = team ? loadingByTeamId[team.id] === true : false;
+      const starters = team ? startersByTeamId[team.id] || [] : [];
+      const ranking = team ? worldRankingByTeamId[team.id] : undefined;
+      const isExpanded = Boolean(team && isLineupsVisible);
+
+      return (
+        <article
+          key={`${source}:${team?.id || 'tbd'}:${index}`}
+          className="bg-base-200/40 relative flex flex-col rounded-2xl p-4"
+        >
+          {!isExpanded && ranking != null && (
+            <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute top-3 left-3">
+              #{ranking}
+            </span>
+          )}
+          <div className={cx('flex w-full items-center justify-center', CARD_SLOT_HEIGHT_CLASS)}>
+            {isExpanded ? (
+              <div className="flex h-full w-full flex-col justify-center overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <p className="text-base-content/60 text-[10px] font-semibold tracking-wide uppercase">
+                    Starters
+                  </p>
+                  <img alt="" src={team.blazon} className="h-5 w-5 opacity-70" aria-hidden="true" />
+                </div>
+                {isLoading ? (
+                  <p className="text-base-content/60 mt-2 text-sm leading-tight">Loading…</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm leading-tight">
+                    {starters.slice(0, STARTERS_PREVIEW_LIMIT).map((player) => (
+                      <li key={player.id} className="flex items-center gap-2">
+                        <span className={`fp ${player.country.code.toLowerCase()}`} />
+                        <span className="truncate">{player.name}</span>
+                      </li>
+                    ))}
+                    {!starters.length && (
+                      <li className="text-base-content/60">No starters listed.</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <figure className="flex h-16 w-16 items-center justify-center">
+                <img
+                  src={team?.blazon || swissTeamPlaceholder}
+                  alt={team ? `${team.name} logo` : 'TBD'}
+                  className="max-h-16 max-w-16 object-contain"
+                />
+              </figure>
+            )}
+          </div>
+          <strong className="mt-3 text-center">{team?.name || 'TBD'}</strong>
+          <p className="text-base-content/60 mt-2 min-h-8 text-center text-xs leading-4">
+            {source}
+          </p>
+          {isExpanded && ranking != null && (
+            <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute bottom-3 left-3">
+              #{ranking}
+            </span>
+          )}
+        </article>
+      );
+    },
+    [isLineupsVisible, loadingByTeamId, startersByTeamId, worldRankingByTeamId],
+  );
 
   const participants = React.useMemo(() => {
     const getRankKey = (teamId: number) => {
@@ -1420,6 +1607,56 @@ export default function () {
               <p className="text-base-content/60 mt-2 text-center text-xs leading-4">{source}</p>
             </article>
           ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentMajorChallengers) {
+    const sortedSlots = sortPreConfirmedMajorSlots(majorChallengersParticipantSlots);
+    const hasConfirmedTeams = sortedSlots.some((slot) => slot.team);
+
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-xl font-black">Participants</h2>
+          {hasConfirmedTeams && (
+            <button
+              type="button"
+              onClick={onToggleLineups}
+              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+            >
+              {isLineupsVisible ? 'Hide lineups' : 'Show lineups'}
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {sortedSlots.map(renderPreConfirmedMajorCard)}
+        </div>
+      </section>
+    );
+  }
+
+  if (isPreTournamentMajorLegends) {
+    const sortedSlots = sortPreConfirmedMajorSlots(majorLegendsParticipantSlots);
+    const hasConfirmedTeams = sortedSlots.some((slot) => slot.team);
+
+    return (
+      <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-xl font-black">Participants</h2>
+          {hasConfirmedTeams && (
+            <button
+              type="button"
+              onClick={onToggleLineups}
+              className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
+            >
+              {isLineupsVisible ? 'Hide lineups' : 'Show lineups'}
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {sortedSlots.map(renderPreConfirmedMajorCard)}
         </div>
       </section>
     );

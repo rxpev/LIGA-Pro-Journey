@@ -59,7 +59,9 @@ function getTournamentThumbnail(
 ) {
   const name = card.name.toLowerCase();
   const organizerName = (organizer || '').toLowerCase();
-  if (name.includes('challenger') || name.includes('pro league')) return null;
+  if (name.includes('pro league') || (name.includes('challenger') && !name.includes('major'))) {
+    return null;
+  }
 
   let file = 'major-pgl.png';
 
@@ -92,7 +94,7 @@ function getTournamentThumbnail(
     file = 'major-pw.png';
   else if (name.includes('starladder') || organizerName.includes('starladder'))
     file = 'major-starladder.png';
-  else if (organizerName.includes('iem') && name === 'major') file = 'major-iem.png';
+  else if (organizerName.includes('iem') && name.includes('major')) file = 'major-iem.png';
   else if (name.includes('iem')) file = 'iem-cologne-krakow.png';
   else if (name.includes('iem')) file = 'iem-cologne-krakow.png';
 
@@ -100,13 +102,14 @@ function getTournamentThumbnail(
 }
 
 const INTERNATIONAL_ORDER: Partial<Record<Constants.LeagueSlug | string, number>> = {
-  'major:international': 10,
-  [Constants.LeagueSlug.ESPORTS_BLAST]: 20,
-  [Constants.LeagueSlug.ESPORTS_IEM_COLOGNE]: 30,
-  [Constants.LeagueSlug.ESPORTS_IEM_KRAKOW]: 40,
-  [Constants.LeagueSlug.ESPORTS_PRO_LEAGUE]: 50,
-  [Constants.LeagueSlug.ESPORTS_ESL_CHALLENGER]: 60,
-  [Constants.LeagueSlug.ESPORTS_CCT_GLOBAL]: 70,
+  'major:challengers': 10,
+  'major:international': 20,
+  [Constants.LeagueSlug.ESPORTS_BLAST]: 30,
+  [Constants.LeagueSlug.ESPORTS_IEM_COLOGNE]: 40,
+  [Constants.LeagueSlug.ESPORTS_IEM_KRAKOW]: 50,
+  [Constants.LeagueSlug.ESPORTS_PRO_LEAGUE]: 60,
+  [Constants.LeagueSlug.ESPORTS_ESL_CHALLENGER]: 70,
+  [Constants.LeagueSlug.ESPORTS_CCT_GLOBAL]: 80,
 };
 
 const ESEA_TOURNAMENT_ORDER: Partial<Record<string, number>> = {
@@ -215,6 +218,7 @@ function getTournamentMeta(
   if (leagueSlug === Constants.LeagueSlug.ESPORTS_MAJOR) {
     const isQualifier = slug.includes('open-qualifier');
     const isRmr = slug.includes(':rmr');
+    const isChallengers = slug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE;
 
     if (isQualifier) {
       const qualifier =
@@ -287,10 +291,20 @@ function getTournamentMeta(
       };
     }
 
+    if (isChallengers) {
+      return {
+        key: 'major:challengers',
+        name: 'Major Challengers Stage',
+        eyebrow: 'International Swiss stage',
+        family: 'major',
+        accent: 'from-red-500/25',
+      };
+    }
+
     return {
       key: 'major:international',
       name: 'Major',
-      eyebrow: 'International stage',
+      eyebrow: 'Legends + Champions stage',
       family: 'major',
       accent: 'from-red-500/25',
     };
@@ -435,6 +449,7 @@ export default function () {
   const [competitionStartDates, setCompetitionStartDates] = React.useState<Record<number, number>>(
     {},
   );
+  const [competitionEndDates, setCompetitionEndDates] = React.useState<Record<number, number>>({});
 
   const [selectedFederationId, setSelectedFederationId] = React.useState<number>(-1);
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
@@ -578,6 +593,7 @@ export default function () {
     if (!seasonCompetitions?.length) {
       setCompetitionDates({});
       setCompetitionStartDates({});
+      setCompetitionEndDates({});
       return;
     }
     Promise.all(
@@ -599,15 +615,25 @@ export default function () {
           startDate && endDate && startValue?.getFullYear() === endValue?.getFullYear()
             ? `${startDate} – ${format(endValue, 'MMM d')}, ${endValue.getFullYear()}`
             : [startDate, endDate].filter(Boolean).join(' – ');
-        return [item.tierId, dateLabel, startValue?.getTime() ?? Number.POSITIVE_INFINITY] as const;
+        return [
+          item.tierId,
+          dateLabel,
+          startValue?.getTime() ?? Number.POSITIVE_INFINITY,
+          endValue?.getTime() ?? startValue?.getTime() ?? Number.NEGATIVE_INFINITY,
+        ] as const;
       }),
     ).then((entries) => {
-      const datedEntries = entries.filter(Boolean) as Array<readonly [number, string, number]>;
+      const datedEntries = entries.filter(Boolean) as Array<
+        readonly [number, string, number, number]
+      >;
       setCompetitionDates(
         Object.fromEntries(datedEntries.map(([tierId, label]) => [tierId, label])),
       );
       setCompetitionStartDates(
         Object.fromEntries(datedEntries.map(([tierId, , startDate]) => [tierId, startDate])),
+      );
+      setCompetitionEndDates(
+        Object.fromEntries(datedEntries.map(([tierId, , , endDate]) => [tierId, endDate])),
       );
     });
   }, [seasonCompetitions]);
@@ -927,7 +953,27 @@ export default function () {
 
   const orderedTournamentCards = React.useMemo(() => {
     if (!isCurrentSeason) {
-      return tournamentCards;
+      return [...tournamentCards].sort((a, b) => {
+        if (selectedFederation?.slug === Constants.FederationSlug.ESPORTS_WORLD) {
+          const majorStagePriority = (card: TournamentCard) =>
+            card.key === 'major:international' ? 10 : card.key === 'major:challengers' ? 20 : 100;
+          const priorityDifference = majorStagePriority(a) - majorStagePriority(b);
+
+          if (priorityDifference !== 0) {
+            return priorityDifference;
+          }
+        } else {
+          const aIsCct = a.key.startsWith('cct:');
+          const bIsCct = b.key.startsWith('cct:');
+          const aIsRmr = a.key.startsWith('major:rmr');
+          const bIsRmr = b.key.startsWith('major:rmr');
+
+          if (aIsCct && bIsRmr) return -1;
+          if (aIsRmr && bIsCct) return 1;
+        }
+
+        return tournamentCards.indexOf(a) - tournamentCards.indexOf(b);
+      });
     }
 
     const getStatus = (card: TournamentCard) => {
@@ -945,6 +991,10 @@ export default function () {
       Math.min(
         ...card.tiers.map((tier) => competitionStartDates[tier.id] ?? Number.POSITIVE_INFINITY),
       );
+    const getCompletionDate = (card: TournamentCard) =>
+      Math.max(
+        ...card.tiers.map((tier) => competitionEndDates[tier.id] ?? Number.NEGATIVE_INFINITY),
+      );
 
     return [...tournamentCards].sort((a, b) => {
       const statusDiff = order[getStatus(a)] - order[getStatus(b)];
@@ -953,10 +1003,24 @@ export default function () {
         return statusDiff;
       }
 
+      if (getStatus(a) === 'completed') {
+        const completionDateDiff = getCompletionDate(b) - getCompletionDate(a);
+        if (completionDateDiff !== 0) {
+          return completionDateDiff;
+        }
+      }
+
       const dateDiff = getStartDate(a) - getStartDate(b);
       return dateDiff !== 0 ? dateDiff : tournamentCards.indexOf(a) - tournamentCards.indexOf(b);
     });
-  }, [competitionStartDates, isCurrentSeason, seasonCompetitions, tournamentCards]);
+  }, [
+    competitionStartDates,
+    competitionEndDates,
+    isCurrentSeason,
+    seasonCompetitions,
+    selectedFederation?.slug,
+    tournamentCards,
+  ]);
 
   const selectedTournamentKey = React.useMemo(() => {
     const selectedTier = tiers.find((tier) => tier.id === selectedTierId);
@@ -1304,6 +1368,8 @@ export default function () {
                   const rmrQualifierNumber =
                     primaryTier.slug.match(/open-qualifier:(\d+)$/)?.[1] || null;
                   const isMajor = primaryTier.slug.toLowerCase().includes('major');
+                  const isMajorChallengersStage =
+                    primaryTier.slug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE;
                   const isRmr =
                     primaryTier.slug.toLowerCase().includes('rmr') ||
                     card.name.toLowerCase().includes('rmr');
@@ -1343,10 +1409,15 @@ export default function () {
                                   .join(' ')
                               : `${rmrRegionName || card.name} RMR Open Qualifier${rmrQualifierNumber ? ` #${rmrQualifierNumber}` : 's'}`
                             : isMajor
-                              ? Util.getMajorEventDisplayName(
-                                  tournament.location,
-                                  tournament.organizer,
-                                )
+                              ? [
+                                  Util.getMajorEventDisplayName(
+                                    tournament.location,
+                                    tournament.organizer,
+                                  ),
+                                  isMajorChallengersStage ? 'Challengers Stage' : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')
                               : hostedName || cctName
                         } ${2025 + selectedSeasonId}`
                       : cctName;

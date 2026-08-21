@@ -170,6 +170,29 @@ export default function Statistics(): JSX.Element {
       };
     }
 
+    if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) {
+      let isCurrent = true;
+
+      api.competitions
+        .find({
+          ...Eagers.competition,
+          where: {
+            federationId: competition.federationId,
+            season: competition.season,
+            tier: { slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE },
+          },
+        })
+        .then((championsCompetition) => {
+          if (isCurrent && championsCompetition) {
+            setCompetitionIds([competition.id, championsCompetition.id]);
+          }
+        });
+
+      return () => {
+        isCurrent = false;
+      };
+    }
+
     if (!playoffTier) {
       return;
     }

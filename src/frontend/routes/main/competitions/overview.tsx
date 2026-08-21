@@ -231,6 +231,18 @@ const ASIA_RMR_OPEN_QUALIFIERS: Partial<
   },
 };
 const CCT_SERIES_SIZE = 16;
+const MAJOR_CHALLENGERS_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 4 }, () => 'Europe RMR A'),
+  ...Array.from({ length: 5 }, () => 'Europe RMR B'),
+  ...Array.from({ length: 4 }, () => 'Americas RMR'),
+  ...Array.from({ length: 3 }, () => 'Asia RMR'),
+];
+const MAJOR_LEGENDS_PLACEHOLDER_SOURCES = [
+  ...Array.from({ length: 4 }, () => 'Europe RMR A'),
+  ...Array.from({ length: 3 }, () => 'Europe RMR B'),
+  'Americas RMR',
+  ...Array.from({ length: 8 }, () => 'Challengers Stage'),
+];
 const CCT_OCE_SERIES_SIZE = 8;
 
 const EPL_RETAINED_SLOTS_BY_FEDERATION_ID = {
@@ -254,6 +266,12 @@ type OutcomeCard = {
   competitor?: CompetitionCompetitor;
   detail: string;
   label: string;
+};
+type MajorPrizePoolCard = {
+  amount?: number;
+  competitor?: CompetitionCompetitor;
+  label: string;
+  placement: number;
 };
 
 function getPlacementLabel(start: number, end: number) {
@@ -362,6 +380,11 @@ export default function () {
   const [eseaPlayoffMatches, setEseaPlayoffMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
+  const [majorChampionsCompetition, setMajorChampionsCompetition] =
+    React.useState<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>();
+  const [majorChampionsMatches, setMajorChampionsMatches] = React.useState<
+    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
+  >([]);
   const [iemEventCompetitions, setIemEventCompetitions] = React.useState<
     Array<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>
   >([]);
@@ -419,6 +442,12 @@ export default function () {
   const isEuropeRmrA = tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A;
   const isEuropeRmrB = tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_B;
   const isEuropeRmr = isEuropeRmrA || isEuropeRmrB;
+  const isMajorChallengersStage = tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE;
+  const isMajorLegendsStage = tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE;
+  const isMajorSwissStage = isMajorChallengersStage || isMajorLegendsStage;
+  const hasMajorChampionsCompleted =
+    isMajorLegendsStage &&
+    majorChampionsCompetition?.status === Constants.CompetitionStatus.COMPLETED;
   const isMajorRmr = isAsiaRmr || isAmericasRmr || isEuropeRmr;
   const rmrQualificationLabel = rmrOpenQualifier
     ? rmrOpenQualifier.qualifiers === 1
@@ -449,6 +478,8 @@ export default function () {
   // ESL Challenger shares CCT Oceania's two four-team group stage and four-team playoff shape.
   const isCctOceaniaStyleGroupStage = isCctOceSeries || isEslChallengerGroupStage;
   const isCctSeries = isCctRegionalSeries || isCctOceSeries;
+  const isSwissDetailedStandings =
+    isCctRegionalSeries || isAmericasRmr || isEuropeRmr || isMajorSwissStage;
   const cctSeriesSize = isCctOceaniaStyleGroupStage ? CCT_OCE_SERIES_SIZE : CCT_SERIES_SIZE;
   const cctPlayoffTier = isCctOceSeries
     ? Constants.TierSlug.CCT_OCE_PLAYOFFS
@@ -476,7 +507,7 @@ export default function () {
       ? 16
       : isBlastFinals || isCctGlobalFinals
         ? 8
-        : isAmericasRmr
+        : isMajorSwissStage || isAmericasRmr
           ? 16
           : isEuropeRmr
             ? 16
@@ -511,6 +542,13 @@ export default function () {
         new Set([competition.id, ...iemEventCompetitions.map((item) => item?.id).filter(Boolean)]),
       ),
     [competition.id, iemEventCompetitions],
+  );
+  const majorEventCompetitionIds = React.useMemo(
+    () =>
+      isMajorLegendsStage && majorChampionsCompetition
+        ? [competition.id, majorChampionsCompetition.id]
+        : [competition.id],
+    [competition.id, isMajorLegendsStage, majorChampionsCompetition],
   );
   const iemGroupBrackets = React.useMemo(
     () =>
@@ -718,9 +756,63 @@ export default function () {
   }, [competition.federationId, competition.season, linkedPlayoffTier]);
 
   React.useEffect(() => {
+    setMajorChampionsCompetition(undefined);
+    setMajorChampionsMatches([]);
+
+    if (!isMajorLegendsStage) {
+      return;
+    }
+
+    let isCurrent = true;
+    api.competitions
+      .find({
+        ...Eagers.competition,
+        where: {
+          federationId: competition.federationId,
+          season: competition.season,
+          tier: { slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE },
+        },
+      })
+      .then((result) => {
+        if (isCurrent) {
+          setMajorChampionsCompetition(result);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition.federationId, competition.season, isMajorLegendsStage]);
+
+  React.useEffect(() => {
+    setMajorChampionsMatches([]);
+
+    if (!majorChampionsCompetition) {
+      return;
+    }
+
+    let isCurrent = true;
+    api.matches
+      .all({
+        include: Eagers.match.include,
+        orderBy: [{ round: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        where: { competitionId: majorChampionsCompetition.id },
+      })
+      .then((result) => {
+        if (isCurrent) {
+          setMajorChampionsMatches(result);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [majorChampionsCompetition]);
+
+  React.useEffect(() => {
     setMajorEventName('Major');
 
-    if (!isMajorRmr) {
+    if (!isMajorRmr && !isMajorSwissStage) {
       return;
     }
 
@@ -744,7 +836,7 @@ export default function () {
     return () => {
       isCurrent = false;
     };
-  }, [competition.season, isMajorRmr]);
+  }, [competition.season, isMajorRmr, isMajorSwissStage]);
 
   React.useEffect(() => {
     setEseaPlayoffMatches([]);
@@ -835,9 +927,11 @@ export default function () {
         where: {
           competitionId: isIemEvent
             ? { in: iemEventCompetitionIds }
-            : linkedPlayoffTier && eseaPlayoffCompetition
-              ? { in: [competition.id, eseaPlayoffCompetition.id] }
-              : competition.id,
+            : isMajorLegendsStage
+              ? { in: majorEventCompetitionIds }
+              : linkedPlayoffTier && eseaPlayoffCompetition
+                ? { in: [competition.id, eseaPlayoffCompetition.id] }
+                : competition.id,
         },
       })
       .then(([match]) => setLatestScheduledMatchDate(match?.date ?? null));
@@ -846,7 +940,9 @@ export default function () {
     eseaPlayoffCompetition?.id,
     iemEventCompetitionIds,
     isIemEvent,
+    isMajorLegendsStage,
     linkedPlayoffTier,
+    majorEventCompetitionIds,
   ]);
 
   // fetch recent match results
@@ -866,9 +962,11 @@ export default function () {
           status: Constants.MatchStatus.COMPLETED,
           competitionId: isIemEvent
             ? { in: iemEventCompetitionIds }
-            : linkedPlayoffTier && eseaPlayoffCompetition
-              ? { in: [competition.id, eseaPlayoffCompetition.id] }
-              : competition.id,
+            : isMajorLegendsStage
+              ? { in: majorEventCompetitionIds }
+              : linkedPlayoffTier && eseaPlayoffCompetition
+                ? { in: [competition.id, eseaPlayoffCompetition.id] }
+                : competition.id,
           date: {
             lte: state.profile.date.toISOString(),
           },
@@ -880,7 +978,9 @@ export default function () {
     eseaPlayoffCompetition?.id,
     iemEventCompetitionIds,
     isIemEvent,
+    isMajorLegendsStage,
     linkedPlayoffTier,
+    majorEventCompetitionIds,
     state.profile,
   ]);
 
@@ -898,9 +998,11 @@ export default function () {
         where: {
           competitionId: isIemEvent
             ? { in: iemEventCompetitionIds }
-            : linkedPlayoffTier && eseaPlayoffCompetition
-              ? { in: [competition.id, eseaPlayoffCompetition.id] }
-              : competition.id,
+            : isMajorLegendsStage
+              ? { in: majorEventCompetitionIds }
+              : linkedPlayoffTier && eseaPlayoffCompetition
+                ? { in: [competition.id, eseaPlayoffCompetition.id] }
+                : competition.id,
           status: Constants.MatchStatus.COMPLETED,
         },
       })
@@ -911,7 +1013,9 @@ export default function () {
     iemEventCompetitionIds,
     isIemEvent,
     isResultsView,
+    isMajorLegendsStage,
     linkedPlayoffTier,
+    majorEventCompetitionIds,
   ]);
 
   // fetch stage matches for expandable standings rows
@@ -1035,7 +1139,8 @@ export default function () {
     isBlastFinals ||
     isIemEvent ||
     isAmericasRmr ||
-    isEuropeRmr;
+    isEuropeRmr ||
+    isMajorSwissStage;
   const visibleStandingGroupKeys = React.useMemo(() => {
     if (!isLeagueStandings || groupKeys.length <= 1) {
       return groupKeys;
@@ -1098,14 +1203,21 @@ export default function () {
   );
 
   // competition prize pool
-  const prizePoolTier = isIemGroupStage ? linkedPlayoffTier || tierSlug : tierSlug;
+  const prizePoolTier = isIemGroupStage
+    ? linkedPlayoffTier || tierSlug
+    : isMajorLegendsStage
+      ? Constants.TierSlug.MAJOR_CHAMPIONS_STAGE
+      : tierSlug;
+  const prizePoolCompetition = isMajorLegendsStage
+    ? majorChampionsCompetition || competition
+    : competition;
   const prizePool = React.useMemo(() => Constants.PrizePool[prizePoolTier], [prizePoolTier]);
   const displayedPrizePool = isEslProLeagueGroupStage
     ? Constants.PrizePool[Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]
     : prizePool;
   const prizePoolRows = React.useMemo(
     () =>
-      competition.competitors
+      prizePoolCompetition.competitors
         .filter(
           (competitor) =>
             Boolean(competitor.team) &&
@@ -1117,7 +1229,7 @@ export default function () {
           placement: idx + 1,
           percentage: prizePool?.distribution?.[idx],
         })),
-    [competition.competitors, prizePool],
+    [prizePoolCompetition.competitors, prizePool],
   );
   const visiblePrizePoolRows = showAllPrizePool
     ? prizePoolRows
@@ -1142,19 +1254,19 @@ export default function () {
     'yyyy',
   );
   const showPrizePool =
-    competition.status === Constants.CompetitionStatus.COMPLETED &&
+    prizePoolCompetition.status === Constants.CompetitionStatus.COMPLETED &&
     Boolean(prizePool?.total) &&
     prizePoolRows.length > 0;
   const canExpandPrizePool = prizePoolRows.length > NUM_PRIZE_POOL_VISIBLE;
   const prizePoolCards = React.useMemo(() => {
     const completedPlacements = new Map<number, CompetitionCompetitor>();
 
-    if (competition.status === Constants.CompetitionStatus.COMPLETED) {
+    if (prizePoolCompetition.status === Constants.CompetitionStatus.COMPLETED) {
       try {
-        const tournament = Tournament.restore(JSON.parse(competition.tournament));
+        const tournament = Tournament.restore(JSON.parse(prizePoolCompetition.tournament));
         tournament.standings.flat().forEach((standing) => {
           const placement = standing.gpos || standing.pos;
-          const competitor = competition.competitors.find(
+          const competitor = prizePoolCompetition.competitors.find(
             (entry) => entry.seed === standing.seed && Boolean(entry.team),
           );
 
@@ -1171,13 +1283,15 @@ export default function () {
       const placement = index + 1;
       return (
         completedPlacements.get(placement) ||
-        competition.competitors.find((entry) => entry.position === placement && Boolean(entry.team))
+        prizePoolCompetition.competitors.find(
+          (entry) => entry.position === placement && Boolean(entry.team),
+        )
       );
     });
     const assignedCompetitorIds = new Set(
       placementCompetitors.flatMap((competitor) => (competitor ? [competitor.id] : [])),
     );
-    const remainingCompetitors = [...competition.competitors]
+    const remainingCompetitors = [...prizePoolCompetition.competitors]
       .filter((competitor) => Boolean(competitor.team) && !assignedCompetitorIds.has(competitor.id))
       .sort((a, b) => a.position - b.position || a.seed - b.seed);
 
@@ -1189,7 +1303,66 @@ export default function () {
         placement,
       };
     });
-  }, [competition.competitors, competition.status, competition.tournament, prizePool]);
+  }, [prizePoolCompetition, prizePool]);
+  const majorPrizePoolCards = React.useMemo<MajorPrizePoolCard[]>(() => {
+    if (!isMajorLegendsStage) {
+      return [];
+    }
+
+    const championsRanges = [
+      [1, 1],
+      [2, 2],
+      [3, 4],
+      [5, 8],
+    ];
+    const legendsRanges = [
+      [9, 11],
+      [12, 14],
+      [15, 16],
+    ];
+
+    return [
+      ...championsRanges.flatMap(([start, end]) =>
+        Array.from({ length: end - start + 1 }, (_, index) => {
+          const placement = start + index;
+          const card = prizePoolCards[placement - 1];
+
+          return {
+            amount: card?.amount,
+            competitor: card?.competitor,
+            label: getPlacementLabel(start, end),
+            placement,
+          };
+        }),
+      ),
+      ...legendsRanges.flatMap(([start, end]) =>
+        Array.from({ length: end - start + 1 }, (_, index) => {
+          const placement = start + index;
+
+          return {
+            amount: undefined as number | undefined,
+            competitor: competition.competitors.find(
+              (competitor) => competitor.position === placement,
+            ),
+            label: getPlacementLabel(start, end),
+            placement,
+          };
+        }),
+      ),
+    ];
+  }, [competition.competitors, isMajorLegendsStage, prizePoolCards]);
+  const displayedMajorPrizePoolCards = React.useMemo(
+    () =>
+      hasMajorChampionsCompleted
+        ? majorPrizePoolCards
+        : prizePoolCards.map(({ amount, competitor, placement }) => ({
+            amount,
+            competitor,
+            label: getPlacementLabel(placement, placement),
+            placement,
+          })),
+    [hasMajorChampionsCompleted, majorPrizePoolCards, prizePoolCards],
+  );
   const iemPrizePoolCards = React.useMemo(() => {
     if (!isIemEvent) {
       return [];
@@ -1214,10 +1387,12 @@ export default function () {
       .flatMap((item) => item.competitors)
       .filter((competitor) => Boolean(competitor.team) && !playoffTeamIds.has(competitor.team.id))
       .sort((a, b) => a.position - b.position || a.seed - b.seed);
-    const teams = [...playoffTeams, ...groupTeams].filter(
-      (competitor, index, all) =>
-        all.findIndex((candidate) => candidate.team.id === competitor.team.id) === index,
-    ).slice(0, 16);
+    const teams = [...playoffTeams, ...groupTeams]
+      .filter(
+        (competitor, index, all) =>
+          all.findIndex((candidate) => candidate.team.id === competitor.team.id) === index,
+      )
+      .slice(0, 16);
 
     return Array.from({ length: 16 }, (_, index) => {
       const percentage = prizePool?.distribution?.[index];
@@ -1378,7 +1553,9 @@ export default function () {
           competitor: isFinalizedCompetitor(competitor) ? competitor : undefined,
           detail:
             isFinalizedCompetitor(competitor) && prizePool?.distribution?.[index]
-              ? Util.formatCurrency(prizePool.total * (prizePool.distribution?.[index] || 0) / 100)
+              ? Util.formatCurrency(
+                  (prizePool.total * (prizePool.distribution?.[index] || 0)) / 100,
+                )
               : '',
           label: getPlacementLabel(index + 1, index + 1),
         }));
@@ -1514,7 +1691,8 @@ export default function () {
           const competitor = getPlayoffCompetitor(placement);
           const prize = playoffPrizePool?.distribution?.[placement - 1]
             ? Util.formatCurrency(
-                playoffPrizePool.total * ((playoffPrizePool.distribution?.[placement - 1] || 0) / 100),
+                playoffPrizePool.total *
+                  ((playoffPrizePool.distribution?.[placement - 1] || 0) / 100),
               )
             : '';
 
@@ -1679,7 +1857,7 @@ export default function () {
         eseaBracketSize,
         isDoubleEseaPlayoffs,
       ).flatMap(([start, end]) => {
-          const amount = playoffPrizePool?.distribution?.[start - 1]
+        const amount = playoffPrizePool?.distribution?.[start - 1]
           ? Util.formatCurrency(
               playoffPrizePool.total * ((playoffPrizePool.distribution?.[start - 1] || 0) / 100),
             )
@@ -1823,6 +2001,36 @@ export default function () {
       });
     }
 
+    if (isMajorSwissStage) {
+      const positionedCompetitors = [...competition.competitors]
+        .filter((competitor) => Boolean(competitor.team))
+        .sort((a, b) => a.position - b.position || a.seed - b.seed);
+
+      const placementRanges = [
+        [1, 2],
+        [3, 5],
+        [6, 8],
+        [9, 11],
+        [12, 14],
+        [15, 16],
+      ];
+
+      return placementRanges.flatMap(([start, end]) =>
+        Array.from({ length: end - start + 1 }, (_, index) => {
+          const placement = start + index;
+
+          return {
+            competitor:
+              competition.status === Constants.CompetitionStatus.COMPLETED
+                ? positionedCompetitors.find((competitor) => competitor.position === placement)
+                : undefined,
+            detail: end <= 8 ? (isMajorLegendsStage ? 'Champions Stage' : majorEventName) : '',
+            label: getPlacementLabel(start, end),
+          };
+        }),
+      );
+    }
+
     if (isAsiaRmr || isAmericasRmr || isEuropeRmr) {
       const placementRanges = isAmericasRmr
         ? [
@@ -1961,6 +2169,8 @@ export default function () {
     isEslProLeagueGroupStage,
     isCctGlobalFinals,
     isBlastFinals,
+    isMajorLegendsStage,
+    isMajorSwissStage,
     isAsiaRmr,
     isAmericasRmr,
     isEuropeRmr,
@@ -2053,7 +2263,11 @@ export default function () {
                   </span>
                   <CompetitionLocationTag tier={competition.tier} />
                 </p>
-                <h2 className="truncate text-xl leading-tight font-black">{competitionTitle}</h2>
+                <h2 className="truncate text-xl leading-tight font-black">
+                  {isMajorChallengersStage
+                    ? `${competitionTitle} Challengers Stage`
+                    : competitionTitle}
+                </h2>
               </article>
               <dl className="text-base-content/70 flex flex-wrap items-center gap-x-5 gap-y-2 py-3 text-xs font-semibold">
                 <div className="flex items-center gap-2">
@@ -2073,7 +2287,7 @@ export default function () {
                     </dd>
                   </div>
                 )}
-                {displayedPrizePool?.total ? (
+                {displayedPrizePool?.total && (!isMajorLegendsStage || hasTournamentStarted) ? (
                   <div className="flex items-center gap-2">
                     <FaTrophy className="text-base-content/50 shrink-0" />
                     <dt>Prize pool</dt>
@@ -2099,7 +2313,8 @@ export default function () {
                 isIemEvent ||
                 isAsiaRmr ||
                 isAmericasRmr ||
-                isEuropeRmr) && (
+                isEuropeRmr ||
+                isMajorSwissStage) && (
                 <section className="border-base-content/10 mt-2 border-t pt-3">
                   <p className="text-base-content/70 mb-1 text-xs font-bold">Format</p>
                   {isIemEvent ? (
@@ -2219,8 +2434,15 @@ export default function () {
                         </span>
                       </article>
                     </div>
-                  ) : isAmericasRmr || isEuropeRmr ? (
-                    <div className="grid grid-cols-[minmax(12rem,auto)_auto_minmax(0,1fr)] items-start gap-3">
+                  ) : isMajorSwissStage || isAmericasRmr || isEuropeRmr ? (
+                    <div
+                      className={cx(
+                        'grid items-start gap-3',
+                        isMajorLegendsStage
+                          ? 'grid-cols-[minmax(11rem,1.5fr)_auto_minmax(8rem,1fr)_auto_minmax(8rem,1fr)]'
+                          : 'grid-cols-[minmax(12rem,auto)_auto_minmax(0,1fr)]',
+                      )}
+                    >
                       <article className="flex min-w-0 items-start gap-2">
                         <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
                           <FaRandom />
@@ -2240,12 +2462,30 @@ export default function () {
                         <span className="min-w-0">
                           <strong className="block truncate text-xs">Qualification</strong>
                           <small className="text-base-content/60 block leading-tight">
-                            {isEuropeRmr
-                              ? `Top 8 to ${majorEventName}`
-                              : `Top 5 to ${majorEventName}`}
+                            {isMajorLegendsStage
+                              ? 'Top 8 to Champions Stage'
+                              : isMajorChallengersStage || isEuropeRmr
+                                ? `Top 8 to ${majorEventName}`
+                                : `Top 5 to ${majorEventName}`}
                           </small>
                         </span>
                       </article>
+                      {isMajorLegendsStage && (
+                        <>
+                          <FaArrowRight className="text-base-content/35 mt-2.5" />
+                          <article className="flex min-w-0 items-start gap-2">
+                            <span className="bg-base-200 text-info flex size-9 shrink-0 items-center justify-center rounded-full">
+                              <FaSitemap />
+                            </span>
+                            <span className="min-w-0">
+                              <strong className="block truncate text-xs">Playoffs</strong>
+                              <small className="text-base-content/60 block leading-tight">
+                                Single elimination · Bo3 / Bo5 Final
+                              </small>
+                            </span>
+                          </article>
+                        </>
+                      )}
                     </div>
                   ) : isAsiaRmr ? (
                     <div className="grid grid-cols-[minmax(12rem,auto)_auto_minmax(0,1fr)] items-start gap-3">
@@ -2738,11 +2978,34 @@ export default function () {
                 })}
               </section>
             )}
+            {isMajorLegendsStage && (
+              <section className="border-base-content/10 bg-base-200/45 mt-4 overflow-hidden rounded-lg border shadow-lg">
+                <header className="border-base-content/10 border-b px-4 py-3">
+                  <h2 className="text-xl leading-none font-black">Champions Stage</h2>
+                  <p className="text-base-content/60 mt-1 text-xs">
+                    Single elimination · Best of 3 · Final Best of 5
+                  </p>
+                </header>
+                <div className="h-[31rem]">
+                  <Brackets
+                    fitToContainer
+                    matches={majorChampionsMatches}
+                    preview={majorChampionsMatches.length ? undefined : { size: 8 }}
+                    onMatchClick={(match, position) => {
+                      setPreviewMatchId(match.id);
+                      setPreviewPosition(position);
+                    }}
+                    onPartyClick={(party) => navigate(`/teams?teamId=${party.id}`)}
+                  />
+                </div>
+              </section>
+            )}
             {!hasTournamentStarted && <Participants />}
             {((hasTournamentStarted &&
               (!(isAsiaRmr || isAmericasRmr || isEuropeRmr) ||
                 competition.status === Constants.CompetitionStatus.COMPLETED)) ||
               isIemQualifier) &&
+              !hasMajorChampionsCompleted &&
               outcomeCards.length > 0 && (
                 <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
                   <header className="mb-4 flex items-center justify-between gap-4">
@@ -2752,7 +3015,8 @@ export default function () {
                       isCctSeries ||
                       isAsiaRmr ||
                       isAmericasRmr ||
-                      isEuropeRmr
+                      isEuropeRmr ||
+                      isMajorSwissStage
                         ? 'Qualification'
                         : eseaFormat
                           ? 'Qualification & Prize Pool'
@@ -2813,6 +3077,62 @@ export default function () {
                   </div>
                 </section>
               )}
+            {isMajorLegendsStage &&
+              hasTournamentStarted &&
+              displayedMajorPrizePoolCards.length > 0 && (
+                <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
+                  <header className="mb-4 flex items-center justify-between gap-4">
+                    <h2 className="text-xl font-black">{t('main.competitions.prizePool')}</h2>
+                    <span className="text-base-content/60 text-sm">
+                      {Util.formatCurrency(prizePool.total)} total
+                    </span>
+                  </header>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {displayedMajorPrizePoolCards.map(
+                      ({ amount, competitor, label, placement }) => (
+                        <article
+                          key={`major-champions-prize-${placement}`}
+                          className="border-base-content/10 bg-base-100/60 relative flex min-h-24 overflow-hidden rounded border px-3 py-2 text-center"
+                        >
+                          {competitor?.team?.blazon && (
+                            <img
+                              alt=""
+                              aria-hidden="true"
+                              className="pointer-events-none absolute inset-0 m-auto size-20 object-contain opacity-10"
+                              src={competitor.team.blazon}
+                            />
+                          )}
+                          <div className="relative z-10 flex w-full flex-col items-center justify-center">
+                            {competitor?.team && (
+                              <Link
+                                to={`/teams?teamId=${competitor.team.id}`}
+                                className="link-hover inline-flex max-w-full items-center justify-center gap-1.5 truncate text-xs font-bold"
+                                title={competitor.team.name}
+                              >
+                                {competitor.team.country?.code && (
+                                  <span
+                                    className={cx(
+                                      'fp shrink-0',
+                                      competitor.team.country.code.toLowerCase(),
+                                    )}
+                                  />
+                                )}
+                                <span className="truncate">{competitor.team.name}</span>
+                              </Link>
+                            )}
+                            <strong className="text-base-content/75 mt-1 text-sm">{label}</strong>
+                            {amount != null && (
+                              <small className="text-base-content/55 mt-2">
+                                {Util.formatCurrency(amount)}
+                              </small>
+                            )}
+                          </div>
+                        </article>
+                      ),
+                    )}
+                  </div>
+                </section>
+              )}
             {showWinners && !isEseaCashCup && (
               <aside>
                 <header className="heading prose max-w-none">
@@ -2856,6 +3176,7 @@ export default function () {
         className={cx(
           isStandaloneStandings &&
             'border-base-content/10 bg-base-200/45 mx-3 mb-3 overflow-hidden rounded-lg border shadow-lg',
+          isMajorSwissStage && 'h-full',
         )}
       >
         <header
@@ -2865,13 +3186,13 @@ export default function () {
           )}
         >
           <h2 className="m-0 text-xl leading-none font-black">
-            {isCctRegionalSeries || isAmericasRmr || isEuropeRmr
+            {isCctRegionalSeries || isAmericasRmr || isEuropeRmr || isMajorSwissStage
               ? 'Swiss Stage'
               : isCctOceaniaStyleGroupStage || isEslProLeagueGroupStage
                 ? 'Group Stage'
                 : t('shared.standings')}
           </h2>
-          {(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) && (
+          {(isCctRegionalSeries || isAmericasRmr || isEuropeRmr || isMajorSwissStage) && (
             <button
               type="button"
               className={cx(
@@ -2903,7 +3224,7 @@ export default function () {
             </nav>
           )}
         </header>
-        {(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) && isCctDetailedStandingsOpen && (
+        {isSwissDetailedStandings && isCctDetailedStandingsOpen && (
           <>
             <div className="h-[36rem] overflow-hidden">
               <SwissDetailedStandings
@@ -2921,9 +3242,11 @@ export default function () {
             <footer className="border-base-content/10 flex gap-4 border-t px-4 py-3 text-xs">
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-green-500" />
-                {isAmericasRmr || isEuropeRmr
-                  ? `Qualified to ${majorEventName}`
-                  : 'Qualified to Playoffs'}
+                {isMajorLegendsStage
+                  ? 'Qualified to Champions Stage'
+                  : isMajorChallengersStage || isAmericasRmr || isEuropeRmr
+                    ? `Qualified to ${majorEventName}`
+                    : 'Qualified to Playoffs'}
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-4 w-1 rounded bg-red-500" />
@@ -2932,7 +3255,7 @@ export default function () {
             </footer>
           </>
         )}
-        {(!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
+        {(!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
           !!effectiveGroupSize &&
           visibleStandingGroupKeys.map((groupKey) => (
             <Standings
@@ -2973,7 +3296,7 @@ export default function () {
               }
             />
           ))}
-        {(!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
+        {(!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
         !effectiveGroupSize &&
         isCashCupStyleStandings &&
         !isAsiaRmr &&
@@ -2983,19 +3306,21 @@ export default function () {
             No teams registered yet.
           </p>
         ) : (
-          (!(isCctRegionalSeries || isAmericasRmr || isEuropeRmr) || !isCctDetailedStandingsOpen) &&
+          (!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
           !effectiveGroupSize && (
             <Standings
               highlight={state.profile.teamId}
               dense={isStandaloneStandings}
               competitors={isIemEvent ? iemStandingsCompetitors : competition.competitors}
               placeholderCount={
-                (isBlastFinals || isCctGlobalFinals || isIemEvent) &&
+                (isBlastFinals || isCctGlobalFinals || isIemEvent || isMajorSwissStage) &&
                 competition.status === Constants.CompetitionStatus.SCHEDULED &&
                 iemStandingsCompetitors.length === 0
-                  ? isIemEvent
+                  ? isMajorSwissStage
                     ? 16
-                    : 8
+                    : isIemEvent
+                      ? 16
+                      : 8
                   : (isCctRegionalSeries || isAsiaRmr || isAmericasRmr || isEuropeRmr) &&
                       competition.status === Constants.CompetitionStatus.SCHEDULED
                     ? isAsiaRmr
@@ -3004,6 +3329,15 @@ export default function () {
                     : undefined
               }
               matches={isSwiss ? standingMatches : undefined}
+              placeholderLabels={
+                isMajorSwissStage &&
+                isCctDetailedStandingsOpen &&
+                competition.status === Constants.CompetitionStatus.SCHEDULED
+                  ? isMajorLegendsStage
+                    ? MAJOR_LEGENDS_PLACEHOLDER_SOURCES
+                    : MAJOR_CHALLENGERS_PLACEHOLDER_SOURCES
+                  : undefined
+              }
               mode={isBracketStandings ? 'ranking' : isSwiss ? 'swiss' : undefined}
               placementRanges={
                 isIemEvent
@@ -3017,8 +3351,8 @@ export default function () {
                       [13, 16],
                     ]
                   : isAsiaRmr || isAmericasRmr
-                  ? getKnockoutPlacementRanges(isAmericasRmr ? 16 : 8, true)
-                  : undefined
+                    ? getKnockoutPlacementRanges(isAmericasRmr ? 16 : 8, true)
+                    : undefined
               }
               hidePoints={isCashCupStyleStandings || isBracketStandings}
               teamLink={(team) => `/teams?teamId=${team.id}`}
@@ -3026,8 +3360,14 @@ export default function () {
                 isCctGlobalFinals || isBlastFinals || isIemEvent
                   ? [
                       ...(isIemEvent
-                        ? [[1, 1], [2, 16]]
-                        : [[1, 1], [2, Math.max(8, competition.competitors.length)]]),
+                        ? [
+                            [1, 1],
+                            [2, 16],
+                          ]
+                        : [
+                            [1, 1],
+                            [2, Math.max(8, competition.competitors.length)],
+                          ]),
                     ]
                   : isCctRegionalSeries
                     ? [
@@ -3049,18 +3389,23 @@ export default function () {
                               [1, 8],
                               [9, 16],
                             ]
-                          : isCashCupStyleStandings &&
-                              competition.status !== Constants.CompetitionStatus.SCHEDULED
+                          : isMajorSwissStage
                             ? [
-                                [1, isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1],
-                                [
-                                  (isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1) + 1,
-                                  Math.max(2, competition.competitors.length),
-                                ],
+                                [1, 8],
+                                [9, 16],
                               ]
-                            : isBracketStandings || isSwiss
-                              ? advancementZones
-                              : undefined
+                            : isCashCupStyleStandings &&
+                                competition.status !== Constants.CompetitionStatus.SCHEDULED
+                              ? [
+                                  [1, isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1],
+                                  [
+                                    (isAsiaRmr ? 3 : rmrOpenQualifier?.qualifiers || 1) + 1,
+                                    Math.max(2, competition.competitors.length),
+                                  ],
+                                ]
+                              : isBracketStandings || isSwiss
+                                ? advancementZones
+                                : undefined
               }
               zoneColors={
                 isCctGlobalFinals ||
@@ -3068,7 +3413,8 @@ export default function () {
                 isIemEvent ||
                 isCctRegionalSeries ||
                 isAmericasRmr ||
-                isEuropeRmr
+                isEuropeRmr ||
+                isMajorSwissStage
                   ? ['border-l-4 border-l-green-500', 'border-l-4 border-l-red-500 bg-red-800/10']
                   : isCashCupStyleStandings
                     ? ['border-l-4 border-l-green-500', 'border-l-4 border-l-red-500 bg-red-800/10']
@@ -3077,9 +3423,10 @@ export default function () {
             />
           )
         )}
-        {!isAmericasRmr &&
+        {!isMajorSwissStage &&
+          !isAmericasRmr &&
           !isEuropeRmr &&
-          (!isCctRegionalSeries || !isCctDetailedStandingsOpen) &&
+          (!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
           isStandaloneStandings && (
             <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
               {isCashCupStyleStandings ||
@@ -3142,11 +3489,15 @@ export default function () {
                 )}
             </footer>
           )}
-        {(isAmericasRmr || isEuropeRmr) && !isCctDetailedStandingsOpen && (
+        {(isMajorSwissStage || isAmericasRmr || isEuropeRmr) && !isCctDetailedStandingsOpen && (
           <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
             <span className="inline-flex items-center gap-2">
               <span className="h-4 w-1 rounded bg-green-500" />
-              Qualified to {majorEventName}
+              {isMajorLegendsStage
+                ? 'Qualified to Champions Stage'
+                : isMajorChallengersStage
+                  ? 'Qualified to Playoffs'
+                  : `Qualified to ${majorEventName}`}
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="h-4 w-1 rounded bg-red-500" />
