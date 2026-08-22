@@ -14,8 +14,42 @@ import { TeamBlazon } from '@liga/frontend/components';
 import { getTeamsRoundLabel, getTeamsTierLabel } from './labels';
 
 type TeamMatch = Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>[number];
+type TeamCompetition = Awaited<
+  ReturnType<
+    typeof api.competitions.all<{
+      include: {
+        competitors: true;
+        federation: true;
+        tier: {
+          include: {
+            league: true;
+          };
+        };
+      };
+    }>
+  >
+>[number];
 
 const MAJOR_CHALLENGERS_STAGE_LABEL = 'Challengers Stage';
+const IEM_GROUP_STAGE_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+]);
+const IEM_PLAYOFF_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+]);
+const IEM_PLACEMENT_RANGES: Array<[number, number]> = [
+  [1, 1],
+  [2, 2],
+  [3, 4],
+  [5, 6],
+  [7, 8],
+  [9, 12],
+  [13, 16],
+];
 
 function getSeasonYear(season?: number | null) {
   return season ? 2025 + season : null;
@@ -30,18 +64,191 @@ function getPlacementLabel(position: number, count: number) {
   return `${position}-${Util.toOrdinalSuffix(end)}`;
 }
 
-function getCompetitionPlacement(match: TeamMatch, teamId: number) {
-  const competitor = match.competition?.competitors.find((item) => item.teamId === teamId);
+function getMajorPlacementLabel(tierSlug: string, position: number) {
+  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) {
+    if (position <= 2) return Util.toOrdinalSuffix(position);
+    if (position <= 4) return '3-4th';
+    if (position <= 8) return '5-8th';
+  }
 
-  if (
-    !competitor?.position ||
-    match.competition?.status !== Constants.CompetitionStatus.COMPLETED
+  if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) {
+    if (position <= 8) return Util.toOrdinalSuffix(position);
+    if (position <= 11) return '9-11th';
+    if (position <= 14) return '12-14th';
+    if (position <= 16) return '15-16th';
+  }
+
+  return null;
+}
+
+function getPlacementRangeLabel(position: number, ranges: Array<[number, number]>) {
+  const range = ranges.find(([start, end]) => position >= start && position <= end);
+
+  return range ? getPlacementLabel(range[0], range[1] - range[0] + 1) : null;
+}
+
+function getKnockoutPlacementLabel(position: number, size: number) {
+  const ranges: Array<[number, number]> = [];
+  let start = 1;
+  let count = 1;
+
+  while (start <= size) {
+    const end = Math.min(size, start + count - 1);
+    ranges.push([start, end]);
+    start = end + 1;
+    if (start > 2) count *= 2;
+  }
+
+  return getPlacementRangeLabel(position, ranges);
+}
+
+function getCompetitionStageOrder(tierSlug?: string | null) {
+  const stageOrder: Partial<Record<Constants.TierSlug, number>> = {
+    [Constants.TierSlug.MAJOR_CHALLENGERS_STAGE]: 70,
+    [Constants.TierSlug.MAJOR_LEGENDS_STAGE]: 80,
+    [Constants.TierSlug.MAJOR_CHAMPIONS_STAGE]: 90,
+    [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS]: 100,
+    [Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]: 100,
+    [Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS]: 100,
+    [Constants.TierSlug.CCT_SERIES_PLAYOFFS]: 100,
+    [Constants.TierSlug.CCT_OCE_PLAYOFFS]: 100,
+    [Constants.TierSlug.IEM_COLOGNE_PLAYOFFS]: 100,
+    [Constants.TierSlug.IEM_KRAKOW_PLAYOFFS]: 100,
+  };
+
+  return stageOrder[tierSlug as Constants.TierSlug] ?? 50;
+}
+
+/**
+ * Matches the event-card grouping used by the Competitions browser.  Prefixing
+ * the card key with federation and season prevents separate editions of the
+ * same tournament from being merged on a team's full match history.
+ */
+function getTournamentGroupKey(competition: TeamCompetition) {
+  const tierSlug = competition.tier.slug as Constants.TierSlug;
+  const leagueSlug = competition.tier.league?.slug as Constants.LeagueSlug | undefined;
+  let tournamentKey = `${leagueSlug}:${tierSlug}`;
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
+    tournamentKey = `${leagueSlug}:${Constants.IdiomaticTier[tierSlug].replace(' Playoffs', '')}`;
+  } else if (leagueSlug === Constants.LeagueSlug.ESPORTS_CCT) {
+    tournamentKey =
+      tierSlug === Constants.TierSlug.CCT_OCE_SERIES ||
+      tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+        ? 'cct:oceania'
+        : 'cct:regional';
+  } else if (leagueSlug === Constants.LeagueSlug.ESPORTS_CCT_GLOBAL) {
+    tournamentKey = 'cct:global-finals';
+  } else if (leagueSlug === Constants.LeagueSlug.ESPORTS_MAJOR) {
+    if (tierSlug.includes('open-qualifier')) {
+      tournamentKey = `major:qualifier:${tierSlug}`;
+    } else if (tierSlug.includes(':rmr')) {
+      tournamentKey =
+        tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_A
+          ? 'major:rmr:europe:a'
+          : tierSlug === Constants.TierSlug.MAJOR_EUROPE_RMR_B
+            ? 'major:rmr:europe:b'
+            : 'major:rmr';
+    } else if (tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) {
+      tournamentKey = 'major:challengers';
+    } else {
+      tournamentKey = 'major:international';
+    }
+  } else if (
+    [
+      Constants.LeagueSlug.ESPORTS_BLAST,
+      Constants.LeagueSlug.ESPORTS_ESEA_CASH_CUP,
+      Constants.LeagueSlug.ESPORTS_IEM_COLOGNE,
+      Constants.LeagueSlug.ESPORTS_IEM_KRAKOW,
+      Constants.LeagueSlug.ESPORTS_ESL_CHALLENGER,
+      Constants.LeagueSlug.ESPORTS_PRO_LEAGUE,
+      Constants.LeagueSlug.ESPORTS_IEM_COLOGNE_QUALIFIER,
+      Constants.LeagueSlug.ESPORTS_IEM_KRAKOW_QUALIFIER,
+    ].includes(leagueSlug as Constants.LeagueSlug)
   ) {
+    tournamentKey = leagueSlug;
+  }
+
+  return `${competition.federationId}:${competition.season}:${tournamentKey}`;
+}
+
+function getEventPlacement(competitions: TeamCompetition[], teamId: number) {
+  const finalCompetition = [...competitions].sort(
+    (a, b) => getCompetitionStageOrder(b.tier.slug) - getCompetitionStageOrder(a.tier.slug),
+  )[0];
+
+  if (finalCompetition?.status !== Constants.CompetitionStatus.COMPLETED) {
     return null;
   }
 
+  const leagueSlug = finalCompetition.tier.league?.slug as Constants.LeagueSlug | undefined;
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_PRO_LEAGUE) {
+    const playoffCompetition = competitions.find(
+      (competition) => competition.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+    );
+    const playoffCompetitor = playoffCompetition?.competitors.find(
+      (item) => item.teamId === teamId,
+    );
+
+    if (playoffCompetitor?.position) {
+      return getKnockoutPlacementLabel(
+        playoffCompetitor.position,
+        playoffCompetition.tier.size || 16,
+      );
+    }
+
+    const groupCompetitor = competitions
+      .find((competition) => competition.tier.slug === Constants.TierSlug.LEAGUE_PRO)
+      ?.competitors.find((item) => item.teamId === teamId);
+
+    return groupCompetitor?.position === 3
+      ? '17-24th'
+      : groupCompetitor?.position === 4
+        ? '25-32nd'
+        : null;
+  }
+
+  if (
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_COLOGNE ||
+    leagueSlug === Constants.LeagueSlug.ESPORTS_IEM_KRAKOW
+  ) {
+    const playoffTeams = competitions
+      .filter((competition) =>
+        IEM_PLAYOFF_TIER_SLUGS.has(competition.tier.slug as Constants.TierSlug),
+      )
+      .flatMap((competition) => competition.competitors)
+      .sort((a, b) => a.position - b.position || a.seed - b.seed);
+    const playoffTeamIds = new Set(playoffTeams.map((competitor) => competitor.teamId));
+    const groupTeams = competitions
+      .filter((competition) =>
+        IEM_GROUP_STAGE_TIER_SLUGS.has(competition.tier.slug as Constants.TierSlug),
+      )
+      .flatMap((competition) => competition.competitors)
+      .filter((competitor) => !playoffTeamIds.has(competitor.teamId))
+      .sort((a, b) => a.position - b.position || a.seed - b.seed);
+    const placement = [...playoffTeams, ...groupTeams].findIndex(
+      (competitor) => competitor.teamId === teamId,
+    );
+
+    return placement < 0 ? null : getPlacementRangeLabel(placement + 1, IEM_PLACEMENT_RANGES);
+  }
+
+  const competitor = finalCompetition?.competitors.find((item) => item.teamId === teamId);
+
+  if (!competitor?.position) {
+    return null;
+  }
+
+  const majorPlacement = getMajorPlacementLabel(finalCompetition.tier.slug, competitor.position);
+  if (majorPlacement) {
+    return majorPlacement;
+  }
+
   const positionCount =
-    match.competition.competitors.filter((item) => item.position === competitor.position).length ||
+    finalCompetition.competitors.filter((item) => item.position === competitor.position).length ||
     1;
 
   return getPlacementLabel(competitor.position, positionCount);
@@ -187,6 +394,7 @@ export default function () {
   const { state } = React.useContext(AppStateContext);
   const { team } = useOutletContext<RouteContextTeams>();
   const [matches, setMatches] = React.useState<TeamMatch[]>([]);
+  const [competitions, setCompetitions] = React.useState<TeamCompetition[]>([]);
   const [showAllResults, setShowAllResults] = React.useState(false);
   const [working, setWorking] = React.useState(false);
   const now = React.useMemo(
@@ -224,8 +432,58 @@ export default function () {
         },
         include: Eagers.match.include,
       })
-      .then((result) => setMatches(result))
-      .then(() => setWorking(false));
+      .then(async (nextMatches) => {
+        const competitionScopes = [
+          ...new Map(
+            nextMatches.flatMap((match) =>
+              match.competition
+                ? [
+                    [
+                      `${match.competition.federationId}:${match.competition.season}`,
+                      match.competition,
+                    ],
+                  ]
+                : [],
+            ),
+          ).values(),
+        ];
+        const resultSets = await Promise.all(
+          competitionScopes.map((competition) =>
+            api.competitions.all<{
+              include: {
+                competitors: true;
+                federation: true;
+                tier: {
+                  include: {
+                    league: true;
+                  };
+                };
+              };
+            }>({
+              where: {
+                federationId: competition.federationId,
+                season: competition.season,
+              },
+              include: {
+                competitors: true,
+                federation: true,
+                tier: {
+                  include: {
+                    league: true,
+                  },
+                },
+              },
+            }),
+          ),
+        );
+
+        return [nextMatches, resultSets.flat()] as const;
+      })
+      .then(([nextMatches, nextCompetitions]) => {
+        setMatches(nextMatches);
+        setCompetitions(nextCompetitions);
+        setWorking(false);
+      });
   }, [team.id]);
 
   const winStreak = React.useMemo(() => getWinStreak(matches, team.id), [matches, team.id]);
@@ -233,15 +491,25 @@ export default function () {
   const groupedMatches = React.useMemo(() => {
     return matches.reduce<
       Array<{
+        competitionId: number | null;
         key: string;
         label: string;
         matches: TeamMatch[];
       }>
     >((groups, match) => {
-      const eventLabel = getEventLabel(match);
-      const placement = getCompetitionPlacement(match, team.id);
+      const matchCompetition = match.competition as TeamCompetition | null;
+      const key = matchCompetition ? getTournamentGroupKey(matchCompetition) : String(match.id);
+      const eventCompetitions = competitions.filter(
+        (competition) => getTournamentGroupKey(competition) === key,
+      );
+      const canonicalCompetition = [...eventCompetitions].sort(
+        (a, b) => getCompetitionStageOrder(a.tier.slug) - getCompetitionStageOrder(b.tier.slug),
+      )[0];
+      const eventLabel = canonicalCompetition
+        ? getEventLabel({ competition: canonicalCompetition } as TeamMatch)
+        : getEventLabel(match);
+      const placement = getEventPlacement(eventCompetitions, team.id);
       const label = [eventLabel, placement].filter(Boolean).join(' - ');
-      const key = eventLabel;
       const previous = groups.find((group) => group.key === key);
 
       if (previous) {
@@ -251,13 +519,17 @@ export default function () {
 
       groups.push({
         key,
+        competitionId:
+          eventCompetitions.sort(
+            (a, b) => getCompetitionStageOrder(a.tier.slug) - getCompetitionStageOrder(b.tier.slug),
+          )[0]?.id ?? null,
         label,
         matches: [match],
       });
 
       return groups;
     }, []);
-  }, [matches, team.id]);
+  }, [competitions, matches, team.id]);
   const visibleGroups = React.useMemo(
     () => (showAllResults ? groupedMatches : groupedMatches.slice(0, 5)),
     [groupedMatches, showAllResults],
@@ -301,7 +573,16 @@ export default function () {
           visibleGroups.map((group) => (
             <section key={`${group.key}__team_matches_group`} className="mb-6 last:mb-0">
               <h3 className="border-base-content/10 bg-base-content/10 border-y py-3 text-center text-lg font-black text-[#9aa8b5]">
-                {group.label}
+                {group.competitionId ? (
+                  <Link
+                    to={`/competitions?competitionId=${group.competitionId}`}
+                    className="link-hover"
+                  >
+                    {group.label}
+                  </Link>
+                ) : (
+                  group.label
+                )}
               </h3>
               <div>
                 {group.matches.map((match) => {
