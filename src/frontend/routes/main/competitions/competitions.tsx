@@ -1134,6 +1134,41 @@ export default function () {
     [allTournamentCards, selectedFamily],
   );
   const isCurrentSeason = selectedSeasonId === state.profile?.season;
+  const getTournamentStatus = React.useCallback(
+    (card: TournamentCard) => {
+      const cardCompetitions =
+        seasonCompetitions?.filter((competition) =>
+          card.tiers.some((tier) => tier.id === competition.tierId),
+        ) || [];
+
+      if (!cardCompetitions.length) {
+        return Constants.CompetitionStatus.SCHEDULED;
+      }
+
+      if (
+        cardCompetitions.every(
+          (competition) => competition.status === Constants.CompetitionStatus.COMPLETED,
+        )
+      ) {
+        return Constants.CompetitionStatus.COMPLETED;
+      }
+
+      // A completed group stage followed by a scheduled playoff is still one active event.
+      // Keep the card live until every stage in its tournament family has concluded.
+      if (
+        cardCompetitions.some(
+          (competition) =>
+            competition.status === Constants.CompetitionStatus.STARTED ||
+            competition.status === Constants.CompetitionStatus.COMPLETED,
+        )
+      ) {
+        return Constants.CompetitionStatus.STARTED;
+      }
+
+      return Constants.CompetitionStatus.SCHEDULED;
+    },
+    [seasonCompetitions],
+  );
 
   const orderedTournamentCards = React.useMemo(() => {
     if (!isCurrentSeason) {
@@ -1161,12 +1196,10 @@ export default function () {
     }
 
     const getStatus = (card: TournamentCard) => {
-      const tournament = seasonCompetitions?.find((item) =>
-        card.tiers.some((tier) => tier.id === item.tierId),
-      );
-      return tournament?.status === Constants.CompetitionStatus.COMPLETED
+      const status = getTournamentStatus(card);
+      return status === Constants.CompetitionStatus.COMPLETED
         ? 'completed'
-        : tournament?.status === Constants.CompetitionStatus.STARTED
+        : status === Constants.CompetitionStatus.STARTED
           ? 'live'
           : 'upcoming';
     };
@@ -1201,7 +1234,7 @@ export default function () {
     competitionStartDates,
     competitionEndDates,
     isCurrentSeason,
-    seasonCompetitions,
+    getTournamentStatus,
     selectedFederation?.slug,
     tournamentCards,
   ]);
@@ -1563,6 +1596,7 @@ export default function () {
                   const tournament = seasonCompetitions?.find((item) =>
                     card.tiers.some((tier) => tier.id === item.tierId),
                   );
+                  const currentStatus = getTournamentStatus(card);
                   const stageStartDates = card.tiers
                     .map((tier) => competitionStartDates[tier.id])
                     .filter((date): date is number => Number.isFinite(date));
@@ -1640,14 +1674,8 @@ export default function () {
 
                   const previousStatus =
                     cardIndex > 0
-                      ? seasonCompetitions?.find((item) =>
-                          orderedTournamentCards[cardIndex - 1].tiers.some(
-                            (tier) => tier.id === item.tierId,
-                          ),
-                        )?.status
+                      ? getTournamentStatus(orderedTournamentCards[cardIndex - 1])
                       : null;
-                  const currentStatus = tournament?.status;
-
                   return (
                     <React.Fragment key={`${card.key}__competition_row`}>
                       {isCurrentSeason &&
@@ -1689,7 +1717,7 @@ export default function () {
                         <span className="min-w-0 flex-1">
                           <span className="mb-1 flex items-center justify-between gap-2">
                             <CompetitionLocationTag tier={primaryTier} />
-                            {tournament?.status === Constants.CompetitionStatus.STARTED && (
+                            {currentStatus === Constants.CompetitionStatus.STARTED && (
                               <span className="inline-flex items-center rounded border border-[#ff5f56]/70 bg-[#ff5f56]/15 px-1.5 py-0.5 text-[0.58rem] font-black text-[#ff5f56] uppercase">
                                 • LIVE
                               </span>

@@ -446,6 +446,7 @@ export default function () {
   const isEuropeRmr = isEuropeRmrA || isEuropeRmrB;
   const isMajorChallengersStage = tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE;
   const isMajorLegendsStage = tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE;
+  const isMajorChampionsStage = tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE;
   const isMajorSwissStage = isMajorChallengersStage || isMajorLegendsStage;
   const hasMajorChampionsCompleted =
     isMajorLegendsStage &&
@@ -1426,6 +1427,48 @@ export default function () {
         : competition.competitors,
     [competition.competitors, iemPrizePoolCards, isIemEvent],
   );
+  const iemFinalizedTeamIds = React.useMemo(() => {
+    if (!isIemEvent) {
+      return new Set<number>();
+    }
+
+    const finalizedTeamIds = new Set<number>();
+    [competition, ...iemEventCompetitions].forEach((eventCompetition) => {
+      if (!eventCompetition) {
+        return;
+      }
+
+      if (eventCompetition.status === Constants.CompetitionStatus.COMPLETED) {
+        eventCompetition.competitors.forEach((competitor) => {
+          if (competitor.teamId != null) {
+            finalizedTeamIds.add(competitor.teamId);
+          }
+        });
+        return;
+      }
+
+      try {
+        const tournament = Tournament.restore(JSON.parse(eventCompetition.tournament));
+        const activeSeeds = new Set(
+          tournament.brackets
+            ?.rounds()
+            .flat()
+            .filter((match) => !match.m)
+            .flatMap((match) => match.p.filter((seed) => seed > 0)) || [],
+        );
+
+        eventCompetition.competitors.forEach((competitor) => {
+          if (competitor.teamId != null && !activeSeeds.has(competitor.seed)) {
+            finalizedTeamIds.add(competitor.teamId);
+          }
+        });
+      } catch {
+        // A tournament snapshot is not available until its bracket has been generated.
+      }
+    });
+
+    return finalizedTeamIds;
+  }, [competition, iemEventCompetitions, isIemEvent]);
   const placementCards = React.useMemo(() => {
     if (prizePoolCards.length) {
       return prizePoolCards;
@@ -1736,11 +1779,12 @@ export default function () {
           const [start, end] = groupPlacement === 3 ? [5, 6] : [7, 8];
 
           return groupKeys.map((groupKey) => ({
-            competitor: hasEseaPlayoffsStarted
-              ? [...(groups[groupKey] || [])]
-                  .filter((competitor) => Boolean(competitor.team))
-                  .sort(sortByGroupStanding)[groupPlacement - 1]
-              : undefined,
+            competitor:
+              hasEseaPlayoffsStarted || competition.status === Constants.CompetitionStatus.COMPLETED
+                ? [...(groups[groupKey] || [])]
+                    .filter((competitor) => Boolean(competitor.team))
+                    .sort(sortByGroupStanding)[groupPlacement - 1]
+                : undefined,
             detail: '',
             label: getPlacementLabel(start, end),
           }));
@@ -2006,7 +2050,10 @@ export default function () {
           competitor:
             competition.status === Constants.CompetitionStatus.COMPLETED
               ? positionedCompetitors[start + index - 1]
-              : undefined,
+              : positionedCompetitors.find(
+                  (competitor) =>
+                    competitor.position === start + index && isFinalizedCompetitor(competitor),
+                ),
           detail: amount,
           label: getPlacementLabel(start, end),
         }));
@@ -2014,6 +2061,7 @@ export default function () {
     }
 
     if (isMajorSwissStage) {
+      const swissConfig = Constants.TierSwissConfig[tierSlug];
       const positionedCompetitors = [...competition.competitors]
         .filter((competitor) => Boolean(competitor.team))
         .sort((a, b) => a.position - b.position || a.seed - b.seed);
@@ -2032,10 +2080,14 @@ export default function () {
           const placement = start + index;
 
           return {
-            competitor:
-              competition.status === Constants.CompetitionStatus.COMPLETED
-                ? positionedCompetitors.find((competitor) => competitor.position === placement)
-                : undefined,
+            competitor: positionedCompetitors.find(
+              (competitor) =>
+                competitor.position === placement &&
+                (competition.status === Constants.CompetitionStatus.COMPLETED ||
+                  (Boolean(swissConfig) &&
+                    (competitor.win >= swissConfig.maxWins ||
+                      competitor.loss >= swissConfig.maxLosses))),
+            ),
             detail: end <= 8 ? (isMajorLegendsStage ? 'Champions Stage' : majorEventName) : '',
             label: getPlacementLabel(start, end),
           };
@@ -2044,6 +2096,13 @@ export default function () {
     }
 
     if (isAsiaRmr || isAmericasRmr || isEuropeRmr) {
+      const swissConfig = Constants.TierSwissConfig[tierSlug];
+      const isLiveRmrOutcome = (competitor: CompetitionCompetitor) =>
+        competition.status === Constants.CompetitionStatus.COMPLETED ||
+        (isAsiaRmr && isFinalizedCompetitor(competitor)) ||
+        ((isAmericasRmr || isEuropeRmr) &&
+          Boolean(swissConfig) &&
+          (competitor.win >= swissConfig.maxWins || competitor.loss >= swissConfig.maxLosses));
       const placementRanges = isAmericasRmr
         ? [
             [1, 1],
@@ -2102,10 +2161,9 @@ export default function () {
                 ? `${majorEventName} Challengers Stage`
                 : '';
           return {
-            competitor:
-              competition.status === Constants.CompetitionStatus.COMPLETED
-                ? competition.competitors.find((competitor) => competitor.position === placement)
-                : undefined,
+            competitor: competition.competitors.find(
+              (competitor) => competitor.position === placement && isLiveRmrOutcome(competitor),
+            ),
             detail,
             label: getPlacementLabel(start, end),
           };
@@ -2144,8 +2202,15 @@ export default function () {
         const placement = start + index;
         return {
           competitor:
-            competition.status === Constants.CompetitionStatus.COMPLETED
-              ? displayedPrizePoolCards[placement - 1]?.competitor
+            displayedPrizePoolCards[placement - 1]?.competitor &&
+            (competition.status === Constants.CompetitionStatus.COMPLETED ||
+              (isBlastFinals &&
+                isFinalizedCompetitor(displayedPrizePoolCards[placement - 1].competitor!)) ||
+              (isMajorChampionsStage &&
+                isFinalizedCompetitor(displayedPrizePoolCards[placement - 1].competitor!)) ||
+              (isIemEvent &&
+                iemFinalizedTeamIds.has(displayedPrizePoolCards[placement - 1].competitor!.teamId)))
+              ? displayedPrizePoolCards[placement - 1].competitor
               : undefined,
           detail: amount,
           label: getPlacementLabel(start, end),
@@ -2172,6 +2237,7 @@ export default function () {
     tierSlug,
     isEseaCashCup,
     isIemQualifier,
+    iemFinalizedTeamIds,
     isAsiaRmrOpenQualifier,
     rmrOpenQualifier,
     qualifierDestination,
@@ -2182,6 +2248,7 @@ export default function () {
     isCctGlobalFinals,
     isBlastFinals,
     isMajorLegendsStage,
+    isMajorChampionsStage,
     isMajorSwissStage,
     isAsiaRmr,
     isAmericasRmr,
@@ -3013,10 +3080,7 @@ export default function () {
               </section>
             )}
             {!hasTournamentStarted && <Participants />}
-            {((hasTournamentStarted &&
-              (!(isAsiaRmr || isAmericasRmr || isEuropeRmr) ||
-                competition.status === Constants.CompetitionStatus.COMPLETED)) ||
-              isIemQualifier) &&
+            {(hasTournamentStarted || isIemQualifier) &&
               !hasMajorChampionsCompleted &&
               outcomeCards.length > 0 && (
                 <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
