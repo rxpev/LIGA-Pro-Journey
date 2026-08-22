@@ -563,15 +563,17 @@ function SwissAdvancedBox(props: {
       className={cx('pointer-events-none absolute z-10 text-white', props.className)}
     >
       <div className="absolute top-0 left-0 h-[72px] w-[120px] rounded-tl-sm bg-green-500/80 p-2">
-        <SwissTerminalColumn
-          compact
-          highlightedTeamId={props.highlightedTeamId}
-          record={props.buckets[0]}
-          records={props.records}
-          showPlaceholders={props.showPlaceholders}
-          teams={props.teams}
-          onTeamClick={props.onTeamClick}
-        />
+        <div className="-translate-y-1">
+          <SwissTerminalColumn
+            compact
+            highlightedTeamId={props.highlightedTeamId}
+            record={props.buckets[0]}
+            records={props.records}
+            showPlaceholders={props.showPlaceholders}
+            teams={props.teams}
+            onTeamClick={props.onTeamClick}
+          />
+        </div>
       </div>
       <div
         className={cx(
@@ -591,6 +593,10 @@ function SwissAdvancedBox(props: {
           />
         ))}
       </div>
+      <div
+        className="pointer-events-none absolute top-0 left-[118px] z-10 h-[72px] w-[4px]"
+        style={{ backgroundColor: 'rgb(3 165 70)' }}
+      />
     </aside>
   );
 }
@@ -674,10 +680,21 @@ function SwissEliminatedBox(props: {
         aria-label="Eliminated"
         className={cx('pointer-events-none absolute z-10 text-white', props.className)}
       >
-        <div className="absolute top-[310px] left-0 h-[30px] w-[346px] rounded-br-sm bg-red-500/80" />
+        <div
+          className="pointer-events-none absolute top-[308px] left-0 z-[1] h-[32px] w-[346px] rounded-br-sm"
+          style={{ backgroundColor: 'rgb(203 40 49)' }}
+        />
         <div className="absolute top-[214px] left-0 h-[96px] w-[139px] rounded-tl-sm bg-red-500/80" />
         <div className="absolute top-[120px] left-[139px] h-[190px] w-[115px] bg-red-500/80" />
         <div className="absolute top-0 left-[254px] h-[328px] w-[92px] rounded-t-sm rounded-r-sm bg-red-500/80" />
+        <div
+          className="pointer-events-none absolute top-[214px] left-[137px] z-10 h-[96px] w-[4px]"
+          style={{ backgroundColor: 'rgb(203 40 49)' }}
+        />
+        <div
+          className="pointer-events-none absolute top-[120px] left-[252px] z-10 h-[190px] w-[4px]"
+          style={{ backgroundColor: 'rgb(203 40 49)' }}
+        />
         {renderBucket(zeroTwo, 'top-[226px] left-[23px] w-[92px]')}
         {renderBucket(oneTwo, 'top-[122px] left-[146px] w-[92px]')}
         {renderBucket(twoTwo, 'top-[10px] left-[254px] w-[92px]', 'column')}
@@ -691,15 +708,17 @@ function SwissEliminatedBox(props: {
       className={cx('pointer-events-none absolute z-10 text-white', props.className)}
     >
       <div className="absolute bottom-0 left-0 h-[72px] w-[120px] rounded-bl-sm bg-red-500/80 p-2">
-        <SwissTerminalColumn
-          compact
-          highlightedTeamId={props.highlightedTeamId}
-          record={props.buckets[0]}
-          records={props.records}
-          showPlaceholders={props.showPlaceholders}
-          teams={props.teams}
-          onTeamClick={props.onTeamClick}
-        />
+        <div className="-translate-y-1">
+          <SwissTerminalColumn
+            compact
+            highlightedTeamId={props.highlightedTeamId}
+            record={props.buckets[0]}
+            records={props.records}
+            showPlaceholders={props.showPlaceholders}
+            teams={props.teams}
+            onTeamClick={props.onTeamClick}
+          />
+        </div>
       </div>
       <div
         className={cx(
@@ -719,6 +738,10 @@ function SwissEliminatedBox(props: {
           />
         ))}
       </div>
+      <div
+        className="pointer-events-none absolute bottom-0 left-[118px] z-10 h-[72px] w-[4px]"
+        style={{ backgroundColor: 'rgb(203 40 49)' }}
+      />
     </aside>
   );
 }
