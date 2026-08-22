@@ -52,6 +52,72 @@ const FEDERATION_ORDER: Constants.FederationSlug[] = [
   Constants.FederationSlug.ESPORTS_OCE,
 ];
 
+/**
+ * Canonical 2026 dates extracted from the default tournament simulation.
+ * These cover every stage whose start is normally withheld until a preceding
+ * event finishes. They let a fresh career display its complete first-season
+ * calendar; subsequent seasons still prefer that save's completed history.
+ */
+const FIRST_SEASON_STAGE_DATES: Record<string, readonly [number, number]> = {
+  'americas/esea:cash-cup': [1791932400000, 1792537200000],
+  'asia/esea:cash-cup': [1791932400000, 1792450800000],
+  'europa/esea:cash-cup': [1791932400000, 1792537200000],
+  'oceania/esea:cash-cup': [1791932400000, 1792364400000],
+  'americas/iem:cologne:open-qualifier': [1781305200000, 1781910000000],
+  'asia/iem:cologne:open-qualifier': [1781305200000, 1781823600000],
+  'europa/iem:cologne:open-qualifier': [1781305200000, 1781910000000],
+  'oceania/iem:cologne:open-qualifier': [1781305200000, 1781823600000],
+  'americas/iem:krakow:open-qualifier': [1793145600000, 1793750400000],
+  'asia/iem:krakow:open-qualifier': [1793145600000, 1793664000000],
+  'europa/iem:krakow:open-qualifier': [1793145600000, 1793750400000],
+  'oceania/iem:krakow:open-qualifier': [1793145600000, 1793664000000],
+  'americas/cct:series:playoffs': [1780527600000, 1780786800000],
+  'asia/cct:series:playoffs': [1780527600000, 1780786800000],
+  'europa/cct:series:playoffs': [1780527600000, 1780786800000],
+  'oceania/cct:oceania:playoffs': [1780527600000, 1780700400000],
+  'americas/league:advanced:playoffs': [1778022000000, 1778367600000],
+  'asia/league:advanced:playoffs': [1778022000000, 1778540400000],
+  'europa/league:advanced:playoffs': [1778022000000, 1778367600000],
+  'oceania/league:advanced:playoffs': [1777158000000, 1777417200000],
+  'americas/league:intermediate:playoffs': [1777158000000, 1777417200000],
+  'europa/league:intermediate:playoffs': [1777158000000, 1777417200000],
+  'americas/league:main:playoffs': [1778022000000, 1778281200000],
+  'europa/league:main:playoffs': [1778022000000, 1778281200000],
+  'americas/league:open:playoffs': [1778022000000, 1778367600000],
+  'asia/league:open:playoffs': [1777158000000, 1777417200000],
+  'europa/league:open:playoffs': [1778022000000, 1778367600000],
+  'oceania/league:open:playoffs': [1778022000000, 1778281200000],
+  'world/esl-challenger:playoffs': [1782860400000, 1783033200000],
+  'world/blast:finals': [1772928000000, 1773446400000],
+  'world/cct:global-finals': [1787871600000, 1788130800000],
+  'world/iem:cologne:playoffs': [1784329200000, 1784588400000],
+  'world/league:pro:playoffs': [1785970800000, 1786316400000],
+  'world/iem:krakow:playoffs': [1794873600000, 1795132800000],
+  'americas/major:americas:open-qualifier:1': [1769904000000, 1770508800000],
+  'americas/major:americas:open-qualifier:2': [1770681600000, 1771286400000],
+  'americas/major:americas:rmr': [1778972400000, 1779318000000],
+  'asia/major:asia:open-qualifier:1': [1769904000000, 1770336000000],
+  'asia/major:asia:open-qualifier:2': [1770595200000, 1771027200000],
+  'asia/major:china:open-qualifier:1': [1769904000000, 1770336000000],
+  'asia/major:china:open-qualifier:2': [1770681600000, 1771113600000],
+  'asia/major:asia:rmr': [1778972400000, 1779318000000],
+  'europa/major:europe:open-qualifier:1': [1769904000000, 1770508800000],
+  'europa/major:europe:open-qualifier:2': [1770681600000, 1771286400000],
+  'europa/major:europe:open-qualifier:3': [1771459200000, 1772064000000],
+  'europa/major:europe:open-qualifier:4': [1772236800000, 1772841600000],
+  'europa/major:europe:rmr:a': [1778972400000, 1779404400000],
+  'europa/major:europe:rmr:b': [1778972400000, 1779404400000],
+  'oceania/major:oce:open-qualifier:1': [1769904000000, 1770422400000],
+  'oceania/major:oce:open-qualifier:2': [1770681600000, 1771200000000],
+  'world/major:challengers-stage': [1789340400000, 1789772400000],
+  'world/major:legends-stage': [1790118000000, 1790550000000],
+  'world/major:champions-stage': [1790895600000, 1791154800000],
+};
+
+function getFirstSeasonStageDates(federationSlug: string, tierSlug: string) {
+  return FIRST_SEASON_STAGE_DATES[`${federationSlug}/${tierSlug}`];
+}
+
 function getTournamentThumbnail(
   card: TournamentCard,
   federation?: string,
@@ -596,6 +662,13 @@ export default function () {
       setCompetitionEndDates({});
       return;
     }
+
+    // A stage that is started by another competition does not get a calendar entry
+    // until its predecessor finishes.  Keep the tournament list useful before that
+    // happens by projecting its proven schedule from the latest completed season.
+    // The projection is shifted from an actual, non-triggered event in both seasons
+    // instead of using `addYears`.  That is important because seasons are advanced
+    // from their start date and therefore move by a day after a leap February.
     Promise.all(
       seasonCompetitions.map(async (item) => {
         const [start, end] = await Promise.all([
@@ -620,20 +693,131 @@ export default function () {
           dateLabel,
           startValue?.getTime() ?? Number.POSITIVE_INFINITY,
           endValue?.getTime() ?? startValue?.getTime() ?? Number.NEGATIVE_INFINITY,
+          Boolean(endValue),
         ] as const;
       }),
-    ).then((entries) => {
+    ).then(async (entries) => {
       const datedEntries = entries.filter(Boolean) as Array<
-        readonly [number, string, number, number]
+        readonly [number, string, number, number, boolean]
       >;
-      setCompetitionDates(
-        Object.fromEntries(datedEntries.map(([tierId, label]) => [tierId, label])),
+      const datesByCompetitionId = new Map<
+        number,
+        readonly [number, string, number, number, boolean]
+      >();
+
+      seasonCompetitions.forEach((competition) => {
+        const entry = datedEntries.find(([tierId]) => tierId === competition.tierId);
+        if (entry) datesByCompetitionId.set(competition.id, entry);
+      });
+
+      const anchor = seasonCompetitions.find((item) => datesByCompetitionId.has(item.id));
+      const projectedEntries = await Promise.all(
+        seasonCompetitions.map(async (item) => {
+          // A start entry alone is not a known duration. Project it too, otherwise
+          // the UI would incorrectly render it as a one-day tournament.
+          if (
+            (datesByCompetitionId.get(item.id)?.[4] &&
+              item.status === Constants.CompetitionStatus.COMPLETED) ||
+            !anchor
+          ) {
+            return null;
+          }
+
+          const projectFirstSeason = () => {
+            const canonicalDates = getFirstSeasonStageDates(item.federation.slug, item.tier.slug);
+            const currentAnchorStart = datesByCompetitionId.get(anchor.id)?.[2];
+
+            if (!canonicalDates || !currentAnchorStart) return null;
+
+            const seasonStart =
+              currentAnchorStart - anchor.tier.league.startOffsetDays * 24 * 60 * 60 * 1000;
+            const shift = seasonStart - new Date(Constants.NewSaveSeasonStartDate).getTime();
+            const startValue = new Date(canonicalDates[0] + shift);
+            const endValue = new Date(canonicalDates[1] + shift);
+            const dateLabel =
+              startValue.getFullYear() === endValue.getFullYear()
+                ? `${format(startValue, 'MMM d')} – ${format(endValue, 'MMM d')}, ${endValue.getFullYear()}`
+                : `${format(startValue, 'MMM d, yyyy')} – ${format(endValue, 'MMM d, yyyy')}`;
+
+            return [item.tierId, dateLabel, startValue.getTime(), endValue.getTime()] as const;
+          };
+
+          const historic = await api.competitions.find({
+            ...Eagers.competition,
+            where: {
+              federationId: item.federationId,
+              tierId: item.tierId,
+              season: { lt: item.season },
+              status: Constants.CompetitionStatus.COMPLETED,
+            },
+            orderBy: { season: 'desc' },
+          });
+
+          if (!historic) return projectFirstSeason();
+
+          const historicAnchor = await api.competitions.find({
+            ...Eagers.competition,
+            where: {
+              federationId: anchor.federationId,
+              tierId: anchor.tierId,
+              season: historic.season,
+            },
+          });
+
+          if (!historicAnchor) return projectFirstSeason();
+
+          const [historicStart, historicEnd, historicAnchorStart] = await Promise.all([
+            api.calendar.find({
+              where: {
+                type: Constants.CalendarEntry.COMPETITION_START,
+                payload: String(historic.id),
+              },
+            }),
+            api.calendar.find({
+              where: {
+                type: Constants.CalendarEntry.COMPETITION_END,
+                payload: String(historic.id),
+              },
+            }),
+            api.calendar.find({
+              where: {
+                type: Constants.CalendarEntry.COMPETITION_START,
+                payload: String(historicAnchor.id),
+              },
+            }),
+          ]);
+          const currentAnchorStart = datesByCompetitionId.get(anchor.id)?.[2];
+
+          if (
+            !historicStart?.date ||
+            !historicEnd?.date ||
+            !historicAnchorStart?.date ||
+            !currentAnchorStart
+          ) {
+            return projectFirstSeason();
+          }
+
+          const shift = currentAnchorStart - new Date(historicAnchorStart.date).getTime();
+          const startValue = new Date(new Date(historicStart.date).getTime() + shift);
+          const endValue = new Date(new Date(historicEnd.date).getTime() + shift);
+          const dateLabel =
+            startValue.getFullYear() === endValue.getFullYear()
+              ? `${format(startValue, 'MMM d')} – ${format(endValue, 'MMM d')}, ${endValue.getFullYear()}`
+              : `${format(startValue, 'MMM d, yyyy')} – ${format(endValue, 'MMM d, yyyy')}`;
+
+          return [item.tierId, dateLabel, startValue.getTime(), endValue.getTime()] as const;
+        }),
       );
+      const allEntries = [
+        ...datedEntries,
+        ...(projectedEntries.filter(Boolean) as Array<readonly [number, string, number, number]>),
+      ];
+      setCompetitionDates(Object.fromEntries(allEntries.map(([tierId, label]) => [tierId, label])));
       setCompetitionStartDates(
-        Object.fromEntries(datedEntries.map(([tierId, , startDate]) => [tierId, startDate])),
+        Object.fromEntries(allEntries.map(([tierId, , startDate]) => [tierId, startDate])),
       );
       setCompetitionEndDates(
-        Object.fromEntries(datedEntries.map(([tierId, , , endDate]) => [tierId, endDate])),
+        Object.fromEntries(allEntries.map(([tierId, , , endDate]) => [tierId, endDate])),
       );
     });
   }, [seasonCompetitions]);
@@ -1037,6 +1221,22 @@ export default function () {
 
     return allTournamentCards.find((card) => card.key === selectedTournamentKey)?.name ?? null;
   }, [allTournamentCards, selectedTournamentKey]);
+  const selectedTournamentDateRange = React.useMemo(() => {
+    const card = allTournamentCards.find((item) => item.key === selectedTournamentKey);
+    if (!card) return { start: null, end: null };
+
+    const starts = card.tiers
+      .map((tier) => competitionStartDates[tier.id])
+      .filter((date): date is number => Number.isFinite(date));
+    const ends = card.tiers
+      .map((tier) => competitionEndDates[tier.id])
+      .filter((date): date is number => Number.isFinite(date));
+
+    return {
+      start: starts.length ? Math.min(...starts) : null,
+      end: ends.length ? Math.max(...ends) : null,
+    };
+  }, [allTournamentCards, competitionEndDates, competitionStartDates, selectedTournamentKey]);
   const isChinaRmrOpenQualifier = competition
     ? [
         Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1,
@@ -1363,8 +1563,24 @@ export default function () {
                   const tournament = seasonCompetitions?.find((item) =>
                     card.tiers.some((tier) => tier.id === item.tierId),
                   );
+                  const stageStartDates = card.tiers
+                    .map((tier) => competitionStartDates[tier.id])
+                    .filter((date): date is number => Number.isFinite(date));
+                  const stageEndDates = card.tiers
+                    .map((tier) => competitionEndDates[tier.id])
+                    .filter((date): date is number => Number.isFinite(date));
+                  const tournamentStartDate = stageStartDates.length
+                    ? new Date(Math.min(...stageStartDates))
+                    : null;
+                  const tournamentEndDate = stageEndDates.length
+                    ? new Date(Math.max(...stageEndDates))
+                    : null;
                   const dateLabel =
-                    competitionDates[primaryTier.id] || `${2025 + selectedSeasonId}`;
+                    tournamentStartDate && tournamentEndDate
+                      ? tournamentStartDate.getFullYear() === tournamentEndDate.getFullYear()
+                        ? `${format(tournamentStartDate, 'MMM d')} – ${format(tournamentEndDate, 'MMM d')}, ${tournamentEndDate.getFullYear()}`
+                        : `${format(tournamentStartDate, 'MMM d, yyyy')} – ${format(tournamentEndDate, 'MMM d, yyyy')}`
+                      : competitionDates[primaryTier.id] || `${2025 + selectedSeasonId}`;
                   const rmrQualifierNumber =
                     primaryTier.slug.match(/open-qualifier:(\d+)$/)?.[1] || null;
                   const isMajor = primaryTier.slug.toLowerCase().includes('major');
@@ -1614,6 +1830,8 @@ export default function () {
                     competitionLocationCountryCode,
                     competitionLocationDisplay,
                     canViewStatistics,
+                    tournamentStartDate: selectedTournamentDateRange.start,
+                    tournamentEndDate: selectedTournamentDateRange.end,
                   } satisfies RouteContextCompetitions
                 }
               />

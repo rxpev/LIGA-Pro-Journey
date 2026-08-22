@@ -25,6 +25,8 @@ declare interface RouteContextCompetitions {
   competitionLocationCountryCode?: string | null;
   competitionLocationDisplay?: string | null;
   canViewStatistics?: boolean;
+  tournamentStartDate?: number | null;
+  tournamentEndDate?: number | null;
 }
 
 /** @interface */

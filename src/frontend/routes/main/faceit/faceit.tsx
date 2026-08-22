@@ -768,7 +768,7 @@ export default function Faceit(): JSX.Element {
 
   if (loading && loadingPhase === 'enter') {
     return (
-      <div className="relative h-screen min-h-0 w-full overflow-hidden bg-[#0b0b0b]">
+      <div className="faceit-route relative h-full min-h-0 w-full overflow-hidden bg-[#0b0b0b]">
         {loadingOverlay}
       </div>
     );
@@ -781,7 +781,7 @@ export default function Faceit(): JSX.Element {
 
   return (
     <div
-      className={`relative flex h-screen w-full flex-col overflow-hidden bg-[#0b0b0b] text-white ${
+      className={`faceit-route relative flex h-full w-full flex-col overflow-hidden bg-[#0b0b0b] text-white ${
         loading ? 'faceit-page-content--entering' : ''
       }`}
     >

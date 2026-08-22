@@ -350,6 +350,8 @@ export default function () {
     competitionLocationCountryCode,
     competitionLocationDisplay,
     canViewStatistics,
+    tournamentStartDate,
+    tournamentEndDate,
   } = useOutletContext<RouteContextCompetitions>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1236,9 +1238,17 @@ export default function () {
     : prizePoolRows.slice(0, NUM_PRIZE_POOL_VISIBLE);
   const displayedEndDate = React.useMemo(() => {
     const calendarEndDate = competitionDates[1]?.date;
+    const projectedEndDate = tournamentEndDate ? new Date(tournamentEndDate) : undefined;
+
+    // While Swiss/bracket rounds are generated, the backend keeps the end
+    // calendar entry in sync with the latest scheduled round. That is a
+    // provisional date, not the tournament's advertised finish.
+    if (competition.status !== Constants.CompetitionStatus.COMPLETED && projectedEndDate) {
+      return projectedEndDate;
+    }
 
     if (!latestScheduledMatchDate) {
-      return calendarEndDate;
+      return calendarEndDate || projectedEndDate;
     }
 
     if (!calendarEndDate) {
@@ -1248,7 +1258,9 @@ export default function () {
     return getDateTime(latestScheduledMatchDate) > getDateTime(calendarEndDate)
       ? latestScheduledMatchDate
       : calendarEndDate;
-  }, [competitionDates, latestScheduledMatchDate]);
+  }, [competition.status, competitionDates, latestScheduledMatchDate, tournamentEndDate]);
+  const displayedStartDate =
+    competitionDates[0]?.date || (tournamentStartDate ? new Date(tournamentStartDate) : undefined);
   const cashCupYear = format(
     competitionDates[0]?.date || state.profile?.date || new Date(),
     'yyyy',
@@ -2273,8 +2285,8 @@ export default function () {
                 <div className="flex items-center gap-2">
                   <FaCalendarAlt className="text-base-content/50 shrink-0" />
                   <dd>
-                    {competitionDates[0]
-                      ? `${format(competitionDates[0].date, 'MMM d, yyyy')}${displayedEndDate ? ` – ${format(displayedEndDate, 'MMM d, yyyy')}` : ''}`
+                    {displayedStartDate
+                      ? `${format(displayedStartDate, 'MMM d, yyyy')}${displayedEndDate ? ` – ${format(displayedEndDate, 'MMM d, yyyy')}` : ''}`
                       : 'Dates TBD'}
                   </dd>
                 </div>
