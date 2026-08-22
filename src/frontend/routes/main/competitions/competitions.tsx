@@ -627,6 +627,37 @@ export default function () {
     [tiers],
   );
 
+  /**
+   * Every card in the tournament browser represents an event, not one of its
+   * individual stages.  Links from team history and news can still refer to a
+   * specific competition record (for example, Pro League Playoffs), so reduce
+   * those records to the card's first stage before rendering the overview.
+   */
+  const getCanonicalTournamentTierId = React.useCallback(
+    (tierId: number) => {
+      const selectedTier = tiers.find((tier) => tier.id === tierId);
+      if (!selectedTier) {
+        return tierId;
+      }
+
+      const federationSlug = federations.find((item) => item.id === selectedFederationId)?.slug as
+        | Constants.FederationSlug
+        | undefined;
+      const tournamentKey = getTournamentMeta(selectedTier, federationSlug).key;
+      const stageTierIds = new Set((seasonCompetitions || []).map((item) => item.tierId));
+      const canonicalTier = tiers
+        .filter(
+          (tier) =>
+            stageTierIds.has(tier.id) &&
+            getTournamentMeta(tier, federationSlug).key === tournamentKey,
+        )
+        .sort((a, b) => getStageOrder(a) - getStageOrder(b))[0];
+
+      return canonicalTier?.id ?? tierId;
+    },
+    [federations, seasonCompetitions, selectedFederationId, tiers],
+  );
+
   React.useEffect(() => {
     if (selectedFederationId <= 0 || selectedSeasonId <= 0) {
       setSeasonCompetitions(null);
@@ -654,6 +685,28 @@ export default function () {
       isCurrent = false;
     };
   }, [selectedFederationId, selectedSeasonId]);
+
+  // Treat every inbound tournament link as a request for the canonical event
+  // view. This keeps direct links to historic playoff records from bypassing
+  // the event view selected by the Competitions browser.
+  React.useEffect(() => {
+    if (!competition || !seasonCompetitions || !tiers.length) {
+      return;
+    }
+
+    const canonicalTierId = getCanonicalTournamentTierId(competition.tierId);
+    if (canonicalTierId === competition.tierId) {
+      return;
+    }
+
+    const canonicalCompetition = seasonCompetitions.find((item) => item.tierId === canonicalTierId);
+    if (!canonicalCompetition) {
+      return;
+    }
+
+    setSelectedTierId(canonicalTierId);
+    setCompetition(canonicalCompetition);
+  }, [competition, getCanonicalTournamentTierId, seasonCompetitions, tiers.length]);
 
   React.useEffect(() => {
     if (!seasonCompetitions?.length) {
