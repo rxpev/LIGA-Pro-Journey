@@ -1606,12 +1606,9 @@ export default function () {
         .sort((a, b) => a.position - b.position)
         .map((competitor, index) => ({
           competitor: isFinalizedCompetitor(competitor) ? competitor : undefined,
-          detail:
-            isFinalizedCompetitor(competitor) && prizePool?.distribution?.[index]
-              ? Util.formatCurrency(
-                  (prizePool.total * (prizePool.distribution?.[index] || 0)) / 100,
-                )
-              : '',
+          detail: prizePool?.distribution?.[index]
+            ? Util.formatCurrency((prizePool.total * (prizePool.distribution?.[index] || 0)) / 100)
+            : '',
           label: getPlacementLabel(index + 1, index + 1),
         }));
     }
@@ -1627,10 +1624,15 @@ export default function () {
       return positionedCompetitors.map((competitor, index) => {
         const placement = competitor.position || index + 1;
         const count = placementCounts.get(competitor.position) || 1;
+        const prize = prizePool?.distribution?.[placement - 1]
+          ? Util.formatCurrency(
+              (prizePool.total * (prizePool.distribution?.[placement - 1] || 0)) / 100,
+            )
+          : '';
 
         return {
           competitor: isFinalizedCompetitor(competitor) ? competitor : undefined,
-          detail: placement === 1 ? qualifierDestination || '' : '',
+          detail: [placement === 1 ? qualifierDestination : '', prize].filter(Boolean).join(' + '),
           label: getPlacementLabel(placement, placement + count - 1),
         };
       });
