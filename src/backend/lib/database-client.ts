@@ -142,6 +142,77 @@ export default class DatabaseClient {
             `;
             return Number(result.worldRanking ?? 0);
           },
+          /** Return a team's saved month-end world-ranking history. */
+          async getWorldRankingHistory(id: number) {
+            return prisma.teamRankingSnapshot.findMany({
+              where: { teamId: id },
+              orderBy: { date: 'asc' },
+              select: { date: true, rank: true },
+            });
+          },
+          /**
+           * Resolve all participant ranks from the latest snapshot on or before
+           * an event's opening date. Old saves without a snapshot fall back to
+           * the live table until their first month-end snapshot is created.
+           */
+          async getCompetitionWorldRankings(competitionId: number) {
+            const competition = await prisma.competition.findUnique({
+              where: { id: competitionId },
+              include: {
+                competitors: { where: { teamId: { not: null } }, select: { teamId: true } },
+                matches: { orderBy: { date: 'asc' }, take: 1, select: { date: true } },
+              },
+            });
+            if (!competition) return {};
+
+            const eventDate =
+              competition.matches[0]?.date ||
+              (
+                await prisma.calendar.findFirst({
+                  where: {
+                    type: Constants.CalendarEntry.COMPETITION_START,
+                    payload: competitionId.toString(),
+                  },
+                  orderBy: { date: 'asc' },
+                  select: { date: true },
+                })
+              )?.date;
+            const teamIds = competition.competitors.flatMap((item) =>
+              item.teamId == null ? [] : [item.teamId],
+            );
+            if (!teamIds.length) return {};
+
+            const snapshotDate = eventDate
+              ? (
+                  await prisma.teamRankingSnapshot.findFirst({
+                    where: { date: { lte: eventDate } },
+                    orderBy: { date: 'desc' },
+                    select: { date: true },
+                  })
+                )?.date
+              : undefined;
+            if (snapshotDate) {
+              const snapshots = await prisma.teamRankingSnapshot.findMany({
+                where: { date: snapshotDate, teamId: { in: teamIds } },
+                select: { teamId: true, rank: true },
+              });
+              return Object.fromEntries(snapshots.map((item) => [item.teamId, item.rank]));
+            }
+
+            const ranks = new Map<number, number>();
+            let previousElo: number | null = null;
+            let rank = 0;
+            const rankedTeams = await prisma.team.findMany({
+              orderBy: { elo: 'desc' },
+              select: { id: true, elo: true },
+            });
+            rankedTeams.forEach((team, index) => {
+              if (team.elo !== previousElo) rank = index + 1;
+              previousElo = team.elo;
+              if (teamIds.includes(team.id)) ranks.set(team.id, rank);
+            });
+            return Object.fromEntries(ranks);
+          },
         },
       },
       query: {

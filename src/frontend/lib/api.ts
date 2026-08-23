@@ -622,6 +622,14 @@ export default {
   team: {
     worldRanking: (id: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.TEAM_RANKING, id) as Promise<number>,
+    worldRankingHistory: (id: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.TEAM_RANKING_HISTORY, id) as Promise<
+        Array<{ date: Date; rank: number }>
+      >,
+    competitionWorldRankings: (competitionId: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.TEAM_COMPETITION_RANKINGS, competitionId) as Promise<
+        Record<number, number>
+      >,
     transfers: <T = typeof Eagers.transfer>(id: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.TEAM_TRANSFERS, id) as Promise<
         Array<Prisma.TransferGetPayload<T>>

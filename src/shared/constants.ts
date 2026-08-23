@@ -400,6 +400,8 @@ export enum IPCRoute {
   SQUAD_UPDATE = '/squad/update',
   SQUAD_RELEASE_PLAYER = '/squad/release/player',
   TEAM_RANKING = '/team/ranking',
+  TEAM_RANKING_HISTORY = '/team/ranking/history',
+  TEAM_COMPETITION_RANKINGS = '/team/competition-rankings',
   TEAM_TRANSFERS = '/team/transfers',
   TEAMS_ALL = '/teams/all',
   TEAMS_CREATE = '/teams/create',

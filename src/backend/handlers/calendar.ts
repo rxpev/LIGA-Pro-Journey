@@ -3,7 +3,17 @@
  */
 
 import { ipcMain } from 'electron';
-import { add, addDays, differenceInDays, endOfDay, format, getISODay, startOfDay } from 'date-fns';
+import {
+  add,
+  addDays,
+  differenceInDays,
+  endOfDay,
+  endOfMonth,
+  format,
+  getISODay,
+  isSameDay,
+  startOfDay,
+} from 'date-fns';
 import { Prisma, Calendar } from '@prisma/client';
 import {
   DatabaseClient,
@@ -226,6 +236,24 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   if (status === Engine.LoopStatus.TERMINATED) {
     Engine.Runtime.Instance.log.info('Stopping...');
     return Promise.resolve();
+  }
+
+  // Store a stable monthly ranking table after all results for the final day
+  // have been applied, before moving the in-game date into the next month.
+  if (isSameDay(profile.date, endOfMonth(profile.date))) {
+    const snapshotDate = endOfDay(profile.date);
+    const rankings = await DatabaseClient.prisma.$queryRaw<Array<{ teamId: number; rank: number }>>`
+      SELECT id AS teamId, RANK() OVER (ORDER BY elo DESC) AS rank FROM "Team"
+    `;
+    await Promise.all(
+      rankings.map((item) =>
+        DatabaseClient.prisma.teamRankingSnapshot.upsert({
+          where: { teamId_date: { teamId: item.teamId, date: snapshotDate } },
+          create: { teamId: item.teamId, rank: Number(item.rank), date: snapshotDate },
+          update: { rank: Number(item.rank) },
+        }),
+      ),
+    );
   }
 
   // Advance day

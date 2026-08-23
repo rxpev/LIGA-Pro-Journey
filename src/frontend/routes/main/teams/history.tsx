@@ -6,6 +6,7 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Chart, ChartConfiguration } from 'chart.js/auto';
+import { format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
@@ -134,6 +135,55 @@ export default function () {
     React.useState<Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>>();
   const [selectedSeasonId, setSelectedSeasonId] = React.useState<number>(-1);
   const refCanvas = React.useRef<HTMLCanvasElement>();
+  const rankingCanvas = React.useRef<HTMLCanvasElement>(null);
+  const [rankingHistory, setRankingHistory] = React.useState<Array<{ date: Date; rank: number }>>(
+    [],
+  );
+  const [worldRanking, setWorldRanking] = React.useState(0);
+
+  React.useEffect(() => {
+    api.team.worldRankingHistory(team.id).then(setRankingHistory);
+    api.team.worldRanking(team.id).then(setWorldRanking);
+  }, [team.id]);
+
+  React.useEffect(() => {
+    if (!rankingCanvas.current || !rankingHistory.length) return;
+    const highestRank = Math.max(...rankingHistory.map((snapshot) => snapshot.rank), 1);
+    const chart = new Chart(rankingCanvas.current, {
+      type: 'line',
+      data: {
+        labels: rankingHistory.map((snapshot) => format(new Date(snapshot.date), 'MMM yy')),
+        datasets: [
+          {
+            data: rankingHistory.map((snapshot) => snapshot.rank),
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.16)',
+            borderWidth: 2,
+            clip: 3,
+            fill: true,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            tension: 0.15,
+          },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(143, 184, 223, 0.12)' }, ticks: { color: '#6f8294' } },
+          y: {
+            reverse: true,
+            min: 1,
+            max: Math.max(10, Math.ceil(highestRank / 10) * 10),
+            grid: { color: 'rgba(143, 184, 223, 0.12)' },
+            ticks: { color: '#6f8294', precision: 0 },
+          },
+        },
+      },
+    });
+    return () => chart.destroy();
+  }, [rankingHistory]);
 
   // grab team competition results
   React.useEffect(() => {
@@ -292,11 +342,32 @@ export default function () {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-y-hidden!">
+      <article className="border-base-content/10 bg-base-200/45 shrink-0 border-b p-4">
+        <header className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold">World ranking development</h2>
+            <p className="text-muted text-xs">Month-end world ranking snapshots</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-black">#{worldRanking || '-'}</p>
+            <p className="text-muted text-xs">Current ranking</p>
+          </div>
+        </header>
+        {rankingHistory.length ? (
+          <figure className="h-64">
+            <canvas ref={rankingCanvas} />
+          </figure>
+        ) : (
+          <p className="text-muted py-12 text-center text-sm">
+            Ranking history will appear after the first month-end snapshot.
+          </p>
+        )}
+      </article>
       <article className="flex h-2/5 min-h-0 flex-col overflow-hidden">
         <header className="heading prose max-w-none border-t-0!">
           <h2>{t('main.teams.honors')}</h2>
         </header>
-        <aside className="grid h-0 flex-grow grid-cols-8 content-start place-items-baseline gap-4 overflow-y-auto p-4">
+        <aside className="grid h-0 flex-grow grid-cols-8 place-items-baseline content-start gap-4 overflow-y-auto p-4">
           {!Object.keys(honors).length && (
             <footer className="col-span-8 flex h-full w-full flex-col items-center justify-center text-center">
               <p>{t('main.teams.noHonorsTitle')}</p>

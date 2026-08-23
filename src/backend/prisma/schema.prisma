@@ -89,6 +89,19 @@ model CompetitionToTeam {
   teamId        Int?
 }
 
+/// A team's position in the global Elo table at the close of a calendar month.
+/// These immutable snapshots power ranking history and historical event displays.
+model TeamRankingSnapshot {
+  id     Int      @id @default(autoincrement())
+  date   DateTime
+  rank   Int
+  team   Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId Int
+
+  @@unique([teamId, date])
+  @@index([date])
+}
+
 model CompetitionMvp {
   id             Int      @id @default(autoincrement())
   score          Float
@@ -478,17 +491,18 @@ model Team {
   elo      Int?    @default(1000)
 
   // has many
-  competitions    CompetitionToTeam[]
-  games           GameToTeam[]
-  matches         MatchToTeam[]
-  players         Player[]
-  personas        Persona[]
-  shortlist       Shortlist[]
-  transfersIn     Transfer[]          @relation("to")
-  transfersOut    Transfer[]          @relation("from")
-  careerStints    CareerStint[]
-  vetoes          MatchVeto[]
-  competitionMvps CompetitionMvp[]
+  competitions     CompetitionToTeam[]
+  games            GameToTeam[]
+  matches          MatchToTeam[]
+  players          Player[]
+  personas         Persona[]
+  shortlist        Shortlist[]
+  transfersIn      Transfer[]            @relation("to")
+  transfersOut     Transfer[]            @relation("from")
+  careerStints     CareerStint[]
+  vetoes           MatchVeto[]
+  competitionMvps  CompetitionMvp[]
+  rankingSnapshots TeamRankingSnapshot[]
 
   // has one
   profile Profile?

@@ -10,6 +10,7 @@ import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Image, TeamBlazon } from '@liga/frontend/components';
+import { format, subMonths } from 'date-fns';
 import {
   FaArrowDown,
   FaArrowUp,
@@ -222,10 +223,13 @@ function TeamHonorStrip(props: { honors: TeamHonor[] }) {
             <Image
               alt={honor.title}
               className="max-h-10 max-w-14 object-contain drop-shadow"
-              src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                location: honor.location,
-                organizer: honor.organizer,
-              })}
+              src={
+                Util.getCompetitionHonorThumbnail(honor) ||
+                Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                  location: honor.location,
+                  organizer: honor.organizer,
+                })
+              }
             />
             {honor.isMajor && <MajorHonorBadge />}
           </Link>
@@ -379,6 +383,11 @@ function TeamRightRail(props: {
   leagueHistory: Awaited<ReturnType<typeof api.competitions.all<typeof Eagers.competition>>>;
 }) {
   const chartRef = React.useRef<HTMLCanvasElement>(null);
+  const rankingChartRef = React.useRef<HTMLCanvasElement>(null);
+  const [rankingHistory, setRankingHistory] = React.useState<Array<{ date: Date; rank: number }>>(
+    [],
+  );
+  const [rankingRange, setRankingRange] = React.useState<'year' | 'all'>('year');
   const recentMatches = props.matches
     .filter((match) => match.competitors.some((competitor) => competitor.teamId !== props.team.id))
     .slice(0, 5);
@@ -390,6 +399,70 @@ function TeamRightRail(props: {
   const hasMovement =
     props.team.elo < 2000 && recentMatches.length > 0 && wins !== recentMatches.length - wins;
   const improving = hasMovement && wins > recentMatches.length - wins;
+
+  React.useEffect(() => {
+    api.team.worldRankingHistory(props.team.id).then(setRankingHistory);
+  }, [props.team.id]);
+
+  const displayedRankingHistory = React.useMemo(() => {
+    if (rankingRange === 'all' || !rankingHistory.length) return rankingHistory;
+    const latestDate = new Date(rankingHistory[rankingHistory.length - 1].date);
+    const cutoff = subMonths(latestDate, 12);
+    return rankingHistory.filter((snapshot) => new Date(snapshot.date) >= cutoff);
+  }, [rankingHistory, rankingRange]);
+  const peakRanking = displayedRankingHistory.length
+    ? Math.min(...displayedRankingHistory.map((snapshot) => snapshot.rank))
+    : null;
+
+  React.useEffect(() => {
+    if (!rankingChartRef.current || !displayedRankingHistory.length) return;
+    const largestRank = Math.max(...displayedRankingHistory.map((snapshot) => snapshot.rank), 1);
+    const chart = new Chart(rankingChartRef.current, {
+      type: 'line',
+      data: {
+        labels: displayedRankingHistory.map((snapshot) =>
+          format(new Date(snapshot.date), 'MMM yy'),
+        ),
+        datasets: [
+          {
+            data: displayedRankingHistory.map((snapshot) => snapshot.rank),
+            borderColor: '#3b9ee5',
+            borderWidth: 2,
+            clip: 3,
+            fill: false,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            tension: 0.12,
+          },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => `#${context.parsed.y}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(143, 184, 223, 0.12)' },
+            ticks: { color: '#6f8294', maxRotation: 0 },
+          },
+          y: {
+            reverse: true,
+            min: 1,
+            max: Math.max(10, Math.ceil(largestRank / 10) * 10),
+            grid: { color: 'rgba(143, 184, 223, 0.12)' },
+            ticks: { color: '#6f8294', precision: 0 },
+          },
+        },
+      },
+    });
+    return () => chart.destroy();
+  }, [displayedRankingHistory]);
 
   React.useEffect(() => {
     if (!chartRef.current) return;
@@ -469,12 +542,12 @@ function TeamRightRail(props: {
   }, [props.leagueHistory]);
 
   return (
-    <aside className="min-w-0 overflow-y-auto p-4">
-      <section className="border-base-content/10 bg-base-200/45 mb-3 border">
-        <header className="border-base-content/10 flex items-center justify-between border-b px-4 py-3">
+    <aside className="min-w-0 overflow-hidden p-3">
+      <section className="border-base-content/10 bg-base-200/45 mb-2 border">
+        <header className="border-base-content/10 flex items-center justify-between border-b px-3 py-2">
           <h2 className="text-base font-bold">World Ranking</h2>
         </header>
-        <div className="divide-base-content/10 grid grid-cols-2 divide-x px-4 py-5">
+        <div className="divide-base-content/10 grid grid-cols-2 divide-x px-3 py-3">
           <div>
             <p className="text-3xl font-black">#{props.worldRanking || '-'}</p>
             <p className="text-muted text-xs">World ranking</p>
@@ -498,10 +571,45 @@ function TeamRightRail(props: {
             <p className="text-muted text-xs">Points</p>
           </div>
         </div>
+        <div className="border-base-content/10 border-t px-3 pt-2 pb-2">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">History</h3>
+              <p className="text-muted text-xs">
+                {peakRanking ? `Peak #${peakRanking}` : 'Month-end snapshots'}
+              </p>
+            </div>
+            <div className="join">
+              <button
+                type="button"
+                className={cx('btn btn-xs join-item', rankingRange === 'year' && 'btn-active')}
+                onClick={() => setRankingRange('year')}
+              >
+                Last year
+              </button>
+              <button
+                type="button"
+                className={cx('btn btn-xs join-item', rankingRange === 'all' && 'btn-active')}
+                onClick={() => setRankingRange('all')}
+              >
+                All time
+              </button>
+            </div>
+          </div>
+          {displayedRankingHistory.length ? (
+            <figure className="h-64">
+              <canvas ref={rankingChartRef} />
+            </figure>
+          ) : (
+            <p className="text-muted py-10 text-center text-xs">
+              History is recorded at each month end.
+            </p>
+          )}
+        </div>
       </section>
 
-      <section className="border-base-content/10 bg-base-200/45 mb-3 border">
-        <header className="border-base-content/10 border-b px-4 py-3">
+      <section className="border-base-content/10 bg-base-200/45 mb-2 border">
+        <header className="border-base-content/10 border-b px-3 py-2">
           <h2 className="text-base font-bold">Last 5 Matches</h2>
         </header>
         <div className="divide-base-content/10 grid grid-cols-5 divide-x">
@@ -517,7 +625,7 @@ function TeamRightRail(props: {
                 key={`${match.id}__rail_match`}
                 className="flex min-w-0 flex-col items-center gap-1 px-2 py-5 text-center"
               >
-                <TeamBlazon src={opponent?.team.blazon} className="size-12 shrink-0" />
+                <TeamBlazon src={opponent?.team.blazon} className="size-14 shrink-0" />
                 <span className="w-full truncate text-xs">{opponent?.team.name || 'BYE'}</span>
                 <span
                   className={cx(
@@ -537,10 +645,10 @@ function TeamRightRail(props: {
       </section>
 
       <section className="border-base-content/10 bg-base-200/45 border">
-        <header className="border-base-content/10 border-b px-4 py-3">
+        <header className="border-base-content/10 border-b px-3 py-2">
           <h2 className="text-base font-bold">League History</h2>
         </header>
-        <div className="h-56 p-3">
+        <div className="h-72 p-2">
           {props.leagueHistory.length ? (
             <canvas ref={chartRef} />
           ) : (

@@ -1318,6 +1318,16 @@ export default function () {
     };
   }, [competition.id, competition.season]);
 
+  React.useEffect(() => {
+    let isCurrent = true;
+    api.team.competitionWorldRankings(competition.id).then((rankings) => {
+      if (isCurrent) setWorldRankingByTeamId(rankings);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [competition.id]);
+
   const baseParticipants = React.useMemo(() => {
     const teamMap = new Map<number, (typeof competition.competitors)[number]['team']>();
     const isIemGroupStage = IEM_GROUP_TIER_SLUGS.has(competition.tier.slug);
@@ -1445,12 +1455,13 @@ export default function () {
         .sort((a, b) => a.position - b.position || a.seed - b.seed);
 
       return Array.from({ length: end - start + 1 }, (_, index) => ({
-        source: ESL_CHALLENGER_PLACEHOLDER_SOURCES[
-          ESL_CHALLENGER_FEEDER_RULES.slice(0, ruleIndex).reduce(
-            (count, rule) => count + rule.end - rule.start + 1,
-            0,
-          ) + index
-        ],
+        source:
+          ESL_CHALLENGER_PLACEHOLDER_SOURCES[
+            ESL_CHALLENGER_FEEDER_RULES.slice(0, ruleIndex).reduce(
+              (count, rule) => count + rule.end - rule.start + 1,
+              0,
+            ) + index
+          ],
         team: qualifiedTeams[index]?.team,
       }));
     });
@@ -1473,12 +1484,13 @@ export default function () {
         .sort((a, b) => a.position - b.position || a.seed - b.seed);
 
       return Array.from({ length: end - start + 1 }, (_, index) => ({
-        source: EPL_QUALIFIER_PLACEHOLDER_SOURCES[
-          EPL_QUALIFIER_FEEDER_RULES.slice(0, ruleIndex).reduce(
-            (count, rule) => count + rule.end - rule.start + 1,
-            0,
-          ) + index
-        ],
+        source:
+          EPL_QUALIFIER_PLACEHOLDER_SOURCES[
+            EPL_QUALIFIER_FEEDER_RULES.slice(0, ruleIndex).reduce(
+              (count, rule) => count + rule.end - rule.start + 1,
+              0,
+            ) + index
+          ],
         team: qualifiedTeams[index]?.team,
       }));
     });
@@ -1502,12 +1514,13 @@ export default function () {
           .sort((a, b) => a.position - b.position || a.seed - b.seed);
 
         return Array.from({ length: end - start + 1 }, (_, index) => ({
-          source: CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES[
-            CCT_GLOBAL_FINALS_FEEDER_RULES.slice(0, ruleIndex).reduce(
-              (count, rule) => count + rule.end - rule.start + 1,
-              0,
-            ) + index
-          ],
+          source:
+            CCT_GLOBAL_FINALS_PLACEHOLDER_SOURCES[
+              CCT_GLOBAL_FINALS_FEEDER_RULES.slice(0, ruleIndex).reduce(
+                (count, rule) => count + rule.end - rule.start + 1,
+                0,
+              ) + index
+            ],
           team: qualifiedTeams[index]?.team,
         }));
       },
@@ -1557,11 +1570,11 @@ export default function () {
       setWorldRankingLoadingByTeamId((prev) => ({ ...prev, [teamId]: true }));
 
       api.team
-        .worldRanking(teamId)
-        .then((rank) => setWorldRankingByTeamId((prev) => ({ ...prev, [teamId]: rank })))
+        .competitionWorldRankings(competition.id)
+        .then((rankings) => setWorldRankingByTeamId((prev) => ({ ...prev, ...rankings })))
         .finally(() => setWorldRankingLoadingByTeamId((prev) => ({ ...prev, [teamId]: false })));
     },
-    [worldRankingByTeamId, worldRankingLoadingByTeamId],
+    [competition.id, worldRankingByTeamId, worldRankingLoadingByTeamId],
   );
 
   /**
@@ -1930,7 +1943,10 @@ export default function () {
               onMouseLeave={() => setHoveredTeamId(null)}
             >
               {showTopLeftRanking && (rankingLoading || ranking != null) && (
-                <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute top-3 left-3">
+                <span
+                  className="badge badge-sm border-base-content/10 bg-base-300/70 absolute top-3 left-3"
+                  title="World ranking at event start"
+                >
                   {rankingLoading ? '…' : `#${ranking}`}
                 </span>
               )}
@@ -1994,7 +2010,10 @@ export default function () {
               </p>
 
               {showBottomLeftRanking && (rankingLoading || ranking != null) && (
-                <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute bottom-3 left-3">
+                <span
+                  className="badge badge-sm border-base-content/10 bg-base-300/70 absolute bottom-3 left-3"
+                  title="World ranking at event start"
+                >
                   {rankingLoading ? '…' : `#${ranking}`}
                 </span>
               )}
@@ -2002,9 +2021,7 @@ export default function () {
           );
         })}
         {isPreTournamentEpl &&
-          sortPreConfirmedMajorSlots(eplQualifierParticipantSlots).map(
-            renderPreConfirmedMajorCard,
-          )}
+          sortPreConfirmedMajorSlots(eplQualifierParticipantSlots).map(renderPreConfirmedMajorCard)}
       </div>
     </section>
   );

@@ -1215,8 +1215,12 @@ export default function () {
     ? majorChampionsCompetition || competition
     : competition;
   const prizePool = React.useMemo(() => Constants.PrizePool[prizePoolTier], [prizePoolTier]);
-  const displayedPrizePool = isEslProLeagueGroupStage
-    ? Constants.PrizePool[Constants.TierSlug.LEAGUE_PRO_PLAYOFFS]
+  const hasLinkedPlayoffPrizePool = Boolean(
+    linkedPlayoffTier &&
+      (eseaFormat || isCctSeries || isEslChallengerGroupStage || isEslProLeagueGroupStage),
+  );
+  const displayedPrizePool = hasLinkedPlayoffPrizePool
+    ? Constants.PrizePool[linkedPlayoffTier!]
     : prizePool;
   const prizePoolRows = React.useMemo(
     () =>
@@ -1677,7 +1681,7 @@ export default function () {
       const positionedCompetitors = [...(eseaPlayoffCompetition?.competitors || [])]
         .filter((competitor) => Boolean(competitor.team))
         .sort((a, b) => a.position - b.position);
-      const playoffPlacements = new Map<number, CompetitionCompetitor>();
+      const playoffPlacementByCompetitorId = new Map<number, number>();
 
       if (eseaPlayoffMatches[0]?.competition.tournament) {
         try {
@@ -1688,7 +1692,7 @@ export default function () {
             const placement = standing.gpos || standing.pos;
             const competitor = positionedCompetitors.find((entry) => entry.seed === standing.seed);
             if (placement && competitor) {
-              playoffPlacements.set(placement, competitor);
+              playoffPlacementByCompetitorId.set(competitor.id, placement);
             }
           });
         } catch {
@@ -1696,13 +1700,13 @@ export default function () {
         }
       }
       const claimedPlayoffCompetitorIds = new Set<number>();
-      const getPlayoffCompetitor = (placement: number) => {
-        const positioned =
-          playoffPlacements.get(placement) ||
-          positionedCompetitors.find(
-            (competitor) =>
-              competitor.position === placement && !claimedPlayoffCompetitorIds.has(competitor.id),
-          );
+      const getPlayoffCompetitor = (start: number, end: number) => {
+        const positioned = positionedCompetitors.find((competitor) => {
+          if (claimedPlayoffCompetitorIds.has(competitor.id)) return false;
+
+          const placement = playoffPlacementByCompetitorId.get(competitor.id) ?? competitor.position;
+          return placement >= start && placement <= end;
+        });
 
         if (
           positioned &&
@@ -1745,7 +1749,7 @@ export default function () {
       const playoffCards = getKnockoutPlacementRanges(linkedBracketSize).flatMap(([start, end]) =>
         Array.from({ length: end - start + 1 }, (_, index) => {
           const placement = start + index;
-          const competitor = getPlayoffCompetitor(placement);
+          const competitor = getPlayoffCompetitor(start, end);
           const prize = playoffPrizePool?.distribution?.[placement - 1]
             ? Util.formatCurrency(
                 playoffPrizePool.total *
@@ -1858,7 +1862,7 @@ export default function () {
       const playoffCompetitors = showPlayoffPlacements
         ? eseaPlayoffCompetition?.competitors || []
         : [];
-      const playoffPlacements = new Map<number, CompetitionCompetitor>();
+      const playoffPlacementByCompetitorId = new Map<number, number>();
 
       if (showPlayoffPlacements && eseaPlayoffMatches[0]?.competition.tournament) {
         try {
@@ -1871,7 +1875,7 @@ export default function () {
             const competitor = playoffCompetitors.find((entry) => entry.seed === standing.seed);
 
             if (placement && competitor) {
-              playoffPlacements.set(placement, competitor);
+              playoffPlacementByCompetitorId.set(competitor.id, placement);
             }
           });
         } catch {
@@ -1879,10 +1883,13 @@ export default function () {
         }
       }
       const claimedPlayoffCompetitorIds = new Set<number>();
-      const getPlayoffCompetitor = (placement: number) => {
-        const positionedCompetitor =
-          playoffPlacements.get(placement) ||
-          playoffCompetitors.find((competitor) => competitor.position === placement);
+      const getPlayoffCompetitor = (start: number, end: number) => {
+        const positionedCompetitor = playoffCompetitors.find((competitor) => {
+          if (claimedPlayoffCompetitorIds.has(competitor.id)) return false;
+
+          const placement = playoffPlacementByCompetitorId.get(competitor.id) ?? competitor.position;
+          return placement >= start && placement <= end;
+        });
 
         if (
           positionedCompetitor &&
@@ -1925,7 +1932,7 @@ export default function () {
         return Array.from({ length: end - start + 1 }, (_, index) => {
           const placement = start + index;
           return {
-            competitor: getPlayoffCompetitor(placement),
+            competitor: getPlayoffCompetitor(start, end),
             detail: [qualification, amount].filter(Boolean).join(' + '),
             label: getPlacementLabel(start, end),
           };
@@ -1974,6 +1981,14 @@ export default function () {
       const leagueStandingCompetitors = [...competition.competitors]
         .filter((competitor) => Boolean(competitor.team))
         .sort(sortByLeagueStanding);
+      const playoffTeamIds = new Set(
+        playoffCompetitors
+          .map((competitor) => competitor.teamId)
+          .filter((teamId): teamId is number => teamId != null),
+      );
+      const nonPlayoffLeagueCompetitors = leagueStandingCompetitors.filter(
+        (competitor) => !playoffTeamIds.has(competitor.teamId),
+      );
 
       if (leagueStageStart <= leagueStageEnd) {
         if (hasSingleLeagueGroup) {
@@ -1987,7 +2002,7 @@ export default function () {
 
               return {
                 competitor: hasEseaPlayoffsStarted
-                  ? leagueStandingCompetitors[placement - 1]
+                  ? nonPlayoffLeagueCompetitors[index]
                   : undefined,
                 detail: isRelegated ? 'Relegation' : '',
                 label: getPlacementLabel(placement, placement),
@@ -1995,14 +2010,21 @@ export default function () {
             }),
           );
         } else {
-          const groupStandings = groupKeys.map((groupKey) =>
-            (groups[groupKey] || [])
+          const groupStandings = groupKeys.map((groupKey) => {
+            const standings = (groups[groupKey] || [])
               .filter((competitor) => Boolean(competitor.team))
-              .sort(sortByLeagueStanding),
-          );
+              .sort(sortByLeagueStanding);
+
+            return standings.filter((competitor) => !playoffTeamIds.has(competitor.teamId));
+          });
           const groupCount = groupStandings.length;
           const playoffSlotsPerGroup = Math.ceil(eseaBracketSize / groupCount);
-          const lastGroupPlacement = Math.max(...groupStandings.map((standing) => standing.length));
+          const lastGroupPlacement = Math.max(
+            ...groupKeys.map(
+              (groupKey) =>
+                (groups[groupKey] || []).filter((competitor) => Boolean(competitor.team)).length,
+            ),
+          );
           const [, , groupRelegationZone] = Util.getTierZonesByGroup(
             tierSlug,
             competition.federation.slug as Constants.FederationSlug,
@@ -2025,7 +2047,9 @@ export default function () {
 
             groupStandings.forEach((standing) => {
               playoffCards.push({
-                competitor: hasEseaPlayoffsStarted ? standing[groupPlacement - 1] : undefined,
+                competitor: hasEseaPlayoffsStarted
+                  ? standing[groupPlacement - playoffSlotsPerGroup - 1]
+                  : undefined,
                 detail: isRelegated ? 'Relegation' : '',
                 label: getPlacementLabel(overallStart, overallEnd),
               });

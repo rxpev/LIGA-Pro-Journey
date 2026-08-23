@@ -3,17 +3,19 @@
  *
  * @module
  */
-import log from "electron-log";
-import { ipcMain } from "electron";
-import { Prisma } from "@prisma/client";
-import { CompetitionMvps, DatabaseClient, DiscordPresence, disconnectActiveDatabaseWithIntegrity } from "@liga/backend/lib";
-import { Util, Constants, Eagers } from "@liga/shared";
-import { verifyFaceitEloIntegrity } from "@liga/backend/lib/faceit-elo-integrity";
+import log from 'electron-log';
+import { ipcMain } from 'electron';
+import { Prisma } from '@prisma/client';
 import {
-  removeLegacySaveIntegrity,
-  verifySaveIntegrity,
-} from "@liga/backend/lib/save-integrity";
-import { isSaveIntegrityDevModeEnabled } from "@liga/backend/lib/save-integrity-dev-mode";
+  CompetitionMvps,
+  DatabaseClient,
+  DiscordPresence,
+  disconnectActiveDatabaseWithIntegrity,
+} from '@liga/backend/lib';
+import { Util, Constants, Eagers } from '@liga/shared';
+import { verifyFaceitEloIntegrity } from '@liga/backend/lib/faceit-elo-integrity';
+import { removeLegacySaveIntegrity, verifySaveIntegrity } from '@liga/backend/lib/save-integrity';
+import { isSaveIntegrityDevModeEnabled } from '@liga/backend/lib/save-integrity-dev-mode';
 
 export default function registerDatabaseHandlers() {
   // CONNECT
@@ -36,7 +38,10 @@ export default function registerDatabaseHandlers() {
       const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
 
       if (saveIntegrityDevMode) {
-        log.warn('Save integrity development mode is enabled; skipping verification for %s.', DatabaseClient.path);
+        log.warn(
+          'Save integrity development mode is enabled; skipping verification for %s.',
+          DatabaseClient.path,
+        );
       }
 
       if (!saveIntegrityDevMode) {
@@ -109,7 +114,6 @@ export default function registerDatabaseHandlers() {
     return disconnectActiveDatabaseWithIntegrity();
   });
 
-
   ipcMain.handle(Constants.IPCRoute.DATABASE_CURRENT, async () => {
     const dbPath = DatabaseClient.path || '';
     const match = dbPath.match(/save_(\d+)\.db$/);
@@ -121,7 +125,7 @@ export default function registerDatabaseHandlers() {
     async (_, query: Prisma.CompetitionFindManyArgs) => {
       const prisma = await DatabaseClient.connect();
       return prisma.competition.findMany(query);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -129,7 +133,7 @@ export default function registerDatabaseHandlers() {
     async (_, query: Prisma.CompetitionFindFirstArgs) => {
       const prisma = await DatabaseClient.connect();
       return prisma.competition.findFirst(query);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -137,7 +141,7 @@ export default function registerDatabaseHandlers() {
     async (_, options: { competitionId?: number; playerId?: number } = {}) => {
       await DatabaseClient.connect();
       return CompetitionMvps.findCompetitionMvps(options);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -165,7 +169,8 @@ export default function registerDatabaseHandlers() {
       }
 
       let competitionStart = competition.matches[0]?.date;
-      let competitionEnd = competition.matches[competition.matches.length - 1]?.date ?? competitionStart;
+      let competitionEnd =
+        competition.matches[competition.matches.length - 1]?.date ?? competitionStart;
 
       // Fallback for legacy competitions that have no match rows:
       // infer season window from all matches tied to the same season.
@@ -294,22 +299,28 @@ export default function registerDatabaseHandlers() {
         return Array.from(byPlayer.values());
       }
 
-      const byPlayerId = new Map<number, {
-        player: {
-          id: number;
-          name: string;
-          country: {
-            code: string;
+      const byPlayerId = new Map<
+        number,
+        {
+          player: {
+            id: number;
+            name: string;
+            country: {
+              code: string;
+            };
           };
-        };
-        starterEvidence: number;
-        overlapMs: number;
-        firstSeen: number;
-      }>();
+          starterEvidence: number;
+          overlapMs: number;
+          firstSeen: number;
+        }
+      >();
 
       for (const stint of overlappingStints) {
         const overlapStart = Math.max(stint.startedAt.getTime(), competitionStart.getTime());
-        const overlapEnd = Math.min((stint.endedAt ?? competitionEnd).getTime(), competitionEnd.getTime());
+        const overlapEnd = Math.min(
+          (stint.endedAt ?? competitionEnd).getTime(),
+          competitionEnd.getTime(),
+        );
         const overlapMs = Math.max(0, overlapEnd - overlapStart);
 
         const current = byPlayerId.get(stint.playerId);
@@ -329,45 +340,44 @@ export default function registerDatabaseHandlers() {
       }
 
       return Array.from(byPlayerId.values())
-        .sort((a, b) =>
-          b.starterEvidence - a.starterEvidence
-          || b.overlapMs - a.overlapMs
-          || a.firstSeen - b.firstSeen
-          || a.player.name.localeCompare(b.player.name))
+        .sort(
+          (a, b) =>
+            b.starterEvidence - a.starterEvidence ||
+            b.overlapMs - a.overlapMs ||
+            a.firstSeen - b.firstSeen ||
+            a.player.name.localeCompare(b.player.name),
+        )
         .slice(0, Constants.GameSettings.SQUAD_STARTERS_NUM)
         .map((entry) => entry.player);
-    }
+    },
   );
 
-  ipcMain.handle(
-    Constants.IPCRoute.COMPETITIONS_WINNERS,
-    async (_, id: string) => {
-      const prisma = await DatabaseClient.connect();
+  ipcMain.handle(Constants.IPCRoute.COMPETITIONS_WINNERS, async (_, id: string) => {
+    const prisma = await DatabaseClient.connect();
 
-      const competition = await prisma.competition.findFirst({
-        where: { id: Number(id) },
-      });
+    const competition = await prisma.competition.findFirst({
+      where: { id: Number(id) },
+    });
 
-      if (!competition) {
-        return [];
-      }
-
-      const competitions = await prisma.competition.findMany({
-        include: Eagers.competition.include,
-        orderBy: { season: "desc" },
-        where: {
-          tierId: competition.tierId,
-          federationId: competition.federationId,
-          season: { lt: competition.season },
-          status: Constants.CompetitionStatus.COMPLETED,
-        },
-      });
-
-      return competitions
-        .map((c) => c.competitors.sort((a, b) => a.position - b.position)[0])
-        .filter((winner) => Boolean(winner?.team));
+    if (!competition) {
+      return [];
     }
-  );
+
+    const competitions = await prisma.competition.findMany({
+      include: Eagers.competition.include,
+      orderBy: { season: 'desc' },
+      where: {
+        tierId: competition.tierId,
+        federationId: competition.federationId,
+        season: { lt: competition.season },
+        status: Constants.CompetitionStatus.COMPLETED,
+      },
+    });
+
+    return competitions
+      .map((c) => c.competitors.sort((a, b) => a.position - b.position)[0])
+      .filter((winner) => Boolean(winner?.team));
+  });
 
   ipcMain.handle(Constants.IPCRoute.CONTINENTS_ALL, async (_, query) => {
     const prisma = await DatabaseClient.connect();
@@ -428,6 +438,16 @@ export default function registerDatabaseHandlers() {
   ipcMain.handle(Constants.IPCRoute.TEAM_RANKING, async (_, id) => {
     const prisma = await DatabaseClient.connect();
     return prisma.team.getWorldRanking(id);
+  });
+
+  ipcMain.handle(Constants.IPCRoute.TEAM_RANKING_HISTORY, async (_, id: number) => {
+    const prisma = await DatabaseClient.connect();
+    return prisma.team.getWorldRankingHistory(id);
+  });
+
+  ipcMain.handle(Constants.IPCRoute.TEAM_COMPETITION_RANKINGS, async (_, competitionId: number) => {
+    const prisma = await DatabaseClient.connect();
+    return prisma.team.getCompetitionWorldRankings(competitionId);
   });
 
   ipcMain.handle(Constants.IPCRoute.TEAM_TRANSFERS, async (_, id: number) => {
