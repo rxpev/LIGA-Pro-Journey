@@ -65,6 +65,14 @@ function getPlacementLabel(position: number, count: number) {
 }
 
 function getMajorPlacementLabel(tierSlug: string, position: number) {
+  if (tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) {
+    // The Challengers standings are stage-local. Teams that do not advance to
+    // Legends occupy the final eight places of the 24-team Major.
+    if (position >= 9 && position <= 11) return '17-19th';
+    if (position >= 12 && position <= 14) return '20-22nd';
+    if (position >= 15 && position <= 16) return '23-24th';
+  }
+
   if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) {
     if (position <= 2) return Util.toOrdinalSuffix(position);
     if (position <= 4) return '3-4th';
@@ -234,6 +242,27 @@ function getEventPlacement(competitions: TeamCompetition[], teamId: number) {
     );
 
     return placement < 0 ? null : getPlacementRangeLabel(placement + 1, IEM_PLACEMENT_RANGES);
+  }
+
+  if (leagueSlug === Constants.LeagueSlug.ESPORTS_MAJOR) {
+    // The international Major group contains Legends and Champions. A team
+    // eliminated in Legends is absent from the Champions competitors, so use
+    // its last completed stage rather than the event's latest stage.
+    const teamFinalCompetition = [...competitions]
+      .filter((competition) => competition.competitors.some((item) => item.teamId === teamId))
+      .sort(
+        (a, b) => getCompetitionStageOrder(b.tier.slug) - getCompetitionStageOrder(a.tier.slug),
+      )[0];
+    const competitor = teamFinalCompetition?.competitors.find((item) => item.teamId === teamId);
+
+    return competitor?.position
+      ? getMajorPlacementLabel(teamFinalCompetition.tier.slug, competitor.position) ||
+          getPlacementLabel(
+            competitor.position,
+            teamFinalCompetition.competitors.filter((item) => item.position === competitor.position)
+              .length || 1,
+          )
+      : null;
   }
 
   const competitor = finalCompetition?.competitors.find((item) => item.teamId === teamId);
