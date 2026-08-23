@@ -26,6 +26,24 @@ const formDefaultValues: AppState['windowData'][Constants.WindowIdentifier.Landi
   countryId: undefined,
 };
 
+const countrySelectorContinentOrder: Record<string, number> = {
+  EU: 0,
+  NA: 1,
+  SA: 2,
+  AS: 3,
+  OC: 4,
+  AF: 5,
+};
+
+const countrySelectorExcludedRegionCodes = new Set(['eu', 'na', 'sa', 'as', 'xsa', 'other']);
+const countrySelectorExcludedRegionNames = new Set([
+  'Europe',
+  'North America',
+  'South America',
+  'Asia',
+  'Other',
+]);
+
 /**
  * Exports this module.
  *
@@ -48,24 +66,27 @@ export default function () {
 
   // load country data
   const countrySelectorData = React.useMemo(() => {
-    return state.continents.map((continent) => ({
-      label: continent.name,
-      options: continent.countries.map((country) => ({
-        ...country,
-        value: country.id,
-        label: country.name,
-      })),
-    }));
+    return [...state.continents]
+      .sort(
+        (left, right) =>
+          (countrySelectorContinentOrder[left.code] ?? Number.MAX_SAFE_INTEGER) -
+          (countrySelectorContinentOrder[right.code] ?? Number.MAX_SAFE_INTEGER),
+      )
+      .map((continent) => ({
+        label: continent.name,
+        options: continent.countries
+          .filter(
+            (country) =>
+              !countrySelectorExcludedRegionCodes.has(country.code) &&
+              !countrySelectorExcludedRegionNames.has(country.name),
+          )
+          .map((country) => ({
+            ...country,
+            value: country.id,
+            label: country.name,
+          })),
+      }));
   }, [state.continents]);
-
-  // preload country if one was selected
-  const selectedCountry = React.useMemo(() => {
-    if (!windowData?.user?.countryId) {
-      return null;
-    }
-
-    return findCountryOptionByValue(countrySelectorData, windowData.user.countryId);
-  }, [countrySelectorData]);
 
   // assign avatar if none found in window data
   React.useEffect(() => {
@@ -148,15 +169,21 @@ export default function () {
         <section className="fieldset w-full">
           <label className="label">
             <span className="label-text text-lg font-semibold">{t('shared.country')}</span>
-            <span className="label-text-alt italic opacity-80 ml-2">(This affects your starting region!)</span>
+            <span className="label-text-alt ml-2 italic opacity-80">
+              (This affects your starting region!)
+            </span>
           </label>
           <Controller
             name="countryId"
             control={control}
-            rules={{ required: true }}
-            render={({ field: { onChange } }) => (
+            rules={{
+              required: true,
+              validate: (countryId) =>
+                Boolean(findCountryOptionByValue(countrySelectorData, countryId)),
+            }}
+            render={({ field: { onChange, value } }) => (
               <CountrySelect
-                defaultValue={selectedCountry}
+                value={findCountryOptionByValue(countrySelectorData, value) || null}
                 options={countrySelectorData}
                 onChange={(option) => onChange(option.value)}
               />

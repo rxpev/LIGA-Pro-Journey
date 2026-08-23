@@ -9,6 +9,59 @@ import { countries } from 'countries-list';
 /** @type {CountryCode} */
 type CountryCode = keyof typeof countries;
 
+/**
+ * Non-player territories which are not meaningful Counter-Strike nationalities.
+ */
+const excludedCountryCodes = new Set<CountryCode>([
+  'AI',
+  'AQ',
+  'AS',
+  'AW',
+  'AX',
+  'BL',
+  'BM',
+  'BQ',
+  'BV',
+  'CC',
+  'CW',
+  'CX',
+  'FK',
+  'FO',
+  'GF',
+  'GG',
+  'GI',
+  'GL',
+  'GP',
+  'GS',
+  'GU',
+  'HM',
+  'IM',
+  'JE',
+  'KY',
+  'MF',
+  'MO',
+  'MP',
+  'MQ',
+  'MS',
+  'NC',
+  'NF',
+  'PF',
+  'PM',
+  'PN',
+  'RE',
+  'SH',
+  'SJ',
+  'SX',
+  'TC',
+  'TF',
+  'TK',
+  'UM',
+  'VG',
+  'VI',
+  'WF',
+  'YT',
+]);
+
 const mixedRegionCountries = [
   { code: 'eu', name: 'Europe', continentCode: 'EU' },
   { code: 'na', name: 'North America', continentCode: 'NA' },
@@ -33,36 +86,40 @@ export default async function (prisma: PrismaClient) {
 
   // build the transaction
   const transaction = [
-    ...Object.keys(countries).map((code: CountryCode) =>
-      prisma.country.upsert({
-      where: { code },
-      update: {
-        code,
-        name: countries[code].name,
-        continent: {
-          connect: {
-            id: continents.find(
-              (continent) => continent.code === (continentOverrides[code] || countries[code].continent),
-            ).id,
+    ...Object.keys(countries)
+      .filter((code): code is CountryCode => !excludedCountryCodes.has(code as CountryCode))
+      .map((code) =>
+        prisma.country.upsert({
+          where: { code },
+          update: {
+            code,
+            name: countries[code].name,
+            continent: {
+              connect: {
+                id: continents.find(
+                  (continent) =>
+                    continent.code === (continentOverrides[code] || countries[code].continent),
+                ).id,
+              },
+            },
           },
-        },
-      },
-      create: {
-        code,
-        name: countries[code].name,
-        continent: {
-          connect: {
-            id: continents.find(
-              (continent) => continent.code === (continentOverrides[code] || countries[code].continent),
-            ).id,
+          create: {
+            code,
+            name: countries[code].name,
+            continent: {
+              connect: {
+                id: continents.find(
+                  (continent) =>
+                    continent.code === (continentOverrides[code] || countries[code].continent),
+                ).id,
+              },
+            },
           },
-        },
-      },
-        include: {
-          continent: true,
-        },
-      }),
-    ),
+          include: {
+            continent: true,
+          },
+        }),
+      ),
     ...mixedRegionCountries.map((country) =>
       prisma.country.upsert({
         where: { code: country.code },
