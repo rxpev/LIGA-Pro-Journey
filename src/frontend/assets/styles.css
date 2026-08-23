@@ -96,6 +96,81 @@
   }
 }
 
+/** In-app modal transitions keep overlays distinct from the swipable primary routes. */
+@keyframes in-app-modal-backdrop-in {
+  from {
+    background-color: transparent;
+    backdrop-filter: blur(0);
+  }
+  to {
+    background-color: rgb(0 0 0 / 0.55);
+    backdrop-filter: blur(4px);
+  }
+}
+
+@keyframes in-app-modal-backdrop-out {
+  from {
+    background-color: rgb(0 0 0 / 0.55);
+    backdrop-filter: blur(4px);
+  }
+  to {
+    background-color: transparent;
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes in-app-modal-content-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(40px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes in-app-modal-content-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(24px) scale(0.98);
+  }
+}
+
+.in-app-modal {
+  animation: in-app-modal-backdrop-in 180ms ease-out both;
+  background-color: rgb(0 0 0 / 0.55);
+}
+
+.in-app-modal > .modal-box {
+  animation: in-app-modal-content-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.in-app-modal.in-app-modal-closing {
+  animation: in-app-modal-backdrop-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.in-app-modal.in-app-modal-closing > .modal-box {
+  animation: in-app-modal-content-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .in-app-modal,
+  .in-app-modal > .modal-box,
+  .in-app-modal.in-app-modal-closing,
+  .in-app-modal.in-app-modal-closing > .modal-box {
+    animation-duration: 1ms;
+  }
+}
+
 /** global styles */
 body {
   @apply bg-base-100 h-full overflow-hidden;

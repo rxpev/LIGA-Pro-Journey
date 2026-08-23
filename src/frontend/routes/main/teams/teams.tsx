@@ -310,9 +310,9 @@ function TeamRosterHero(props: {
               className="size-14 shrink-0"
             />
             <article className="min-w-0">
-              <p className="mb-1 truncate text-sm opacity-70" title={props.displayCountry.name}>
+              <p className="mb-1 truncate text-sm" title={props.displayCountry.name}>
                 <span className={cx('fp', props.displayCountry.code.toLowerCase())} />
-                &nbsp;{props.displayCountry.name}
+                <span className="opacity-70">&nbsp;{props.displayCountry.name}</span>
               </p>
               <h3 className="truncate text-xl leading-tight font-bold" title={props.team.name}>
                 {props.team.name}

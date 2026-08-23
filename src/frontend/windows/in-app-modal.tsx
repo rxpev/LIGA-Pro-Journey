@@ -17,6 +17,9 @@ type InAppModalRequest = ModalRequest & {
   inAppModal?: boolean;
 };
 
+const MODAL_CLOSE_DURATION = 220;
+const IN_APP_MODAL_CLOSE_EVENT = 'in-app-modal-close';
+
 function ModalStateLoader(props: { children: React.ReactNode }) {
   const { dispatch } = React.useContext(AppStateContext);
   const [loaded, setLoaded] = React.useState(false);
@@ -59,16 +62,46 @@ function ModalStateLoader(props: { children: React.ReactNode }) {
 }
 
 function ModalApplication(props: { request: InAppModalRequest; onClose: () => void }) {
+  const [isClosing, setIsClosing] = React.useState(false);
+  const closeTimeout = React.useRef<number>();
+
+  const close = React.useCallback(() => {
+    if (closeTimeout.current != null) {
+      return;
+    }
+
+    setIsClosing(true);
+    closeTimeout.current = window.setTimeout(props.onClose, MODAL_CLOSE_DURATION);
+  }, [props.onClose]);
+
+  React.useEffect(
+    () => () => {
+      if (closeTimeout.current != null) {
+        window.clearTimeout(closeTimeout.current);
+      }
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    document.addEventListener(IN_APP_MODAL_CLOSE_EVENT, close);
+    return () => document.removeEventListener(IN_APP_MODAL_CLOSE_EVENT, close);
+  }, [close]);
+
   return (
     <AppStateProvider>
       <ModalStateLoader>
-        <ModalContent {...props} />
+        <ModalContent {...props} isClosing={isClosing} onClose={close} />
       </ModalStateLoader>
     </AppStateProvider>
   );
 }
 
-function ModalContent(props: { request: InAppModalRequest; onClose: () => void }) {
+function ModalContent(props: {
+  request: InAppModalRequest;
+  isClosing: boolean;
+  onClose: () => void;
+}) {
   const audioHover = useAudio('button-hover.wav');
   const audioClick = useAudio('button-click-inapp.wav');
   const audioRelease = useAudio('button-release.wav');
@@ -147,7 +180,11 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
   }, [audioClick, audioHover, audioRelease, props.onClose]);
 
   return (
-    <dialog className="modal modal-open fixed inset-0 z-[100] h-screen w-screen">
+    <dialog
+      className={`in-app-modal modal modal-open fixed inset-0 z-[100] h-screen w-screen ${
+        props.isClosing ? 'in-app-modal-closing' : ''
+      }`}
+    >
       <section
         className={`modal-box bg-base-100 relative h-[75vh] max-h-none w-1/2 max-w-none ${
           hasHeader ? 'flex flex-col overflow-hidden' : overflowClass
@@ -176,9 +213,7 @@ function ModalContent(props: { request: InAppModalRequest; onClose: () => void }
         <div
           className={`w-full ${hasHeader ? 'min-h-0 flex-1 overflow-auto' : 'h-full'} [&>main]:!h-full [&>main]:!w-full`}
         >
-          <MemoryRouter
-            initialEntries={[{ pathname: props.request.target, state: routeState }]}
-          >
+          <MemoryRouter initialEntries={[{ pathname: props.request.target, state: routeState }]}>
             <RouterRoutes>
               <Route path="/brackets" element={<Routes.Modal.Brackets />} />
               <Route path="/map-pool" element={<Routes.Modal.MapPool />} />
@@ -213,10 +248,6 @@ export default function InAppModal(): React.ReactNode {
   const root = React.useRef<ReactDOM.Root>();
   const container = React.useRef<HTMLDivElement>();
 
-  const close = React.useCallback(() => {
-    root.current?.render(null);
-  }, []);
-
   React.useEffect(() => {
     let instance = 0;
     container.current = document.createElement('div');
@@ -232,7 +263,11 @@ export default function InAppModal(): React.ReactNode {
         }
 
         root.current?.render(
-          <ModalApplication key={`${data.target}:${instance++}`} request={data} onClose={close} />,
+          <ModalApplication
+            key={`${data.target}:${instance++}`}
+            request={data}
+            onClose={() => root.current?.render(null)}
+          />,
         );
       },
     );
@@ -241,7 +276,7 @@ export default function InAppModal(): React.ReactNode {
       Constants.IPCRoute.WINDOW_CLOSE,
       (id: Constants.WindowIdentifier) => {
         if (id === Constants.WindowIdentifier.Modal) {
-          close();
+          document.dispatchEvent(new Event(IN_APP_MODAL_CLOSE_EVENT));
         }
       },
     );
@@ -252,7 +287,7 @@ export default function InAppModal(): React.ReactNode {
       root.current?.unmount();
       container.current?.remove();
     };
-  }, [close]);
+  }, []);
 
   return null;
 }
