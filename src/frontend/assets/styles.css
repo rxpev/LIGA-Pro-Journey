@@ -721,7 +721,7 @@ meter::-webkit-meter-bar {
 
   .calendar-yearly-sidebar,
   .calendar-yearly-month-rail {
-    @apply border-base-content/10 bg-base-200/40 min-h-0 overflow-hidden rounded border;
+    @apply border-base-content/10 bg-base-100 min-h-0 overflow-hidden rounded border;
   }
 
   .calendar-yearly-timeline {
@@ -931,7 +931,7 @@ meter::-webkit-meter-bar {
   }
 
   .calendar-fixtures-panel {
-    @apply bg-base-200 overflow-y-auto;
+    @apply bg-base-100 overflow-y-auto;
   }
 
   .calendar-grid-panel {
@@ -966,47 +966,58 @@ meter::-webkit-meter-bar {
   }
 
   .calendar-my-match-country-bg {
-    @apply pointer-events-none absolute inset-y-0 left-0 -z-10 border-0! bg-left bg-no-repeat opacity-15 saturate-75;
+    @apply pointer-events-none absolute inset-y-0 left-0 -z-10 border-0! bg-left bg-no-repeat saturate-75;
     display: block !important;
     position: absolute !important;
     top: 0 !important;
     bottom: 0 !important;
-    left: 0 !important;
-    width: 50% !important;
+    left: -1rem !important;
+    width: 12rem !important;
     height: 100% !important;
-    background-size: auto 150% !important;
-    mask-image: linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
+    background-position: center !important;
+    background-size: 100% 100% !important;
+    opacity: 0.22;
+    mask-image: linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 100%);
     -webkit-mask-image: linear-gradient(
       to right,
       #000 0%,
-      rgba(0, 0, 0, 0.8) 42%,
+      rgba(0, 0, 0, 0.9) 46%,
       transparent 100%
     );
   }
 
   .calendar-my-match-country-bg.is-away {
-    @apply right-0 left-auto bg-right;
-    right: 0 !important;
+    @apply right-auto left-auto bg-right;
+    right: -1rem !important;
     left: auto !important;
-    mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
+    background-position: center !important;
+    mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.9) 46%, transparent 100%);
   }
 
   .calendar-my-match-team {
-    @apply flex min-w-0 flex-col gap-1;
+    @apply flex min-w-0 flex-col items-center gap-1;
     grid-row: 1;
   }
 
   .calendar-my-match-team:first-child {
-    @apply items-start;
+    @apply items-center;
   }
 
   .calendar-my-match-team:last-child {
-    @apply items-end;
+    @apply items-center;
+  }
+
+  .calendar-my-match-team.is-home {
+    transform: translateX(0.25rem);
+  }
+
+  .calendar-my-match-team.is-away {
+    transform: translateX(-0.25rem);
   }
 
   .calendar-my-match-team strong {
-    @apply w-full truncate text-xs font-bold;
+    @apply w-full truncate text-center text-xs font-bold;
   }
 
   .calendar-my-match-score {
@@ -1074,12 +1085,56 @@ meter::-webkit-meter-bar {
     @apply text-base-content/50 flex h-20 items-center justify-center text-xs font-semibold;
   }
 
+  .calendar-my-match-map-tba > img {
+    @apply opacity-25 grayscale;
+  }
+
+  .calendar-my-match-map-tba-overlay {
+    @apply absolute inset-0 flex items-center justify-center;
+  }
+
+  .calendar-my-match-map-tba-overlay span {
+    @apply border-base-content/20 bg-base-300/80 text-base-content/80 rounded-sm border px-4 py-1 text-lg font-black uppercase shadow;
+  }
+
+  .calendar-my-match-lineups {
+    @apply border-base-content/10 border-b;
+  }
+
+  .calendar-my-match-lineups > div {
+    @apply divide-base-content/10 grid grid-cols-2 divide-x;
+  }
+
+  .calendar-my-match-lineups table {
+    @apply min-w-0;
+  }
+
+  .calendar-my-match-lineup-player {
+    @apply grid grid-cols-[3rem_minmax(0,1fr)] items-center;
+  }
+
+  .calendar-my-match-lineup-player > img {
+    @apply h-12 w-auto justify-self-center;
+  }
+
+  .calendar-my-match-lineup-player > div {
+    @apply min-w-0 py-1;
+  }
+
+  .calendar-my-match-lineup-player h3 {
+    @apply truncate text-sm font-bold;
+  }
+
+  .calendar-my-match-lineup-player p {
+    @apply text-xs;
+  }
+
   .calendar-my-match-statistics {
     @apply divide-base-content/10 border-base-content/10 divide-y border-b;
   }
 
   .calendar-my-match-statistics table {
-    @apply table-xs table w-full text-[0.6rem];
+    @apply table-xs table w-full table-fixed text-[0.6rem];
   }
 
   .calendar-my-match-statistics th {
@@ -1088,7 +1143,7 @@ meter::-webkit-meter-bar {
 
   .calendar-my-match-statistics th:first-child,
   .calendar-my-match-statistics td:first-child {
-    @apply text-left;
+    @apply w-[32%] text-left;
   }
 
   .calendar-my-match-statistics td {

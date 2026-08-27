@@ -81,6 +81,11 @@ type YearlyCalendarAction = {
   position: { x: number; y: number };
 };
 
+enum Rating {
+  LOW = 0.95,
+  HIGH = 1.05,
+}
+
 const YEARLY_WINNER_EVENT_TYPES: Array<{
   label: string;
   tiers: Constants.TierSlug[];
@@ -1653,7 +1658,7 @@ export default function () {
                                   )}
                                 />
                               )}
-                              <span className="calendar-my-match-team">
+                              <span className="calendar-my-match-team is-home">
                                 {!!home?.team?.blazon && (
                                   <Image
                                     src={home.team.blazon}
@@ -1668,7 +1673,9 @@ export default function () {
                                   home && getCompetitorScoreTone(match, home),
                                 )}
                               >
-                                {home ? getCompetitorScore(match, home) : '-'}
+                                {match.status === Constants.MatchStatus.COMPLETED && home
+                                  ? getCompetitorScore(match, home)
+                                  : null}
                               </strong>
                               <span className="calendar-my-match-competition">
                                 <Image src={competitionLogo} className="size-14 object-contain" />
@@ -1680,9 +1687,11 @@ export default function () {
                                   away && getCompetitorScoreTone(match, away),
                                 )}
                               >
-                                {away ? getCompetitorScore(match, away) : '-'}
+                                {match.status === Constants.MatchStatus.COMPLETED && away
+                                  ? getCompetitorScore(match, away)
+                                  : null}
                               </strong>
-                              <span className="calendar-my-match-team text-right">
+                              <span className="calendar-my-match-team is-away">
                                 {!!away?.team?.blazon && (
                                   <Image
                                     src={away.team.blazon}
@@ -1695,7 +1704,7 @@ export default function () {
                             <section className="calendar-my-match-summary">
                               <article className="calendar-my-match-map">
                                 <p>Maps</p>
-                                {!!mapGame ? (
+                                {match.status === Constants.MatchStatus.COMPLETED && !!mapGame ? (
                                   <figure>
                                     <Image src={Util.convertMapPool(mapGame.map, game, true)} />
                                     <figcaption>
@@ -1706,7 +1715,12 @@ export default function () {
                                     </figcaption>
                                   </figure>
                                 ) : (
-                                  <span className="calendar-my-match-pending">Maps pending</span>
+                                  <figure className="calendar-my-match-map-tba">
+                                    <Image src="resources://maps/allmaps.png" />
+                                    <div className="calendar-my-match-map-tba-overlay">
+                                      <span>TBA</span>
+                                    </div>
+                                  </figure>
                                 )}
                               </article>
                               <article className="calendar-my-match-info">
@@ -1718,6 +1732,72 @@ export default function () {
                                 <span>{Util.getMatchRoundLabel(match)}</span>
                               </article>
                             </section>
+                            {match.status !== Constants.MatchStatus.COMPLETED &&
+                              !!state.profile && (
+                                <section className="calendar-my-match-lineups">
+                                  <div>
+                                    {match.competitors.map((competitor) => {
+                                      const starters = Util.getSquad(
+                                        competitor.team,
+                                        state.profile,
+                                        true,
+                                      );
+
+                                      return (
+                                        <table
+                                          key={competitor.id}
+                                          className="table-xs table table-fixed"
+                                        >
+                                          <thead>
+                                            <tr>
+                                              <th>Expected Lineup</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {starters.map((player) => (
+                                              <tr key={player.id}>
+                                                <td
+                                                  title={
+                                                    player.id === state.profile.playerId
+                                                      ? t('shared.you')
+                                                      : undefined
+                                                  }
+                                                  className={cx(
+                                                    'p-0',
+                                                    player.id === state.profile.playerId &&
+                                                      'bg-base-200/50',
+                                                  )}
+                                                >
+                                                  <article className="calendar-my-match-lineup-player">
+                                                    <img
+                                                      src={
+                                                        player.avatar ||
+                                                        'resources://avatars/empty.png'
+                                                      }
+                                                    />
+                                                    <div>
+                                                      <h3>{player.name}</h3>
+                                                      <p>
+                                                        <span
+                                                          className={cx(
+                                                            'fp',
+                                                            player.country.code.toLowerCase(),
+                                                          )}
+                                                        />
+                                                        <span>&nbsp;{player.country.name}</span>
+                                                      </p>
+                                                    </div>
+                                                  </article>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      );
+                                    })}
+                                  </div>
+                                </section>
+                              )}
                             {!!details?.events.length && (
                               <section className="calendar-my-match-statistics">
                                 <p>Statistics</p>
@@ -1740,7 +1820,15 @@ export default function () {
                                     <table key={competitor.id}>
                                       <thead>
                                         <tr>
-                                          <th>{competitor.team.name}</th>
+                                          <th>
+                                            {!!competitor.team.blazon && (
+                                              <Image
+                                                src={competitor.team.blazon}
+                                                className="mr-1 inline-block size-3 object-contain align-[-1px]"
+                                              />
+                                            )}
+                                            {competitor.team.name}
+                                          </th>
                                           <th>R</th>
                                           <th>K</th>
                                           <th>D</th>
@@ -1758,13 +1846,41 @@ export default function () {
 
                                           return (
                                             <tr key={player.id}>
-                                              <td>{player.name}</td>
-                                              <td>{performance.rating.toFixed(2)}</td>
+                                              <td>
+                                                {!!player.country?.code && (
+                                                  <span
+                                                    className={cx(
+                                                      'fp mr-1 inline-block align-[-1px]',
+                                                      player.country.code.toLowerCase(),
+                                                    )}
+                                                  />
+                                                )}
+                                                {player.name}
+                                              </td>
+                                              <td
+                                                className={cx(
+                                                  performance.rating <= Rating.LOW && 'text-error',
+                                                  performance.rating > Rating.LOW &&
+                                                    performance.rating < Rating.HIGH &&
+                                                    'text-inherit',
+                                                  performance.rating >= Rating.HIGH &&
+                                                    'text-success',
+                                                )}
+                                              >
+                                                {performance.rating.toFixed(2)}
+                                              </td>
                                               <td>{performance.kills}</td>
                                               <td>{performance.deaths}</td>
                                               <td>{performance.assists}</td>
                                               <td>{performance.headshots}%</td>
-                                              <td>
+                                              <td
+                                                className={cx(
+                                                  performance.kd > 0
+                                                    ? 'text-success'
+                                                    : 'text-error',
+                                                  performance.kd === 0 && 'text-inherit',
+                                                )}
+                                              >
                                                 {performance.kd > 0 ? '+' : ''}
                                                 {performance.kd}
                                               </td>
