@@ -114,7 +114,7 @@ const FIRST_SEASON_STAGE_DATES: Record<string, readonly [number, number]> = {
   'world/major:champions-stage': [1790895600000, 1791154800000],
 };
 
-function getFirstSeasonStageDates(federationSlug: string, tierSlug: string) {
+export function getFirstSeasonStageDates(federationSlug: string, tierSlug: string) {
   return FIRST_SEASON_STAGE_DATES[`${federationSlug}/${tierSlug}`];
 }
 

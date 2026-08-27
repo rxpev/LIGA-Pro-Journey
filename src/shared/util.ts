@@ -809,7 +809,12 @@ export function getCompetitionLogo(
   return `${protocol}${slug}-${federationSlug}.png`;
 }
 
-export function getCompetitionHonorThumbnail(options: {
+/**
+ * Gets the non-trophy thumbnail for a competition when one is available.
+ *
+ * @function
+ */
+export function getCompetitionThumbnail(options: {
   tierSlug: Constants.TierSlug | string;
   federationSlug?: Constants.FederationSlug | string;
   organizer?: string | null;
@@ -829,26 +834,106 @@ export function getCompetitionHonorThumbnail(options: {
           : organizer.includes('iem')
             ? 'major-iem.png'
             : 'major-pgl.png';
+  } else if (
+    tier.includes('rmr') ||
+    (tier.startsWith('major:') && tier.includes('open-qualifier'))
+  ) {
+    file = federation.includes('amer')
+      ? 'rmr-am.png'
+      : federation.includes('asia') || federation.includes('china')
+        ? 'rmr-as.png'
+        : 'rmr-eu.png';
   } else if (tier === Constants.TierSlug.BLAST_FINALS) {
     file = 'blast-finals.png';
   } else if (tier.includes('cash')) {
     file = 'cashcup.png';
-  } else if (tier === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
-    file = 'iem-cologne-trophy.png';
-  } else if (tier === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
-    file = 'iem-krakow-trophy.png';
+  } else if (tier.includes('iem:')) {
+    file = 'iem-cologne-krakow.png';
   } else if (
-    tier === Constants.TierSlug.LEAGUE_PRO ||
-    tier === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
-  ) {
-    file = 'epl-trophy.png';
-  } else if (
+    tier === Constants.TierSlug.LEAGUE_OPEN ||
+    tier === Constants.TierSlug.LEAGUE_INTERMEDIATE ||
+    tier === Constants.TierSlug.LEAGUE_MAIN ||
+    tier === Constants.TierSlug.LEAGUE_ADVANCED ||
     tier === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS ||
     tier === Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS ||
     tier === Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
     tier === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS
   ) {
     file = 'esea.png';
+  } else if (tier === Constants.TierSlug.CCT_GLOBAL_FINALS) {
+    file = 'cct-global-finals.png';
+  } else if (tier.includes('cct')) {
+    file = federation.includes('amer')
+      ? 'cct-am.png'
+      : federation.includes('asia')
+        ? 'cct-as.png'
+        : federation.includes('oce')
+          ? 'cct-oce.png'
+          : 'cct-eu.png';
+  }
+
+  return file ? `resources://competitions/thumbnail/${file}` : null;
+}
+
+export function getCompetitionHonorThumbnail(options: {
+  tierSlug: Constants.TierSlug | string;
+  federationSlug?: Constants.FederationSlug | string;
+  organizer?: string | null;
+}) {
+  const tier = options.tierSlug.toLowerCase();
+  const organizer = (options.organizer || '').toLowerCase();
+  const federation = options.federationSlug?.toLowerCase() || '';
+  let file: string | null = null;
+
+  if (isMajorStageTier(options.tierSlug)) {
+    file = organizer.includes('blast')
+      ? 'blast-major-trophy.png'
+      : organizer.includes('perfect')
+        ? 'perfectworld-major-trophy.png'
+        : organizer.includes('starladder')
+          ? 'starladder-major-trophy.png'
+          : organizer.includes('iem')
+            ? 'iem-major-trophy.png'
+            : 'pgl-major-trophy.png';
+  } else if (
+    tier.includes('rmr') ||
+    (tier.startsWith('major:') && tier.includes('open-qualifier'))
+  ) {
+    file = federation.includes('amer')
+      ? 'rmr-am.png'
+      : federation.includes('asia') || federation.includes('china')
+        ? 'rmr-as.png'
+        : 'rmr-eu.png';
+  } else if (tier === Constants.TierSlug.BLAST_FINALS) {
+    file = 'blast-finals-trophy.png';
+  } else if (tier.includes('blast') || organizer.includes('blast')) {
+    file = 'major-blast.png';
+  } else if (tier.includes('cash')) {
+    file = 'cashcup.png';
+  } else if (tier.includes('iem:cologne')) {
+    file = 'iem-cologne-trophy.png';
+  } else if (tier.includes('iem:krakow')) {
+    file = 'iem-krakow-trophy.png';
+  } else if (
+    tier === Constants.TierSlug.LEAGUE_PRO ||
+    tier === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS
+  ) {
+    file = 'epl-trophy.png';
+  } else if (tier.includes('esl-challenger')) {
+    file = 'esl-challenger-trophy.png';
+  } else if (
+    tier === Constants.TierSlug.LEAGUE_OPEN ||
+    tier === Constants.TierSlug.LEAGUE_INTERMEDIATE ||
+    tier === Constants.TierSlug.LEAGUE_MAIN ||
+    tier === Constants.TierSlug.LEAGUE_ADVANCED ||
+    tier === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
+    tier === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS
+  ) {
+    file = 'esea.png';
+  } else if (tier === Constants.TierSlug.CCT_GLOBAL_FINALS) {
+    file = 'cct-global-finals-trophy.png';
   } else if (tier.includes('cct')) {
     file = tier.includes('global')
       ? 'cct-global-finals.png'
@@ -859,9 +944,22 @@ export function getCompetitionHonorThumbnail(options: {
           : federation.includes('oce')
             ? 'cct-oce.png'
             : 'cct-eu.png';
+  } else if (tier.startsWith('major:')) {
+    file = organizer.includes('perfect')
+      ? 'major-pw.png'
+      : organizer.includes('starladder')
+        ? 'major-starladder.png'
+        : organizer.includes('iem')
+          ? 'major-iem.png'
+          : 'major-pgl.png';
   }
 
-  return file ? `resources://competitions/thumbnail/${file}` : null;
+  if (!file) {
+    return null;
+  }
+
+  const directory = file.endsWith('-trophy.png') ? 'trophies' : 'thumbnail';
+  return `resources://competitions/${directory}/${file}`;
 }
 
 export function formatCompetitionHostingLocation(location: Constants.CompetitionHostingLocation) {

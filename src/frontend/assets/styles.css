@@ -202,6 +202,10 @@ body {
   height: 100%;
 }
 
+.route-transition-page > .calendar-dashboard {
+  height: 100%;
+}
+
 .route-transition-enter.route-transition-forward {
   animation: main-route-enter 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
@@ -642,6 +646,765 @@ meter::-webkit-meter-bar {
 
   main > :nth-child(2) {
     @apply col-span-4;
+  }
+}
+
+@utility calendar-dashboard {
+  & {
+    @apply box-border flex h-full min-w-0 flex-col overflow-hidden;
+    @apply bg-base-100;
+  }
+
+  .calendar-toolbar {
+    @apply border-base-content/10 flex h-22 shrink-0 items-center gap-6 border-b px-5;
+    @apply bg-base-200;
+  }
+
+  .calendar-toolbar h1,
+  .calendar-month-controls h2 {
+    @apply text-lg font-black tracking-tight;
+  }
+
+  .calendar-toolbar h1 {
+    @apply text-base tracking-wide uppercase;
+  }
+
+  .calendar-toolbar-icon,
+  .calendar-icon-button {
+    @apply border-base-content/15 bg-base-200/65 text-base-content flex size-10 items-center justify-center rounded-lg border;
+  }
+
+  .calendar-toolbar-icon svg {
+    @apply size-5;
+  }
+
+  .calendar-mode-tabs {
+    @apply border-base-content/15 bg-base-200/35 flex overflow-hidden rounded-lg border;
+  }
+
+  .calendar-mode-tabs button {
+    @apply text-base-content/75 hover:text-base-content h-10 px-6 text-sm font-bold transition-colors;
+  }
+
+  .calendar-mode-tabs button.is-active {
+    @apply text-primary border-primary bg-primary/10;
+    box-shadow: inset 0 -2px 0 var(--color-primary);
+  }
+
+  .calendar-month-controls {
+    @apply ml-auto flex items-center gap-3;
+  }
+
+  .calendar-month-controls h2 {
+    @apply min-w-36 text-center;
+  }
+
+  .calendar-icon-button {
+    @apply hover:border-primary/70 hover:bg-base-300 disabled:cursor-not-allowed disabled:opacity-35;
+  }
+
+  .calendar-icon-button svg {
+    @apply size-4;
+  }
+
+  .calendar-content {
+    @apply grid min-h-0 flex-1 grid-cols-[minmax(290px,28%)_1fr] gap-2 overflow-hidden p-4;
+  }
+
+  .calendar-yearly-overview {
+    @apply grid min-h-0 flex-1 grid-cols-4 gap-3 overflow-y-auto p-4;
+  }
+
+  .calendar-yearly-layout {
+    @apply grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] gap-3 overflow-hidden p-4;
+  }
+
+  .calendar-yearly-sidebar,
+  .calendar-yearly-month-rail {
+    @apply border-base-content/10 bg-base-200/40 min-h-0 overflow-hidden rounded border;
+  }
+
+  .calendar-yearly-timeline {
+    @apply border-base-content/10 bg-base-100 min-h-0 overflow-hidden rounded border;
+  }
+
+  .calendar-yearly-sidebar {
+    @apply p-4;
+  }
+  .calendar-yearly-sidebar h2 {
+    @apply text-2xl font-black;
+  }
+  .calendar-yearly-sidebar h3 {
+    @apply text-base-content/70 mt-5 mb-2 text-xs font-black uppercase;
+  }
+  .calendar-yearly-sidebar article {
+    @apply border-base-content/10 bg-base-100/60 mb-1 rounded border p-2;
+  }
+  .calendar-yearly-sidebar article span {
+    @apply text-base-content/60 block text-[0.6rem] font-bold uppercase;
+  }
+  .calendar-yearly-sidebar article strong {
+    @apply block truncate text-xs;
+  }
+
+  .calendar-yearly-winners {
+    @apply flex h-full min-h-0 flex-col;
+  }
+  .calendar-yearly-winners-header {
+    @apply border-base-content/10 shrink-0 border-b px-1 pt-1 pb-3;
+  }
+  .calendar-yearly-winners-header h2 {
+    @apply mb-1 text-xl;
+  }
+  .calendar-yearly-winner-list {
+    @apply flex min-h-0 flex-1 flex-col;
+  }
+  .calendar-yearly-sidebar article.calendar-yearly-winner {
+    @apply border-base-content/10 mb-0 grid min-h-0 flex-1 grid-cols-[2.5rem_minmax(0,1fr)_2rem_minmax(0,0.8fr)_2.75rem] items-center gap-2 overflow-hidden border-b py-2 transition-[background-color,box-shadow] last:border-b-0;
+  }
+  .calendar-yearly-sidebar article.calendar-yearly-winner.is-hovered {
+    @apply bg-primary/10 shadow-[inset_3px_0_0_var(--color-primary)];
+  }
+  .calendar-yearly-winner-tournament-logo {
+    @apply size-10 shrink-0 object-contain;
+  }
+  .calendar-yearly-winner-details {
+    @apply min-w-0 flex-1;
+  }
+  .calendar-yearly-winner-details span {
+    @apply text-base-content/85 block text-[0.65rem] leading-tight font-black tracking-wide whitespace-normal uppercase;
+  }
+  .calendar-yearly-winner-team-logo {
+    @apply size-11 shrink-0 justify-self-end object-contain;
+  }
+  .calendar-yearly-winner-trophy {
+    @apply flex size-8 shrink-0 items-center justify-center;
+  }
+  .calendar-yearly-winner-trophy > img,
+  .calendar-yearly-winner-trophy > svg {
+    @apply size-full object-contain;
+  }
+  .calendar-yearly-winner-trophy > svg {
+    color: #e8bb58;
+  }
+  .calendar-yearly-winner-team-name {
+    @apply text-base-content truncate text-left text-sm font-black;
+  }
+
+  .calendar-yearly-timeline {
+    @apply flex h-full flex-col;
+  }
+  .calendar-yearly-board {
+    @apply grid min-h-0 grid-cols-[5rem_minmax(0,1fr)] overflow-hidden;
+  }
+  .calendar-yearly-timeline > header {
+    @apply border-base-content/10 grid border-b;
+    grid-template-columns: repeat(31, minmax(0, 1fr));
+  }
+  .calendar-yearly-events {
+    @apply relative grid min-h-0 flex-1 grid-rows-12 gap-x-0 gap-y-2 overflow-hidden px-0 py-2;
+    grid-template-columns: repeat(31, minmax(0, 1fr));
+    background-image: linear-gradient(
+      to right,
+      transparent calc(100% - 1px),
+      color-mix(in srgb, var(--color-base-content) 10%, transparent) calc(100% - 1px)
+    );
+    background-size: calc(100% / 31) 100%;
+    background-position: 0 0;
+  }
+  .calendar-yearly-day-actions {
+    @apply absolute inset-x-0 inset-y-2 z-0 grid grid-rows-12 gap-y-2;
+    grid-template-columns: repeat(31, minmax(0, 1fr));
+  }
+  .calendar-yearly-day-actions button {
+    @apply hover:bg-base-content/4 transition-colors;
+  }
+  .calendar-yearly-timeline > header span {
+    @apply border-base-content/10 border-l py-3 text-center text-xs font-black uppercase;
+  }
+  .calendar-yearly-timeline > header span:first-child {
+    @apply border-l-0;
+  }
+  .calendar-yearly-month-rail {
+    @apply flex h-full flex-col rounded-r-none border-r-0;
+  }
+  .calendar-yearly-board > .calendar-yearly-timeline {
+    @apply rounded-l-none;
+  }
+  .calendar-yearly-month-rail > header {
+    @apply border-base-content/10 shrink-0 border-b;
+    height: calc(1rem + 1.5rem + 1px);
+  }
+  .calendar-yearly-month-rail > div {
+    @apply grid min-h-0 flex-1 grid-rows-12 gap-y-2 p-2;
+  }
+  .calendar-yearly-month-rail strong {
+    @apply text-base-content/75 flex items-center justify-center text-xs font-black tracking-widest uppercase;
+  }
+  .calendar-yearly-lane {
+    @apply border-base-content/10 min-h-0 flex-1 border-b last:border-b-0;
+  }
+  .calendar-yearly-lane > div {
+    @apply grid h-full grid-cols-12 grid-rows-2 gap-2 overflow-hidden p-2;
+    background-image: linear-gradient(
+      to right,
+      transparent calc(100% - 1px),
+      color-mix(in srgb, var(--color-base-content) 10%, transparent) calc(100% - 1px)
+    );
+    background-size: calc(100% / 12) 100%;
+  }
+  .calendar-yearly-lane article {
+    @apply bg-base-100/80 relative flex min-w-0 items-center gap-2 overflow-hidden rounded border px-2 py-1.5;
+  }
+  .calendar-yearly-lane article > img:first-child {
+    @apply pointer-events-none absolute right-0 bottom-0 size-14 object-contain opacity-15;
+  }
+  .calendar-yearly-lane article > img:nth-child(2) {
+    @apply relative z-10 size-7 shrink-0 object-contain;
+  }
+  .calendar-yearly-lane article strong {
+    @apply relative z-10 truncate text-xs font-bold;
+  }
+  .calendar-yearly-lane article span {
+    @apply relative z-10 ml-auto shrink-0 text-[0.6rem] font-semibold;
+  }
+
+  .calendar-yearly-events article {
+    @apply bg-base-100/80 relative z-10 flex min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded border px-2 py-1.5;
+  }
+  .calendar-yearly-events article > img:first-child {
+    @apply pointer-events-none absolute right-0 bottom-0 size-14 object-contain opacity-15;
+  }
+  .calendar-yearly-events article > img:nth-child(2) {
+    @apply relative z-10 size-7 shrink-0 object-contain;
+  }
+  .calendar-yearly-events article.calendar-yearly-pro-league > img:nth-child(2) {
+    @apply size-10;
+  }
+  .calendar-yearly-events article strong {
+    @apply relative z-10 truncate text-xs font-bold;
+  }
+  .calendar-yearly-events article span {
+    @apply relative z-10 ml-auto shrink-0 text-[0.6rem] font-semibold;
+  }
+
+  .calendar-year-month {
+    @apply border-base-content/10 bg-base-200/40 min-h-52 rounded border p-3;
+  }
+
+  .calendar-year-month > h2 {
+    @apply text-base font-black uppercase;
+  }
+
+  .calendar-year-month > div {
+    @apply mt-3 space-y-2;
+  }
+
+  .calendar-year-month article {
+    @apply bg-base-100/70 relative flex min-h-14 items-center gap-2 overflow-hidden rounded border px-2 py-1.5;
+  }
+
+  .calendar-year-month article > img:first-child {
+    @apply pointer-events-none absolute right-0 bottom-0 size-16 object-contain opacity-15;
+  }
+
+  .calendar-year-month article > img:nth-child(2) {
+    @apply relative z-10 size-8 shrink-0 object-contain;
+  }
+
+  .calendar-year-month article strong,
+  .calendar-year-month article span {
+    @apply relative z-10 min-w-0;
+  }
+
+  .calendar-year-month article strong {
+    @apply truncate text-xs font-bold;
+  }
+
+  .calendar-year-month article span {
+    @apply text-base-content/60 ml-auto shrink-0 text-[0.6rem] font-semibold;
+  }
+
+  .calendar-fixtures-panel,
+  .calendar-grid-panel {
+    @apply border-base-content/15 h-full min-h-0 overflow-hidden rounded-lg border;
+  }
+
+  .calendar-fixtures-panel {
+    @apply bg-base-200 overflow-y-auto;
+  }
+
+  .calendar-grid-panel {
+    @apply bg-base-100;
+  }
+
+  .calendar-fixtures > header,
+  .calendar-fixtures-empty > header {
+    @apply border-base-content/10 flex items-start justify-between gap-3 border-b p-4;
+  }
+
+  .calendar-my-day > header {
+    @apply border-base-content/10 border-b px-4 py-4;
+  }
+
+  .calendar-my-day h2 {
+    @apply text-lg font-black;
+  }
+
+  .calendar-my-day-content {
+    @apply space-y-3 p-3;
+  }
+
+  .calendar-my-match-card {
+    @apply border-base-content/15 bg-base-200/45 overflow-hidden rounded border;
+  }
+
+  .calendar-my-match-scoreboard {
+    @apply border-base-content/10 bg-base-200 relative isolate grid items-center overflow-hidden border-b px-3 py-4;
+    grid-template-columns: minmax(4.5rem, 1fr) 3.25rem 5rem 3.25rem minmax(4.5rem, 1fr);
+    column-gap: 0.5rem;
+  }
+
+  .calendar-my-match-country-bg {
+    @apply pointer-events-none absolute inset-y-0 left-0 -z-10 border-0! bg-left bg-no-repeat opacity-15 saturate-75;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 50% !important;
+    height: 100% !important;
+    background-size: auto 150% !important;
+    mask-image: linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 0%,
+      rgba(0, 0, 0, 0.8) 42%,
+      transparent 100%
+    );
+  }
+
+  .calendar-my-match-country-bg.is-away {
+    @apply right-0 left-auto bg-right;
+    right: 0 !important;
+    left: auto !important;
+    mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.8) 42%, transparent 100%);
+  }
+
+  .calendar-my-match-team {
+    @apply flex min-w-0 flex-col gap-1;
+    grid-row: 1;
+  }
+
+  .calendar-my-match-team:first-child {
+    @apply items-start;
+  }
+
+  .calendar-my-match-team:last-child {
+    @apply items-end;
+  }
+
+  .calendar-my-match-team strong {
+    @apply w-full truncate text-xs font-bold;
+  }
+
+  .calendar-my-match-score {
+    @apply relative z-10 text-center text-4xl leading-none font-black whitespace-nowrap tabular-nums;
+    grid-row: 1;
+  }
+
+  .calendar-my-match-competition {
+    @apply flex min-w-0 flex-col items-center gap-0.5 text-center;
+    grid-row: 1;
+  }
+
+  .calendar-my-match-competition strong {
+    @apply w-full truncate text-[0.65rem] font-black;
+  }
+
+  .calendar-my-match-competition small {
+    @apply text-base-content/55 text-[0.55rem] font-bold uppercase;
+  }
+
+  .calendar-my-match-summary {
+    @apply border-base-content/10 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] gap-2 border-b p-2;
+  }
+
+  .calendar-my-match-map,
+  .calendar-my-match-info {
+    @apply border-base-content/10 bg-base-100/55 min-w-0 overflow-hidden rounded border;
+  }
+
+  .calendar-my-match-map > p,
+  .calendar-my-match-info > p,
+  .calendar-my-match-statistics > p {
+    @apply border-base-content/10 text-base-content/65 border-b px-2 py-1 text-[0.6rem] font-black uppercase;
+  }
+
+  .calendar-my-match-map figure {
+    @apply relative h-20 overflow-hidden;
+  }
+
+  .calendar-my-match-map figure > img {
+    @apply size-full object-cover;
+  }
+
+  .calendar-my-match-map figcaption {
+    @apply bg-base-300/85 absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-2 py-1 text-[0.65rem];
+  }
+
+  .calendar-my-match-map figcaption strong {
+    @apply truncate font-bold;
+  }
+
+  .calendar-my-match-map figcaption span {
+    @apply shrink-0 font-black tabular-nums;
+  }
+
+  .calendar-my-match-info > span {
+    @apply text-base-content/65 block px-2 pt-2 text-[0.65rem] font-semibold;
+  }
+
+  .calendar-my-match-info > span + span {
+    @apply pt-1 pb-2;
+  }
+
+  .calendar-my-match-pending {
+    @apply text-base-content/50 flex h-20 items-center justify-center text-xs font-semibold;
+  }
+
+  .calendar-my-match-statistics {
+    @apply divide-base-content/10 border-base-content/10 divide-y border-b;
+  }
+
+  .calendar-my-match-statistics table {
+    @apply table-xs table w-full text-[0.6rem];
+  }
+
+  .calendar-my-match-statistics th {
+    @apply text-base-content/65 px-1 py-1 text-center text-[0.55rem] font-black whitespace-nowrap;
+  }
+
+  .calendar-my-match-statistics th:first-child,
+  .calendar-my-match-statistics td:first-child {
+    @apply text-left;
+  }
+
+  .calendar-my-match-statistics td {
+    @apply px-1 py-0.5 text-center tabular-nums;
+  }
+
+  .calendar-my-match-actions {
+    @apply border-base-content/10 grid auto-cols-fr grid-flow-col gap-2 border-t p-2;
+  }
+
+  .calendar-my-match-actions .btn {
+    @apply border-base-content/15 bg-base-100 hover:border-primary/70 h-7 min-h-7 rounded text-[0.65rem] shadow-none;
+  }
+
+  .calendar-my-day-empty {
+    @apply text-base-content/55 flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center;
+  }
+
+  .calendar-my-day-empty svg {
+    @apply text-primary/70 size-8;
+  }
+
+  .calendar-my-day-empty p {
+    @apply text-base-content text-sm font-bold;
+  }
+
+  .calendar-fixtures h2,
+  .calendar-fixtures-empty h2 {
+    @apply text-lg font-black;
+  }
+
+  .calendar-fixtures header p,
+  .calendar-fixtures-empty header p {
+    @apply text-base-content/65 mt-1 text-xs font-semibold;
+  }
+
+  .calendar-match-count {
+    @apply border-base-content/15 bg-base-300/60 text-base-content/80 flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.65rem] font-bold uppercase;
+  }
+
+  .calendar-match-count svg {
+    @apply text-primary;
+  }
+
+  .calendar-fixture-groups {
+    @apply space-y-3 p-3;
+  }
+
+  .calendar-career-activity {
+    @apply border-base-content/15 bg-base-200/45 space-y-2 rounded border p-2.5;
+  }
+
+  .calendar-career-activity h3 {
+    @apply text-base-content/65 text-[0.65rem] font-black tracking-wide uppercase;
+  }
+
+  .calendar-career-entry {
+    @apply border-base-content/15 bg-base-100/70 text-base-content flex min-w-0 items-center gap-2 rounded border px-2 py-1.5 text-xs font-semibold;
+  }
+
+  .calendar-career-entry span:last-child {
+    @apply truncate;
+  }
+
+  .calendar-career-entry.signed {
+    @apply border-success/40;
+  }
+
+  .calendar-career-entry.joined {
+    @apply border-primary/40;
+  }
+
+  .calendar-career-entry.left {
+    @apply border-error/40;
+  }
+
+  .calendar-fixture-group {
+    @apply border-base-content/15 bg-base-100/45 overflow-hidden rounded-md border;
+  }
+
+  .calendar-fixture-group > header {
+    @apply border-base-content/10 flex items-center gap-2 border-b p-2.5;
+  }
+
+  .calendar-fixture-group > header > span > span:last-child {
+    @apply text-base-content/55;
+  }
+
+  .calendar-group-count {
+    @apply bg-primary text-primary-content flex size-6 items-center justify-center rounded-full text-xs font-black;
+  }
+
+  .calendar-fixture-group > section {
+    @apply space-y-1 p-1.5;
+  }
+
+  .calendar-fixture-match {
+    @apply border-base-content/10 bg-base-200/40 rounded border p-2 transition-colors;
+  }
+
+  .calendar-fixture-match:hover,
+  .calendar-fixture-match.is-active {
+    @apply border-primary/60 bg-base-300/70;
+  }
+
+  .calendar-fixture-match button:first-child {
+    @apply text-base-content/90;
+  }
+
+  .calendar-score {
+    @apply bg-base-100 rounded px-1.5 py-0.5 text-xs font-black;
+  }
+
+  .calendar-fixture-actions {
+    @apply mt-2 flex gap-1.5;
+  }
+
+  .calendar-fixture-actions .btn {
+    @apply border-base-content/15 bg-base-100 hover:border-primary/70 h-7 min-h-7 rounded text-[0.65rem] shadow-none;
+  }
+
+  .calendar-fixtures-empty > div {
+    @apply text-base-content/55 flex min-h-52 flex-col items-center justify-center gap-2 p-6 text-center;
+  }
+
+  .calendar-fixtures-empty > div svg {
+    @apply text-primary/70 size-8;
+  }
+
+  .calendar-fixtures-empty > div p {
+    @apply text-base-content font-bold;
+  }
+
+  .calendar-fixtures-empty > div span {
+    @apply text-xs;
+  }
+
+  .calendar-grid-panel {
+    @apply grid grid-rows-[2.5rem_minmax(0,1fr)];
+  }
+
+  .calendar-weekdays {
+    @apply border-base-content/10 grid grid-cols-7 border-b;
+  }
+
+  .calendar-weekdays span {
+    @apply text-base-content/70 flex items-center justify-center text-xs font-black uppercase;
+  }
+
+  .calendar-grid {
+    @apply grid min-h-0 grid-cols-7;
+  }
+
+  .calendar-day {
+    @apply border-base-content/10 relative min-h-0 border-r border-b;
+  }
+
+  .calendar-day:nth-child(7n) {
+    @apply border-r-0;
+  }
+
+  .calendar-day:nth-last-child(-n + 7) {
+    @apply border-b-0;
+  }
+
+  .calendar-day.is-empty {
+    @apply bg-base-300/15;
+  }
+
+  .calendar-day.is-today:not(.is-selected) {
+    @apply bg-primary/5;
+  }
+
+  .calendar-day.is-selected {
+    @apply z-10;
+  }
+  .calendar-day.is-selected::after {
+    @apply pointer-events-none absolute inset-0 z-30 content-[''];
+    border: 2px solid var(--color-primary);
+  }
+
+  .calendar-day-button {
+    @apply hover:bg-base-300/45 flex h-full w-full items-start justify-start p-0 text-left transition-colors;
+  }
+
+  .calendar-day-button > time {
+    @apply m-2;
+  }
+
+  .calendar-day-button > time,
+  .calendar-day-summary time {
+    @apply text-base-content/90 block text-base font-black;
+  }
+
+  .calendar-day-summary {
+    @apply relative flex h-full w-full flex-col gap-2 overflow-hidden p-2;
+  }
+
+  .calendar-day-summary
+    > :not(.calendar-day-competition-logo):not(.calendar-day-team-logo):not(
+      .calendar-day-score
+    ):not(.calendar-day-tournament-logo):not(.calendar-day-global-tournament-logo) {
+    @apply relative z-10;
+  }
+
+  .calendar-day-competition-logo {
+    @apply pointer-events-none absolute right-0 bottom-0 z-0 h-[70%] w-[75%] object-contain opacity-8;
+    object-position: right bottom;
+  }
+
+  .calendar-day-summary > div:first-child {
+    @apply flex items-start justify-between gap-2;
+  }
+
+  .calendar-career-day {
+    @apply relative flex h-full w-full flex-col overflow-hidden p-2;
+  }
+
+  .calendar-career-day > time {
+    @apply text-base-content/90 text-base font-black;
+  }
+
+  .calendar-career-signing {
+    background:
+      radial-gradient(
+        circle at top left,
+        color-mix(in srgb, var(--color-warning) 20%, transparent),
+        transparent 72%
+      ),
+      linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--color-warning) 7%, var(--color-base-100)),
+        var(--color-base-100)
+      );
+  }
+
+  .calendar-career-signing-logo {
+    @apply pointer-events-none absolute right-[-0.5rem] bottom-[-0.5rem] h-[85%] w-[85%] object-contain opacity-20;
+  }
+
+  .calendar-career-signing-label {
+    @apply text-base-content/90 relative z-10 mt-1 text-xs font-black;
+  }
+
+  .calendar-career-contract {
+    @apply text-base-content absolute bottom-2 left-2 z-10 flex flex-col items-center gap-2 text-center text-xs font-black;
+  }
+
+  .calendar-career-contract svg {
+    @apply text-warning size-10;
+  }
+
+  .calendar-marker-dots {
+    @apply absolute top-2 right-2 z-20 flex max-w-[60%] flex-wrap justify-end gap-1;
+  }
+
+  .calendar-marker-dots > span {
+    @apply block size-2 rounded-full;
+  }
+
+  .calendar-event-marker {
+    @apply text-base-content/85 block truncate text-sm font-bold;
+  }
+
+  .calendar-day-tournament-logo {
+    @apply pointer-events-none absolute top-14 left-2 z-10 size-15 object-contain;
+  }
+
+  .calendar-day-global-tournament-logo {
+    @apply pointer-events-none absolute bottom-2 left-2 z-10 size-13 object-contain;
+  }
+
+  .calendar-day-match-count {
+    @apply text-base-content/60 flex items-center gap-1 text-[0.65rem] font-medium;
+  }
+
+  .calendar-day-team-logo {
+    @apply pointer-events-none absolute right-2 bottom-2 z-20 size-12 object-contain;
+  }
+
+  .calendar-day-score {
+    @apply absolute bottom-2 left-2 z-20 rounded-full px-2 py-0.5 text-xs font-black;
+  }
+
+  .calendar-day-score.is-win {
+    @apply bg-success text-success-content;
+  }
+
+  .calendar-day-score.is-loss {
+    @apply bg-error text-error-content;
+  }
+
+  .calendar-day-score.is-draw {
+    @apply bg-base-300 text-base-content;
+  }
+
+  @media (max-width: 900px) {
+    .calendar-toolbar {
+      @apply h-auto flex-wrap gap-3 py-3;
+    }
+
+    .calendar-month-controls {
+      @apply ml-0;
+    }
+
+    .calendar-content {
+      @apply grid-cols-1 overflow-y-auto;
+    }
+
+    .calendar-fixtures-panel {
+      @apply max-h-72;
+    }
+
+    .calendar-grid-panel {
+      @apply min-h-150;
+    }
   }
 }
 

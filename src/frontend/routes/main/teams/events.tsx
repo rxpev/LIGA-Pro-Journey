@@ -173,10 +173,17 @@ function getEventKey(competition: TeamCompetition) {
 }
 
 function getEventLogo(competition: TeamCompetition) {
-  return Util.getCompetitionLogo(competition.tier.slug, competition.federation.slug, {
-    location: competition.location,
-    organizer: competition.organizer,
-  });
+  return (
+    Util.getCompetitionThumbnail({
+      federationSlug: competition.federation.slug,
+      organizer: competition.organizer,
+      tierSlug: competition.tier.slug,
+    }) ||
+    Util.getCompetitionLogo(competition.tier.slug, competition.federation.slug, {
+      location: competition.location,
+      organizer: competition.organizer,
+    })
+  );
 }
 
 function getCompetitionLink(competition: TeamCompetition) {

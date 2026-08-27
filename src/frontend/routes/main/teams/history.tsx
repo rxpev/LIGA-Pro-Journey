@@ -401,10 +401,13 @@ export default function () {
                 <Image
                   alt={honor.tierSlug}
                   className="w-2/3"
-                  src={Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                    location: honor.location,
-                    organizer: honor.organizer,
-                  })}
+                  src={
+                    Util.getCompetitionHonorThumbnail(honor) ||
+                    Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                      location: honor.location,
+                      organizer: honor.organizer,
+                    })
+                  }
                 />
                 <p className="text-4xl font-bold">{honor.count}</p>
                 <p className="text-sm">
