@@ -6,7 +6,9 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  addDays,
   addMonths,
+  addWeeks,
   addYears,
   differenceInCalendarMonths,
   eachDayOfInterval,
@@ -18,10 +20,12 @@ import {
   isSameDay,
   startOfMonth,
   startOfWeek,
+  subDays,
   subMonths,
   subYears,
 } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
+import Tournament from '@liga/shared/tournament';
 import { AppStateContext } from '@liga/frontend/redux';
 import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
@@ -57,6 +61,45 @@ type CalendarMatch = MatchesResponse[number];
 type YearlyCompetition = Awaited<
   ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
 >[number];
+type ScheduledMatchday = {
+  competition: YearlyCompetition;
+  date: Date;
+  fixtures: number;
+  label: string;
+  round: number;
+};
+
+function getProjectedCalendarMatch(competition: YearlyCompetition) {
+  return { competition, competitionId: competition.id } as CalendarMatch;
+}
+
+function projectScheduleDateToYear(date: Date, year: number) {
+  // Calendar templates are anchored to a non-leap year. Normalise a source
+  // date back to that template before applying the target year's leap shift.
+  const source = new Date(date);
+  const normalised =
+    isLeapYear(source) && source.getMonth() > 1 ? addDays(source, 1) : new Date(source);
+  normalised.setFullYear(year);
+
+  return isLeapYear(normalised) && normalised.getMonth() > 1 ? subDays(normalised, 1) : normalised;
+}
+
+function projectScheduleDatesToYear<T extends Record<number, Date | { end: Date; start: Date }>>(
+  dates: T,
+  year: number,
+) {
+  return Object.fromEntries(
+    Object.entries(dates).map(([id, value]) => [
+      id,
+      value instanceof Date
+        ? projectScheduleDateToYear(value, year)
+        : {
+            end: projectScheduleDateToYear(value.end, year),
+            start: projectScheduleDateToYear(value.start, year),
+          },
+    ]),
+  ) as T;
+}
 type CareerStint = {
   teamId: number | null;
   startedAt: Date | string;
@@ -147,6 +190,59 @@ const ESEA_SEASON_TIER_SLUGS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
 ]);
 
+const IEM_QUALIFIER_SIZES: Partial<Record<Constants.FederationSlug, number>> = {
+  [Constants.FederationSlug.ESPORTS_AMERICAS]: 112,
+  [Constants.FederationSlug.ESPORTS_ASIA]: 50,
+  [Constants.FederationSlug.ESPORTS_EUROPA]: 111,
+  [Constants.FederationSlug.ESPORTS_OCE]: 36,
+};
+
+const IEM_GROUP_STAGE_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+]);
+
+const GROUP_SWISS_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.CCT_OCE_SERIES,
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.LEAGUE_PRO,
+]);
+
+const THREE_MATCHES_PER_WEEK_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
+]);
+
+const SUCCESSIVE_ROUND_TIER_SLUGS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+  Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  Constants.TierSlug.CCT_OCE_SERIES,
+  Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+  Constants.TierSlug.ESEA_CASH_CUP,
+  Constants.TierSlug.ESL_CHALLENGER,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+  Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+  Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+  Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+]);
+
 function getTournamentColor(match: CalendarMatch) {
   const leagueSlug = match.competition?.tier?.league?.slug;
 
@@ -225,10 +321,14 @@ function getCalendarCompetitionLabel(match: CalendarMatch) {
   return useEventLevelName ? label.replace(/\s+Group (?:Stage|[A-Z])$/i, '') : label;
 }
 
-function getYearlyCompetitionLabel(competition: YearlyCompetition) {
+function getYearlyCompetitionLabel(competition: YearlyCompetition, isFutureMajorPreview = false) {
   const tier = competition.tier.slug;
 
   if (Util.isMajorStageTier(tier)) {
+    if (isFutureMajorPreview) {
+      return 'Major';
+    }
+
     return Util.getMajorEventDisplayName(competition.location, competition.organizer);
   }
 
@@ -319,6 +419,228 @@ function getStageLabel(match: CalendarMatch, matchdayLabel: string) {
   }
 
   return getTeamsRoundLabel(match);
+}
+
+function getProjectedRoundLabel(
+  competition: YearlyCompetition,
+  tournament: Tournament,
+  match: { id?: unknown; round: number },
+) {
+  return Util.getMatchRoundLabel({
+    competition: {
+      tier: competition.tier,
+      tournament: JSON.stringify(tournament.save()),
+    },
+    payload: match.id ? JSON.stringify(match.id) : null,
+    round: match.round,
+    totalRounds: tournament.$base.rounds().length,
+  });
+}
+
+/**
+ * Builds the full known fixture calendar from the same tournament formats and
+ * round cadence used when match records are created. Fixtures whose opponents
+ * depend on prior results remain TBA, but their matchday and round are still
+ * visible throughout the year.
+ */
+function getScheduledMatchdays(
+  competitions: YearlyCompetition[],
+  year: number,
+  savedDates: Record<number, { end: Date; start: Date }>,
+  savedStartDates: Record<number, Date>,
+) {
+  return competitions.flatMap((competition) => {
+    const tierSlug = competition.tier.slug as Constants.TierSlug;
+    const canContinueAfterStart =
+      Boolean(Constants.TierSwissConfig[tierSlug]) ||
+      IEM_GROUP_STAGE_TIER_SLUGS.has(tierSlug) ||
+      (GROUP_SWISS_TIER_SLUGS.has(tierSlug) && Boolean(competition.tier.groupSize));
+    if (
+      competition.status !== Constants.CompetitionStatus.SCHEDULED &&
+      !(competition.status === Constants.CompetitionStatus.STARTED && canContinueAfterStart)
+    ) {
+      return [];
+    }
+
+    const dates =
+      savedDates[competition.id] ||
+      (savedStartDates[competition.id]
+        ? { end: savedStartDates[competition.id], start: savedStartDates[competition.id] }
+        : getStageDatesForYear(competition.federation.slug, competition.tier.slug, year));
+    if (!dates) return [];
+
+    const bracketSize =
+      (tierSlug === Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER ||
+        tierSlug === Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER) &&
+      IEM_QUALIFIER_SIZES[competition.federation.slug as Constants.FederationSlug]
+        ? IEM_QUALIFIER_SIZES[competition.federation.slug as Constants.FederationSlug]!
+        : competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
+          ? Util.getLeagueTierSize(
+              tierSlug,
+              competition.federation.slug as Constants.FederationSlug,
+              competition.tier.size,
+            )
+          : competition.tier.size;
+    const swissConfig = Constants.TierSwissConfig[tierSlug];
+    const isIemGroup = IEM_GROUP_STAGE_TIER_SLUGS.has(tierSlug);
+    const isGroupSwiss =
+      GROUP_SWISS_TIER_SLUGS.has(tierSlug) && Boolean(competition.tier.groupSize);
+    const isDoubleElimination = tierSlug === Constants.TierSlug.BLAST_FINALS;
+    const tournament = new Tournament(
+      bracketSize,
+      swissConfig
+        ? {
+            swiss: {
+              maxLosses: swissConfig.maxLosses,
+              maxRounds: swissConfig.maxRounds,
+              maxWins: swissConfig.maxWins,
+            },
+          }
+        : isGroupSwiss
+          ? {
+              groupSize: Math.min(competition.tier.groupSize!, bracketSize),
+              groupSwiss: true,
+              maxLosses: 2,
+              maxRounds: 3,
+              maxWins: 2,
+            }
+          : isIemGroup
+            ? { iemGroup: true, last: Constants.BracketIdentifier.LOWER, short: true }
+            : competition.tier.groupSize
+              ? { groupSize: Math.min(competition.tier.groupSize, bracketSize), meetTwice: false }
+              : isDoubleElimination
+                ? { last: Constants.BracketIdentifier.LOWER, short: true }
+                : { short: true },
+    );
+    tournament.addCompetitors(Array.from({ length: bracketSize }, (_, index) => index + 1));
+    tournament.start();
+
+    if (isIemGroup) {
+      // Both IEM groups use the same four-day double-elimination cadence.
+      // This is also the date layout rendered by the empty group brackets.
+      return [
+        { fixtures: 4, matchIds: [{ r: 1, s: Constants.BracketIdentifier.UPPER }] },
+        {
+          fixtures: 4,
+          matchIds: [
+            { r: 2, s: Constants.BracketIdentifier.UPPER },
+            { r: 1, s: Constants.BracketIdentifier.LOWER },
+          ],
+        },
+        {
+          fixtures: 3,
+          matchIds: [
+            { r: 3, s: Constants.BracketIdentifier.UPPER },
+            { r: 2, s: Constants.BracketIdentifier.LOWER },
+          ],
+        },
+        { fixtures: 1, matchIds: [{ r: 3, s: Constants.BracketIdentifier.LOWER }] },
+      ].map((matchday, index) => ({
+        competition,
+        date: addDays(dates.start, index + 1),
+        fixtures: matchday.fixtures,
+        label: matchday.matchIds
+          .map((id) => getProjectedRoundLabel(competition, tournament, { id, round: id.r }))
+          .join(' · '),
+        round: index + 1,
+      }));
+    }
+
+    if (swissConfig || isGroupSwiss) {
+      const maxRounds = swissConfig?.maxRounds ?? 3;
+      return Array.from({ length: maxRounds }, (_, index) => {
+        const round = index + 1;
+        const fixtures = Math.floor(bracketSize / 2);
+        return {
+          competition,
+          date: addDays(dates.start, round),
+          fixtures,
+          label: getProjectedRoundLabel(competition, tournament, { round }),
+          round,
+        };
+      });
+    }
+
+    if (competition.tier.groupSize) {
+      return tournament.groups.rounds().map((matches, index) => {
+        const round = index + 1;
+        const date = THREE_MATCHES_PER_WEEK_TIER_SLUGS.has(tierSlug)
+          ? addDays(dates.start, 1 + Math.floor(index / 3) * 7 + (index % 3) * 2)
+          : addWeeks(dates.start, round);
+
+        return {
+          competition,
+          date,
+          fixtures: matches.length,
+          label: getProjectedRoundLabel(competition, tournament, {
+            id: matches[0]?.id,
+            round,
+          }),
+          round,
+        };
+      });
+    }
+
+    if (isDoubleElimination) {
+      const matchdays = new Map<string, ScheduledMatchday>();
+
+      tournament.brackets
+        .rounds()
+        .flat()
+        .forEach((match) => {
+          const matchId = match.id as {
+            m: number;
+            r: number;
+            s: Constants.BracketIdentifier;
+          };
+          const offset =
+            matchId.s === Constants.BracketIdentifier.LOWER ? matchId.r + 1 : matchId.r;
+          const date = addDays(dates.start, offset);
+          const label = getProjectedRoundLabel(competition, tournament, {
+            id: matchId,
+            round: matchId.r,
+          });
+          const key = `${date.toISOString()}:${label}`;
+          const existing = matchdays.get(key);
+
+          if (existing) {
+            existing.fixtures += 1;
+            return;
+          }
+
+          matchdays.set(key, {
+            competition,
+            date,
+            fixtures: 1,
+            label,
+            round: offset * 10 + matchId.s,
+          });
+        });
+
+      return [...matchdays.values()];
+    }
+
+    const upperRounds = tournament.brackets.rounds().map((matches, index) => {
+      const fixtures = matches.filter((match) => !match.p.includes(-1)).length;
+      const round = index + 1;
+      const date = THREE_MATCHES_PER_WEEK_TIER_SLUGS.has(tierSlug)
+        ? addDays(dates.start, 1 + Math.floor(index / 3) * 7 + (index % 3) * 2)
+        : SUCCESSIVE_ROUND_TIER_SLUGS.has(tierSlug) ||
+            competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_MAJOR
+          ? addDays(dates.start, round)
+          : addWeeks(dates.start, round);
+
+      return {
+        competition,
+        date,
+        fixtures,
+        label: getProjectedRoundLabel(competition, tournament, { id: matches[0]?.id, round }),
+        round,
+      };
+    });
+
+    return upperRounds;
+  });
 }
 
 function isWithinCareerStint(date: Date | string, stint: CareerStint) {
@@ -616,6 +938,10 @@ function getFixtureGroupLabel(match: CalendarMatch) {
   return [getCompetitionLabel(match), region].filter(Boolean).join(' ');
 }
 
+function getScheduledFixtureGroupLabel(competition: YearlyCompetition) {
+  return getFixtureGroupLabel({ competition } as CalendarMatch);
+}
+
 function getTournamentGroups(matches: CalendarMatch[]) {
   return Object.values(
     matches.filter(isPlayableFixture).reduce<
@@ -683,11 +1009,19 @@ export default function () {
   const [mode, setMode] = React.useState<CalendarMode>(defaultMode);
   const [selectedDate, setSelectedDate] = React.useState(state.profile?.date || new Date());
   const [spotlight, setSpotlight] = React.useState<CalendarMatch>();
+  const [datePicker, setDatePicker] = React.useState<'month' | 'year'>();
+  const datePickerRef = React.useRef<HTMLDivElement>(null);
   const [hoveredYearlyCompetitionId, setHoveredYearlyCompetitionId] = React.useState<number>();
   const [yearlyCalendarAction, setYearlyCalendarAction] = React.useState<YearlyCalendarAction>();
   const [careerStints, setCareerStints] = React.useState<CareerStint[]>([]);
   const today = React.useMemo(() => state.profile?.date || new Date(), [state.profile]);
   const yearlyMaximumYear = today.getFullYear() + 1;
+  const selectableYears = React.useMemo(() => {
+    const firstYear = new Date(Constants.NewSaveSeasonStartDate).getFullYear();
+    const lastYear = yearlyMaximumYear;
+
+    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index);
+  }, [yearlyMaximumYear]);
   const game = React.useMemo(
     () =>
       state.profile?.settings
@@ -699,6 +1033,24 @@ export default function () {
   React.useEffect(() => {
     setMode(defaultMode);
   }, [defaultMode]);
+
+  React.useEffect(() => {
+    if (mode === 'yearly') {
+      setDatePicker(undefined);
+    }
+  }, [mode]);
+
+  React.useEffect(() => {
+    if (!datePicker) return;
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (datePickerRef.current?.contains(event.target as Node)) return;
+      setDatePicker(undefined);
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [datePicker]);
 
   React.useEffect(() => {
     if (mode !== 'yearly' || current.getFullYear() <= yearlyMaximumYear) {
@@ -817,9 +1169,11 @@ export default function () {
   const [matches, setMatches] = React.useState<MatchesResponse>([]);
   const [matchDetails, setMatchDetails] = React.useState<CalendarMatchDetails[]>([]);
   const [yearlyCompetitions, setYearlyCompetitions] = React.useState<YearlyCompetition[]>([]);
+  const [isFutureSeasonProjection, setIsFutureSeasonProjection] = React.useState(false);
   const [yearlyDates, setYearlyDates] = React.useState<Record<number, { end: Date; start: Date }>>(
     {},
   );
+  const [yearlyStartDates, setYearlyStartDates] = React.useState<Record<number, Date>>({});
 
   React.useEffect(() => {
     api.matches
@@ -838,18 +1192,48 @@ export default function () {
   }, [start, end]);
 
   React.useEffect(() => {
-    if (mode !== 'yearly') return;
+    if (mode !== 'yearly' && mode !== 'global') return;
+
+    const targetYear = current.getFullYear();
+    const targetSeason = targetYear - 2025;
+    const currentSaveYear = today.getFullYear();
+    const sourceSeason = currentSaveYear - 2025;
 
     api.competitions
       .all<typeof Eagers.competition>({
         ...Eagers.competition,
-        where: { season: current.getFullYear() - 2025 },
+        where: { season: targetSeason },
       })
-      .then(setYearlyCompetitions);
-  }, [current, mode]);
+      .then(async (competitions) => {
+        if (
+          competitions.length ||
+          targetYear <= currentSaveYear ||
+          targetYear > currentSaveYear + 1
+        ) {
+          setIsFutureSeasonProjection(false);
+          setYearlyCompetitions(competitions);
+          return;
+        }
+
+        const sourceCompetitions = await api.competitions.all<typeof Eagers.competition>({
+          ...Eagers.competition,
+          where: { season: sourceSeason },
+        });
+        setIsFutureSeasonProjection(true);
+        setYearlyCompetitions(
+          sourceCompetitions.map((competition) => ({
+            ...competition,
+            location: Util.isMajorStageTier(competition.tier.slug) ? null : competition.location,
+            organizer: Util.isMajorStageTier(competition.tier.slug) ? null : competition.organizer,
+            season: targetSeason,
+            status: Constants.CompetitionStatus.SCHEDULED,
+          })),
+        );
+      });
+  }, [current, mode, today]);
 
   React.useEffect(() => {
-    if (mode !== 'yearly' || !yearlyCompetitions.length) return;
+    if ((mode !== 'yearly' && mode !== 'global') || !yearlyCompetitions.length) return;
 
     Promise.all(
       yearlyCompetitions.map(async (competition) => {
@@ -867,21 +1251,47 @@ export default function () {
             },
           }),
         ]);
-        return start?.date && end?.date
-          ? ([competition.id, { start: new Date(start.date), end: new Date(end.date) }] as const)
-          : null;
+        return {
+          end: end?.date ? new Date(end.date) : null,
+          id: competition.id,
+          start: start?.date ? new Date(start.date) : null,
+        };
       }),
-    ).then((entries) =>
+    ).then((entries) => {
       setYearlyDates(
-        Object.fromEntries(entries.filter(Boolean)) as Record<number, { end: Date; start: Date }>,
-      ),
-    );
+        Object.fromEntries(
+          entries
+            .filter((entry) => entry.start && entry.end)
+            .map((entry) => [entry.id, { end: entry.end!, start: entry.start! }]),
+        ),
+      );
+      setYearlyStartDates(
+        Object.fromEntries(
+          entries.filter((entry) => entry.start).map((entry) => [entry.id, entry.start!]),
+        ),
+      );
+    });
   }, [mode, yearlyCompetitions]);
+
+  const displayYearlyDates = React.useMemo(
+    () =>
+      isFutureSeasonProjection
+        ? projectScheduleDatesToYear(yearlyDates, current.getFullYear())
+        : yearlyDates,
+    [current, isFutureSeasonProjection, yearlyDates],
+  );
+  const displayYearlyStartDates = React.useMemo(
+    () =>
+      isFutureSeasonProjection
+        ? projectScheduleDatesToYear(yearlyStartDates, current.getFullYear())
+        : yearlyStartDates,
+    [current, isFutureSeasonProjection, yearlyStartDates],
+  );
 
   const yearlyStages = React.useMemo(() => {
     const stages = yearlyCompetitions
       .map((competition) => {
-        const savedDates = yearlyDates[competition.id];
+        const savedDates = displayYearlyDates[competition.id];
         if (savedDates) return { competition, ...savedDates };
         const dates = getStageDatesForYear(
           competition.federation.slug,
@@ -1157,7 +1567,7 @@ export default function () {
           ]
         : []),
     ];
-  }, [current, yearlyCompetitions, yearlyDates]);
+  }, [current, displayYearlyDates, yearlyCompetitions]);
 
   const yearlyStageSegments = React.useMemo(
     () =>
@@ -1231,6 +1641,23 @@ export default function () {
         .sort(sortMatches),
     [careerStints, matches, mode, playerId],
   );
+  const scheduledMatchdays = React.useMemo(() => {
+    if (mode !== 'global') return [];
+
+    return getScheduledMatchdays(
+      yearlyCompetitions,
+      current.getFullYear(),
+      displayYearlyDates,
+      displayYearlyStartDates,
+    ).filter(
+      (matchday) =>
+        !matches.some(
+          (match) =>
+            match.competitionId === matchday.competition.id &&
+            isSameDay(new Date(match.date), matchday.date),
+        ),
+    );
+  }, [current, displayYearlyDates, displayYearlyStartDates, matches, mode, yearlyCompetitions]);
 
   const selectedMatches = React.useMemo(
     () => visibleMatches.filter((match) => isSameDay(match.date, selectedDate)),
@@ -1239,6 +1666,14 @@ export default function () {
   const selectedFixtures = React.useMemo(
     () => selectedMatches.filter(isPlayableFixture),
     [selectedMatches],
+  );
+  const selectedScheduledMatchdays = React.useMemo(
+    () => scheduledMatchdays.filter((matchday) => isSameDay(matchday.date, selectedDate)),
+    [scheduledMatchdays, selectedDate],
+  );
+  const selectedPlannedFixtureCount = React.useMemo(
+    () => selectedScheduledMatchdays.reduce((total, matchday) => total + matchday.fixtures, 0),
+    [selectedScheduledMatchdays],
   );
   const selectedFixtureIds = React.useMemo(
     () => selectedFixtures.map((match) => match.id),
@@ -1331,14 +1766,162 @@ export default function () {
           >
             <FaChevronLeft />
           </button>
-          <h2>{mode === 'yearly' ? format(current, 'yyyy') : format(current, 'MMMM yyyy')}</h2>
+          {mode === 'yearly' ? (
+            <div ref={datePickerRef} className="relative min-w-36 text-center">
+              <div className="text-lg font-black tracking-tight">
+                <button
+                  type="button"
+                  className="hover:bg-base-300 rounded px-0.5 transition-colors"
+                  aria-expanded={datePicker === 'year'}
+                  aria-haspopup="dialog"
+                  onClick={() => setDatePicker(datePicker === 'year' ? undefined : 'year')}
+                >
+                  {format(current, 'yyyy')}
+                </button>
+              </div>
+              {datePicker === 'year' && (
+                <section
+                  className="border-base-content/15 bg-base-100 absolute top-full left-1/2 z-50 mt-2 flex w-32 -translate-x-1/2 flex-col gap-1 rounded-lg border p-2 shadow-xl"
+                  aria-label="Select year"
+                  role="dialog"
+                >
+                  {selectableYears.map((year) => (
+                    <button
+                      key={year}
+                      type="button"
+                      className={cx(
+                        'hover:bg-base-200 rounded px-2 py-2 text-center text-sm font-bold',
+                        current.getFullYear() === year && 'bg-base-300 text-base-content',
+                      )}
+                      onClick={() => {
+                        setCurrent(
+                          new Date(
+                            year,
+                            current.getMonth(),
+                            Math.min(
+                              current.getDate(),
+                              endOfMonth(new Date(year, current.getMonth())).getDate(),
+                            ),
+                          ),
+                        );
+                        setDatePicker(undefined);
+                      }}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </section>
+              )}
+            </div>
+          ) : (
+            <div ref={datePickerRef} className="min-w-36 text-center">
+              <div className="text-lg font-black tracking-tight">
+                <span className="relative inline-block">
+                  <button
+                    type="button"
+                    className="hover:bg-base-300 rounded px-0.5 transition-colors"
+                    aria-expanded={datePicker === 'month'}
+                    aria-haspopup="dialog"
+                    onClick={() => setDatePicker(datePicker === 'month' ? undefined : 'month')}
+                  >
+                    {format(current, 'MMMM')}
+                  </button>
+                  {datePicker === 'month' && (
+                    <section
+                      className="border-base-content/15 bg-base-100 absolute top-full left-1/2 z-50 mt-2 flex w-32 -translate-x-1/2 flex-col gap-1 rounded-lg border p-2 shadow-xl"
+                      aria-label="Select month"
+                      role="dialog"
+                    >
+                      {Array.from({ length: 12 }, (_, month) => (
+                        <button
+                          key={month}
+                          type="button"
+                          className={cx(
+                            'hover:bg-base-200 rounded px-2 py-2 text-center text-sm font-bold',
+                            current.getMonth() === month && 'bg-base-300 text-base-content',
+                          )}
+                          onClick={() => {
+                            setCurrent(
+                              new Date(
+                                current.getFullYear(),
+                                month,
+                                Math.min(
+                                  current.getDate(),
+                                  endOfMonth(new Date(current.getFullYear(), month)).getDate(),
+                                ),
+                              ),
+                            );
+                            setDatePicker(undefined);
+                          }}
+                        >
+                          {format(new Date(current.getFullYear(), month), 'MMM')}
+                        </button>
+                      ))}
+                    </section>
+                  )}
+                </span>{' '}
+                <span className="relative inline-block">
+                  <button
+                    type="button"
+                    className="hover:bg-base-300 rounded px-0.5 transition-colors"
+                    aria-expanded={datePicker === 'year'}
+                    aria-haspopup="dialog"
+                    onClick={() => setDatePicker(datePicker === 'year' ? undefined : 'year')}
+                  >
+                    {format(current, 'yyyy')}
+                  </button>
+                  {datePicker === 'year' && (
+                    <section
+                      className="border-base-content/15 bg-base-100 absolute top-full left-1/2 z-50 mt-2 flex w-32 -translate-x-1/2 flex-col gap-1 rounded-lg border p-2 shadow-xl"
+                      aria-label="Select year"
+                      role="dialog"
+                    >
+                      {selectableYears.map((year) => (
+                        <button
+                          key={year}
+                          type="button"
+                          className={cx(
+                            'hover:bg-base-200 rounded px-2 py-2 text-center text-sm font-bold',
+                            current.getFullYear() === year && 'bg-base-300 text-base-content',
+                          )}
+                          onClick={() => {
+                            setCurrent(
+                              new Date(
+                                year,
+                                current.getMonth(),
+                                Math.min(
+                                  current.getDate(),
+                                  endOfMonth(new Date(year, current.getMonth())).getDate(),
+                                ),
+                              ),
+                            );
+                            setDatePicker(undefined);
+                          }}
+                        >
+                          {year}
+                        </button>
+                      ))}
+                    </section>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
           <button
             className="calendar-icon-button"
             aria-label={mode === 'yearly' ? 'Next year' : 'Next month'}
             title={mode === 'yearly' ? 'Next year' : 'Next month'}
-            disabled={mode === 'yearly' && current.getFullYear() >= yearlyMaximumYear}
+            disabled={
+              current.getFullYear() > yearlyMaximumYear ||
+              (current.getFullYear() === yearlyMaximumYear &&
+                (mode === 'yearly' || current.getMonth() === 11))
+            }
             onClick={() => {
-              if (mode === 'yearly' && current.getFullYear() >= yearlyMaximumYear) {
+              if (
+                current.getFullYear() > yearlyMaximumYear ||
+                (current.getFullYear() === yearlyMaximumYear &&
+                  (mode === 'yearly' || current.getMonth() === 11))
+              ) {
                 return;
               }
 
@@ -1373,12 +1956,16 @@ export default function () {
                 </header>
                 <div className="calendar-yearly-winner-list">
                   {yearlyWinners.map((winner) => {
+                    const isFutureMajorPreview =
+                      isFutureSeasonProjection &&
+                      Util.isMajorStageTier(winner.competition.tier.slug);
                     const trophyThumbnail = Util.getCompetitionHonorThumbnail({
                       federationSlug: winner.competition.federation.slug,
                       organizer: winner.competition.organizer,
                       tierSlug: winner.competition.tier.slug,
                     });
                     const hasTrophyThumbnail =
+                      isFutureMajorPreview ||
                       trophyThumbnail?.includes('-trophy.png') ||
                       winner.competition.tier.slug === Constants.TierSlug.BLAST_FINALS;
 
@@ -1392,24 +1979,38 @@ export default function () {
                       >
                         <Image
                           className="calendar-yearly-winner-tournament-logo"
-                          src={Util.getCompetitionLogo(
-                            winner.competition.tier.slug,
-                            winner.competition.federation.slug,
-                            {
-                              location: winner.competition.location,
-                              organizer: winner.competition.organizer,
-                            },
-                          )}
+                          src={
+                            isFutureMajorPreview
+                              ? 'resources://competitions/major-preview.png'
+                              : Util.getCompetitionLogo(
+                                  winner.competition.tier.slug,
+                                  winner.competition.federation.slug,
+                                  {
+                                    location: winner.competition.location,
+                                    organizer: winner.competition.organizer,
+                                  },
+                                )
+                          }
                         />
                         <div className="calendar-yearly-winner-details">
-                          {getYearlyCompetitionLabel(winner.competition)
+                          {getYearlyCompetitionLabel(winner.competition, isFutureSeasonProjection)
                             .split(' ')
                             .map((line, index) => (
                               <span key={`${winner.label}-${line}-${index}`}>{line}</span>
                             ))}
                         </div>
                         <span className="calendar-yearly-winner-trophy" title="Winner">
-                          {hasTrophyThumbnail ? <Image src={trophyThumbnail} /> : <FaTrophy />}
+                          {hasTrophyThumbnail ? (
+                            <Image
+                              src={
+                                isFutureMajorPreview
+                                  ? 'resources://competitions/trophies/major-preview-trophy.png'
+                                  : trophyThumbnail
+                              }
+                            />
+                          ) : (
+                            <FaTrophy />
+                          )}
                         </span>
                         <strong className="calendar-yearly-winner-team-name">
                           {winner.team?.name ?? 'TBD'}
@@ -1478,25 +2079,33 @@ export default function () {
                 {[...yearlyStageSegments]
                   .sort((a, b) => a.start.getTime() - b.start.getTime())
                   .map((stage) => {
-                    const thumbnail = Util.isMajorStageTier(stage.competition.tier.slug)
-                      ? Util.getCompetitionThumbnail({
-                          tierSlug: stage.competition.tier.slug,
-                          federationSlug: stage.competition.federation.slug,
-                          organizer: stage.competition.organizer,
-                        })
+                    const isFutureMajorPreview =
+                      isFutureSeasonProjection &&
+                      Util.isMajorStageTier(stage.competition.tier.slug);
+                    const thumbnail = isFutureMajorPreview
+                      ? 'resources://competitions/trophies/major-preview-trophy.png'
                       : Util.getCompetitionHonorThumbnail({
                           tierSlug: stage.competition.tier.slug,
                           federationSlug: stage.competition.federation.slug,
                           organizer: stage.competition.organizer,
                         });
-                    const logo = Util.getCompetitionLogo(
-                      stage.competition.tier.slug,
-                      stage.competition.federation.slug,
-                      {
-                        location: stage.competition.location,
-                        organizer: stage.competition.organizer,
-                      },
-                    );
+                    const eventThumbnail = Util.isMajorStageTier(stage.competition.tier.slug)
+                      ? Util.getCompetitionThumbnail({
+                          tierSlug: stage.competition.tier.slug,
+                          federationSlug: stage.competition.federation.slug,
+                          organizer: stage.competition.organizer,
+                        })
+                      : thumbnail;
+                    const logo = isFutureMajorPreview
+                      ? 'resources://competitions/major-preview.png'
+                      : Util.getCompetitionLogo(
+                          stage.competition.tier.slug,
+                          stage.competition.federation.slug,
+                          {
+                            location: stage.competition.location,
+                            organizer: stage.competition.organizer,
+                          },
+                        );
                     const isCashCup =
                       stage.competition.tier.slug === Constants.TierSlug.ESEA_CASH_CUP;
                     const isCctSeries = [
@@ -1534,9 +2143,10 @@ export default function () {
                       isRmrQualifier ||
                       isEseaSeason ||
                       Util.isMajorStageTier(stage.competition.tier.slug);
-                    const eventIcon =
-                      useThumbnailIcon && thumbnail
-                        ? thumbnail
+                    const eventIcon = isFutureMajorPreview
+                      ? logo
+                      : useThumbnailIcon && eventThumbnail
+                        ? eventThumbnail
                         : isCctGlobalFinals
                           ? 'resources://competitions/thumbnail/cct-global-finals.png'
                           : isIemMainEvent
@@ -1548,7 +2158,7 @@ export default function () {
                     const hue = TOURNAMENT_COLORS[stage.competition.tier.league.slug] ?? '#8aa0b5';
                     const city = Util.getCompetitionHostingLocationCity(stage.competition.location);
                     const title = [
-                      getYearlyCompetitionLabel(stage.competition),
+                      getYearlyCompetitionLabel(stage.competition, isFutureSeasonProjection),
                       Util.isMajorStageTier(stage.competition.tier.slug) ||
                       isIemMainEvent ||
                       isEslChallenger ||
@@ -1611,6 +2221,9 @@ export default function () {
                   <article className="calendar-my-day">
                     <header>
                       <h2>{format(selectedDate, 'MMMM do, yyyy')}</h2>
+                      <p className="text-base-content/65 mt-1 text-xs font-semibold">
+                        Calendar activity on this date
+                      </p>
                     </header>
                     <div className="calendar-my-day-content">
                       {selectedFixtures.map((match) => {
@@ -1960,7 +2573,11 @@ export default function () {
                 );
               }
 
-              if (!selectedFixtures.length && !selectedCareerEntries.length) {
+              if (
+                !selectedFixtures.length &&
+                !selectedScheduledMatchdays.length &&
+                !selectedCareerEntries.length
+              ) {
                 return (
                   <article className="calendar-fixtures-empty">
                     <header>
@@ -1989,11 +2606,68 @@ export default function () {
                       <p>Fixtures on this date</p>
                     </div>
                     <span className="calendar-match-count">
-                      <FaTrophy /> {selectedFixtures.length}{' '}
-                      {selectedFixtures.length === 1 ? 'match' : 'matches'}
+                      <FaTrophy /> {selectedFixtures.length + selectedPlannedFixtureCount}{' '}
+                      {selectedFixtures.length + selectedPlannedFixtureCount === 1
+                        ? 'match'
+                        : 'matches'}
                     </span>
                   </header>
                   <div className="calendar-fixture-groups">
+                    {!!selectedScheduledMatchdays.length && (
+                      <>
+                        {selectedScheduledMatchdays.map((matchday) => {
+                          const isFutureMajorPreview =
+                            isFutureSeasonProjection &&
+                            Util.isMajorStageTier(matchday.competition.tier.slug);
+
+                          return (
+                            <section
+                              key={`${matchday.competition.id}:${matchday.round}`}
+                              className="calendar-fixture-group"
+                            >
+                              <header className="px-3 py-2">
+                                <Image
+                                  className="size-9 shrink-0"
+                                  src={
+                                    isFutureMajorPreview
+                                      ? 'resources://competitions/major-preview.png'
+                                      : Util.getCompetitionLogo(
+                                          matchday.competition.tier.slug,
+                                          matchday.competition.federation.slug,
+                                          {
+                                            location: matchday.competition.location,
+                                            organizer: matchday.competition.organizer,
+                                          },
+                                        )
+                                  }
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-bold">
+                                    {getScheduledFixtureGroupLabel(matchday.competition)}
+                                  </span>
+                                  <span className="block truncate text-xs">{matchday.label}</span>
+                                </span>
+                                <span className="calendar-group-count">{matchday.fixtures}</span>
+                              </header>
+                              <section>
+                                {Array.from({ length: matchday.fixtures }, (_, fixtureIndex) => (
+                                  <article key={fixtureIndex} className="calendar-fixture-match">
+                                    <Link
+                                      className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 text-left"
+                                      to={`/competitions?federationId=${matchday.competition.federationId}&season=${matchday.competition.season}&tierId=${matchday.competition.tier.id}`}
+                                    >
+                                      <span className="truncate text-sm">TBD</span>
+                                      <span className="calendar-score text-base-content/40">-</span>
+                                      <span className="truncate text-right text-sm">TBD</span>
+                                    </Link>
+                                  </article>
+                                ))}
+                              </section>
+                            </section>
+                          );
+                        })}
+                      </>
+                    )}
                     {!!selectedCareerEntries.length && (
                       <section className="calendar-career-activity">
                         <h3>Career activity</h3>
@@ -2156,6 +2830,9 @@ export default function () {
                           const matchday = visibleMatches.filter((match) =>
                             isSameDay(match.date, day),
                           );
+                          const plannedMatchdays = scheduledMatchdays.filter((matchday) =>
+                            isSameDay(matchday.date, day),
+                          );
                           const dayCareerEntries = careerEntries.filter((entry) =>
                             isSameDay(new Date(entry.date), day),
                           );
@@ -2163,13 +2840,13 @@ export default function () {
                             (entry) => entry.type === 'signed',
                           );
 
-                          if (!matchday.length && !daySigningEntry) {
+                          if (!matchday.length && !plannedMatchdays.length && !daySigningEntry) {
                             return (
                               <time dateTime={format(day, 'yyyy-MM-dd')}>{day.getDate()}</time>
                             );
                           }
 
-                          if (!matchday.length) {
+                          if (!matchday.length && !plannedMatchdays.length) {
                             return (
                               <div className="calendar-career-day calendar-career-signing">
                                 <time dateTime={format(day, 'yyyy-MM-dd')}>{day.getDate()}</time>
@@ -2184,6 +2861,87 @@ export default function () {
                                   <span>{daySigningEntry.duration || 'Contract pending'}</span>
                                   <FaFileContract />
                                 </span>
+                              </div>
+                            );
+                          }
+
+                          if (!matchday.length) {
+                            const projectedMatches = plannedMatchdays.map((matchday) =>
+                              getProjectedCalendarMatch(matchday.competition),
+                            );
+                            const primary = projectedMatches[0];
+                            const tournamentMarkers = getTournamentMarkers(projectedMatches);
+                            const firstMarker = tournamentMarkers[0];
+                            const thumbnailMatch = getCalendarThumbnailMatch(projectedMatches);
+                            const dayHue = getCalendarDayHue(primary);
+                            const isFutureMajorPreview =
+                              isFutureSeasonProjection &&
+                              Util.isMajorStageTier(primary.competition.tier.slug);
+                            const competitionThumbnail = isFutureMajorPreview
+                              ? 'resources://competitions/trophies/major-preview-trophy.png'
+                              : thumbnailMatch
+                                ? Util.getCompetitionHonorThumbnail({
+                                    federationSlug: thumbnailMatch.competition.federation.slug,
+                                    organizer: thumbnailMatch.competition.organizer,
+                                    tierSlug: thumbnailMatch.competition.tier.slug,
+                                  })
+                                : null;
+                            const competitionLogo = isFutureMajorPreview
+                              ? 'resources://competitions/major-preview.png'
+                              : Util.getCompetitionLogo(
+                                  (thumbnailMatch ?? primary).competition.tier.slug,
+                                  (thumbnailMatch ?? primary).competition.federation.slug,
+                                  {
+                                    location: (thumbnailMatch ?? primary).competition.location,
+                                    organizer: (thumbnailMatch ?? primary).competition.organizer,
+                                  },
+                                );
+                            const markerLabel = firstMarker?.label;
+
+                            return (
+                              <div
+                                className="calendar-day-summary"
+                                style={{
+                                  background: `radial-gradient(circle at top left, color-mix(in srgb, ${dayHue} 18%, transparent), transparent 70%), linear-gradient(145deg, color-mix(in srgb, ${dayHue} 7%, var(--color-base-100)), var(--color-base-100))`,
+                                }}
+                              >
+                                {!!competitionThumbnail && (
+                                  <Image
+                                    className="calendar-day-competition-logo"
+                                    src={competitionThumbnail}
+                                  />
+                                )}
+                                <div>
+                                  <time dateTime={format(day, 'yyyy-MM-dd')}>{day.getDate()}</time>
+                                  <span className="calendar-marker-dots">
+                                    {tournamentMarkers.slice(0, 5).map((marker) => (
+                                      <span
+                                        key={`${marker.label}__${marker.color}`}
+                                        className="block size-2 rounded-full"
+                                        style={{ backgroundColor: marker.color }}
+                                        title={marker.label}
+                                      />
+                                    ))}
+                                  </span>
+                                </div>
+                                {!!markerLabel && (
+                                  <p className="calendar-event-marker" title={markerLabel}>
+                                    {markerLabel}
+                                  </p>
+                                )}
+                                <Image
+                                  className="calendar-day-global-tournament-logo"
+                                  src={competitionLogo}
+                                />
+                                <div className="calendar-day-match-count">
+                                  <span>
+                                    {plannedMatchdays.reduce(
+                                      (total, matchday) => total + matchday.fixtures,
+                                      0,
+                                    )}{' '}
+                                    planned matches
+                                  </span>
+                                </div>
                               </div>
                             );
                           }
@@ -2333,7 +3091,10 @@ export default function () {
             <header className="border-base-content/10 border-b px-4 py-3">
               <h2 id="calendar-yearly-action-title" className="truncate text-sm font-black">
                 {yearlyCalendarAction.competition
-                  ? getYearlyCompetitionLabel(yearlyCalendarAction.competition)
+                  ? getYearlyCompetitionLabel(
+                      yearlyCalendarAction.competition,
+                      isFutureSeasonProjection,
+                    )
                   : format(yearlyCalendarAction.date, 'MMMM d, yyyy')}
               </h2>
               <p className="text-base-content/60 mt-0.5 text-xs">
@@ -2341,7 +3102,7 @@ export default function () {
               </p>
             </header>
             <div className="grid gap-2 p-3">
-              {!!yearlyCalendarAction.competition && (
+              {!!yearlyCalendarAction.competition && !isFutureSeasonProjection && (
                 <Link
                   className="btn btn-primary btn-sm w-full"
                   to={`/competitions?federationId=${yearlyCalendarAction.competition.federationId}&season=${yearlyCalendarAction.competition.season}&tierId=${yearlyCalendarAction.competition.tier.id}`}
