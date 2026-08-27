@@ -4,7 +4,7 @@
  * @module
  */
 import React from 'react';
-import { format } from 'date-fns';
+import { format, isLeapYear, subDays } from 'date-fns';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -116,6 +116,33 @@ const FIRST_SEASON_STAGE_DATES: Record<string, readonly [number, number]> = {
 
 export function getFirstSeasonStageDates(federationSlug: string, tierSlug: string) {
   return FIRST_SEASON_STAGE_DATES[`${federationSlug}/${tierSlug}`];
+}
+
+/**
+ * Resolves a canonical stage schedule for a calendar year. The first-season
+ * data is based on 2026 (a non-leap year); later dates move back one day after
+ * February in leap years, matching the yearly tournament schedule.
+ */
+export function getStageDatesForYear(
+  federationSlug: string,
+  tierSlug: string,
+  year: number,
+) {
+  const dates = getFirstSeasonStageDates(federationSlug, tierSlug);
+
+  if (!dates) {
+    return undefined;
+  }
+
+  const leapYear = isLeapYear(new Date(year, 0, 1));
+  const resolve = (timestamp: number) => {
+    const date = new Date(timestamp);
+    date.setFullYear(year);
+
+    return leapYear && date.getMonth() > 1 ? subDays(date, 1) : date;
+  };
+
+  return { start: resolve(dates[0]), end: resolve(dates[1]) };
 }
 
 function getTournamentThumbnail(

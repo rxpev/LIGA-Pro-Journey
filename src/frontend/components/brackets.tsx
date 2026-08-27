@@ -4,6 +4,7 @@
  * @module
  */
 import React from 'react';
+import { addDays } from 'date-fns';
 import Tournament from '@liga/shared/tournament';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -28,6 +29,8 @@ interface Props {
     iemGroup?: boolean;
     skipUpperFinal?: boolean;
     size: number;
+    /** Scheduled first day of this bracket's competition. */
+    startDate?: Date | string | null;
   };
 }
 
@@ -97,11 +100,36 @@ function getIemGroupSlotIds(skipUpperFinal: boolean) {
   ];
 }
 
-function createPlaceholderMatch(matchId: BracketMatchId): BracketDisplayMatch {
+function getPreviewMatchDate(matchId: BracketMatchId, preview?: NonNullable<Props['preview']>) {
+  if (!preview?.startDate) {
+    return new Date(0);
+  }
+
+  const startDate = new Date(preview.startDate);
+
+  if (Number.isNaN(startDate.getTime())) {
+    return new Date(0);
+  }
+
+  // This mirrors matchday scheduling: each upper-bracket round advances by a
+  // day, while lower-bracket rounds follow the corresponding upper round.
+  const offset =
+    (preview.doubleElimination || preview.iemGroup) &&
+    matchId.s === Constants.BracketIdentifier.LOWER
+      ? matchId.r + 1
+      : matchId.r;
+
+  return addDays(startDate, offset);
+}
+
+function createPlaceholderMatch(
+  matchId: BracketMatchId,
+  preview?: NonNullable<Props['preview']>,
+): BracketDisplayMatch {
   return {
     id: -Number(`${matchId.s}${matchId.r}${matchId.m}`),
     payload: JSON.stringify(matchId),
-    date: new Date(0),
+    date: getPreviewMatchDate(matchId, preview),
     competitors: [],
     isPlaceholder: true,
   } as unknown as BracketDisplayMatch;
@@ -138,7 +166,7 @@ function createPreviewMatches(preview: NonNullable<Props['preview']>): BracketMa
       .flat()
       .filter((match) => iemPlayoffMatchKeys.has(getMatchKey(match.id)))
       .map((match, index) =>
-        Object.assign(createPlaceholderMatch(match.id), {
+        Object.assign(createPlaceholderMatch(match.id, preview), {
           id: -(index + 1),
           competition: { tournament },
         }),
@@ -149,7 +177,7 @@ function createPreviewMatches(preview: NonNullable<Props['preview']>): BracketMa
     .rounds()
     .flat()
     .map((match, index) =>
-      Object.assign(createPlaceholderMatch(match.id), {
+      Object.assign(createPlaceholderMatch(match.id, preview), {
         id: -(index + 1),
         competition: { tournament },
       }),
@@ -213,7 +241,7 @@ function BracketCard(props: {
   height?: number;
   highlightedTeamId?: number;
   match: BracketDisplayMatch;
-  fmtDate: (value: Date | number | string) => string;
+  fmtDate: (value: Date | number | string, fallback?: string) => string;
   onMatchClick?: (match: BracketDisplayMatch, position: { x: number; y: number }) => void;
   onPartyClick?: Props['onPartyClick'];
   onTeamHover: (teamId?: number) => void;
@@ -246,7 +274,9 @@ function BracketCard(props: {
           props.compact ? 'px-2 py-0.5' : 'px-3 py-1',
         )}
       >
-        {props.match.isPlaceholder ? 'TBD' : props.fmtDate(props.match.date)}
+        {props.match.isPlaceholder
+          ? props.fmtDate(props.match.date, 'TBD')
+          : props.fmtDate(props.match.date)}
       </header>
       {props.match.isPlaceholder &&
         [0, 1].map((idx) => (
@@ -379,6 +409,7 @@ function ManualBracket(props: {
   tourney: Tournament;
   onMatchClick?: Props['onMatchClick'];
   onPartyClick?: Props['onPartyClick'];
+  preview?: Props['preview'];
 }) {
   const fmtDate = useFormatAppDate();
   const isIemGroup = Boolean(props.tourney.iemGroup);
@@ -479,7 +510,7 @@ function ManualBracket(props: {
 
         const section = matchId.s === Constants.BracketIdentifier.LOWER ? 'lower' : 'upper';
         sections[section][matchId.r] ||= [];
-        sections[section][matchId.r].push(createPlaceholderMatch(matchId));
+        sections[section][matchId.r].push(createPlaceholderMatch(matchId, props.preview));
       });
     }
 
@@ -928,6 +959,7 @@ export default function (props: Props) {
       minFitZoom={props.minFitZoom}
       onMatchClick={props.onMatchClick}
       onPartyClick={props.onPartyClick}
+      preview={props.preview}
     />
   );
 }

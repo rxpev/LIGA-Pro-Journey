@@ -33,6 +33,7 @@ import {
   FaUsers,
 } from 'react-icons/fa';
 import CompetitionLocationTag from './competition-location-tag';
+import { getStageDatesForYear } from './competitions';
 import CompetitionNews from './news';
 import Participants from './participants';
 import Statistics from './statistics';
@@ -335,6 +336,22 @@ function getDateTime(value: Date | string | number | null | undefined) {
   return date.getTime();
 }
 
+function getProjectedStageStartDate(
+  competition: RouteContextCompetitions['competition'],
+  tournamentStartDate?: number | null,
+) {
+  const year = tournamentStartDate
+    ? new Date(tournamentStartDate).getFullYear()
+    : new Date(Constants.NewSaveSeasonStartDate).getFullYear();
+  const dates = getStageDatesForYear(
+    competition.federation.slug,
+    competition.tier.slug,
+    year,
+  );
+
+  return dates?.start ?? null;
+}
+
 /**
  * Exports this module.
  *
@@ -362,6 +379,7 @@ export default function () {
   const [competitionDates, setCompetitionDates] = React.useState<
     Array<Awaited<ReturnType<typeof api.calendar.find>>>
   >([]);
+  const [bracketPreviewStartDate, setBracketPreviewStartDate] = React.useState<Date | null>(null);
   const [matches, setMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
@@ -645,6 +663,15 @@ export default function () {
   // The RMR can enter its started state before its match list reaches this view.
   // Use its dedicated preview until the first bracket match is available.
   const shouldPreviewAsiaRmr = isAsiaRmr && !standingMatches.length;
+  const bracketPreviewCompetition = isIemGroupStage
+    ? iemEventCompetitions.find(
+        (item) =>
+          item?.tier.slug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS ||
+          item?.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+      )
+    : linkedPlayoffTier
+      ? eseaPlayoffCompetition
+      : competition;
   const locationDisplay = isChinaRmrOpenQualifier
     ? 'China (Online)'
     : Util.getCompetitionDisplayLocation({
@@ -914,6 +941,43 @@ export default function () {
       }),
     ]).then(setCompetitionDates);
   }, [competition]);
+
+  React.useEffect(() => {
+    const previewCompetitionId = bracketPreviewCompetition?.id;
+    const projectedStartDate = bracketPreviewCompetition
+      ? getProjectedStageStartDate(bracketPreviewCompetition, tournamentStartDate)
+      : null;
+
+    if (!previewCompetitionId) {
+      setBracketPreviewStartDate(projectedStartDate);
+      return;
+    }
+
+    if (previewCompetitionId === competition.id) {
+      setBracketPreviewStartDate(projectedStartDate ?? competitionDates[0]?.date ?? null);
+      return;
+    }
+
+    let isCurrent = true;
+    setBracketPreviewStartDate(null);
+
+    api.calendar
+      .find({
+        where: {
+          type: Constants.CalendarEntry.COMPETITION_START,
+          payload: String(previewCompetitionId),
+        },
+      })
+      .then((entry) => {
+        if (isCurrent) {
+          setBracketPreviewStartDate(projectedStartDate ?? entry?.date ?? null);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [bracketPreviewCompetition, competition.id, competitionDates, tournamentStartDate]);
 
   React.useEffect(() => {
     setLatestScheduledMatchDate(null);
@@ -1266,6 +1330,9 @@ export default function () {
   }, [competition.status, competitionDates, latestScheduledMatchDate, tournamentEndDate]);
   const displayedStartDate =
     competitionDates[0]?.date || (tournamentStartDate ? new Date(tournamentStartDate) : undefined);
+  const majorChampionsPreviewStartDate = majorChampionsCompetition
+    ? getProjectedStageStartDate(majorChampionsCompetition, tournamentStartDate)
+    : null;
   const cashCupYear = format(
     competitionDates[0]?.date || state.profile?.date || new Date(),
     'yyyy',
@@ -3018,6 +3085,7 @@ export default function () {
                               iemPlayoffs: isIemEvent,
                               iemGroup: isAsiaRmr,
                               skipUpperFinal: isAsiaRmr,
+                              startDate: bracketPreviewStartDate,
                               size: isAsiaRmr
                                 ? 8
                                 : isFixedBracketQualifier
@@ -3070,7 +3138,15 @@ export default function () {
                         <Brackets
                           fitToContainer
                           matches={groupMatches}
-                          preview={groupMatches.length ? undefined : { iemGroup: true, size: 8 }}
+                          preview={
+                            groupMatches.length
+                              ? undefined
+                              : {
+                                  iemGroup: true,
+                                  size: 8,
+                                  startDate: displayedStartDate,
+                                }
+                          }
                           onMatchClick={(match, position) => {
                             setPreviewMatchId(match.id);
                             setPreviewPosition(position);
@@ -3095,7 +3171,14 @@ export default function () {
                   <Brackets
                     fitToContainer
                     matches={majorChampionsMatches}
-                    preview={majorChampionsMatches.length ? undefined : { size: 8 }}
+                    preview={
+                      majorChampionsMatches.length
+                        ? undefined
+                        : {
+                            size: 8,
+                            startDate: majorChampionsPreviewStartDate,
+                          }
+                    }
                     onMatchClick={(match, position) => {
                       setPreviewMatchId(match.id);
                       setPreviewPosition(position);
@@ -3646,7 +3729,11 @@ export default function () {
                 }
                 preview={
                   competition.status === Constants.CompetitionStatus.SCHEDULED
-                    ? { doubleElimination: false, size: fixedBracketSize }
+                    ? {
+                        doubleElimination: false,
+                        size: fixedBracketSize,
+                        startDate: bracketPreviewStartDate,
+                      }
                     : undefined
                 }
                 onMatchClick={(match, position) => {

@@ -28,7 +28,7 @@ import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
 import swissTeamPlaceholder from '@liga/frontend/assets/swiss/teamplaceholder.svg';
 import { getTeamsRoundLabel } from './teams/labels';
-import { getFirstSeasonStageDates } from './competitions/competitions';
+import { getStageDatesForYear } from './competitions/competitions';
 import {
   FaCalendarAlt,
   FaCalendarDay,
@@ -883,16 +883,14 @@ export default function () {
       .map((competition) => {
         const savedDates = yearlyDates[competition.id];
         if (savedDates) return { competition, ...savedDates };
-        const dates = getFirstSeasonStageDates(competition.federation.slug, competition.tier.slug);
+        const dates = getStageDatesForYear(
+          competition.federation.slug,
+          competition.tier.slug,
+          current.getFullYear(),
+        );
         if (!dates) return null;
 
-        const yearShift = current.getFullYear() - 2026;
-        const start = new Date(dates[0]);
-        const end = new Date(dates[1]);
-        start.setFullYear(start.getFullYear() + yearShift);
-        end.setFullYear(end.getFullYear() + yearShift);
-
-        return { competition, end, start };
+        return { competition, ...dates };
       })
       .filter(Boolean);
 
