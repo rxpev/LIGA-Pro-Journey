@@ -42,22 +42,113 @@ import {
   FaTrophy,
 } from 'react-icons/fa';
 
-const CalendarMatchEager = {
-  include: {
-    ...Eagers.match.include,
-    players: {
-      select: { id: true },
+// The calendar previously used Eagers.match, which also loads every competitor
+// and player registered for each competition. A busy month could therefore
+// transfer hundreds of unrelated team rosters for every single fixture.
+const CalendarCompetitionSelect = {
+  select: {
+    federation: { select: { slug: true } },
+    federationId: true,
+    id: true,
+    location: true,
+    organizer: true,
+    season: true,
+    tier: {
+      select: {
+        groupSize: true,
+        id: true,
+        lan: true,
+        league: { select: { name: true, slug: true } },
+        slug: true,
+      },
     },
+    tournament: true,
+  },
+} as const;
+
+const CalendarMatchEager = {
+  select: {
+    _count: { select: { events: true } },
+    competition: CalendarCompetitionSelect,
+    competitionId: true,
+    competitors: {
+      select: {
+        id: true,
+        result: true,
+        score: true,
+        team: {
+          select: {
+            blazon: true,
+            country: { select: { code: true } },
+            id: true,
+            name: true,
+            players: {
+              select: {
+                avatar: true,
+                country: { select: { code: true, name: true } },
+                id: true,
+                name: true,
+                starter: true,
+                transferListed: true,
+              },
+            },
+          },
+        },
+        teamId: true,
+      },
+    },
+    date: true,
+    games: {
+      select: {
+        map: true,
+        teams: { select: { score: true, teamId: true } },
+      },
+    },
+    id: true,
+    payload: true,
+    players: { select: { id: true } },
+    round: true,
+    status: true,
+    totalRounds: true,
+  },
+} as const;
+
+// Global calendar cards only show fixture and tournament summaries. Keep this
+// response intentionally small so match-heavy months remain responsive.
+const GlobalCalendarMatchEager = {
+  select: {
+    _count: { select: { events: true } },
+    competition: CalendarCompetitionSelect,
+    competitionId: true,
+    competitors: {
+      select: {
+        id: true,
+        result: true,
+        score: true,
+        team: { select: { blazon: true, id: true, name: true } },
+        teamId: true,
+      },
+    },
+    date: true,
+    id: true,
+    payload: true,
+    round: true,
+    status: true,
+    totalRounds: true,
   },
 } as const;
 
 /** @type {MatchesResponse} */
 type MatchesResponse = Awaited<ReturnType<typeof api.matches.all<typeof CalendarMatchEager>>>;
+type GlobalMatchesResponse = Awaited<
+  ReturnType<typeof api.matches.all<typeof GlobalCalendarMatchEager>>
+>;
 type CalendarMatchDetails = Awaited<
   ReturnType<typeof api.matches.all<typeof Eagers.matchEvents>>
 >[number];
 type CalendarMode = 'mine' | 'global' | 'yearly';
 type CalendarMatch = MatchesResponse[number];
+type GlobalCalendarMatch = GlobalMatchesResponse[number];
 type YearlyCompetition = Awaited<
   ReturnType<typeof api.competitions.all<typeof Eagers.competition>>
 >[number];
@@ -70,7 +161,23 @@ type ScheduledMatchday = {
 };
 
 function getProjectedCalendarMatch(competition: YearlyCompetition) {
-  return { competition, competitionId: competition.id } as CalendarMatch;
+  return { competition, competitionId: competition.id } as unknown as CalendarMatch;
+}
+
+function hydrateGlobalCalendarMatch(match: GlobalCalendarMatch): CalendarMatch {
+  return {
+    ...match,
+    competitors: match.competitors.map((competitor) => ({
+      ...competitor,
+      team: competitor.team && {
+        ...competitor.team,
+        country: null as null,
+        players: [] as never[],
+      },
+    })),
+    games: [],
+    players: [],
+  } as unknown as CalendarMatch;
 }
 
 function projectScheduleDateToYear(date: Date, year: number) {
@@ -99,6 +206,10 @@ function projectScheduleDatesToYear<T extends Record<number, Date | { end: Date;
           },
     ]),
   ) as T;
+}
+
+function getCalendarDateKey(date: Date | string) {
+  return format(new Date(date), 'yyyy-MM-dd');
 }
 type CareerStint = {
   teamId: number | null;
@@ -939,7 +1050,7 @@ function getFixtureGroupLabel(match: CalendarMatch) {
 }
 
 function getScheduledFixtureGroupLabel(competition: YearlyCompetition) {
-  return getFixtureGroupLabel({ competition } as CalendarMatch);
+  return getFixtureGroupLabel({ competition } as unknown as CalendarMatch);
 }
 
 function getTournamentGroups(matches: CalendarMatch[]) {
@@ -1013,7 +1124,7 @@ export default function () {
   const datePickerRef = React.useRef<HTMLDivElement>(null);
   const [hoveredYearlyCompetitionId, setHoveredYearlyCompetitionId] = React.useState<number>();
   const [yearlyCalendarAction, setYearlyCalendarAction] = React.useState<YearlyCalendarAction>();
-  const [careerStints, setCareerStints] = React.useState<CareerStint[]>([]);
+  const [careerStints, setCareerStints] = React.useState<CareerStint[] | null>(null);
   const today = React.useMemo(() => state.profile?.date || new Date(), [state.profile]);
   const yearlyMaximumYear = today.getFullYear() + 1;
   const selectableYears = React.useMemo(() => {
@@ -1071,6 +1182,7 @@ export default function () {
       return;
     }
 
+    setCareerStints(null);
     let isCurrent = true;
 
     api.players
@@ -1174,22 +1286,71 @@ export default function () {
     {},
   );
   const [yearlyStartDates, setYearlyStartDates] = React.useState<Record<number, Date>>({});
+  const resolvedCareerStints = careerStints || [];
 
   React.useEffect(() => {
+    // The yearly view is schedule-driven and never consumes fixture records.
+    if (mode === 'yearly') {
+      setMatches([]);
+      return;
+    }
+
+    const date = {
+      gte: start.toISOString(),
+      lte: end.toISOString(),
+    };
+    const orderBy = [{ date: 'asc' as const }, { id: 'asc' as const }];
+    let isCurrent = true;
+
+    if (mode === 'global') {
+      api.matches
+        .all<typeof GlobalCalendarMatchEager>({
+          ...GlobalCalendarMatchEager,
+          where: { date, competitionId: { not: null } },
+          orderBy,
+        })
+        .then((result) => isCurrent && setMatches(result.map(hydrateGlobalCalendarMatch)));
+
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    // Do not load the world's fixtures just to filter them to the player's
+    // current and former teams in the renderer.
+    if (!careerStints) {
+      setMatches([]);
+      return;
+    }
+
+    const careerTeamIds = [
+      ...new Set(
+        careerStints
+          .map((stint) => stint.teamId)
+          .filter((teamId): teamId is number => teamId !== null),
+      ),
+    ];
+    if (!careerTeamIds.length) {
+      setMatches([]);
+      return;
+    }
+
     api.matches
       .all<typeof CalendarMatchEager>({
         ...CalendarMatchEager,
         where: {
-          date: {
-            gte: start.toISOString(),
-            lte: end.toISOString(),
-          },
+          competitors: { some: { teamId: { in: careerTeamIds } } },
+          date,
           competitionId: { not: null },
         },
-        orderBy: [{ date: 'asc' }, { id: 'asc' }],
+        orderBy,
       })
-      .then(setMatches);
-  }, [start, end]);
+      .then((result) => isCurrent && setMatches(result));
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [careerStints, end, mode, start]);
 
   React.useEffect(() => {
     if (mode !== 'yearly' && mode !== 'global') return;
@@ -1636,10 +1797,31 @@ export default function () {
             return true;
           }
 
-          return !!getCareerMatchCompetitor(match, careerStints, playerId);
+          return !!getCareerMatchCompetitor(match, resolvedCareerStints, playerId);
         })
         .sort(sortMatches),
-    [careerStints, matches, mode, playerId],
+    [matches, mode, playerId, resolvedCareerStints],
+  );
+  const visibleMatchesByDate = React.useMemo(
+    () =>
+      visibleMatches.reduce<Map<string, CalendarMatch[]>>((byDate, match) => {
+        const dateKey = getCalendarDateKey(match.date);
+        const matchesOnDate = byDate.get(dateKey);
+
+        if (matchesOnDate) {
+          matchesOnDate.push(match);
+        } else {
+          byDate.set(dateKey, [match]);
+        }
+
+        return byDate;
+      }, new Map()),
+    [visibleMatches],
+  );
+  const existingCompetitionMatchdays = React.useMemo(
+    () =>
+      new Set(matches.map((match) => `${match.competitionId}:${getCalendarDateKey(match.date)}`)),
+    [matches],
   );
   const scheduledMatchdays = React.useMemo(() => {
     if (mode !== 'global') return [];
@@ -1651,17 +1833,38 @@ export default function () {
       displayYearlyStartDates,
     ).filter(
       (matchday) =>
-        !matches.some(
-          (match) =>
-            match.competitionId === matchday.competition.id &&
-            isSameDay(new Date(match.date), matchday.date),
+        !existingCompetitionMatchdays.has(
+          `${matchday.competition.id}:${getCalendarDateKey(matchday.date)}`,
         ),
     );
-  }, [current, displayYearlyDates, displayYearlyStartDates, matches, mode, yearlyCompetitions]);
+  }, [
+    current,
+    displayYearlyDates,
+    displayYearlyStartDates,
+    existingCompetitionMatchdays,
+    mode,
+    yearlyCompetitions,
+  ]);
+  const scheduledMatchdaysByDate = React.useMemo(
+    () =>
+      scheduledMatchdays.reduce<Map<string, ScheduledMatchday[]>>((byDate, matchday) => {
+        const dateKey = getCalendarDateKey(matchday.date);
+        const matchdaysOnDate = byDate.get(dateKey);
+
+        if (matchdaysOnDate) {
+          matchdaysOnDate.push(matchday);
+        } else {
+          byDate.set(dateKey, [matchday]);
+        }
+
+        return byDate;
+      }, new Map()),
+    [scheduledMatchdays],
+  );
 
   const selectedMatches = React.useMemo(
-    () => visibleMatches.filter((match) => isSameDay(match.date, selectedDate)),
-    [selectedDate, visibleMatches],
+    () => visibleMatchesByDate.get(getCalendarDateKey(selectedDate)) || [],
+    [selectedDate, visibleMatchesByDate],
   );
   const selectedFixtures = React.useMemo(
     () => selectedMatches.filter(isPlayableFixture),
@@ -1710,13 +1913,29 @@ export default function () {
   const careerEntries = React.useMemo(
     () =>
       mode === 'mine'
-        ? getCareerCalendarEntries(careerStints, state.profile?.player?.contractEnd)
+        ? getCareerCalendarEntries(resolvedCareerStints, state.profile?.player?.contractEnd)
         : [],
-    [careerStints, mode, state.profile?.player?.contractEnd],
+    [mode, resolvedCareerStints, state.profile?.player?.contractEnd],
+  );
+  const careerEntriesByDate = React.useMemo(
+    () =>
+      careerEntries.reduce<Map<string, CareerCalendarEntry[]>>((byDate, entry) => {
+        const dateKey = getCalendarDateKey(entry.date);
+        const entriesOnDate = byDate.get(dateKey);
+
+        if (entriesOnDate) {
+          entriesOnDate.push(entry);
+        } else {
+          byDate.set(dateKey, [entry]);
+        }
+
+        return byDate;
+      }, new Map()),
+    [careerEntries],
   );
   const selectedCareerEntries = React.useMemo(
-    () => careerEntries.filter((entry) => isSameDay(new Date(entry.date), selectedDate)),
-    [careerEntries, selectedDate],
+    () => careerEntriesByDate.get(getCalendarDateKey(selectedDate)) || [],
+    [careerEntriesByDate, selectedDate],
   );
 
   React.useEffect(() => {
@@ -2349,7 +2568,9 @@ export default function () {
                                   <div>
                                     {match.competitors.map((competitor) => {
                                       const starters = Util.getSquad(
-                                        competitor.team,
+                                        competitor.team as unknown as Parameters<
+                                          typeof Util.getSquad
+                                        >[0],
                                         state.profile,
                                         true,
                                       );
@@ -2827,15 +3048,10 @@ export default function () {
                         onClick={() => setSelectedDate(day)}
                       >
                         {(() => {
-                          const matchday = visibleMatches.filter((match) =>
-                            isSameDay(match.date, day),
-                          );
-                          const plannedMatchdays = scheduledMatchdays.filter((matchday) =>
-                            isSameDay(matchday.date, day),
-                          );
-                          const dayCareerEntries = careerEntries.filter((entry) =>
-                            isSameDay(new Date(entry.date), day),
-                          );
+                          const dateKey = getCalendarDateKey(day);
+                          const matchday = visibleMatchesByDate.get(dateKey) || [];
+                          const plannedMatchdays = scheduledMatchdaysByDate.get(dateKey) || [];
+                          const dayCareerEntries = careerEntriesByDate.get(dateKey) || [];
                           const daySigningEntry = dayCareerEntries.find(
                             (entry) => entry.type === 'signed',
                           );
@@ -2949,7 +3165,7 @@ export default function () {
                           const primary = matchday[0];
                           const ownCompetitor =
                             mode === 'mine'
-                              ? getCareerMatchCompetitor(primary, careerStints, playerId)
+                              ? getCareerMatchCompetitor(primary, resolvedCareerStints, playerId)
                               : undefined;
                           const opponent = getOpponent(primary, ownCompetitor);
                           const tournamentMarkers = getTournamentMarkers(matchday);

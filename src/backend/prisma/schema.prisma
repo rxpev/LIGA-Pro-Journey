@@ -286,6 +286,7 @@ model Match {
   profile       Profile?     @relation(fields: [profileId], references: [id])
 
   @@index([status, matchType, competitionId, date])
+  @@index([date, competitionId])
 }
 
 model MatchEvent {
