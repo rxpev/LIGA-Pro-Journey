@@ -13,9 +13,12 @@ import { Constants } from '@liga/shared';
  * @function
  */
 export default function () {
-  ipcMain.on(Constants.IPCRoute.WINDOW_CLOSE, (_, id) => {
+  ipcMain.on(Constants.IPCRoute.WINDOW_CLOSE, (_, id, closeAll = false) => {
     if (id === Constants.WindowIdentifier.Modal) {
-      return WindowManager.getAppWindow()?.webContents.send(Constants.IPCRoute.WINDOW_CLOSE, id);
+      return WindowManager.getAppWindow()?.webContents.send(
+        Constants.IPCRoute.WINDOW_CLOSE,
+        closeAll ? { id, closeAll: true } : id,
+      );
     }
 
     WindowManager.get(id, false)?.close();

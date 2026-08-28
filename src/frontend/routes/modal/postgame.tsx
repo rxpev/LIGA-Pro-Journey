@@ -222,6 +222,40 @@ function getCustomCountryBackground(code?: string | null) {
   }
 }
 
+function openPlayerModal(playerId: number) {
+  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+    target: '/transfer',
+    payload: playerId,
+  });
+}
+
+function openMainRoute(target: string) {
+  api.window.send<ModalRequest>(Constants.WindowIdentifier.Main, { target }, null);
+  api.window.close(Constants.WindowIdentifier.Modal);
+}
+
+function getInferredSeriesVeto(
+  gameIndex: number,
+  gameCount: number,
+  competitors: PostgameCompetitor[],
+) {
+  if (gameCount <= 1) {
+    return undefined;
+  }
+
+  if (gameIndex === gameCount - 1) {
+    return { teamId: null, type: Constants.MapVetoAction.DECIDER };
+  }
+
+  const pick = Constants.MapVetoConfig[gameCount]?.filter(
+    (entry) => entry.type === Constants.MapVetoAction.PICK,
+  )[gameIndex];
+
+  return pick
+    ? { teamId: competitors[pick.team]?.teamId ?? null, type: Constants.MapVetoAction.PICK }
+    : undefined;
+}
+
 /**
  * Generates a player's match performance from the
  * provided player killed or assists events array.
@@ -455,19 +489,26 @@ function MatchInfo(props: { competitionMatches: SwissSiblingMatch[]; match: Matc
     </article>
   );
 }
-function PostgameTeamHeader(props: { competitor: PostgameCompetitor; side: 'left' | 'right' }) {
+function PostgameTeamHeader(props: {
+  competitor: PostgameCompetitor;
+  onClick: () => void;
+  side: 'left' | 'right';
+}) {
   return (
-    <article
+    <button
+      type="button"
+      title={`View ${props.competitor.team.name}`}
       className={cx(
-        'relative z-10 flex h-full min-w-0 items-center',
+        'relative z-10 flex h-full min-w-0 items-center text-inherit',
         props.side === 'left' ? 'justify-start pl-16' : 'justify-end pr-16',
       )}
+      onClick={props.onClick}
     >
       <div className="grid w-28 place-items-center gap-1">
         <img src={props.competitor.team.blazon} className="size-16 object-contain" />
         <p className="max-w-full truncate px-1 text-sm font-black">{props.competitor.team.name}</p>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -477,6 +518,8 @@ function PostgameScoreHeader(props: {
   home: PostgameCompetitor;
   homeScore: number | null;
   match: PostgameMatch;
+  onCompetitionClick: () => void;
+  onTeamClick: (teamId: number) => void;
 }) {
   const competitionLogo = Util.getCompetitionLogo(
     props.match.competition.tier.slug,
@@ -532,7 +575,11 @@ function PostgameScoreHeader(props: {
         />
       )}
 
-      <PostgameTeamHeader competitor={props.home} side="left" />
+      <PostgameTeamHeader
+        competitor={props.home}
+        side="left"
+        onClick={() => props.onTeamClick(props.home.team.id)}
+      />
 
       <p
         className={cx(
@@ -544,12 +591,17 @@ function PostgameScoreHeader(props: {
         {props.homeScore}
       </p>
 
-      <article className="relative z-10 grid place-items-center gap-1">
+      <button
+        type="button"
+        title="View competition"
+        className="relative z-10 grid place-items-center gap-1 text-inherit"
+        onClick={props.onCompetitionClick}
+      >
         <Image src={competitionLogo} className="size-24 object-contain" />
         <p className="text-base-content/60 text-xs leading-none font-bold tracking-wide uppercase">
           {matchDateLabel}
         </p>
-      </article>
+      </button>
 
       <p
         className={cx(
@@ -561,7 +613,11 @@ function PostgameScoreHeader(props: {
         {props.awayScore}
       </p>
 
-      <PostgameTeamHeader competitor={props.away} side="right" />
+      <PostgameTeamHeader
+        competitor={props.away}
+        side="right"
+        onClick={() => props.onTeamClick(props.away.team.id)}
+      />
     </section>
   );
 }
@@ -581,6 +637,14 @@ function VetoSummary(props: {
       })),
     [props.match.games, props.vetoes],
   );
+  const completedMapCount = React.useMemo(
+    () =>
+      props.match.competitors.reduce(
+        (count, competitor) => count + Math.max(0, competitor.score ?? 0),
+        0,
+      ),
+    [props.match.competitors],
+  );
 
   return (
     <section className="border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-t p-2">
@@ -595,15 +659,25 @@ function VetoSummary(props: {
           className="grid h-[118px] gap-2 p-2"
           style={{ gridTemplateColumns: `repeat(${playedMaps.length}, minmax(0, 1fr))` }}
         >
-          {playedMaps.map(({ game, veto }) => {
+          {playedMaps.map(({ game, veto }, index) => {
             const selected = !props.matchGame || props.matchGame.id === game.id;
-            const competitor =
-              veto && props.match.competitors.find((entry) => entry.teamId === veto.teamId);
             const [home, away] = props.match.competitors;
+            const resolvedVeto =
+              veto ??
+              (!props.vetoes.length
+                ? getInferredSeriesVeto(index, props.match.games.length, props.match.competitors)
+                : undefined);
+            const competitor =
+              resolvedVeto &&
+              props.match.competitors.find((entry) => entry.teamId === resolvedVeto.teamId);
             const homeGame = getGameTeamForCompetitor(game, home, 0);
             const awayGame = getGameTeamForCompetitor(game, away, 1);
             const hasScore = homeGame.score !== null && awayGame.score !== null;
-            const unusedDecider = veto?.type === Constants.MapVetoAction.DECIDER && !hasScore;
+            const unusedMap =
+              !hasScore &&
+              (resolvedVeto?.type === Constants.MapVetoAction.DECIDER ||
+                (props.match.status === Constants.MatchStatus.COMPLETED &&
+                  index >= completedMapCount));
 
             return (
               <figure
@@ -613,7 +687,7 @@ function VetoSummary(props: {
                   selected
                     ? 'border-base-content/30 opacity-100'
                     : 'border-base-content/10 opacity-50',
-                  unusedDecider && 'opacity-40 grayscale',
+                  unusedMap && 'opacity-40 grayscale',
                 )}
               >
                 <Image
@@ -626,14 +700,14 @@ function VetoSummary(props: {
                     <span className="truncate font-bold">
                       {Util.convertMapPool(game.map, props.settings.general.game)}
                     </span>
-                    {!!veto && (
+                    {!!resolvedVeto && (
                       <span
                         className={cx(
                           'badge badge-xs uppercase',
-                          VETO_BADGE_STYLES[veto.type as Constants.MapVetoAction],
+                          VETO_BADGE_STYLES[resolvedVeto.type as Constants.MapVetoAction],
                         )}
                       >
-                        {veto.type}
+                        {resolvedVeto.type}
                       </span>
                     )}
                   </div>
@@ -691,7 +765,12 @@ function Scoreboard(props: ScoreboardProps) {
       <thead>
         <tr className="border-t-base-content/10 border-t">
           <th>
-            <p title={props.competitor.team.name}>
+            <button
+              type="button"
+              title={`View ${props.competitor.team.name}`}
+              className="link-hover inline-flex items-center text-left"
+              onClick={() => openMainRoute(`/teams?teamId=${props.competitor.team.id}`)}
+            >
               {!!props.competitor.team.blazon && (
                 <img src={props.competitor.team.blazon} className="mr-2 inline-block size-4" />
               )}
@@ -699,7 +778,7 @@ function Scoreboard(props: ScoreboardProps) {
               {!!veto && veto.teamId === props.competitor.teamId && (
                 <span className="badge badge-xs ml-2 uppercase">pick</span>
               )}
-            </p>
+            </button>
           </th>
           <th title="Rating" className="w-[10%] text-center">
             {t('postgame.rating')}
@@ -746,7 +825,13 @@ function Scoreboard(props: ScoreboardProps) {
               <tr key={player.name + '__scoreboard'}>
                 <td>
                   <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
-                  <span>{player.name}</span>
+                  <button
+                    type="button"
+                    className="link-hover"
+                    onClick={() => openPlayerModal(player.id)}
+                  >
+                    {player.name}
+                  </button>
                 </td>
                 <td
                   className={cx(
@@ -797,12 +882,17 @@ function ExhibitionScoreboard(props: {
       <thead>
         <tr className="border-t-base-content/10 border-t">
           <th>
-            <p title={props.team.name}>
+            <button
+              type="button"
+              title={`View ${props.team.name}`}
+              className="link-hover inline-flex items-center text-left"
+              onClick={() => openMainRoute(`/teams?teamId=${props.team.id}`)}
+            >
               {!!props.team.blazon && (
                 <img src={props.team.blazon} className="mr-2 inline-block size-4" />
               )}
               {props.team.name}
-            </p>
+            </button>
           </th>
           <th title="Rating" className="w-[10%] text-center">
             {t('postgame.rating')}
@@ -840,7 +930,13 @@ function ExhibitionScoreboard(props: {
                   {!!player.country?.code && (
                     <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
                   )}
-                  <span>{player.name}</span>
+                  <button
+                    type="button"
+                    className="link-hover"
+                    onClick={() => openPlayerModal(player.id)}
+                  >
+                    {player.name}
+                  </button>
                 </td>
                 <td
                   className={cx(
@@ -941,7 +1037,13 @@ function DeathmatchPostgame(props: { payload: ExhibitionPostgamePayload }) {
                   {!!player.country?.code && (
                     <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
                   )}
-                  <span>{player.name}</span>
+                  <button
+                    type="button"
+                    className="link-hover"
+                    onClick={() => openPlayerModal(player.id)}
+                  >
+                    {player.name}
+                  </button>
                 </td>
                 <td className="text-center">{report.kills.length}</td>
                 <td className="text-center">{report.deaths.length}</td>
@@ -1160,7 +1262,6 @@ export default function () {
     () => Math.max(...matchEvents.map((me) => me.half)) + 1,
     [matchEvents],
   );
-
   if (exhibitionPayload) {
     return <ExhibitionPostgame payload={exhibitionPayload} />;
   }
@@ -1175,17 +1276,23 @@ export default function () {
     );
   }
 
+  const competitionPath = `/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`;
+
   return (
     <main className="flex h-screen w-full flex-col">
       <header className="breadcrumbs border-base-content/10 bg-base-200 sticky top-0 z-30 border-b px-2 text-sm">
         <ul>
           <li>
-            <span>
+            <button
+              type="button"
+              className="link-hover"
+              onClick={() => openMainRoute(competitionPath)}
+            >
               {Util.getCompetitionDisplayName(
                 match.competition.tier.league.name,
                 match.competition.tier.slug,
               )}
-            </span>
+            </button>
           </li>
           <li>{Util.getMatchRoundLabel(match, t('shared.matchday'))}</li>
           <li>
@@ -1201,6 +1308,8 @@ export default function () {
         home={home}
         homeScore={matchGameHome.score}
         match={match}
+        onCompetitionClick={() => openMainRoute(competitionPath)}
+        onTeamClick={(teamId) => openMainRoute(`/teams?teamId=${teamId}`)}
       />
       {match.games.length > 1 && (
         <section

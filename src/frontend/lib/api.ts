@@ -673,7 +673,8 @@ export default {
     start: () => ipcRenderer.send(Constants.IPCRoute.UPDATER_START),
   },
   window: {
-    close: (id: string) => ipcRenderer.send(Constants.IPCRoute.WINDOW_CLOSE, id),
+    close: (id: string, closeAll = false) =>
+      ipcRenderer.send(Constants.IPCRoute.WINDOW_CLOSE, id, closeAll),
     open: (id: string) => ipcRenderer.send(Constants.IPCRoute.WINDOW_OPEN, id),
     send: <T = unknown>(id: string, data: T, delay = 500) =>
       ipcRenderer.send(Constants.IPCRoute.WINDOW_SEND, id, data, delay),

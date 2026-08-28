@@ -18,7 +18,6 @@ type InAppModalRequest = ModalRequest & {
 };
 
 const MODAL_CLOSE_DURATION = 220;
-const IN_APP_MODAL_CLOSE_EVENT = 'in-app-modal-close';
 
 function ModalStateLoader(props: { children: React.ReactNode }) {
   const { dispatch } = React.useContext(AppStateContext);
@@ -61,7 +60,12 @@ function ModalStateLoader(props: { children: React.ReactNode }) {
   return props.children;
 }
 
-function ModalApplication(props: { request: InAppModalRequest; onClose: () => void }) {
+function ModalApplication(props: {
+  isTop: boolean;
+  request: InAppModalRequest;
+  onClose: () => void;
+  stackIndex: number;
+}) {
   const [isClosing, setIsClosing] = React.useState(false);
   const closeTimeout = React.useRef<number>();
 
@@ -83,11 +87,6 @@ function ModalApplication(props: { request: InAppModalRequest; onClose: () => vo
     [],
   );
 
-  React.useEffect(() => {
-    document.addEventListener(IN_APP_MODAL_CLOSE_EVENT, close);
-    return () => document.removeEventListener(IN_APP_MODAL_CLOSE_EVENT, close);
-  }, [close]);
-
   return (
     <AppStateProvider>
       <ModalStateLoader>
@@ -100,7 +99,9 @@ function ModalApplication(props: { request: InAppModalRequest; onClose: () => vo
 function ModalContent(props: {
   request: InAppModalRequest;
   isClosing: boolean;
+  isTop: boolean;
   onClose: () => void;
+  stackIndex: number;
 }) {
   const audioHover = useAudio('button-hover.wav');
   const audioClick = useAudio('button-click-inapp.wav');
@@ -117,6 +118,10 @@ function ModalContent(props: {
       : props.request.payload;
 
   React.useEffect(() => {
+    if (!props.isTop) {
+      return;
+    }
+
     const interactiveSelector = [
       'button',
       'a',
@@ -177,13 +182,13 @@ function ModalContent(props: {
       document.removeEventListener('mousedown', onInteractionDown);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [audioClick, audioHover, audioRelease, props.onClose]);
+  }, [audioClick, audioHover, audioRelease, props.isTop, props.onClose]);
 
   return (
     <dialog
       className={`in-app-modal modal modal-open fixed inset-0 z-[100] h-screen w-screen ${
-        props.isClosing ? 'in-app-modal-closing' : ''
-      }`}
+        props.stackIndex > 0 ? 'in-app-modal-nested' : ''
+      } ${props.isClosing ? 'in-app-modal-closing' : ''}`}
     >
       <section
         className={`modal-box bg-base-100 relative h-[75vh] max-h-none w-1/2 max-w-none ${
@@ -247,6 +252,7 @@ function ModalContent(props: {
 export default function InAppModal(): React.ReactNode {
   const root = React.useRef<ReactDOM.Root>();
   const container = React.useRef<HTMLDivElement>();
+  const modals = React.useRef<Array<{ id: number; request: InAppModalRequest }>>([]);
 
   React.useEffect(() => {
     let instance = 0;
@@ -255,6 +261,25 @@ export default function InAppModal(): React.ReactNode {
     document.body.appendChild(container.current);
     root.current = ReactDOM.createRoot(container.current);
 
+    const renderModals = () => {
+      root.current?.render(
+        <>
+          {modals.current.map((modal) => (
+            <ModalApplication
+              key={modal.id}
+              request={modal.request}
+              isTop={modals.current.indexOf(modal) === modals.current.length - 1}
+              stackIndex={modals.current.indexOf(modal)}
+              onClose={() => {
+                modals.current = modals.current.filter(({ id }) => id !== modal.id);
+                renderModals();
+              }}
+            />
+          ))}
+        </>,
+      );
+    };
+
     const removeSendListener = api.ipc.on(
       Constants.IPCRoute.WINDOW_SEND,
       (data: InAppModalRequest) => {
@@ -262,21 +287,27 @@ export default function InAppModal(): React.ReactNode {
           return;
         }
 
-        root.current?.render(
-          <ModalApplication
-            key={`${data.target}:${instance++}`}
-            request={data}
-            onClose={() => root.current?.render(null)}
-          />,
-        );
+        modals.current.push({ id: instance++, request: data });
+        renderModals();
       },
     );
 
     const removeCloseListener = api.ipc.on(
       Constants.IPCRoute.WINDOW_CLOSE,
-      (id: Constants.WindowIdentifier) => {
+      (
+        request:
+          | Constants.WindowIdentifier
+          | { closeAll?: boolean; id: Constants.WindowIdentifier },
+      ) => {
+        const id = typeof request === 'string' ? request : request.id;
+
         if (id === Constants.WindowIdentifier.Modal) {
-          document.dispatchEvent(new Event(IN_APP_MODAL_CLOSE_EVENT));
+          if (typeof request === 'object' && request.closeAll) {
+            modals.current = [];
+          } else {
+            modals.current.pop();
+          }
+          renderModals();
         }
       },
     );
@@ -286,6 +317,7 @@ export default function InAppModal(): React.ReactNode {
       removeCloseListener();
       root.current?.unmount();
       container.current?.remove();
+      modals.current = [];
     };
   }, []);
 

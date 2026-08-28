@@ -556,7 +556,7 @@ export default function TransferModal() {
       },
       0,
     );
-    api.window.close(Constants.WindowIdentifier.Modal);
+    api.window.close(Constants.WindowIdentifier.Modal, true);
   }, [player]);
   const openNewsPlaceholder = React.useCallback(() => {
     api.window.send<ModalRequest>(
@@ -566,7 +566,7 @@ export default function TransferModal() {
       },
       0,
     );
-    api.window.close(Constants.WindowIdentifier.Modal);
+    api.window.close(Constants.WindowIdentifier.Modal, true);
   }, []);
   const openTop20Article = React.useCallback((articleId: number) => {
     api.window.send<ModalRequest<{ articleId: number }>>(
@@ -577,7 +577,7 @@ export default function TransferModal() {
       },
       0,
     );
-    api.window.close(Constants.WindowIdentifier.Modal);
+    api.window.close(Constants.WindowIdentifier.Modal, true);
   }, []);
 
   if (!player) {
