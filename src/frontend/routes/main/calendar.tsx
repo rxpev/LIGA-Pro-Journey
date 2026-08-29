@@ -1126,13 +1126,30 @@ export default function () {
   const [yearlyCalendarAction, setYearlyCalendarAction] = React.useState<YearlyCalendarAction>();
   const [careerStints, setCareerStints] = React.useState<CareerStint[] | null>(null);
   const today = React.useMemo(() => state.profile?.date || new Date(), [state.profile]);
+  const calendarStartDate = React.useMemo(() => new Date(Constants.NewSaveSeasonStartDate), []);
+  const calendarStartMonth = React.useMemo(
+    () => startOfMonth(calendarStartDate),
+    [calendarStartDate],
+  );
   const yearlyMaximumYear = today.getFullYear() + 1;
   const selectableYears = React.useMemo(() => {
-    const firstYear = new Date(Constants.NewSaveSeasonStartDate).getFullYear();
+    const firstYear = calendarStartDate.getFullYear();
     const lastYear = yearlyMaximumYear;
 
     return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index);
-  }, [yearlyMaximumYear]);
+  }, [calendarStartDate, yearlyMaximumYear]);
+  const clampCalendarDate = React.useCallback(
+    (date: Date) => (date < calendarStartDate ? calendarStartDate : date),
+    [calendarStartDate],
+  );
+  const setCalendarCurrent = React.useCallback(
+    (date: Date) => setCurrent(clampCalendarDate(date)),
+    [clampCalendarDate],
+  );
+  const isAtCalendarStart =
+    mode === 'yearly'
+      ? current.getFullYear() <= calendarStartDate.getFullYear()
+      : startOfMonth(current) <= calendarStartMonth;
   const game = React.useMemo(
     () =>
       state.profile?.settings
@@ -1979,9 +1996,11 @@ export default function () {
             className="calendar-icon-button"
             aria-label={mode === 'yearly' ? 'Previous year' : 'Previous month'}
             title={mode === 'yearly' ? 'Previous year' : 'Previous month'}
-            onClick={() =>
-              setCurrent(mode === 'yearly' ? subYears(current, 1) : subMonths(current, 1))
-            }
+            disabled={isAtCalendarStart}
+            onClick={() => {
+              if (isAtCalendarStart) return;
+              setCalendarCurrent(mode === 'yearly' ? subYears(current, 1) : subMonths(current, 1));
+            }}
           >
             <FaChevronLeft />
           </button>
@@ -2013,7 +2032,7 @@ export default function () {
                         current.getFullYear() === year && 'bg-base-300 text-base-content',
                       )}
                       onClick={() => {
-                        setCurrent(
+                        setCalendarCurrent(
                           new Date(
                             year,
                             current.getMonth(),
@@ -2055,12 +2074,16 @@ export default function () {
                         <button
                           key={month}
                           type="button"
+                          disabled={
+                            current.getFullYear() === calendarStartDate.getFullYear() &&
+                            month < calendarStartDate.getMonth()
+                          }
                           className={cx(
-                            'hover:bg-base-200 rounded px-2 py-2 text-center text-sm font-bold',
+                            'hover:bg-base-200 rounded px-2 py-2 text-center text-sm font-bold disabled:hover:bg-transparent',
                             current.getMonth() === month && 'bg-base-300 text-base-content',
                           )}
                           onClick={() => {
-                            setCurrent(
+                            setCalendarCurrent(
                               new Date(
                                 current.getFullYear(),
                                 month,
@@ -2104,7 +2127,7 @@ export default function () {
                             current.getFullYear() === year && 'bg-base-300 text-base-content',
                           )}
                           onClick={() => {
-                            setCurrent(
+                            setCalendarCurrent(
                               new Date(
                                 year,
                                 current.getMonth(),
@@ -2144,7 +2167,7 @@ export default function () {
                 return;
               }
 
-              setCurrent(mode === 'yearly' ? addYears(current, 1) : addMonths(current, 1));
+              setCalendarCurrent(mode === 'yearly' ? addYears(current, 1) : addMonths(current, 1));
             }}
           >
             <FaChevronRight />
@@ -2157,7 +2180,7 @@ export default function () {
               mode === 'yearly' ? true : start.toISOString() === startOfMonth(today).toISOString()
             }
             onClick={() => {
-              setCurrent(today);
+              setCalendarCurrent(today);
               setSelectedDate(today);
             }}
           >
@@ -3330,8 +3353,8 @@ export default function () {
                 type="button"
                 className="btn btn-outline btn-sm w-full"
                 onClick={() => {
-                  setCurrent(yearlyCalendarAction.date);
-                  setSelectedDate(yearlyCalendarAction.date);
+                  setCalendarCurrent(yearlyCalendarAction.date);
+                  setSelectedDate(clampCalendarDate(yearlyCalendarAction.date));
                   setMode('global');
                   setYearlyCalendarAction(undefined);
                 }}
