@@ -24,7 +24,17 @@ import {
   startOfDay,
   subDays,
 } from 'date-fns';
-import { compact, differenceBy, flatten, groupBy, random, sample, shuffle, sortBy } from 'lodash';
+import {
+  chunk,
+  compact,
+  differenceBy,
+  flatten,
+  groupBy,
+  random,
+  sample,
+  shuffle,
+  sortBy,
+} from 'lodash';
 import { Calendar, Prisma, PrismaClient } from '@prisma/client';
 import {
   Constants,
@@ -146,6 +156,15 @@ type SimulatedMapInput = {
 
 type SimulatedParticipant = SimulatedTeam['players'][number] & {
   performanceWeight: number;
+};
+
+type SimulatedMatchPlayerGameStat = {
+  playerId: number;
+  matchId: number;
+  gameKey: number;
+  kills: number;
+  assists: number;
+  deaths: number;
 };
 
 const simulatedMatchCompetitorsSelect = {
@@ -525,6 +544,104 @@ function buildSimulatedMatchEvents({
   };
 }
 
+/**
+ * Persisting the event stream is necessary for detailed match views. Keep the
+ * aggregate table in sync here as well so the calendar never has to rescan all
+ * completed matches to derive player statistics later.
+ */
+function buildSimulatedMatchPlayerGameStats(
+  events: Array<Prisma.MatchEventUncheckedCreateInput>,
+) {
+  const statsByPlayerGame = new Map<string, SimulatedMatchPlayerGameStat>();
+
+  const apply = (
+    playerId: number | null | undefined,
+    event: Prisma.MatchEventUncheckedCreateInput,
+    field: 'kills' | 'assists' | 'deaths',
+  ) => {
+    if (playerId == null) return;
+
+    const gameKey = event.gameId ?? -event.matchId;
+    const key = `${playerId}:${event.matchId}:${gameKey}`;
+    const stat = statsByPlayerGame.get(key) || {
+      playerId,
+      matchId: event.matchId,
+      gameKey,
+      kills: 0,
+      assists: 0,
+      deaths: 0,
+    };
+    stat[field] += 1;
+    statsByPlayerGame.set(key, stat);
+  };
+
+  for (const event of events) {
+    apply(event.attackerId, event, 'kills');
+    apply(event.assistId, event, 'assists');
+    // Assist events share the victim with their kill event, but do not
+    // represent an additional death. This deliberately mirrors the legacy SQL
+    // backfill calculation.
+    if (event.assistId == null) {
+      apply(event.victimId, event, 'deaths');
+    }
+  }
+
+  return Array.from(statsByPlayerGame.values());
+}
+
+const SIMULATED_EVENT_INSERT_BATCH_SIZE = 50;
+
+/**
+ * Prisma 5.1 does not expose createMany for this SQLite model. Insert a safe,
+ * parameterized batch instead of issuing one SQL statement for every round,
+ * kill, and assist event.
+ */
+function createSimulatedMatchEventBatches(
+  events: Array<Prisma.MatchEventUncheckedCreateInput>,
+) {
+  return chunk(events, SIMULATED_EVENT_INSERT_BATCH_SIZE).map((batch) =>
+    DatabaseClient.prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "MatchEvent" (
+          "half", "headshot", "payload", "result", "timestamp", "weapon",
+          "matchId", "attackerId", "assistId", "gameId", "victimId", "winnerId"
+        ) VALUES ${Prisma.join(
+          batch.map(
+            (event) => Prisma.sql`(
+              ${event.half}, ${event.headshot ?? false}, ${event.payload}, ${event.result ?? null},
+              ${event.timestamp}, ${event.weapon ?? null}, ${event.matchId}, ${event.attackerId ?? null},
+              ${event.assistId ?? null}, ${event.gameId ?? null}, ${event.victimId ?? null},
+              ${event.winnerId ?? null}
+            )`,
+          ),
+        )}
+      `,
+    ),
+  );
+}
+
+function createSimulatedMatchPlayerGameStatUpserts(
+  events: Array<Prisma.MatchEventUncheckedCreateInput>,
+) {
+  return buildSimulatedMatchPlayerGameStats(events).map((stat) =>
+    DatabaseClient.prisma.matchPlayerGameStat.upsert({
+      where: {
+        playerId_matchId_gameKey: {
+          playerId: stat.playerId,
+          matchId: stat.matchId,
+          gameKey: stat.gameKey,
+        },
+      },
+      create: stat,
+      update: {
+        kills: stat.kills,
+        assists: stat.assists,
+        deaths: stat.deaths,
+      },
+    }),
+  );
+}
+
 function getLegacyBackfillMapScores(
   home: SimulatedCompetitor,
   away: SimulatedCompetitor,
@@ -803,11 +920,8 @@ export async function legacyBackfillNpcMatchStats(
 
       if (simulatedStats.events.length) {
         transaction.push(
-          ...simulatedStats.events.map((event) =>
-            DatabaseClient.prisma.matchEvent.create({
-              data: event,
-            }),
-          ),
+          ...createSimulatedMatchEventBatches(simulatedStats.events),
+          ...createSimulatedMatchPlayerGameStatUpserts(simulatedStats.events),
         );
       }
 
@@ -939,11 +1053,8 @@ export async function repairMissingLegacyBackfillNpcMatchStats() {
 
       if (simulatedStats.events.length) {
         transaction.push(
-          ...simulatedStats.events.map((event) =>
-            DatabaseClient.prisma.matchEvent.create({
-              data: event,
-            }),
-          ),
+          ...createSimulatedMatchEventBatches(simulatedStats.events),
+          ...createSimulatedMatchPlayerGameStatUpserts(simulatedStats.events),
         );
       }
 
@@ -1134,6 +1245,11 @@ export async function repairLegacyBackfillSimulatedLineups() {
 
       await DatabaseClient.prisma.$transaction([
         DatabaseClient.prisma.matchEvent.deleteMany({
+          where: {
+            matchId: match.id,
+          },
+        }),
+        DatabaseClient.prisma.matchPlayerGameStat.deleteMany({
           where: {
             matchId: match.id,
           },
@@ -5855,13 +5971,103 @@ async function recalculateTeamCountryIdentity(teamId: number) {
 }
 
 export async function recalculateAllTeamCountryIdentities() {
-  const teams = await DatabaseClient.prisma.team.findMany({
-    select: { id: true },
-  });
+  // This is an integrity sweep for roster changes which were not handled by a
+  // direct recalculation hook. Read every roster in one relation query and
+  // update only identities that are actually stale; the former implementation
+  // performed the same nested query once per team on every calendar day.
+  const [teams, identityCountries] = await Promise.all([
+    DatabaseClient.prisma.team.findMany({
+      select: {
+        id: true,
+        name: true,
+        countryId: true,
+        players: {
+          where: { starter: true },
+          select: {
+            countryId: true,
+            country: {
+              select: {
+                continent: {
+                  select: { code: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    DatabaseClient.prisma.country.findMany({
+      where: {
+        code: {
+          in: [...MIXED_REGION_COUNTRY_CODES, OTHER_TEAM_COUNTRY_CODE].map((code) =>
+            code.toLowerCase(),
+          ),
+        },
+      },
+      select: { id: true, code: true, name: true },
+    }),
+  ]);
+  const identityCountryByCode = new Map(
+    identityCountries.map((country) => [country.code.toUpperCase(), country]),
+  );
+  const updates: Array<{ id: number; name: string; nextCountryId: number }> = [];
 
   for (const team of teams) {
-    await recalculateTeamCountryIdentity(team.id);
+    if (team.players.length < 3) continue;
+
+    const countryCounts = new Map<number, number>();
+    const continentCounts = new Map<string, number>();
+    for (const player of team.players) {
+      countryCounts.set(player.countryId, (countryCounts.get(player.countryId) ?? 0) + 1);
+      const continentCode = player.country?.continent?.code?.toUpperCase();
+      if (continentCode) {
+        continentCounts.set(continentCode, (continentCounts.get(continentCode) ?? 0) + 1);
+      }
+    }
+
+    const dominantCountry = [...countryCounts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0] - b[0],
+    )[0];
+    let nextCountryId = dominantCountry?.[1] >= 3 ? dominantCountry[0] : null;
+
+    if (!nextCountryId) {
+      const dominantContinent = [...continentCounts.entries()]
+        .filter(([code]) => MIXED_REGION_COUNTRY_CODES.has(code))
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      nextCountryId = dominantContinent
+        ? (identityCountryByCode.get(dominantContinent[0])?.id ?? null)
+        : null;
+    }
+
+    if (!nextCountryId) {
+      nextCountryId = identityCountryByCode.get(OTHER_TEAM_COUNTRY_CODE.toUpperCase())?.id ?? null;
+    }
+
+    if (nextCountryId && nextCountryId !== team.countryId) {
+      updates.push({ id: team.id, name: team.name, nextCountryId });
+    }
   }
+
+  if (!updates.length) return Promise.resolve();
+
+  await DatabaseClient.prisma.$transaction(
+    updates.map((team) =>
+      DatabaseClient.prisma.team.update({
+        where: { id: team.id },
+        data: { countryId: team.nextCountryId },
+      }),
+    ),
+  );
+
+  updates.forEach((team) => {
+    const country = identityCountries.find((item) => item.id === team.nextCountryId);
+    Engine.Runtime.Instance.log.info(
+      'Updated team country identity: %s -> %s (%s)',
+      team.name,
+      country?.name ?? team.nextCountryId,
+      country?.code ?? 'unknown',
+    );
+  });
 
   return Promise.resolve();
 }
@@ -8983,11 +9189,8 @@ export async function onMatchdayNPC(entry: Calendar) {
 
   if (simulatedStats.events.length) {
     transaction.push(
-      ...simulatedStats.events.map((event) =>
-        DatabaseClient.prisma.matchEvent.create({
-          data: event,
-        }),
-      ),
+      ...createSimulatedMatchEventBatches(simulatedStats.events),
+      ...createSimulatedMatchPlayerGameStatUpserts(simulatedStats.events),
     );
   }
 

@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { Constants, Util } from '@liga/shared';
 import DatabaseClient from './database-client';
 import { findCompetitionMvps, getCompetitionMvpStageCompetitionIds } from './competition-mvps';
-import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 import { getThankYouGraphic, getWelcomeGraphic } from './news-welcome-graphics';
 import { CIS_COUNTRY_CODES } from './npc-transfer-identity';
 
@@ -1649,6 +1648,51 @@ async function getCompetitionMvpSeedsForNews(publishedAt: Date) {
 
 function isTopPlayersOfYearDate(publishedAt: Date) {
   return publishedAt.getMonth() === 11 && publishedAt.getDate() === 31;
+}
+
+/**
+ * Cheap daily check for automatic stories. The full generator loads standings,
+ * transfers, and MVP history, so only invoke it when a story can actually be
+ * due on this in-game date.
+ */
+export async function hasAutomaticItemsDue(date: Date) {
+  if (isTopPlayersOfYearDate(date)) {
+    return true;
+  }
+
+  const from = startOfDay(date);
+  const to = endOfDay(date);
+  const [acceptedTransfer, expiredTransfer] = await Promise.all([
+    DatabaseClient.prisma.transfer.findFirst({
+      where: {
+        status: {
+          in: [
+            Constants.TransferStatus.TEAM_ACCEPTED,
+            Constants.TransferStatus.PLAYER_ACCEPTED,
+          ],
+        },
+        target: {
+          careerStints: {
+            some: {
+              startedAt: { gte: from, lte: to },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    }),
+    DatabaseClient.prisma.transfer.findFirst({
+      where: {
+        status: Constants.TransferStatus.EXPIRED,
+        target: {
+          lastOfferAt: { gte: from, lte: to },
+        },
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  return Boolean(acceptedTransfer || expiredTransfer);
 }
 
 function getTopPlayersOfYearEventWeight(tierSlug?: string | null, federationSlug?: string | null) {
@@ -5990,10 +6034,6 @@ export async function generateAutomaticItems(date?: Date) {
   const topTeamIds = await getTopTeamIds();
   const transferShortTeamIds = await getTransferShortTeamIds();
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
-
-  if (includeStatistics) {
-    await backfillMissingMatchPlayerGameStats();
-  }
 
   const transfers = await getCompletedTransfersForNews();
   const mvpSeeds = includeStatistics ? await getCompetitionMvpSeedsForNews(publishedAt) : [];

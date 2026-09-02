@@ -36,6 +36,21 @@ function disableClose(event: Electron.Event) {
   mainWindow.webContents.send(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE);
 }
 
+const calendarPhaseTimings = new Map<string, { count: number; totalMs: number }>();
+
+async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>) {
+  const startedAt = performance.now();
+  try {
+    return await callback();
+  } finally {
+    const elapsedMs = performance.now() - startedAt;
+    const timing = calendarPhaseTimings.get(phase) || { count: 0, totalMs: 0 };
+    timing.count += 1;
+    timing.totalMs += elapsedMs;
+    calendarPhaseTimings.set(phase, timing);
+  }
+}
+
 async function resetDatabaseForMainMenu() {
   await disconnectActiveDatabaseWithIntegrity();
   await DatabaseClient.connect(0);
@@ -203,29 +218,58 @@ async function onTickStart() {
  * Engine middleware: end of each tick.
  */
 async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
-  // Mark entries completed
+  // A handler can legitimately cancel or replace an entry while processing
+  // today's input (for example, when it reschedules contract checks). Mark
+  // only entries that still exist rather than failing the entire calendar run
+  // when one has been removed.
   await Promise.all(
     input.map((calendar) =>
-      DatabaseClient.prisma.calendar.update({
+      DatabaseClient.prisma.calendar.updateMany({
         where: { id: calendar.id },
         data: { completed: true },
       }),
     ),
   );
 
-  await Worldgen.recordMatchResults();
+  const updatedCompetitions = await measureCalendarPhase('record-match-results', () =>
+    Worldgen.recordMatchResults(),
+  );
 
   // npc transfers
-  await Worldgen.sendNPCTransferOffer();
+  await measureCalendarPhase('npc-transfers', () => Worldgen.sendNPCTransferOffer());
 
   // keep team country identities synced even for teams that did not pass
   // through a direct roster-change recalculation hook this tick
-  await Worldgen.recalculateAllTeamCountryIdentities();
+  await measureCalendarPhase('team-country-identities', () =>
+    Worldgen.recalculateAllTeamCountryIdentities(),
+  );
 
   let profile = await DatabaseClient.prisma.profile.findFirst();
-  const newsItems = profile.simulateNpcMatchStats
-    ? await News.generateAutomaticItems(profile.date)
-    : [];
+  // Automatic news used to rebuild its entire historical statistics view after
+  // every calendar day. Keep stories on their actual dates by doing a cheap
+  // due-date check, then only loading the full generator when it has work.
+  const hasNewsRelevantCalendarWork = input.some((entry) =>
+    [
+      Constants.CalendarEntry.TRANSFER_PARSE,
+      Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
+      Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
+    ].includes(entry.type as Constants.CalendarEntry),
+  );
+  const hasCompletedCompetition = updatedCompetitions.some(
+    (competition) => competition.status === Constants.CompetitionStatus.COMPLETED,
+  );
+  const newsItems = await measureCalendarPhase(
+    'automatic-news',
+    async (): Promise<Awaited<ReturnType<typeof News.generateAutomaticItems>>> => {
+      const hasAutomaticItemsDue = profile.simulateNpcMatchStats
+        ? await News.hasAutomaticItemsDue(profile.date)
+        : false;
+      const shouldGenerateAutomaticNews =
+        profile.simulateNpcMatchStats &&
+        (hasNewsRelevantCalendarWork || hasCompletedCompetition || hasAutomaticItemsDue);
+      return shouldGenerateAutomaticNews ? News.generateAutomaticItems(profile.date) : [];
+    },
+  );
   if (newsItems.length > 0) {
     WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents.send(
       Constants.IPCRoute.NEWS_ITEMS_UPDATED,
@@ -484,7 +528,9 @@ export default function () {
     Worldgen.onCompetitionStart,
   );
   Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, Worldgen.onMatchdayNPC);
+  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, (entry: Calendar) =>
+    measureCalendarPhase('npc-matchday', () => Worldgen.onMatchdayNPC(entry)),
+  );
 
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.MATCHDAY_USER,

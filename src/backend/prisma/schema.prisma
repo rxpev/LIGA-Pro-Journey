@@ -71,6 +71,8 @@ model Competition {
   federationId Int
   tier         Tier       @relation(fields: [tierId], references: [id])
   tierId       Int
+
+  @@index([season, status, federationId])
 }
 
 model CompetitionToTeam {
@@ -287,6 +289,7 @@ model Match {
 
   @@index([status, matchType, competitionId, date])
   @@index([date, competitionId])
+  @@index([competitionId, status, date])
 }
 
 model MatchEvent {
@@ -585,6 +588,7 @@ model CareerStint {
   createdAt DateTime  @default(now())
 
   @@index([playerId, endedAt])
+  @@index([playerId, starter, startedAt, endedAt])
   @@index([teamId, startedAt])
   @@index([tier, startedAt])
 }
