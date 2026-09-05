@@ -18,6 +18,12 @@ const PLAYER_HONOR_TIER_SLUGS = [
   ),
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
 ];
+const RETIREMENT_NOTABLE_TIER_SLUGS = [
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+];
 const TOP_PLAYERS_OF_YEAR_SIZE = 20;
 const TOP_PLAYERS_OF_YEAR_MIN_MAPS = 12;
 const TOP_PLAYERS_OF_YEAR_MIN_BIG_EVENT_MAPS = 8;
@@ -6021,6 +6027,120 @@ async function createDrafts(drafts: NewsDraft[]) {
   }
 
   return created;
+}
+
+/**
+ * Creates the single retirement story appropriate for an NPC's final career
+ * situation. The article intentionally has no copy yet: retirement coverage is
+ * currently a title, player image, and (where a template exists) thank-you card.
+ */
+export async function createNpcRetirementItem(args: {
+  playerId: number;
+  publishedAt: Date;
+}) {
+  const player = await DatabaseClient.prisma.player.findFirst({
+    where: { id: args.playerId },
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      starter: true,
+      team: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          blazon: true,
+        },
+      },
+      country: { select: { code: true } },
+      careerStints: {
+        orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }, { id: 'desc' }],
+        take: 1,
+        select: {
+          team: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              blazon: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!player) return null;
+
+  const [topTeamIds, transferShortTeamIds, notableTrophy] = await Promise.all([
+    getTopTeamIds(),
+    getTransferShortTeamIds(),
+    DatabaseClient.prisma.competitionToTeam.findFirst({
+      where: {
+        position: 1,
+        competition: {
+          OR: [
+            { tier: { slug: { in: RETIREMENT_NOTABLE_TIER_SLUGS } } },
+            { tier: { league: { slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE } } },
+          ],
+          matches: { some: { players: { some: { id: player.id } } } },
+        },
+      },
+      select: { id: true },
+    }),
+  ]);
+  const currentTeam = player.team;
+  const lastTeam = player.careerStints[0]?.team || null;
+  const currentTeamIsTop = !!currentTeam && topTeamIds.has(currentTeam.id);
+  const lastTeamIsTop = !!lastTeam && topTeamIds.has(lastTeam.id);
+  const currentTeamIsShortEligible = !!currentTeam && transferShortTeamIds.has(currentTeam.id);
+  const lastTeamIsShortEligible = !!lastTeam && transferShortTeamIds.has(lastTeam.id);
+  const wasBenchedAtTopTeam = !!currentTeam && !player.starter && currentTeamIsTop;
+
+  // Top-team bench retirements are full farewell stories. Teamless veterans with
+  // a major title and the last eligible stints keep their deserved visibility;
+  // lower eligible divisions use the short format used for transfer coverage.
+  const type = wasBenchedAtTopTeam || (!currentTeam && (!!notableTrophy || lastTeamIsTop))
+    ? 'ARTICLE'
+    : currentTeamIsShortEligible || (!currentTeam && lastTeamIsShortEligible)
+      ? 'SHORT'
+      : null;
+  if (!type) return null;
+
+  const relatedTeam = currentTeam || lastTeam;
+  // A retirement announced while the player is still on a team gets that
+  // team's farewell treatment, whether it is a top-story article or a short.
+  // Teamless last-stint coverage stays deliberately minimal for now.
+  const thankYouGraphic =
+    currentTeam && (wasBenchedAtTopTeam || type === 'SHORT')
+      ? getThankYouGraphic(currentTeam, player)
+      : null;
+  const publishedAt = new Date(startOfDay(args.publishedAt).getTime() + player.id);
+  const [item] = await createDrafts([
+    {
+      type,
+      topic: 'TRANSFERS',
+      headline: `${player.name} retires`,
+      summary: '',
+      body: '',
+      image: playerImage(player, relatedTeam || undefined),
+      priority: type === 'ARTICLE' ? 10 : 0,
+      eventKey: `${AUTO_EVENT_PREFIX}:retirement:${player.id}`,
+      payload: {
+        playerId: player.id,
+        teamId: relatedTeam?.id,
+        teamIds: relatedTeam ? [relatedTeam.id] : [],
+        flagCode: toFlagCode(player.country?.code),
+        welcomeGraphic: thankYouGraphic,
+        relatedPlayers: [toRelatedPlayer(player)].filter(Boolean),
+        relatedTeams: [toRelatedTeam(relatedTeam)].filter(Boolean),
+      },
+      publishedAt,
+    },
+  ]);
+
+  return item || null;
 }
 
 export async function generateAutomaticItems(date?: Date) {

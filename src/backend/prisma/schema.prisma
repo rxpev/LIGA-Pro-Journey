@@ -416,6 +416,9 @@ model Player {
   age            Int?
   contractEnd    DateTime?
   lastOfferAt    DateTime?
+  retiredAt      DateTime?
+  isRegen        Boolean   @default(false)
+  generatedAt    DateTime?
 
   // has many
   matches         Match[]
@@ -435,6 +438,8 @@ model Player {
   countryId Int
   team      Team?   @relation(fields: [teamId], references: [id])
   teamId    Int?
+
+  @@index([isRegen, generatedAt])
 }
 
 model Profile {

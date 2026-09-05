@@ -510,6 +510,25 @@ async function onLoopFinish() {
     Engine.MiddlewareType.LOOP_FINISH.toUpperCase(),
   );
 
+  for (const [phase, timing] of calendarPhaseTimings) {
+    Engine.Runtime.Instance.log.info(
+      'Calendar phase %s: total=%dms avg=%dms calls=%d',
+      phase,
+      Math.round(timing.totalMs),
+      Math.round(timing.totalMs / timing.count),
+      timing.count,
+    );
+  }
+  calendarPhaseTimings.clear();
+  const tournamentCacheStats = Worldgen.clearRecordMatchResultsCache();
+  if (tournamentCacheStats.hits + tournamentCacheStats.misses > 0) {
+    Engine.Runtime.Instance.log.info(
+      'Tournament cache: hits=%d misses=%d',
+      tournamentCacheStats.hits,
+      tournamentCacheStats.misses,
+    );
+  }
+
   return Promise.resolve();
 }
 
@@ -571,6 +590,14 @@ export default function () {
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
     Worldgen.onPlayerContractExtensionEval,
+  );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
+    Worldgen.onNpcRetirementCheck,
+  );
+  Engine.Runtime.Instance.register(
+    Constants.CalendarEntry.NPC_REGEN_INTAKE,
+    Worldgen.onNpcRegenIntake,
   );
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,

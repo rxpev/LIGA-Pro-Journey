@@ -50,8 +50,10 @@ function ageGainMult(age?: number | null) {
   if (age <= 19) return 1.25;
   if (age <= 24) return 1.1;
   if (age <= 29) return 1.0;
-  if (age <= 32) return 0.9;
-  return 0.75;
+  if (age <= 31) return 0.55;
+  if (age <= 33) return 0.35;
+  if (age <= 35) return 0.15;
+  return 0.05;
 }
 
 function ageLossMult(age?: number | null) {
@@ -59,8 +61,10 @@ function ageLossMult(age?: number | null) {
   if (age <= 19) return 0.9;
   if (age <= 24) return 0.95;
   if (age <= 29) return 1.0;
-  if (age <= 32) return 1.1;
-  return 1.25;
+  if (age <= 31) return 1.45;
+  if (age <= 33) return 1.8;
+  if (age <= 35) return 2.25;
+  return 3.0;
 }
 
 // Strong dampening for gains near the top

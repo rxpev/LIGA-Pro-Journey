@@ -159,6 +159,8 @@ export enum CalendarEntry {
   PLAYER_CONTRACT_EXPIRE = '/player/contract-expire',
   PLAYER_CONTRACT_REVIEW = '/player/contract-review',
   PLAYER_CONTRACT_EXTENSION_EVAL = '/player/contract-extension-eval',
+  NPC_RETIREMENT_CHECK = '/npc/retirement-check',
+  NPC_REGEN_INTAKE = '/npc/regen-intake',
   TRANSFER_OFFER_EXPIRY_CHECK = '/transfer/offer-expiry-check',
 }
 

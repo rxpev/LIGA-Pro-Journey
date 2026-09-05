@@ -13,6 +13,7 @@ import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { Image } from '@liga/frontend/components';
 import { XPBar } from '@liga/frontend/components/player-card';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import { AppStateContext } from '@liga/frontend/redux';
 import faceitLogo from '../../assets/faceit/icon.png';
 import faceitLevel1 from '../../assets/faceit/1.png';
@@ -258,6 +259,7 @@ function getTop20Year(
 export default function TransferModal() {
   const location = useLocation();
   const { state } = React.useContext(AppStateContext);
+  const formatAppDate = useFormatAppDate();
   const [player, setPlayer] = React.useState<Player>();
   const [honors, setHonors] = React.useState<HonorOccurrence[]>([]);
   const [mvps, setMvps] = React.useState<MvpOccurrence[]>([]);
@@ -626,7 +628,21 @@ export default function TransferModal() {
                 {player.country.name}
               </td>
               <td className="truncate">
-                {player.team ? (
+                {player.retiredAt ? (
+                  <span>
+                    Retired{' '}
+                    <span
+                      className="inline-flex cursor-help text-base-content/50"
+                      aria-label={`Retired on ${formatAppDate(player.retiredAt)}`}
+                      onMouseEnter={(event) =>
+                        showTooltip(event, `Retired on ${formatAppDate(player.retiredAt)}`)
+                      }
+                      onMouseLeave={() => setActiveTooltip(null)}
+                    >
+                      (?)
+                    </span>
+                  </span>
+                ) : player.team ? (
                   <>
                     <img src={player.team.blazon} className="inline-block size-6" />
                     <span className="inline-flex items-baseline gap-1">
@@ -778,16 +794,6 @@ export default function TransferModal() {
               {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
             </div>
           )}
-          {activeTooltip &&
-            createPortal(
-              <div
-                className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
-                style={activeTooltip}
-              >
-                {activeTooltip.content}
-              </div>,
-              document.body,
-            )}
           {Object.values(honorGroups).map((honor) => {
             const honorTooltip =
               honor.titles.length === 1
@@ -929,6 +935,16 @@ export default function TransferModal() {
           </tbody>
         </table>
       </section>
+      {activeTooltip &&
+        createPortal(
+          <div
+            className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
+            style={activeTooltip}
+          >
+            {activeTooltip.content}
+          </div>,
+          document.body,
+        )}
     </main>
   );
 }

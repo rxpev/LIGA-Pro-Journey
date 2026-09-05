@@ -1,3 +1,5 @@
+export const FACEIT_LEVEL_TEN_MIN_ELO = 2000;
+
 export function levelFromElo(elo: number): number {
   // tweak ranges to taste
   if (elo < 801) return 1;
@@ -8,6 +10,6 @@ export function levelFromElo(elo: number): number {
   if (elo < 1551) return 6;
   if (elo < 1701) return 7;
   if (elo < 1851) return 8;
-  if (elo < 2000) return 9;
+  if (elo < FACEIT_LEVEL_TEN_MIN_ELO) return 9;
   return 10;
 }

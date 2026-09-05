@@ -27,6 +27,8 @@ const NUM_COLUMNS = 4;
 /** @constant */
 const PAGE_SIZE = 100;
 
+type PlayerTransferStatus = '' | 'listed' | 'retired';
+
 /**
  * Builds player query from provided filters.
  *
@@ -34,7 +36,7 @@ const PAGE_SIZE = 100;
  * @param countryId       Limit search to a specific country.
  * @param teamId          Limit search to a specific team.
  * @param tier            Limit search to a specific tier.
- * @param transferListed  Whether to search for only transfer listed players.
+ * @param transferStatus  Whether to filter by transfer-listed or retired players.
  * @param orderBy         Sorting direction.
  * @param playerName      Filter by player name.
  * @param weapon          Filter by player weapon preference.
@@ -45,7 +47,7 @@ function buildPlayerQuery(
   countryId?: number,
   teamId?: number,
   tier?: number,
-  transferListed?: boolean,
+  transferStatus?: PlayerTransferStatus,
   orderBy?: ExtractBaseType<Parameters<typeof api.players.all>[number]['orderBy']>,
   playerName?: string,
   role?: string,
@@ -53,7 +55,8 @@ function buildPlayerQuery(
   return {
     ...(orderBy ? { orderBy } : {}),
     where: {
-      ...(transferListed ? { transferListed } : {}),
+      ...(transferStatus === 'listed' ? { transferListed: true } : {}),
+      ...(transferStatus === 'retired' ? { retiredAt: { not: null } } : {}),
       ...(role ? { role } : {}),
       ...(playerName !== ''
         ? {
@@ -104,7 +107,8 @@ export default function () {
   const [selectedPlayerName, setSelectedPlayerName] = React.useState('');
   const [selectedPlayerRole, setSelectedPlayerRole] = React.useState<Constants.PlayerRole | ''>('');
   const [selectedTierId, setSelectedTierId] = React.useState<number>();
-  const [selectedTransferStatus, setSelectedTransferStatus] = React.useState<boolean>();
+  const [selectedTransferStatus, setSelectedTransferStatus] =
+    React.useState<PlayerTransferStatus>('');
   const [selectedTeam, setSelectedTeam] =
     React.useState<ReturnType<typeof findTeamOptionByValue>>();
   const [selectedPlayerOrderBy, setSelectedPlayerOrderBy] = React.useState<
@@ -365,11 +369,14 @@ export default function () {
               <article>
                 <select
                   className="select"
-                  onChange={(event) => setSelectedTransferStatus(Boolean(event.target.value))}
-                  value={String(selectedTransferStatus)}
+                  onChange={(event) =>
+                    setSelectedTransferStatus(event.target.value as PlayerTransferStatus)
+                  }
+                  value={selectedTransferStatus}
                 >
                   <option value="">{t('shared.any')}</option>
-                  <option value="true">{t('shared.transferListed')}</option>
+                  <option value="listed">{t('shared.transferListed')}</option>
+                  <option value="retired">Retired</option>
                 </select>
               </article>
             </section>
@@ -392,7 +399,7 @@ export default function () {
                   setSelectedPlayerName('');
                   setSelectedPlayerRole('' as Constants.PlayerRole);
                   setSelectedTierId('' as unknown as number);
-                  setSelectedTransferStatus(null);
+                  setSelectedTransferStatus('');
                   setSelectedTeam(null);
                 }}
               >

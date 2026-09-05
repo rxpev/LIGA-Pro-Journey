@@ -4,6 +4,8 @@
  * @module
  */
 import * as Sqrl from 'squirrelly';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as Autofill from './autofill';
 import * as Simulator from './simulator';
 import * as WindowManager from './window-manager';
@@ -41,14 +43,17 @@ import {
   Chance,
   Bot,
   Eagers,
+  is,
   Util,
   UserOfferSettings,
   TierSlug,
   UserRole,
 } from '@liga/shared';
 import { computeLifetimeStats } from './faceitstats';
+import { FACEIT_LEVEL_TEN_MIN_ELO } from './levels';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
+import { getNpcRetirementChance } from '@liga/backend/lib/retirement';
 import { backfillCompetitionLocations } from './competition-locations';
 import { upsertCompetitionMvp } from './competition-mvps';
 import {
@@ -131,7 +136,138 @@ const NPC_TRANSFER_TEAM_INCLUDE = {
 } satisfies Prisma.TeamInclude;
 
 type NpcTransferTeam = Prisma.TeamGetPayload<{ include: typeof NPC_TRANSFER_TEAM_INCLUDE }>;
+
+// Teamless NPCs who have never represented a team are only eligible for a
+// team when they have reached FACEIT level 10. Regens are created above this
+// threshold, while ordinary unproven FACEIT players stay out of team pools.
+const NPC_TEAMLESS_CANDIDATE_ELIGIBILITY: Prisma.PlayerWhereInput = {
+  OR: [
+    { careerStints: { some: { teamId: { not: null } } } },
+    { elo: { gte: FACEIT_LEVEL_TEN_MIN_ELO } },
+  ],
+};
+
 const NPC_BACKFILL_CHAIN_MAX_DEPTH = 3;
+const NPC_RETIREMENT_CHECK_MIN_DAYS = 45;
+const NPC_RETIREMENT_CHECK_MAX_DAYS = 75;
+const CAREER_COMPLETION_TIER_SLUGS = [
+  TierSlug.IEM_COLOGNE_PLAYOFFS,
+  TierSlug.IEM_KRAKOW_PLAYOFFS,
+  TierSlug.BLAST_FINALS,
+  TierSlug.MAJOR_CHAMPIONS_STAGE,
+];
+const NPC_REGEN_INTAKE_OFFSETS_DAYS = [45, 105, 165, 225, 285, 345];
+const NPC_REGEN_INTAKE_BATCH_SIZE = 4;
+const REGEN_AVATAR_URL_PREFIX = 'resources://regens/';
+// Calendar simulation often handles several matchdays from the same
+// competition. Reusing its already-restored tournament avoids repeatedly
+// parsing and rebuilding the same large snapshot. The serialized value is
+// retained as a version check so an out-of-band database update is never
+// hidden by the cache.
+const recordedTournamentCache = new Map<
+  number,
+  {
+    serialized: string;
+    tournament: Tournament;
+  }
+>();
+let recordedTournamentCacheHits = 0;
+let recordedTournamentCacheMisses = 0;
+const REGEN_REGION_SETTINGS = {
+  asia_east: {
+    avatarDirectory: 'asia_east',
+    countryCodes: ['CN', 'HK', 'JP', 'KR', 'MN', 'TW'],
+    elo: [2200, 3150],
+    xp: [20, 50],
+  },
+  asia_southeast: {
+    avatarDirectory: 'asia_southeast',
+    countryCodes: ['ID', 'MY', 'PH', 'SG'],
+    elo: [2200, 3150],
+    xp: [20, 50],
+  },
+  asia_south: {
+    avatarDirectory: 'asia_south',
+    countryCodes: ['BD', 'IN', 'PK'],
+    elo: [2200, 3150],
+    xp: [20, 50],
+  },
+  asia_mena: {
+    avatarDirectory: 'asia_mena',
+    countryCodes: ['IR', 'IQ', 'JO', 'LB', 'PS'],
+    elo: [2200, 3150],
+    xp: [20, 50],
+  },
+  oceania: {
+    avatarDirectory: 'oceania',
+    countryCodes: ['AU', 'NZ'],
+    elo: [2200, 3000],
+    xp: [20, 40],
+  },
+  south_america: {
+    avatarDirectory: 'southamerica',
+    countryCodes: ['AR', 'BR', 'CL', 'CO', 'CU', 'HN', 'MX', 'PA', 'UY', 'VE'],
+    elo: [2300, 3400],
+    xp: [20, 60],
+  },
+  north_america: {
+    countryCodes: ['CA', 'US'],
+    elo: [2200, 3300],
+    xp: [20, 50],
+  },
+  europe: {
+    countryCodes: [],
+    elo: [2300, 4200],
+    xp: [20, 65],
+  },
+} as const satisfies Record<
+  string,
+  {
+    avatarDirectory?: string;
+    countryCodes: readonly string[];
+    elo: readonly [number, number];
+    xp: readonly [number, number];
+  }
+>;
+type RegenRegion = keyof typeof REGEN_REGION_SETTINGS;
+const REGEN_EXPLICIT_COUNTRY_CODES = Object.values(REGEN_REGION_SETTINGS).flatMap(
+  (region) => region.countryCodes,
+);
+const REGEN_COUNTRY_FILTER: Prisma.CountryWhereInput = {
+  OR: [
+    { code: { in: REGEN_EXPLICIT_COUNTRY_CODES } },
+    // "eu" is the game's synthetic mixed-region nationality, not a country.
+    { AND: [{ continent: { code: 'EU' } }, { code: { not: 'eu' } }] },
+  ],
+};
+const REGEN_RIFLE_PERSONALITIES = [
+  Constants.PersonalityTemplate.LURK,
+  Constants.PersonalityTemplate.ALURK,
+  Constants.PersonalityTemplate.PLURK,
+  Constants.PersonalityTemplate.ARIFLE,
+  Constants.PersonalityTemplate.RIFLE,
+  Constants.PersonalityTemplate.PRIFLE,
+  Constants.PersonalityTemplate.ENTRY,
+];
+const REGEN_SNIPER_PERSONALITIES = [
+  Constants.PersonalityTemplate.ASNIPER,
+  Constants.PersonalityTemplate.SNIPER,
+  Constants.PersonalityTemplate.PSNIPER,
+];
+type RegenAvatar = {
+  region: RegenRegion;
+  url: string;
+};
+let regenAvatarPool: RegenAvatar[] | null = null;
+
+function getRegenRegionForCountry(country: { code: string; continent: { code: string } }) {
+  const explicitRegion = (Object.keys(REGEN_REGION_SETTINGS) as RegenRegion[]).find((region) => {
+    const countryCodes: readonly string[] = REGEN_REGION_SETTINGS[region].countryCodes;
+    return countryCodes.includes(country.code);
+  });
+
+  return explicitRegion || (country.continent.code === 'EU' ? 'europe' : null);
+}
 type SimulatedMatch = {
   id: number;
   date: Date;
@@ -1262,11 +1398,8 @@ export async function repairLegacyBackfillSimulatedLineups() {
             },
           },
         }),
-        ...simulatedStats.events.map((event) =>
-          DatabaseClient.prisma.matchEvent.create({
-            data: event,
-          }),
-        ),
+        ...createSimulatedMatchEventBatches(simulatedStats.events),
+        ...createSimulatedMatchPlayerGameStatUpserts(simulatedStats.events),
       ]);
 
       repaired += 1;
@@ -2571,6 +2704,7 @@ async function benchVictim(params: {
           xp: true,
           contractEnd: true,
           transferListed: true,
+          userControlled: true,
         },
       },
     },
@@ -2631,6 +2765,9 @@ async function benchVictim(params: {
     starter: false,
     startedAt: now,
   });
+  if (!victim.userControlled) {
+    await scheduleNpcRetirementCheck(victim.id, now);
+  }
 
   Engine.Runtime.Instance.log.info(
     'Bench victim: teamId=%d victimId=%d victimRole=%s (xp=%d) transferListed=true',
@@ -4971,11 +5108,27 @@ export async function recordMatchResults() {
   // record results for all competitions
   return Promise.all(
     competitionIds.map(async (competitionId) => {
+      const numericCompetitionId = Number(competitionId);
       // restore tournament object
       const matches = groupedMatches[competitionId];
       const competition = matches[0].competition;
-      const tournamentData = JSON.parse(competition.tournament);
-      const tournament = Tournament.restore(tournamentData as ReturnType<Tournament['save']>);
+      const cachedTournament = recordedTournamentCache.get(numericCompetitionId);
+      const isCacheHit = cachedTournament?.serialized === competition.tournament;
+      if (isCacheHit) {
+        recordedTournamentCacheHits += 1;
+      } else {
+        recordedTournamentCacheMisses += 1;
+      }
+      const tournament =
+        isCacheHit
+          ? cachedTournament.tournament
+          : Tournament.restore(
+              JSON.parse(competition.tournament) as ReturnType<Tournament['save']>,
+            );
+      // The cached object is mutated below. Remove it until the database
+      // update succeeds so a failed result write can never leave stale state
+      // available to a later retry.
+      recordedTournamentCache.delete(numericCompetitionId);
 
       // record match results with tourney
       matches.forEach((match) => {
@@ -5159,28 +5312,55 @@ export async function recordMatchResults() {
       }
 
       const isCompetitionDone = tournament.$base.isDone();
+      const serializedTournament = JSON.stringify(tournament.save());
+      const competitorsById = new Map(
+        competition.competitors.map((competitor) => [competitor.id, competitor]),
+      );
+      const standingUpdates = tournament.competitors.flatMap((id) => {
+        const result = tournament.$base.resultsFor(tournament.getSeedByCompetitorId(id));
+        const nextStanding = {
+          position: result.gpos || result.pos,
+          win: result.wins,
+          loss: result.losses,
+          draw: result.draws,
+        };
+        const currentStanding = competitorsById.get(id);
+
+        // A result only changes the standings of the teams that played. Avoid
+        // rewriting every other competitor in a league on each matchday.
+        if (
+          currentStanding &&
+          currentStanding.position === nextStanding.position &&
+          currentStanding.win === nextStanding.win &&
+          currentStanding.loss === nextStanding.loss &&
+          currentStanding.draw === nextStanding.draw
+        ) {
+          return [];
+        }
+
+        return [
+          {
+            where: { id },
+            data: nextStanding,
+          },
+        ];
+      });
+
       // update the competition database record
       const updatedCompetition = await DatabaseClient.prisma.competition.update({
-        where: { id: Number(competitionId) },
+        where: { id: numericCompetitionId },
         data: {
           status: isCompetitionDone
             ? Constants.CompetitionStatus.COMPLETED
             : Constants.CompetitionStatus.STARTED,
-          tournament: JSON.stringify(tournament.save()),
-          competitors: {
-            update: tournament.competitors.map((id) => {
-              const competitor = tournament.$base.resultsFor(tournament.getSeedByCompetitorId(id));
-              return {
-                where: { id },
-                data: {
-                  position: competitor.gpos || competitor.pos,
-                  win: competitor.wins,
-                  loss: competitor.losses,
-                  draw: competitor.draws,
+          tournament: serializedTournament,
+          ...(standingUpdates.length > 0
+            ? {
+                competitors: {
+                  update: standingUpdates,
                 },
-              };
-            }),
-          },
+              }
+            : {}),
         },
       });
 
@@ -5197,9 +5377,34 @@ export async function recordMatchResults() {
           : Promise.resolve(),
       ]);
 
+      if (isCompetitionDone) {
+        recordedTournamentCache.delete(numericCompetitionId);
+      } else {
+        recordedTournamentCache.set(numericCompetitionId, {
+          serialized: serializedTournament,
+          tournament,
+        });
+      }
+
       return updatedCompetition;
     }),
   );
+}
+
+/**
+ * Tournament state is persisted after every match result, so this cache is
+ * only an in-memory acceleration for a single calendar run. Clear it after a
+ * loop to release memory and ensure a later run always starts from SQLite.
+ */
+export function clearRecordMatchResultsCache() {
+  const stats = {
+    hits: recordedTournamentCacheHits,
+    misses: recordedTournamentCacheMisses,
+  };
+  recordedTournamentCache.clear();
+  recordedTournamentCacheHits = 0;
+  recordedTournamentCacheMisses = 0;
+  return stats;
 }
 
 /**
@@ -6812,7 +7017,7 @@ async function enforceSingleStarterSniper(params: {
           id: { not: keepStarterPlayerId },
           role: { in: ['SNIPER', 'AWPER'] },
         },
-        select: { id: true },
+        select: { id: true, userControlled: true },
       },
     },
   });
@@ -6851,6 +7056,12 @@ async function enforceSingleStarterSniper(params: {
       }),
     ),
   ]);
+
+  await Promise.all(
+    team.players
+      .filter((player) => !player.userControlled)
+      .map((player) => scheduleNpcRetirementCheck(player.id, date)),
+  );
 }
 
 async function enforceStarterLimit(params: { teamId: number; date: Date; maxStarters?: number }) {
@@ -6934,6 +7145,9 @@ async function enforceStarterLimit(params: { teamId: number; date: Date; maxStar
       starter: false,
       startedAt: date,
     });
+    if (!victim.userControlled) {
+      await scheduleNpcRetirementCheck(victim.id, date);
+    }
   }
 }
 
@@ -7020,6 +7234,8 @@ async function reinstateBenchedPlayerAfterSale(params: {
     where: {
       teamId: null,
       userControlled: false,
+      retiredAt: null,
+      ...NPC_TEAMLESS_CANDIDATE_ELIGIBILITY,
     },
     include: {
       country: {
@@ -7270,6 +7486,8 @@ async function canBackfillNPCStarterAfterSale(params: {
     where: {
       teamId: null,
       userControlled: false,
+      retiredAt: null,
+      ...NPC_TEAMLESS_CANDIDATE_ELIGIBILITY,
     },
     include: {
       country: {
@@ -7408,7 +7626,12 @@ async function processNPCContractExtensions() {
       }
 
       const freeAgents = await prisma.player.findMany({
-        where: { teamId: null, userControlled: false },
+        where: {
+          teamId: null,
+          userControlled: false,
+          retiredAt: null,
+          ...NPC_TEAMLESS_CANDIDATE_ELIGIBILITY,
+        },
         include: { country: { include: { continent: true } } },
         take: 200,
       });
@@ -7587,6 +7810,20 @@ async function processNPCContractExtensions() {
       },
     });
 
+    const retired = await evaluateNpcRetirement({
+      playerId: player.id,
+      date: now,
+      requireNoRecentOffers: false,
+      previousStarter: player.starter,
+    });
+    if (retired) {
+      if (player.starter) {
+        await ensureNPCStarterFloorAndAwper(player.teamId, player.role);
+      }
+      await recalculateTeamCountryIdentity(player.teamId);
+      continue;
+    }
+
     await tryPlaceEliteNPCFreeAgent({
       player,
       date: now,
@@ -7695,6 +7932,8 @@ async function trySignNPCFreeAgent(params: { from: NpcTransferTeam; date: Date }
     where: {
       teamId: null,
       userControlled: false,
+      retiredAt: null,
+      ...NPC_TEAMLESS_CANDIDATE_ELIGIBILITY,
     },
     include: {
       country: {
@@ -7799,6 +8038,7 @@ async function trySignNPCFreeAgent(params: { from: NpcTransferTeam; date: Date }
     starter: false,
     startedAt: date,
   });
+  await scheduleNpcRetirementCheck(victim.id, date);
 
   const years = getTierContractYears(from.tier);
   const contractEnd = addYears(date, years);
@@ -7945,6 +8185,7 @@ async function tryPlaceEliteNPCFreeAgent(params: {
     starter: false,
     startedAt: date,
   });
+  await scheduleNpcRetirementCheck(victim.id, date);
 
   const years = getTierContractYears(targetTeam.tier);
   const contractEnd = addYears(date, years);
@@ -8003,6 +8244,7 @@ async function tryPlaceEliteNPCFreeAgent(params: {
 
 export async function sendNPCTransferOffer() {
   await processNPCContractExtensions();
+  await scheduleExistingNpcFreeAgentRetirementChecks();
 
   if (!Chance.rollD2(Constants.TransferSettings.PBX_NPC_CONSIDER)) {
     return Promise.resolve();
@@ -8467,6 +8709,7 @@ export async function onTransferParse(entry: Calendar) {
     starter: false,
     startedAt: profile.date,
   });
+  await scheduleNpcRetirementCheck(victim.id, profile.date);
 
   await DatabaseClient.prisma.transfer.update({
     where: { id: transfer.id },
@@ -8683,6 +8926,495 @@ async function incrementAgesSeasonal() {
   });
 
   Engine.Runtime.Instance.log.info('Season start: incremented age for %d players.', res.count);
+}
+
+function getSeasonalXpRegression(player: {
+  age: number | null;
+  starter: boolean;
+  teamId: number | null;
+  transferListed: boolean;
+}) {
+  const age = player.age ?? 0;
+  const inactive = player.teamId == null || !player.starter || player.transferListed;
+
+  if (age <= 31) return 0;
+  if (age <= 33) return 1;
+  if (age <= 35) return inactive ? 4 : 2;
+  return inactive ? 6 : 3;
+}
+
+async function applySeasonalXpRegression() {
+  const profile = await DatabaseClient.prisma.profile.findFirst();
+  if (!profile || profile.season <= 1) return;
+
+  const players = await DatabaseClient.prisma.player.findMany({
+    where: {
+      age: { gte: 32 },
+      retiredAt: null,
+    },
+    select: {
+      id: true,
+      xp: true,
+      age: true,
+      starter: true,
+      teamId: true,
+      transferListed: true,
+    },
+  });
+
+  const updates = players
+    .map((player) => ({
+      id: player.id,
+      xp: Math.max(0, (player.xp ?? 0) - getSeasonalXpRegression(player)),
+    }))
+    .filter((update, index) => update.xp !== (players[index].xp ?? 0));
+
+  if (!updates.length) return;
+
+  await DatabaseClient.prisma.$transaction(
+    updates.map((update) =>
+      DatabaseClient.prisma.player.update({
+        where: { id: update.id },
+        data: { xp: update.xp },
+      }),
+    ),
+  );
+
+  Engine.Runtime.Instance.log.info('Season start: applied XP regression to %d veteran players.', updates.length);
+}
+
+async function scheduleNpcRetirementCheck(playerId: number, fromDate: Date) {
+  const prisma = DatabaseClient.prisma;
+  const inactivityDays = random(NPC_RETIREMENT_CHECK_MIN_DAYS, NPC_RETIREMENT_CHECK_MAX_DAYS);
+  await prisma.calendar.deleteMany({
+    where: {
+      type: Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
+      completed: false,
+      date: { gt: fromDate.toISOString() },
+      OR: [
+        { payload: String(playerId) },
+        { payload: { startsWith: `${playerId}:` } },
+      ],
+    },
+  });
+  await prisma.calendar.create({
+    data: {
+      type: Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
+      date: addDays(fromDate, inactivityDays).toISOString(),
+      payload: `${playerId}:${inactivityDays}`,
+    },
+  });
+}
+
+async function scheduleExistingNpcFreeAgentRetirementChecks() {
+  const prisma = DatabaseClient.prisma;
+  const profile = await prisma.profile.findFirst();
+  if (!profile) return;
+
+  const [freeAgents, scheduledChecks] = await Promise.all([
+    prisma.player.findMany({
+      where: {
+        teamId: null,
+        userControlled: false,
+        retiredAt: null,
+        age: { gte: 30 },
+      },
+      select: { id: true },
+    }),
+    prisma.calendar.findMany({
+      where: {
+        type: Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
+        completed: false,
+      },
+      select: { payload: true },
+    }),
+  ]);
+  const scheduledPlayerIds = new Set(
+    scheduledChecks
+      .map((entry) => Number(String(entry.payload ?? '').split(':')[0]))
+      .filter((playerId) => Number.isFinite(playerId) && playerId > 0),
+  );
+
+  // Existing saves can already contain veteran free agents. Give each one an
+  // individual, randomized check without retiring the group as a batch.
+  await Promise.all(
+    freeAgents
+      .filter((player) => !scheduledPlayerIds.has(player.id))
+      .map((player) => scheduleNpcRetirementCheck(player.id, profile.date)),
+  );
+}
+
+function getRegenAssetsPath() {
+  return is.dev()
+    ? path.join(process.env.INIT_CWD || process.cwd(), 'src', 'resources', 'regens')
+    : path.join(process.resourcesPath, 'regens');
+}
+
+async function getRegenAvatarPool() {
+  if (regenAvatarPool) return regenAvatarPool;
+
+  const assetsPath = getRegenAssetsPath();
+  const regions = (Object.keys(REGEN_REGION_SETTINGS) as RegenRegion[])
+    .map((region) => ({
+      region,
+      directory: (REGEN_REGION_SETTINGS[region] as { avatarDirectory?: string }).avatarDirectory,
+    }))
+    .filter((region): region is { region: RegenRegion; directory: string } => !!region.directory);
+  const entries = await Promise.all(
+    regions.map(async ({ region, directory }) => {
+      try {
+        const files = await fs.promises.readdir(path.join(assetsPath, directory));
+        return files
+          .filter((file) => /\.(png|jpe?g|webp)$/i.test(file))
+          .map((file) => ({
+            region,
+            url: `${REGEN_AVATAR_URL_PREFIX}${directory}/${file}`,
+          }));
+      } catch (error) {
+        Engine.Runtime.Instance.log.warn(
+          'Unable to load regen avatars from %s: %s',
+          path.join(assetsPath, directory),
+          (error as Error).message,
+        );
+        return [];
+      }
+    }),
+  );
+
+  regenAvatarPool = entries.flat();
+  return regenAvatarPool;
+}
+
+async function scheduleNpcRegenIntakes() {
+  const profile = await DatabaseClient.prisma.profile.findFirst({ select: { date: true } });
+  if (!profile) return;
+
+  const seasonStart = startOfDay(profile.date);
+  const intakeDates = NPC_REGEN_INTAKE_OFFSETS_DAYS.map((offset) => addDays(seasonStart, offset));
+  const existing = await DatabaseClient.prisma.calendar.findMany({
+    where: {
+      type: Constants.CalendarEntry.NPC_REGEN_INTAKE,
+      date: { in: intakeDates.map((date) => date.toISOString()) },
+    },
+    select: { date: true },
+  });
+  const scheduledDates = new Set(existing.map((entry) => entry.date.toISOString()));
+  const missingDates = intakeDates.filter((date) => !scheduledDates.has(date.toISOString()));
+
+  if (!missingDates.length) return;
+
+  await DatabaseClient.prisma.$transaction(
+    missingDates.map((date) =>
+      DatabaseClient.prisma.calendar.create({
+        data: {
+          date: date.toISOString(),
+          type: Constants.CalendarEntry.NPC_REGEN_INTAKE,
+        },
+      }),
+    ),
+  );
+}
+
+function getNextRegenNumber(names: string[]) {
+  return (
+    names.reduce((highest, name) => {
+      const match = /^Regen\s+(\d+)$/i.exec(name.trim());
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0) + 1
+  );
+}
+
+/**
+ * Creates a small, staggered, country-specific intake. Retirements are the
+ * demand signal, so no players appear merely because the season has advanced.
+ */
+export async function onNpcRegenIntake(_: Calendar) {
+  const prisma = DatabaseClient.prisma;
+  const [retiredPlayers, regens, countries, usedAvatars, existingNames] = await Promise.all([
+    // Keep retirement demand by country. A Chinese retirement must produce a
+    // Chinese regen; the portrait pool must never decide the nationality.
+    prisma.player.findMany({
+      where: {
+        userControlled: false,
+        retiredAt: { not: null },
+        country: REGEN_COUNTRY_FILTER,
+        // A free agent who never represented a team has not left a competitive
+        // career slot behind, so they must not create a regen replacement.
+        careerStints: { some: { teamId: { not: null } } },
+      },
+      select: { countryId: true },
+    }),
+    prisma.player.findMany({
+      where: {
+        isRegen: true,
+        country: REGEN_COUNTRY_FILTER,
+      },
+      select: { countryId: true },
+    }),
+    prisma.country.findMany({
+      where: REGEN_COUNTRY_FILTER,
+      select: { id: true, code: true, continent: { select: { code: true } } },
+    }),
+    prisma.player.findMany({
+      where: {
+        isRegen: true,
+        avatar: { startsWith: REGEN_AVATAR_URL_PREFIX },
+      },
+      select: { avatar: true },
+    }),
+    prisma.player.findMany({
+      where: { name: { startsWith: 'Regen ' } },
+      select: { name: true },
+    }),
+  ]);
+  const countryRegionById = new Map<number, RegenRegion>();
+  for (const country of countries) {
+    const region = getRegenRegionForCountry(country);
+    if (region) {
+      countryRegionById.set(country.id, region);
+    }
+  }
+  const retirementsByCountryId = new Map<number, number>();
+  const regensByCountryId = new Map<number, number>();
+  retiredPlayers.forEach((player) =>
+    retirementsByCountryId.set(
+      player.countryId,
+      (retirementsByCountryId.get(player.countryId) || 0) + 1,
+    ),
+  );
+  regens.forEach((player) =>
+    regensByCountryId.set(player.countryId, (regensByCountryId.get(player.countryId) || 0) + 1),
+  );
+  const pendingCountryIds = countries.flatMap((country) =>
+    Array.from(
+      {
+        length: Math.max(
+          0,
+          (retirementsByCountryId.get(country.id) || 0) - (regensByCountryId.get(country.id) || 0),
+        ),
+      },
+      () => country.id,
+    ),
+  ).filter((countryId) => countryRegionById.has(countryId));
+  const pendingReplacements = pendingCountryIds.length;
+  const intakeSize = Math.min(NPC_REGEN_INTAKE_BATCH_SIZE, pendingReplacements);
+  if (!intakeSize) return;
+
+  const usedAvatarUrls = new Set(usedAvatars.flatMap((player) => (player.avatar ? [player.avatar] : [])));
+  const availableAvatars = (await getRegenAvatarPool()).filter((avatar) => !usedAvatarUrls.has(avatar.url));
+  const profile = await prisma.profile.findFirst({ select: { date: true } });
+  if (!profile) return;
+
+  let nextRegenNumber = getNextRegenNumber(existingNames.map((player) => player.name));
+  const createData: Prisma.PlayerUncheckedCreateInput[] = [];
+  for (let index = 0; index < intakeSize; index += 1) {
+    const countryIndex = random(0, pendingCountryIds.length - 1);
+    const countryId = pendingCountryIds.splice(countryIndex, 1)[0];
+    const country = countries.find((item) => item.id === countryId);
+    const region = countryRegionById.get(countryId);
+    if (!country || !region) continue;
+
+    const regionalAvatarIndexes = availableAvatars
+      .map((avatar, avatarIndex) => (avatar.region === region ? avatarIndex : -1))
+      .filter((avatarIndex) => avatarIndex >= 0);
+    const avatarIndex = regionalAvatarIndexes.length
+      ? sample(regionalAvatarIndexes)!
+      : -1;
+    const avatar = avatarIndex >= 0 ? availableAvatars.splice(avatarIndex, 1)[0] : null;
+    const regionSettings = REGEN_REGION_SETTINGS[region];
+
+    const isSniper = random(1, 100) <= 20;
+    createData.push({
+      name: `Regen ${nextRegenNumber++}`,
+      countryId: country.id,
+      avatar: avatar?.url || null,
+      age: random(16, 19),
+      xp: random(regionSettings.xp[0], regionSettings.xp[1]),
+      elo: random(regionSettings.elo[0], regionSettings.elo[1]),
+      role: isSniper ? Constants.PlayerRole.SNIPER : Constants.PlayerRole.RIFLER,
+      personality: sample(isSniper ? REGEN_SNIPER_PERSONALITIES : REGEN_RIFLE_PERSONALITIES),
+      starter: false,
+      transferListed: true,
+      isRegen: true,
+      generatedAt: profile.date,
+    });
+  }
+
+  if (!createData.length) return;
+  await prisma.$transaction(createData.map((data) => prisma.player.create({ data })));
+  Engine.Runtime.Instance.log.info(
+    'Generated %d regen%s (%d pending replacement%s remain).',
+    createData.length,
+    createData.length === 1 ? '' : 's',
+    Math.max(0, pendingReplacements - createData.length),
+    pendingReplacements - createData.length === 1 ? '' : 's',
+  );
+}
+
+async function evaluateNpcRetirement(params: {
+  playerId: number;
+  date: Date;
+  requireNoRecentOffers: boolean;
+  inactivityDays?: number;
+  previousStarter?: boolean;
+}) {
+  const {
+    playerId,
+    date,
+    requireNoRecentOffers,
+    inactivityDays = 60,
+    previousStarter,
+  } = params;
+  const prisma = DatabaseClient.prisma;
+  const player = await prisma.player.findFirst({
+    where: { id: playerId, userControlled: false, retiredAt: null },
+    select: {
+      id: true,
+      name: true,
+      age: true,
+      xp: true,
+      starter: true,
+      teamId: true,
+      countryId: true,
+      transferListed: true,
+      team: { select: { tier: true } },
+      careerStints: { select: { tier: true } },
+    },
+  });
+
+  if (!player || (player.age ?? 0) < 30) return false;
+
+  const inactive = player.teamId == null || (!player.starter && player.transferListed);
+  if (!inactive) return false;
+
+  if (requireNoRecentOffers) {
+    const recentOffer = await prisma.offer.findFirst({
+      where: {
+        createdAt: { gt: subDays(date, inactivityDays) },
+        transfer: { playerId: player.id },
+      },
+      select: { id: true },
+    });
+    if (recentOffer) {
+      await scheduleNpcRetirementCheck(player.id, date);
+      return false;
+    }
+  }
+
+  const peakTier = Math.max(
+    player.team?.tier ?? -1,
+    ...player.careerStints.map((stint) => stint.tier ?? -1),
+  );
+  const nationalTeams = await prisma.team.findMany({
+    where: { profile: null, countryId: player.countryId },
+    select: {
+      id: true,
+      tier: true,
+      players: {
+        where: { starter: true },
+        select: { xp: true },
+      },
+    },
+  });
+  const hasViableNationalContinuation = nationalTeams.some(
+    (team) =>
+      team.id !== player.teamId &&
+      team.tier <= peakTier &&
+      team.players.some((starter) => (starter.xp ?? 0) <= (player.xp ?? 0) - 5),
+  );
+  const trophyWins = await prisma.competitionToTeam.findMany({
+    where: {
+      position: 1,
+      teamId: { not: null },
+      competition: {
+        OR: [
+          { tier: { slug: { in: CAREER_COMPLETION_TIER_SLUGS } } },
+          { tier: { league: { slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE } } },
+        ],
+        matches: {
+          some: {
+            players: {
+              some: { id: player.id },
+            },
+          },
+        },
+      },
+    },
+    select: { competition: { select: { tier: { select: { slug: true } } } } },
+  });
+  const careerTrophyPoints = trophyWins.reduce(
+    (total, win) =>
+      total + (win.competition.tier.slug === TierSlug.MAJOR_CHAMPIONS_STAGE ? 3 : 1),
+    0,
+  );
+  const retirementChance = getNpcRetirementChance({
+    ...player,
+    starter: previousStarter ?? player.starter,
+    hasViableNationalContinuation,
+    careerTrophyPoints,
+  });
+
+  if (!Chance.rollD2(retirementChance)) {
+    await scheduleNpcRetirementCheck(player.id, date);
+    return false;
+  }
+
+  await closeOpenCareerStints(prisma, player.id, date);
+  // Build the story before the team link is cleared. The news classifier needs
+  // the player's final bench/team state to decide between a farewell article,
+  // a title-based article, and a lower-division short.
+  const retirementNewsItem = await News.createNpcRetirementItem({
+    playerId: player.id,
+    publishedAt: date,
+  });
+  await prisma.player.update({
+    where: { id: player.id },
+    data: {
+      teamId: null,
+      contractEnd: null,
+      starter: false,
+      transferListed: false,
+      lastOfferAt: null,
+      retiredAt: date,
+    },
+  });
+  if (retirementNewsItem) {
+    WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents.send(
+      Constants.IPCRoute.NEWS_ITEMS_UPDATED,
+    );
+  }
+  Engine.Runtime.Instance.log.info(
+    'Retired NPC %s (id=%d age=%d xp=%d chance=%d nationalContinuation=%s trophyPoints=%d).',
+    player.name,
+    player.id,
+    player.age ?? 0,
+    player.xp ?? 0,
+    retirementChance,
+    hasViableNationalContinuation,
+    careerTrophyPoints,
+  );
+  return true;
+}
+
+export async function onNpcRetirementCheck(entry: Calendar) {
+  const [rawPlayerId, rawInactivityDays] = String(entry.payload ?? '').split(':');
+  const playerId = Number(rawPlayerId);
+  const parsedInactivityDays = Number(rawInactivityDays);
+  const inactivityDays = Number.isFinite(parsedInactivityDays)
+    ? Math.max(
+        NPC_RETIREMENT_CHECK_MIN_DAYS,
+        Math.min(NPC_RETIREMENT_CHECK_MAX_DAYS, parsedInactivityDays),
+      )
+    : 60;
+  const profile = await DatabaseClient.prisma.profile.findFirst();
+  if (!profile || !Number.isFinite(playerId) || playerId <= 0) return;
+
+  await evaluateNpcRetirement({
+    playerId,
+    date: profile.date,
+    requireNoRecentOffers: true,
+    inactivityDays,
+  });
 }
 
 /**
@@ -8945,6 +9677,8 @@ export async function onSeasonStart() {
     .then(() => syncLeagueSchedule(DatabaseClient.prisma as unknown as PrismaClient))
     .then(createCompetitions)
     .then(incrementAgesSeasonal)
+    .then(applySeasonalXpRegression)
+    .then(scheduleNpcRegenIntakes)
     .then(syncTiers)
     .then(syncWages);
 }
