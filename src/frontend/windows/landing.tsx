@@ -85,10 +85,6 @@ const routes = createMemoryRouter(
               ],
             },
             {
-              path: '/create/3',
-              element: <Routes.Landing.Create.Statistics />,
-            },
-            {
               path: '/create/4',
               element: <Routes.Landing.Create.Save />,
             },
@@ -104,9 +100,7 @@ const routes = createMemoryRouter(
 
 function RoutePersistence(): React.ReactNode {
   const location = useLocation();
-  const [customGameMusicPaused, setCustomGameMusicPaused] = React.useState(
-    isCustomGameMusicPaused,
-  );
+  const [customGameMusicPaused, setCustomGameMusicPaused] = React.useState(isCustomGameMusicPaused);
   const isLoadingCareer =
     location.pathname.startsWith('/connect/') || location.pathname === '/create/4';
   const isCustomGameInProgress = location.pathname === '/exhibition' && customGameMusicPaused;
@@ -116,10 +110,7 @@ function RoutePersistence(): React.ReactNode {
     fadeDuration: 1200,
   });
 
-  React.useEffect(
-    () => onCustomGameMusicPausedChange(setCustomGameMusicPaused),
-    [],
-  );
+  React.useEffect(() => onCustomGameMusicPausedChange(setCustomGameMusicPaused), []);
 
   React.useEffect(() => {
     api.app.presence({

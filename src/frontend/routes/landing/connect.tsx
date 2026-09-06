@@ -57,11 +57,17 @@ export default function () {
 
   return (
     <React.Fragment>
-      <main className="frosted center h-full w-2/5 p-5 xl:w-1/3">
-        <header className="center gap-6">
-          <span className="loading loading-bars loading-lg" />
-          <p>{status}</p>
-        </header>
+      <main className="landing-operation-status">
+        <section className="landing-operation-status__panel">
+          <span className="landing-operation-status__label">Career Session</span>
+          <header>
+            <span className="landing-operation-status__spinner loading loading-bars loading-lg" />
+            <p>{status || 'Preparing connection...'}</p>
+          </header>
+          <div className="landing-operation-status__progress" aria-hidden="true">
+            <span />
+          </div>
+        </section>
       </main>
 
       {faceitLockout && (

@@ -109,11 +109,13 @@ function ModalContent(props: {
   const overflowClass = props.request.target === '/settings' ? 'overflow-hidden' : 'overflow-auto';
   const hasHeader = props.request.target === '/postgame';
   const isCareerWindow = !!document.getElementById(Constants.WindowIdentifier.Main);
+  const isFaceitRoute = isCareerWindow && document.documentElement.dataset.faceitRoute === 'true';
   const routeState =
     props.request.target === '/settings'
       ? {
           ...(props.request.payload as Record<string, unknown> | undefined),
           inCareer: isCareerWindow,
+          useMainMenuTheme: isFaceitRoute,
         }
       : props.request.payload;
 
@@ -192,8 +194,12 @@ function ModalContent(props: {
     >
       <section
         className={`modal-box bg-base-100 relative h-[75vh] max-h-none w-1/2 max-w-none ${
-          hasHeader ? 'flex flex-col overflow-hidden' : overflowClass
-        } rounded-lg p-0 shadow-2xl`}
+          props.request.target === '/settings'
+            ? isCareerWindow && !isFaceitRoute
+              ? 'career-settings-modal'
+              : 'landing-settings-modal'
+            : ''
+        } ${hasHeader ? 'flex flex-col overflow-hidden' : overflowClass} rounded-lg p-0 shadow-2xl`}
       >
         {hasHeader ? (
           <header className="border-base-content/10 bg-base-200 flex h-12 shrink-0 items-center justify-end border-b px-4">

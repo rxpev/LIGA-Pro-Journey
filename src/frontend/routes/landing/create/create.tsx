@@ -8,6 +8,7 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { cx } from '@liga/frontend/lib';
 import { FaArrowLeft } from 'react-icons/fa';
+import { AppStateContext } from '@liga/frontend/redux';
 
 /**
  * Top-level create career component.
@@ -20,6 +21,8 @@ export default function () {
   const location = useLocation();
   const audioRelease = useAudio('button-release.wav');
   const audioClick = useAudio('button-click.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
+  const { state } = React.useContext(AppStateContext);
 
   // infer the currently loaded step
   const currentStep = React.useMemo(() => {
@@ -35,45 +38,68 @@ export default function () {
   // the steps for creating a new career.
   const steps = React.useMemo(
     () => [
-      { id: 'player-info', title: 'Player Info', path: '/create' },
-      { id: 'role', title: 'Role', path: '/create/2' },
-      { id: 'statistics', title: 'Statistics', path: '/create/3' },
+      {
+        id: 'player-info',
+        title: 'Player Info',
+        subtitle: 'Create your player identity',
+        path: '/create',
+      },
+      { id: 'role', title: 'Role', subtitle: 'Choose your playstyle', path: '/create/2' },
     ],
     [t],
   );
+  const canAccessRole =
+    Boolean(state.windowData.landing?.user?.name?.trim()) &&
+    Boolean(state.windowData.landing?.user?.countryId);
 
   return (
-    <div className="frosted center h-full w-2/5 p-5 xl:w-1/3">
-      <FaArrowLeft
-        className="absolute top-5 left-5 size-5 cursor-pointer"
-        onClick={() => navigate('/')}
-        onMouseDown={audioRelease}
-      />
+    <section className="landing-create-panel">
+      <header className="landing-create-panel__intro">
+        <button
+          type="button"
+          className="landing-create-panel__back"
+          aria-label="Back to main menu"
+          onClick={() => navigate('/')}
+          onMouseDown={audioRelease}
+        >
+          <FaArrowLeft />
+        </button>
+        <div>
+          <h1>New Career</h1>
+        </div>
+      </header>
 
-      {/* FORM STEPPER ITEMS */}
-      <ul className="steps steps-horizontal absolute top-10 w-full">
-        {steps.map((step, idx) => (
-          <li
-            key={step.id}
-            className={cx(
-              'step',
-              idx < currentStep && 'step-primary',
-              idx <= 2 && 'cursor-pointer',
-            )}
-            onClick={() => {
-              audioClick();
-              navigate(step.path);
-            }}
-          >
-            <span className="text-sm italic">{step.title}</span>
-          </li>
-        ))}
-      </ul>
+      <nav className="landing-create-panel__header" aria-label="New career progress">
+        <ul aria-label="New career progress">
+          {steps.map((step, idx) => (
+            <li
+              key={step.id}
+              className={cx(
+                'landing-create-panel__step',
+                idx + 1 === currentStep && 'landing-create-panel__step--active',
+              )}
+              onClick={() => {
+                if (step.id === 'role' && !canAccessRole) {
+                  audioNegativeAlert();
+                  return;
+                }
+                audioClick();
+                navigate(step.path);
+              }}
+            >
+              <strong>0{idx + 1}</strong>
+              <span>
+                <b>{step.title}</b>
+                <small>{step.subtitle}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
-      {/* FORM CONTENT RENDERED BY ROUTE */}
-      <main className="stack-y h-full w-full">
+      <main className="landing-create-panel__content">
         <Outlet />
       </main>
-    </div>
+    </section>
   );
 }

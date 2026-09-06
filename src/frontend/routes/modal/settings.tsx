@@ -60,6 +60,7 @@ export default function () {
   const navigate = useNavigate();
   const routeState = location.state as {
     inCareer?: boolean;
+    useMainMenuTheme?: boolean;
     returnToPlayMatchId?: number;
     tab?: string;
   } | null;
@@ -71,9 +72,7 @@ export default function () {
   const hasManuallyUpdatedInstallPath = React.useRef(false);
   const lastInvalidGamePathError = React.useRef('');
   const [activeTab, setActiveTab] = React.useState(
-    routeState?.tab === 'game-settings'
-      ? Tab.GAME_SETTINGS
-      : Tab.GENERAL,
+    routeState?.tab === 'game-settings' ? Tab.GAME_SETTINGS : Tab.GENERAL,
   );
   const returnToPlayMatchId = routeState?.returnToPlayMatchId;
   const [settings, setSettings] = React.useState(Util.loadSettings(state.profile.settings));
@@ -302,42 +301,36 @@ export default function () {
     (!state.profile.simulateNpcMatchStats || legacyBackfillBusy);
 
   return (
-    <main>
-      <header role="tablist" className="tabs-box tabs sticky top-0 left-0 rounded-none">
-        {Object.keys(Tab)
-          .filter((tabKey) => isNaN(Number(tabKey)))
-          .map((tabKey: keyof typeof Tab) => (
-            <a
-              key={tabKey + '__tab'}
-              role="tab"
-              className={cx('tab capitalize', Tab[tabKey] === activeTab && 'tab-active')}
-              onClick={() => setActiveTab(Tab[tabKey])}
-            >
-              {tabKey.replace('_', ' ').toLowerCase()}
-            </a>
-          ))}
+    <main
+      className={cx(
+        'landing-settings',
+        routeState?.inCareer && !routeState?.useMainMenuTheme && 'career-settings',
+      )}
+    >
+      <header className="landing-settings__header">
+        <p className="landing-settings__title">Settings</p>
+        <nav role="tablist" className="landing-settings__tabs" aria-label="Settings sections">
+          {Object.keys(Tab)
+            .filter((tabKey) => isNaN(Number(tabKey)))
+            .map((tabKey: keyof typeof Tab) => (
+              <a
+                key={tabKey + '__tab'}
+                role="tab"
+                aria-selected={Tab[tabKey] === activeTab}
+                className={cx(
+                  'landing-settings__tab',
+                  Tab[tabKey] === activeTab && 'landing-settings__tab--active',
+                )}
+                onClick={() => setActiveTab(Tab[tabKey])}
+              >
+                {tabKey.replace('_', ' ').toLowerCase()}
+              </a>
+            ))}
+        </nav>
       </header>
-      <form className="form-ios h-full">
+      <form className="landing-settings__form form-ios">
         {activeTab === Tab.GENERAL && (
           <fieldset>
-            <section>
-              <header>
-                <p>{t('settings.themeTitle')}</p>
-              </header>
-              <article>
-                <select
-                  className="select"
-                  onChange={(event) => onSettingsUpdate('general.theme', event.target.value)}
-                  value={settings.general.theme || Constants.ThemeType.SYSTEM}
-                >
-                  {Object.values(Constants.ThemeType).map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </article>
-            </section>
             <section>
               <header>
                 <p>{t('settings.fullscreenTitle')}</p>
@@ -398,9 +391,7 @@ export default function () {
                   max={1}
                   step={0.01}
                   value={settings.general.musicVolume}
-                  onChange={(event) =>
-                    onSettingsUpdate('general.musicVolume', event.target.value)
-                  }
+                  onChange={(event) => onSettingsUpdate('general.musicVolume', event.target.value)}
                 />
               </article>
             </section>
@@ -454,10 +445,7 @@ export default function () {
                       .then(
                         (dialogData) =>
                           !dialogData.canceled &&
-                          onInstallPathSettingsUpdate(
-                            'general.steamPath',
-                            dialogData.filePaths[0],
-                          ),
+                          onInstallPathSettingsUpdate('general.steamPath', dialogData.filePaths[0]),
                       )
                   }
                 >
@@ -493,10 +481,7 @@ export default function () {
                       .then(
                         (dialogData) =>
                           !dialogData.canceled &&
-                          onInstallPathSettingsUpdate(
-                            'general.gamePath',
-                            dialogData.filePaths[0],
-                          ),
+                          onInstallPathSettingsUpdate('general.gamePath', dialogData.filePaths[0]),
                       )
                   }
                 >

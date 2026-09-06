@@ -31,7 +31,7 @@ export default function Save() {
   const playerName = windowData?.user?.name;
   const countryId = windowData?.user?.countryId;
   const selectedRole = location.state?.role || windowData?.role?.selectedRole;
-  const simulateNpcMatchStats = windowData?.statistics?.simulateNpcMatchStats ?? false;
+  const simulateNpcMatchStats = windowData?.statistics?.simulateNpcMatchStats ?? true;
 
   // compute new save ID
   const latestProfile = Math.max(...state.profiles.map((profile) => profile.id));
@@ -78,11 +78,17 @@ export default function Save() {
   }, []);
 
   return (
-    <article className="center h-full">
-      <header className="stack-y items-center">
-        <span className="loading loading-bars loading-lg" />
-        <p>{status}</p>
-      </header>
-    </article>
+    <main className="landing-operation-status">
+      <section className="landing-operation-status__panel">
+        <span className="landing-operation-status__label">Creating Career</span>
+        <header>
+          <span className="landing-operation-status__spinner loading loading-bars loading-lg" />
+          <p>{status || 'Preparing your career...'}</p>
+        </header>
+        <div className="landing-operation-status__progress" aria-hidden="true">
+          <span />
+        </div>
+      </section>
+    </main>
   );
 }

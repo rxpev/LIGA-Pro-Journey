@@ -12,7 +12,7 @@ import { setCustomGameMusicPaused } from '@liga/frontend/lib/landing-music';
 import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useLoopingAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
-import { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
+import Select, { findTeamOptionByValue, TeamSelect } from '@liga/frontend/components/select';
 import arenaModeIcon from '@liga/frontend/assets/customgames/arenamode.png';
 import chaosModeImage from '@liga/frontend/assets/customgames/chaos.png';
 import classicModeImage from '@liga/frontend/assets/customgames/classic.png';
@@ -172,7 +172,7 @@ function ModeInfoBox(props: { mode: CustomGameMode; className?: string }) {
   return (
     <aside
       className={cx(
-        'border-base-content/10 bg-base-300/45 text-base-content/80 flex items-start gap-3 rounded-md border px-4 py-3 text-left shadow-lg backdrop-blur-sm',
+        'landing-custom-games__mode-info border-base-content/10 bg-base-300/45 text-base-content/80 flex items-start gap-3 rounded-none border px-4 py-3 text-left shadow-lg backdrop-blur-sm',
         props.className,
       )}
     >
@@ -373,6 +373,22 @@ function TeamSelector(props: TeamSelectorProps) {
       })),
     [isTierEnabled, props.excludedTeamId, teams, selectedTierId],
   );
+  const federationSelectorData = React.useMemo(
+    () =>
+      selectableFederations.map((federation) => ({ value: federation.id, label: federation.name })),
+    [selectableFederations],
+  );
+  const tierSelectorData = React.useMemo(
+    () =>
+      Constants.Prestige.filter((prestige) => isTierEnabled(prestige)).map((prestige) => ({
+        value: Constants.Prestige.findIndex((tier) => tier === prestige),
+        label:
+          Constants.IdiomaticTier[prestige] === 'Group Stage'
+            ? 'ESL Pro League'
+            : Constants.IdiomaticTier[prestige],
+      })),
+    [isTierEnabled],
+  );
 
   // isolate the selected team
   const team = React.useMemo(
@@ -403,17 +419,19 @@ function TeamSelector(props: TeamSelectorProps) {
               <p>{t('shared.federation')}</p>
             </header>
             <aside>
-              <select
-                className="select w-full"
-                onChange={(event) => onFederationSelection(Number(event.target.value))}
-                value={selectedFederationId}
-              >
-                {selectableFederations.map((federation) => (
-                  <option key={federation.id} value={federation.id}>
-                    {federation.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                aria-label={t('shared.federation')}
+                className="w-full"
+                backgroundColor="#071017"
+                borderColor="#536878"
+                options={federationSelectorData}
+                value={federationSelectorData.find(
+                  (federation) => federation.value === selectedFederationId,
+                )}
+                onChange={(option) =>
+                  option && onFederationSelection(Number((option as { value: number }).value))
+                }
+              />
             </aside>
           </article>
           <article>
@@ -421,24 +439,17 @@ function TeamSelector(props: TeamSelectorProps) {
               <p>{t('shared.tierPrestige')}</p>
             </header>
             <aside>
-              <select
-                className="select w-full"
-                onChange={(event) => onTierSelection(Number(event.target.value))}
-                value={selectedTierId}
-              >
-                {Constants.Prestige.filter((prestige) => isTierEnabled(prestige)).map(
-                  (prestige) => (
-                    <option
-                      key={prestige}
-                      value={Constants.Prestige.findIndex((tier) => tier === prestige)}
-                    >
-                      {Constants.IdiomaticTier[prestige] === 'Group Stage'
-                        ? 'ESL Pro League'
-                        : Constants.IdiomaticTier[prestige]}
-                    </option>
-                  ),
-                )}
-              </select>
+              <Select
+                aria-label={t('shared.tierPrestige')}
+                className="w-full"
+                backgroundColor="#071017"
+                borderColor="#536878"
+                options={tierSelectorData}
+                value={tierSelectorData.find((tier) => tier.value === selectedTierId)}
+                onChange={(option) =>
+                  option && onTierSelection(Number((option as { value: number }).value))
+                }
+              />
             </aside>
           </article>
           <article>
@@ -448,7 +459,8 @@ function TeamSelector(props: TeamSelectorProps) {
             <aside>
               <TeamSelect
                 className="w-full"
-                backgroundColor="var(--color-base-200)"
+                backgroundColor="#071017"
+                borderColor="#536878"
                 options={teamSelectorData}
                 value={selectedTeam}
                 onChange={(option) =>
@@ -514,7 +526,7 @@ function DeathmatchLineupColumn(props: {
   );
 
   return (
-    <section className="bg-base-300/35 border-base-content/10 flex w-80 flex-col border shadow-2xl">
+    <section className="landing-custom-games__lineup bg-base-300/35 border-base-content/10 flex w-80 flex-col border shadow-2xl">
       <header
         className={cx(
           'border-base-content/10 flex shrink-0 items-center justify-center gap-4 border-b px-5',
@@ -1918,18 +1930,18 @@ export default function () {
   };
 
   return (
-    <main className="frosted relative flex h-full w-full pl-64">
+    <main className="landing-custom-games relative flex h-full w-full pl-64">
       <FaArrowLeft
-        className="absolute top-5 left-5 z-10 size-5 cursor-pointer"
+        className="landing-custom-games__back absolute top-5 left-5 z-10 size-5 cursor-pointer"
         onClick={() => navigate('/')}
         onMouseDown={audioRelease}
       />
-      <nav className="border-base-content/10 bg-base-300/35 absolute inset-y-0 left-0 flex w-56 flex-col gap-3 overflow-y-auto border-r px-5 pt-28 pb-5 shadow-2xl">
+      <nav className="landing-custom-games__modes border-base-content/10 bg-base-300/35 absolute inset-y-0 left-0 flex w-56 flex-col gap-3 overflow-y-auto border-r px-5 pt-28 pb-5 shadow-2xl">
         <button
           type="button"
           className={cx(
-            'group border-base-content/20 bg-base-300/60 overflow-hidden rounded-md border text-left shadow-lg transition',
-            selectedGameMode === 'classic' && 'border-primary bg-base-200/80 shadow-primary/20',
+            'landing-custom-games__mode-card group border-base-content/20 bg-base-300/60 overflow-hidden rounded-none border text-left shadow-lg transition',
+            selectedGameMode === 'classic' && 'landing-custom-games__mode-card--active',
           )}
           onMouseDown={() => {
             audioClick();
@@ -1947,9 +1959,9 @@ export default function () {
         <button
           type="button"
           className={cx(
-            'border-base-content/20 bg-base-300/35 overflow-hidden rounded-md border text-left shadow-lg transition',
+            'landing-custom-games__mode-card border-base-content/20 bg-base-300/35 overflow-hidden rounded-none border text-left shadow-lg transition',
             selectedGameMode === 'deathmatch'
-              ? 'border-primary bg-base-200/80 shadow-primary/20'
+              ? 'landing-custom-games__mode-card--active'
               : 'hover:border-base-content/40',
           )}
           onMouseDown={() => {
@@ -1968,9 +1980,9 @@ export default function () {
         <button
           type="button"
           className={cx(
-            'border-base-content/20 bg-base-300/35 overflow-hidden rounded-md border text-left shadow-lg transition',
+            'landing-custom-games__mode-card border-base-content/20 bg-base-300/35 overflow-hidden rounded-none border text-left shadow-lg transition',
             selectedGameMode === 'chaos'
-              ? 'border-primary bg-base-200/80 shadow-primary/20'
+              ? 'landing-custom-games__mode-card--active'
               : 'hover:border-base-content/40',
           )}
           onMouseDown={() => {
@@ -1988,7 +2000,7 @@ export default function () {
           <button
             key={index}
             type="button"
-            className="border-base-content/10 bg-base-300/35 overflow-hidden rounded-md border text-left opacity-50 shadow-lg"
+            className="landing-custom-games__mode-card landing-custom-games__mode-card--locked border-base-content/10 bg-base-300/35 overflow-hidden rounded-none border text-left opacity-50 shadow-lg"
             aria-disabled
             onMouseDown={audioNegativeAlert}
           >
@@ -2178,12 +2190,7 @@ export default function () {
           </section>
         </section>
       )}
-      <section
-        className={cx(
-          'flex w-[36rem] shrink-0 flex-col',
-          isDeathmatchMode ? 'p-4' : 'py-4 pr-0 pl-8',
-        )}
-      >
+      <section className="landing-custom-games__settings flex w-[36rem] shrink-0 flex-col py-4 pr-0 pl-8">
         <form className="form-ios form-ios-col-2 w-full flex-1">
           <fieldset>
             <article>

@@ -17,6 +17,7 @@ interface SelectProps {
   backgroundColor?: string;
   foregroundColor?: string;
   borderColor?: string;
+  square?: boolean;
 }
 
 /** @interface */
@@ -148,7 +149,7 @@ export default function Select(props: SelectProps & ReactSelectProps) {
           height: '2.5rem',
           background: backgroundColor,
           borderColor: borderColor,
-          borderRadius: 'var(--radius-field)',
+          borderRadius: props.square ? '0' : 'var(--radius-field)',
           boxShadow: 'none',
           ':hover': {
             borderColor: borderColor,
@@ -166,6 +167,7 @@ export default function Select(props: SelectProps & ReactSelectProps) {
         menu: (baseStyles) => ({
           ...baseStyles,
           background: backgroundColor,
+          borderRadius: props.square ? '0' : 'var(--radius-field)',
         }),
         option: (baseStyles, state) => ({
           ...baseStyles,

@@ -13,7 +13,7 @@ export default function Statistics() {
   const audioRelease = useAudio('button-release.wav');
   const windowData = state.windowData.landing;
   const [enabled, setEnabled] = React.useState(
-    windowData?.statistics?.simulateNpcMatchStats ?? false,
+    windowData?.statistics?.simulateNpcMatchStats ?? true,
   );
 
   const updateEnabled = (value: boolean) => {
@@ -51,7 +51,7 @@ export default function Statistics() {
         <h2 className="text-3xl font-semibold">Statistic Simulation</h2>
         <p className="text-base leading-relaxed text-gray-300">
           Enable statistic simulation for non-user matches to give all players generated
-          scoreboards, ratings, kills, deaths, assists, and map-level match details.
+          scoreboards, ratings, kills, deaths, assists, map-level match details, and news articles.
         </p>
       </section>
 
@@ -67,8 +67,8 @@ export default function Statistics() {
             Enable statistic simulation for non-user matches
           </span>
           <span className="text-sm leading-relaxed text-gray-400">
-            This adds immersion by giving every simulated match real-looking player statistics, but
-            it can significantly slow down calendar simulation and may be problematic on low-end
+            This adds immersion through real-looking player statistics and generated news articles,
+            but it can significantly slow down calendar simulation and may be problematic on low-end
             PCs.
           </span>
         </span>
