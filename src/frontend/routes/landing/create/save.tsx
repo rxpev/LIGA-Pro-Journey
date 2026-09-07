@@ -29,6 +29,7 @@ export default function Save() {
   // extract user + role data
   const windowData = state.windowData[Constants.WindowIdentifier.Landing];
   const playerName = windowData?.user?.name;
+  const playerAge = windowData?.user?.age;
   const countryId = windowData?.user?.countryId;
   const selectedRole = location.state?.role || windowData?.role?.selectedRole;
   const simulateNpcMatchStats = windowData?.statistics?.simulateNpcMatchStats ?? true;
@@ -39,9 +40,9 @@ export default function Save() {
 
   React.useEffect(() => {
     const createPlayerCareer = async () => {
-      if (!playerName?.trim() || !countryId || !selectedRole) {
+      if (!playerName?.trim() || !playerAge || !countryId || !selectedRole) {
         audioNegativeAlert();
-        setStatus('Choose an alias, country, and role before creating a save.');
+        setStatus('Choose an alias, age, country, and role before creating a save.');
         return;
       }
 
@@ -54,6 +55,7 @@ export default function Save() {
         setStatus(t('landing.create.statusSaving'));
         await api.profiles.createPlayerCareer({
           playerName,
+          age: playerAge,
           countryId,
           role: selectedRole,
           simulateNpcMatchStats,

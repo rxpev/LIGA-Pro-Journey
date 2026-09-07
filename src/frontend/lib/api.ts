@@ -566,6 +566,7 @@ export default {
 
     createPlayerCareer: (data: {
       playerName: string;
+      age: number;
       countryId: number;
       role: string;
       simulateNpcMatchStats?: boolean;

@@ -10,6 +10,7 @@ import { Constants, Eagers } from '@liga/shared';
 /** Lightweight user struct for Landing window */
 export interface PlayerCareerUser {
   name: string;
+  age: number;
   countryId?: number;
   avatar?: string;
 }

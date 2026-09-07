@@ -14,7 +14,7 @@ import { AppState } from '@liga/frontend/redux/state';
 import { windowDataUpdate } from '@liga/frontend/redux/actions';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { CountrySelect, findCountryOptionByValue } from '@liga/frontend/components/select';
-import { FaUpload } from 'react-icons/fa';
+import { FaInfoCircle, FaUpload } from 'react-icons/fa';
 import worldMap from '@liga/frontend/assets/career-world-map.png';
 import europeWorldMap from '@liga/frontend/assets/career-world-map-europe.png';
 import americasWorldMap from '@liga/frontend/assets/career-world-map-americas.png';
@@ -28,6 +28,7 @@ import oceaniaWorldMap from '@liga/frontend/assets/career-world-map-oceania.png'
  */
 const formDefaultValues: AppState['windowData'][Constants.WindowIdentifier.Landing]['user'] = {
   name: '',
+  age: 18,
   countryId: undefined,
 };
 
@@ -103,7 +104,9 @@ export default function () {
 
   // form setup
   const { control, formState, handleSubmit, register, watch } = useForm({
-    defaultValues: windowData?.user ? windowData.user : formDefaultValues,
+    defaultValues: windowData?.user
+      ? { ...formDefaultValues, ...windowData.user }
+      : formDefaultValues,
     mode: 'all',
   });
 
@@ -235,23 +238,65 @@ export default function () {
             </button>
           </section>
           <form className="landing-create-user-step__form stack-y">
-            <section className="fieldset w-full">
-              <label className="label">
-                <span className="label-text text-lg font-semibold">{t('shared.alias')}</span>
-              </label>
-              <input
-                {...register('name', { required: true, pattern: /^[\w]+$/, maxLength: 15 })}
-                type="text"
-                className={cx('input', 'w-full', !!formState.errors?.name?.type && 'input-error')}
-                placeholder="Enter your alias..."
-              />
-              <footer className="label h-5">
-                <span className="label-text-alt">
-                  {formState.errors?.name?.type === 'required' && t('shared.required')}
-                  {formState.errors?.name?.type === 'pattern' && t('shared.specialCharactersError')}
-                </span>
-              </footer>
-            </section>
+            <div className="landing-create-user-step__identity-fields">
+              <section className="fieldset w-full">
+                <label className="label">
+                  <span className="label-text text-lg font-semibold">{t('shared.alias')}</span>
+                </label>
+                <input
+                  {...register('name', { required: true, pattern: /^[\w]+$/, maxLength: 15 })}
+                  type="text"
+                  className={cx('input', 'w-full', !!formState.errors?.name?.type && 'input-error')}
+                  placeholder="Enter your alias..."
+                />
+                <footer className="label h-5">
+                  <span className="label-text-alt">
+                    {formState.errors?.name?.type === 'required' && t('shared.required')}
+                    {formState.errors?.name?.type === 'pattern' &&
+                      t('shared.specialCharactersError')}
+                  </span>
+                </footer>
+              </section>
+              <section className="landing-create-user-step__age-field fieldset w-full">
+                <label className="label">
+                  <span className="label-text text-lg font-semibold">
+                    Age{' '}
+                    <span
+                      className="tooltip tooltip-top ml-1"
+                      data-tip="Age is purely cosmetic and does not affect gameplay."
+                    >
+                      <FaInfoCircle aria-label="Age is purely cosmetic" className="text-sm" />
+                    </span>
+                  </span>
+                </label>
+                <input
+                  {...register('age', {
+                    required: true,
+                    valueAsNumber: true,
+                    min: 14,
+                    max: 60,
+                    validate: (age) => Number.isInteger(age),
+                  })}
+                  type="number"
+                  min="14"
+                  max="60"
+                  step="1"
+                  className={cx('input', 'w-full', !!formState.errors?.age?.type && 'input-error')}
+                  aria-label="Age"
+                />
+                <footer className="label h-5">
+                  <span className="label-text-alt">
+                    {(formState.errors?.age?.type === 'required' ||
+                      formState.errors?.age?.type === 'typeError') &&
+                      t('shared.required')}
+                    {(formState.errors?.age?.type === 'min' ||
+                      formState.errors?.age?.type === 'max' ||
+                      formState.errors?.age?.type === 'validate') &&
+                      '14–60 only.'}
+                  </span>
+                </footer>
+              </section>
+            </div>
             <section className="fieldset w-full">
               <label className="label">
                 <span className="label-text text-lg font-semibold">{t('shared.country')}</span>

@@ -21,12 +21,17 @@ export default function registerProfileHandlers() {
       _,
       data: {
         playerName: string;
+        age: number;
         countryId: number;
         role: string;
         simulateNpcMatchStats?: boolean;
       },
     ) => {
-      const { playerName, countryId, role, simulateNpcMatchStats } = data;
+      const { playerName, age, countryId, role, simulateNpcMatchStats } = data;
+
+      if (!Number.isInteger(age) || age < 14 || age > 60) {
+        throw new Error('Player age must be a whole number between 14 and 60.');
+      }
 
       // Always use the single root profile
       const existing = await DatabaseClient.prisma.profile.findFirst();
@@ -44,6 +49,7 @@ export default function registerProfileHandlers() {
           player: {
             create: {
               name: playerName,
+              age,
               countryId,
               role,
               xp: 0,

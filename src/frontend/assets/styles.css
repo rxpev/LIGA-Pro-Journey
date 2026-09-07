@@ -2502,6 +2502,27 @@ meter::-webkit-meter-bar {
 .landing-create-user-step__form {
   align-self: stretch;
 }
+.landing-create-user-step__identity-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  gap: 0.9rem;
+}
+.landing-create-user-step__identity-fields > .fieldset {
+  min-width: 0;
+}
+.landing-create-user-step__age-field {
+  width: 6.5rem;
+  min-width: 0;
+}
+.landing-create-user-step__age-field input {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.landing-create-user-step__identity-fields .label-text-alt {
+  display: block;
+  overflow-wrap: anywhere;
+}
 
 .landing-create-user-step__statistics {
   display: flex;

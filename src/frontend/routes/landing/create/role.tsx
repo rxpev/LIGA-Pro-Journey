@@ -103,12 +103,13 @@ export default function Role() {
   const handleNext = () => {
     const missingFields = [
       !windowData?.user?.name?.trim() && 'alias',
+      !windowData?.user?.age && 'age',
       !windowData?.user?.countryId && 'country',
       !selectedRole && 'role',
     ].filter(Boolean);
 
     if (missingFields.length) {
-      setError('Choose an alias, country, and role before creating a save.');
+      setError('Choose an alias, age, country, and role before creating a save.');
       audioNegativeAlert();
       return;
     }
