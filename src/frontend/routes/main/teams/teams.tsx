@@ -1093,15 +1093,10 @@ export default function () {
             <header className="prose">
               <h2 className="text-sm tracking-wide uppercase">World ranking</h2>
             </header>
-            <nav className="grid grid-cols-5 gap-1 p-2">
+            <nav className="region-filter-tabs m-2 w-auto" aria-label="Ranking region">
               <button
                 type="button"
-                className={cx(
-                  'btn border-base-content/10 h-8 rounded-lg border px-2 text-xs font-semibold shadow-none',
-                  !Number.isInteger(selectedRankingFederationId)
-                    ? 'btn-primary'
-                    : 'btn-ghost bg-base-200 hover:bg-base-300',
-                )}
+                className={cx(!Number.isInteger(selectedRankingFederationId) && 'is-active')}
                 onClick={() => selectRankingFederation(undefined)}
               >
                 World
@@ -1112,12 +1107,7 @@ export default function () {
                   <button
                     type="button"
                     key={federation.id + '__ranking_filter'}
-                    className={cx(
-                      'btn border-base-content/10 h-8 rounded-lg border px-2 text-xs font-semibold shadow-none',
-                      selectedRankingFederationId === federation.id
-                        ? 'btn-primary'
-                        : 'btn-ghost bg-base-200 hover:bg-base-300',
-                    )}
+                    className={cx(selectedRankingFederationId === federation.id && 'is-active')}
                     onClick={() => selectRankingFederation(federation)}
                   >
                     {federation.slug === Constants.FederationSlug.ESPORTS_OCE

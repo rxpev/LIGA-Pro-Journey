@@ -1615,31 +1615,30 @@ export default function () {
       <main>
         <form className="form-ios">
           <fieldset className="gap-0!">
-            <legend className="border-t-0! text-lg! font-black uppercase">Competitions</legend>
             <section className="block! py-2!">
-              <article className="grid! grid-cols-[1.35fr_1fr_1fr_1fr_1fr] gap-1! p-2!">
-                {federationTabs.map((federation) => (
-                  <button
-                    key={federation.id}
-                    type="button"
-                    className={cx(
-                      'btn border-base-content/10 h-8 rounded-lg border px-2 text-xs font-semibold shadow-none',
-                      selectedFederationId === federation.id
-                        ? 'btn-primary'
-                        : 'btn-ghost bg-base-200 hover:bg-base-300',
-                    )}
-                    onClick={() => {
-                      setSelectedFederationId(federation.id);
-                      setSelectedTierId(-1);
-                      setCompetition(undefined);
-                      setSelectedFamily('all');
-                      setPreserveTournamentOnSeasonChange(false);
-                    }}
-                  >
-                    {FEDERATION_LABELS[federation.slug as Constants.FederationSlug] ||
-                      federation.name}
-                  </button>
-                ))}
+              <article className="p-2!">
+                <nav
+                  className="region-filter-tabs competition-region-filter"
+                  aria-label="Competition region"
+                >
+                  {federationTabs.map((federation) => (
+                    <button
+                      key={federation.id}
+                      type="button"
+                      className={cx(selectedFederationId === federation.id && 'is-active')}
+                      onClick={() => {
+                        setSelectedFederationId(federation.id);
+                        setSelectedTierId(-1);
+                        setCompetition(undefined);
+                        setSelectedFamily('all');
+                        setPreserveTournamentOnSeasonChange(false);
+                      }}
+                    >
+                      {FEDERATION_LABELS[federation.slug as Constants.FederationSlug] ||
+                        federation.name}
+                    </button>
+                  ))}
+                </nav>
               </article>
             </section>
             <section className="py-2!">
