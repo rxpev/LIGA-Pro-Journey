@@ -837,10 +837,14 @@ function getCareerMatchCompetitor(
     .map((stint) => match.competitors.find((competitor) => competitor.teamId === stint.teamId))
     .find(Boolean);
 
-  const hasRecordedLineup = match.players.length > 0;
+  // A team stint only establishes eligibility. A completed match belongs in
+  // career activity only when the user has recorded participation in it.
+  // Older roster links can include players who joined later that day, whereas
+  // a match with recorded activity has both a participant link and events.
   const playerWasInLineup = !playerId || match.players.some((player) => player.id === playerId);
+  const hasRecordedParticipation = playerWasInLineup && match._count.events > 0;
 
-  if (match.status === Constants.MatchStatus.COMPLETED && hasRecordedLineup && !playerWasInLineup) {
+  if (match.status === Constants.MatchStatus.COMPLETED && !hasRecordedParticipation) {
     return undefined;
   }
 
