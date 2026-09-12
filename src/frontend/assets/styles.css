@@ -1241,11 +1241,23 @@ meter::-webkit-meter-bar {
   }
 
   .calendar-career-entry {
-    @apply border-base-content/15 bg-base-100/70 text-base-content flex min-w-0 items-center gap-2 rounded border px-2 py-1.5 text-xs font-semibold;
+    @apply border-base-content/15 bg-base-100/70 text-base-content min-w-0 rounded border p-2 text-xs font-semibold;
   }
 
-  .calendar-career-entry span:last-child {
+  .calendar-career-entry-summary {
+    @apply flex min-w-0 items-center gap-2;
+  }
+
+  .calendar-career-entry-summary span:last-child {
     @apply truncate;
+  }
+
+  .calendar-career-entry-graphic {
+    @apply bg-base-300 relative mt-2 w-full overflow-hidden rounded-sm;
+  }
+
+  .calendar-career-entry-graphic figcaption {
+    font-size: clamp(1rem, 5vw, 2.35rem) !important;
   }
 
   .calendar-career-entry.signed {

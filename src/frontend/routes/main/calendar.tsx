@@ -30,6 +30,7 @@ import { AppStateContext } from '@liga/frontend/redux';
 import { cx } from '@liga/frontend/lib';
 import { useTranslation } from '@liga/frontend/hooks';
 import { Image } from '@liga/frontend/components';
+import { getThankYouGraphic, getWelcomeGraphic } from '@liga/backend/lib/news-welcome-graphics';
 import swissTeamPlaceholder from '@liga/frontend/assets/swiss/teamplaceholder.svg';
 import { getTeamsRoundLabel } from './teams/labels';
 import { getStageDatesForYear } from './competitions/competitions';
@@ -219,6 +220,7 @@ type CareerStint = {
     id: number;
     name: string;
     blazon: string;
+    slug: string;
   } | null;
 };
 type CareerCalendarEntry = {
@@ -234,6 +236,81 @@ type YearlyCalendarAction = {
   date: Date;
   position: { x: number; y: number };
 };
+
+type CareerEntryGraphic = NonNullable<ReturnType<typeof getWelcomeGraphic>>;
+
+function CareerEntryGraphicImage(props: { graphic: CareerEntryGraphic }) {
+  const { graphic } = props;
+  const avatar = graphic.avatarLayout;
+  const name = graphic.nameLayout;
+  const fontFamily = graphic.fontFamily
+    ? `${graphic.fontFamily}, Impact, Haettenschweiler, 'Arial Black', sans-serif`
+    : "Impact, Haettenschweiler, 'Arial Black', sans-serif";
+
+  return (
+    <figure
+      className="calendar-career-entry-graphic"
+      style={{ aspectRatio: graphic.aspectRatio || '1836 / 857' }}
+    >
+      <img src={graphic.template} alt="" className="absolute inset-0 size-full object-cover" />
+      <img
+        src={graphic.avatar || 'resources://avatars/empty.png'}
+        alt=""
+        className="absolute object-contain object-bottom drop-shadow-[0_10px_14px_rgba(0,0,0,0.65)]"
+        style={{
+          bottom: avatar?.bottom || '0%',
+          height: avatar?.height || '90%',
+          left: avatar?.left || '3%',
+          maxWidth: avatar?.maxWidth || '37%',
+        }}
+      />
+      <figcaption
+        className={cx(
+          'absolute overflow-visible text-center leading-[1.16] font-black tracking-normal whitespace-nowrap uppercase',
+          graphic.textShadow !== false && 'drop-shadow-[0_5px_8px_rgba(0,0,0,0.9)]',
+        )}
+        style={{
+          color: graphic.textColor || '#ffffff',
+          fontFamily,
+          fontSize: graphic.fontSize || '4.5rem',
+          fontStyle: graphic.fontStyle || 'normal',
+          letterSpacing: graphic.letterSpacing || '0',
+          left: name?.left || '68%',
+          backgroundClip: graphic.textGradient ? 'text' : undefined,
+          backgroundImage: graphic.textGradient || undefined,
+          top: name?.top || '84%',
+          transform: `translate(-50%, -50%) rotate(${graphic.rotate || '0deg'}) skewX(${graphic.skewX || '0deg'})`,
+          WebkitBackgroundClip: graphic.textGradient ? 'text' : undefined,
+          WebkitTextFillColor: graphic.textGradient ? 'transparent' : undefined,
+          WebkitTextStroke: graphic.textStroke || undefined,
+          width: name?.width || '34%',
+        }}
+      >
+        {graphic.playerName}
+      </figcaption>
+    </figure>
+  );
+}
+
+function CareerCalendarEntry(props: {
+  entry: CareerCalendarEntry;
+  player?: { avatar?: string | null; name?: string | null } | null;
+}) {
+  const graphic =
+    props.entry.type === 'left'
+      ? getThankYouGraphic(props.entry.team, props.player)
+      : getWelcomeGraphic(props.entry.team, props.player);
+
+  return (
+    <div className={cx('calendar-career-entry', props.entry.type)}>
+      <div className="calendar-career-entry-summary">
+        <Image className="size-7 shrink-0" src={props.entry.team.blazon} />
+        <span>{props.entry.label}</span>
+      </div>
+      {graphic && <CareerEntryGraphicImage graphic={graphic} />}
+    </div>
+  );
+}
 
 enum Rating {
   LOW = 0.95,
@@ -1219,6 +1296,7 @@ export default function () {
                   id: true;
                   name: true;
                   blazon: true;
+                  slug: true;
                 };
               };
             };
@@ -1236,6 +1314,7 @@ export default function () {
                   id: true,
                   name: true,
                   blazon: true,
+                  slug: true,
                 },
               },
             },
@@ -2803,10 +2882,11 @@ export default function () {
                         <section className="calendar-career-activity">
                           <h3>Career activity</h3>
                           {selectedCareerEntries.map((entry) => (
-                            <div key={entry.id} className={cx('calendar-career-entry', entry.type)}>
-                              <Image className="size-7 shrink-0" src={entry.team.blazon} />
-                              <span>{entry.label}</span>
-                            </div>
+                            <CareerCalendarEntry
+                              key={entry.id}
+                              entry={entry}
+                              player={state.profile?.player}
+                            />
                           ))}
                         </section>
                       )}
@@ -2920,10 +3000,11 @@ export default function () {
                       <section className="calendar-career-activity">
                         <h3>Career activity</h3>
                         {selectedCareerEntries.map((entry) => (
-                          <div key={entry.id} className={cx('calendar-career-entry', entry.type)}>
-                            <Image className="size-7 shrink-0" src={entry.team.blazon} />
-                            <span>{entry.label}</span>
-                          </div>
+                          <CareerCalendarEntry
+                            key={entry.id}
+                            entry={entry}
+                            player={state.profile?.player}
+                          />
                         ))}
                       </section>
                     )}
