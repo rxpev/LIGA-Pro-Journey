@@ -20,13 +20,16 @@ type GlobalPlayerStatsParams = {
   competitionId?: number;
   competitionIds?: number[];
   currentDate?: Date | string;
+  countryCode?: string;
   federationSlug?: string;
   name?: string;
   page?: number;
   pageSize?: number;
   sort?: 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team';
+  role?: string;
   teamId?: number;
   tierId?: number;
+  transferStatus?: 'listed' | 'retired';
   year?: string;
 };
 
@@ -60,10 +63,13 @@ function getGlobalPlayerStatsCacheKey(params: GlobalPlayerStatsParams) {
     competitionId: params.competitionId || 0,
     competitionIds: [...new Set(params.competitionIds || [])].sort((a, b) => a - b),
     currentDate: params.currentDate ? new Date(params.currentDate).toISOString() : '',
+    countryCode: params.countryCode || '',
     federationSlug: params.federationSlug || '',
     name: params.name || '',
+    role: params.role || '',
     teamId: params.teamId || 0,
     tierId: params.tierId ?? '',
+    transferStatus: params.transferStatus || '',
     year: params.year || '',
   });
 }
@@ -376,6 +382,20 @@ export default function () {
                 playerWhere.push('"Federation"."slug" = ?');
                 playerParams.push(params.federationSlug);
               }
+              if (params.countryCode) {
+                playerWhere.push('"Country"."code" = ?');
+                playerParams.push(params.countryCode);
+              }
+              if (params.role) {
+                playerWhere.push('"Player"."role" = ?');
+                playerParams.push(params.role);
+              }
+              if (params.transferStatus === 'listed') {
+                playerWhere.push('"Player"."transferListed" = 1');
+              }
+              if (params.transferStatus === 'retired') {
+                playerWhere.push('"Player"."retiredAt" IS NOT NULL');
+              }
               if (params.name) {
                 playerWhere.push('"Player"."name" LIKE ?');
                 playerParams.push(`%${params.name}%`);
@@ -408,9 +428,7 @@ export default function () {
                   FROM "Player"
                   LEFT JOIN "Country" ON "Country"."id" = "Player"."countryId"
                   LEFT JOIN "Team" ON "Team"."id" = "Player"."teamId"
-                  LEFT JOIN "Country" AS "TeamCountry" ON "TeamCountry"."id" = "Team"."countryId"
-                  LEFT JOIN "Continent" ON "Continent"."id" = "TeamCountry"."continentId"
-                  LEFT JOIN "Federation" ON "Federation"."id" = "Continent"."federationId"
+                  LEFT JOIN "Federation" ON "Federation"."id" = "Team"."competitionFederationId"
                   WHERE ${playerWhere.join(' AND ')}
                   ORDER BY "Player"."id" ASC
                 `,

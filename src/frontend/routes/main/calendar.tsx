@@ -1974,7 +1974,7 @@ export default function () {
   return (
     <div className="calendar-dashboard">
       <header className="calendar-toolbar">
-        <nav className="calendar-mode-tabs" aria-label="Calendar view">
+        <nav className="mode-tabs" aria-label="Calendar view">
           <button className={cx(mode === 'mine' && 'is-active')} onClick={() => setMode('mine')}>
             My Calendar
           </button>

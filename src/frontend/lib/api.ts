@@ -420,13 +420,16 @@ export default {
       competitionId?: number;
       competitionIds?: number[];
       currentDate?: Date | string;
+      countryCode?: string;
       federationSlug?: string;
       name?: string;
       page: number;
       pageSize: number;
       sort: 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team';
+      role?: string;
       teamId?: number;
       tierId?: number;
+      transferStatus?: 'listed' | 'retired';
       year?: string;
     }) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_GLOBAL_PLAYER_STATS, params) as Promise<{

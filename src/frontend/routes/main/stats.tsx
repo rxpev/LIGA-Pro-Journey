@@ -4,13 +4,25 @@
  * @module
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { groupBy } from 'lodash';
-import { format, subMonths } from 'date-fns';
+import { differenceInCalendarDays, format, subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { Pagination } from '@liga/frontend/components';
-import { FaChartBar } from 'react-icons/fa';
+import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
+import {
+  FaChartBar,
+  FaChevronLeft,
+  FaChevronRight,
+  FaCrosshairs,
+  FaExternalLinkAlt,
+  FaMap,
+  FaSkull,
+  FaTrophy,
+} from 'react-icons/fa';
+import { GiCrossedSwords } from 'react-icons/gi';
 import { Link, useLocation } from 'react-router-dom';
 import CompetitionLocationTag from './competitions/competition-location-tag';
 
@@ -84,6 +96,25 @@ type WeaponPerformance = {
   hsPercent: number;
 };
 
+type CareerHonor = {
+  competitionId: number;
+  federationId: number;
+  tierId: number;
+  season: number;
+  key: string;
+  title: string;
+  tierSlug: string;
+  federationSlug: string;
+  location: string | null;
+  organizer: string | null;
+};
+
+type CareerHonorsTooltip = {
+  content: string;
+  left: number;
+  top: number;
+};
+
 type CompetitionGroupKey =
   | 'MAJOR'
   | 'ESL_PRO_LEAGUE'
@@ -95,6 +126,7 @@ type CompetitionGroupKey =
   | 'CCT_OCEANIA_SERIES'
   | 'ESL_CHALLENGER'
   | 'CCT_GLOBAL_FINALS'
+  | 'BLAST_FINALS'
   | 'IEM_COLOGNE'
   | 'IEM_COLOGNE_QUALIFIERS'
   | 'IEM_KRAKOW'
@@ -121,6 +153,7 @@ const CompetitionGroupLabels: Record<CompetitionGroupKey, string> = {
   CCT_OCEANIA_SERIES: 'CCT Oceania Series (Groups + Playoffs)',
   ESL_CHALLENGER: 'ESL Challenger (Groups + Playoffs)',
   CCT_GLOBAL_FINALS: 'CCT Global Finals',
+  BLAST_FINALS: 'BLAST Finals',
   IEM_COLOGNE: 'IEM Cologne (Groups + Playoffs)',
   IEM_COLOGNE_QUALIFIERS: 'IEM Cologne Qualifiers',
   IEM_KRAKOW: 'IEM Krakow (Groups + Playoffs)',
@@ -144,6 +177,7 @@ const CompetitionGroupOrder: CompetitionGroupKey[] = [
   'CCT_OCEANIA_SERIES',
   'ESL_CHALLENGER',
   'CCT_GLOBAL_FINALS',
+  'BLAST_FINALS',
   'IEM_COLOGNE',
   'IEM_COLOGNE_QUALIFIERS',
   'IEM_KRAKOW',
@@ -181,7 +215,13 @@ const CompetitionStageLabels: Record<CompetitionStageOption, string> = {
 
 const CompetitionStageOptions: CompetitionStageOption[] = ['', 'GROUP_STAGE', 'PLAYOFFS'];
 
-const GlobalPlayerPageSize = 20;
+const GlobalPlayerPageSize = 19;
+const MatchHistoryPageSize = 9;
+const IndividualMatchHistoryPageSize = 10;
+const TeammateMatchHistoryPageSize = 5;
+const TeammatePageSize = 6;
+const WeaponPageSize = 5;
+const TeammateWeaponPageSize = 3;
 
 enum Rating {
   LOW = 0.95,
@@ -230,6 +270,7 @@ enum StatsTab {
 
 enum StatsDetailView {
   MATCH_HISTORY = 'MATCH_HISTORY',
+  EVENTS = 'EVENTS',
   WEAPONS = 'WEAPONS',
 }
 
@@ -296,6 +337,26 @@ function getCompetitionLabel(match: MatchRecord) {
   return `${federation} ${tier}`.trim();
 }
 
+function getEventPlacementLabel(position?: number | null, tierSlug?: Constants.TierSlug): string {
+  if (!position) return '-';
+  const distribution = tierSlug ? Constants.PrizePool[tierSlug]?.distribution || [] : [];
+  const prizeShare = distribution[position - 1];
+  if (prizeShare !== undefined) {
+    let start = position;
+    let end = position;
+    while (start > 1 && distribution[start - 2] === prizeShare) start -= 1;
+    while (end < distribution.length && distribution[end] === prizeShare) end += 1;
+    if (start !== end) return `${Util.toOrdinalSuffix(start)}-${Util.toOrdinalSuffix(end)}`;
+  }
+  return Util.toOrdinalSuffix(position);
+}
+
+function formatPlacementRange(start: number, end: number) {
+  return start === end
+    ? Util.toOrdinalSuffix(start)
+    : `${Util.toOrdinalSuffix(start)}-${Util.toOrdinalSuffix(end)}`;
+}
+
 function getTierDisplayLabel(tierSlug?: string | null) {
   if (tierSlug === Constants.TierSlug.LEAGUE_PRO) {
     return 'ESL Pro League';
@@ -306,6 +367,128 @@ function getTierDisplayLabel(tierSlug?: string | null) {
   }
 
   return tierSlug ? Constants.IdiomaticTier[tierSlug] : 'Competition';
+}
+
+function getOfficialCompetitionTitle(competition: any) {
+  const year = competition.season ? 2025 + competition.season : null;
+  const city = Util.getCompetitionHostingLocationCity(competition.location);
+
+  if (Util.isMajorStageTier(competition.tier.slug)) {
+    return [Util.getMajorEventDisplayName(competition.location, competition.organizer), year]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.BLAST_FINALS) {
+    return ['BLAST Finals', city, year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+    return ['IEM Cologne', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+    return ['IEM Krakow', year].filter(Boolean).join(' ');
+  }
+
+  if (competition.tier.slug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+    return ['ESL Pro League', city, year].filter(Boolean).join(' ');
+  }
+
+  const displayName = Util.getCompetitionDisplayName(
+    competition.tier.league.name,
+    competition.tier.slug,
+  ).replace(/\s+Playoffs$/i, '');
+  const federationSlug = competition.federation.slug;
+  const region =
+    federationSlug === Constants.FederationSlug.ESPORTS_OCE
+      ? 'Oceania'
+      : federationSlug === Constants.FederationSlug.ESPORTS_ASIA
+        ? 'Asia'
+        : federationSlug === Constants.FederationSlug.ESPORTS_AMERICAS
+          ? 'Americas'
+          : federationSlug === Constants.FederationSlug.ESPORTS_EUROPA
+            ? 'Europe'
+            : city;
+
+  return [displayName, region, year].filter(Boolean).join(' ');
+}
+
+function getStatisticsEventGroup(competition: any) {
+  const tierSlug = competition?.tier?.slug as Constants.TierSlug | undefined;
+  const majorStage = tierSlug && Util.isMajorStageTier(tierSlug);
+  const group = tierSlug ? getCompetitionGroup({ competition } as MatchRecord) : 'COMPETITION';
+  const majorStageGroup =
+    tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE ? 'CHALLENGERS' : 'MAIN_EVENT';
+  const regionalEventGroup = group === 'RMR_EUROPE' ? tierSlug : '';
+
+  return [
+    majorStage ? 'MAJOR' : group,
+    majorStage ? majorStageGroup : '',
+    regionalEventGroup,
+    competition?.federationId,
+    competition?.season,
+    competition?.location || '',
+  ].join(':');
+}
+
+function getStatisticsEventTitle(competition: any) {
+  const tierSlug = competition?.tier?.slug as Constants.TierSlug | undefined;
+  const year = competition?.season ? 2025 + competition.season : null;
+  const city = Util.getCompetitionHostingLocationCity(competition?.location);
+
+  if (tierSlug && Util.isMajorStageTier(tierSlug)) {
+    const title = [Util.getMajorEventDisplayName(competition.location, competition.organizer), year]
+      .filter(Boolean)
+      .join(' ');
+    return tierSlug === Constants.TierSlug.MAJOR_CHALLENGERS_STAGE
+      ? `${title} Challengers Stage`
+      : title;
+  }
+
+  if (getCompetitionGroup({ competition } as MatchRecord) === 'IEM_KRAKOW') {
+    return ['IEM Krakow', year].filter(Boolean).join(' ');
+  }
+
+  if (getCompetitionGroup({ competition } as MatchRecord) === 'IEM_COLOGNE') {
+    return ['IEM Cologne', year].filter(Boolean).join(' ');
+  }
+
+  if (getCompetitionGroup({ competition } as MatchRecord) === 'ESL_PRO_LEAGUE') {
+    return ['ESL Pro League', city, year].filter(Boolean).join(' ');
+  }
+
+  return getOfficialCompetitionTitle(competition);
+}
+
+function getHonorNotability(tierSlug: string) {
+  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) return 0;
+  if (
+    tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS
+  ) {
+    return 1;
+  }
+  if (tierSlug === Constants.TierSlug.BLAST_FINALS) return 2;
+  if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) return 3;
+  if (tierSlug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS) return 4;
+  if (tierSlug === Constants.TierSlug.CCT_GLOBAL_FINALS) return 5;
+  if (tierSlug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS) return 6;
+  if (
+    tierSlug === Constants.TierSlug.CCT_SERIES_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.CCT_OCE_PLAYOFFS
+  ) {
+    return 7;
+  }
+  if (
+    tierSlug === Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS ||
+    tierSlug === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS
+  ) {
+    return 8;
+  }
+  if (tierSlug === Constants.TierSlug.ESEA_CASH_CUP) return 9;
+  return 10;
 }
 
 function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
@@ -353,6 +536,10 @@ function getCompetitionGroup(match: MatchRecord): CompetitionGroupKey | null {
 
   if (tierSlug === 'cct:global-finals') {
     return 'CCT_GLOBAL_FINALS';
+  }
+
+  if (tierSlug === Constants.TierSlug.BLAST_FINALS) {
+    return 'BLAST_FINALS';
   }
 
   if (
@@ -449,6 +636,9 @@ function getCompetitionGroupTierWhere(group: string) {
       break;
     case 'CCT_GLOBAL_FINALS':
       tierSlugs.push(Constants.TierSlug.CCT_GLOBAL_FINALS);
+      break;
+    case 'BLAST_FINALS':
+      tierSlugs.push(Constants.TierSlug.BLAST_FINALS);
       break;
     case 'IEM_COLOGNE':
       tierSlugs.push(
@@ -839,6 +1029,7 @@ function getPlayerMatchCompetitor(match: MatchRecord, playerId: number, selected
 export default function LeagueStatsConcept(): JSX.Element {
   const { state } = React.useContext(AppStateContext);
   const location = useLocation();
+  const formatAppDate = useFormatAppDate();
   const [loading, setLoading] = React.useState(true);
   const [activeTab, setActiveTab] = React.useState<StatsTab>(StatsTab.INDIVIDUAL);
   const [activeDetailView, setActiveDetailView] = React.useState<StatsDetailView>(
@@ -849,7 +1040,21 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [globalPlayers, setGlobalPlayers] = React.useState<StatsPlayerOption[]>([]);
   const [selectedGlobalPlayerProfile, setSelectedGlobalPlayerProfile] =
     React.useState<StatsPlayerOption | null>(null);
+  const [activePlayerProfile, setActivePlayerProfile] = React.useState<any>(null);
+  const [majorAwardCounts, setMajorAwardCounts] = React.useState({ wins: 0, mvps: 0 });
+  const [careerHonors, setCareerHonors] = React.useState<CareerHonor[]>([]);
+  const [careerMvps, setCareerMvps] = React.useState<any[]>([]);
+  const [eventFinalPlacements, setEventFinalPlacements] = React.useState<Record<string, string>>(
+    {},
+  );
+  const [careerHonorsTooltip, setCareerHonorsTooltip] = React.useState<CareerHonorsTooltip | null>(
+    null,
+  );
+  const [visibleHonorCount, setVisibleHonorCount] = React.useState(0);
+  const honorsRowRef = React.useRef<HTMLDivElement>(null);
+  const honorsMeasureRef = React.useRef<HTMLDivElement>(null);
   const [globalPlayerTeams, setGlobalPlayerTeams] = React.useState<Array<any>>([]);
+  const [globalPlayerCountries, setGlobalPlayerCountries] = React.useState<Array<any>>([]);
   const [numGlobalPlayers, setNumGlobalPlayers] = React.useState(0);
   const [globalPlayerPage, setGlobalPlayerPage] = React.useState(1);
   const [careerStints, setCareerStints] = React.useState<CareerStintRecord[]>([]);
@@ -863,6 +1068,13 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedCareerTeamId, setSelectedCareerTeamId] = React.useState<string>('');
   const [selectedTeammateId, setSelectedTeammateId] = React.useState<string>('');
   const [selectedGlobalPlayerId, setSelectedGlobalPlayerId] = React.useState<string>('');
+  const [selectedGlobalPlayerPreviewId, setSelectedGlobalPlayerPreviewId] =
+    React.useState<string>('');
+  const [globalPlayerPreviewProfile, setGlobalPlayerPreviewProfile] = React.useState<any>(null);
+  const [globalPlayerPreviewAwards, setGlobalPlayerPreviewAwards] = React.useState({
+    wins: 0,
+    mvps: 0,
+  });
   const [selectedGlobalDetailCompetitionGroup, setSelectedGlobalDetailCompetitionGroup] =
     React.useState<string>('');
   const [selectedGlobalDetailMap, setSelectedGlobalDetailMap] = React.useState<string>('');
@@ -880,6 +1092,11 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedGlobalPlayerName, setSelectedGlobalPlayerName] = React.useState('');
   const [selectedGlobalFederationSlug, setSelectedGlobalFederationSlug] =
     React.useState<string>('');
+  const [selectedGlobalCountryCode, setSelectedGlobalCountryCode] = React.useState('');
+  const [selectedGlobalPlayerRole, setSelectedGlobalPlayerRole] = React.useState('');
+  const [selectedGlobalTransferStatus, setSelectedGlobalTransferStatus] = React.useState<
+    '' | 'listed' | 'retired'
+  >('');
   const [selectedGlobalPlayerTierId, setSelectedGlobalPlayerTierId] = React.useState<string>(
     String(Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO)),
   );
@@ -887,11 +1104,12 @@ export default function LeagueStatsConcept(): JSX.Element {
     'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team'
   >('rating');
   const [matchPage, setMatchPage] = React.useState(1);
+  const [teammatePage, setTeammatePage] = React.useState(1);
   const [tournamentPage, setTournamentPage] = React.useState(1);
+  const [weaponPage, setWeaponPage] = React.useState(1);
   const [globalPlayersLoading, setGlobalPlayersLoading] = React.useState(false);
+  const [globalPlayerFilterRevision, setGlobalPlayerFilterRevision] = React.useState(0);
   const [globalPlayerMatchesLoading, setGlobalPlayerMatchesLoading] = React.useState(false);
-  const previousActiveTab = React.useRef<StatsTab>(activeTab);
-  const shouldDefaultTeammateTeam = React.useRef(false);
   const canViewGlobalPlayerStats = Boolean(state.profile?.simulateNpcMatchStats);
   const isGlobalPlayerDetailView =
     activeTab === StatsTab.GLOBAL_PLAYERS && !!selectedGlobalPlayerId;
@@ -994,6 +1212,15 @@ export default function LeagueStatsConcept(): JSX.Element {
         orderBy: { name: 'asc' },
       })
       .then((teams: any[]) => setGlobalPlayerTeams(teams));
+    api.players
+      .all({
+        distinct: ['countryId'],
+        include: { country: true },
+        orderBy: { country: { name: 'asc' } },
+      })
+      .then((players: any[]) =>
+        setGlobalPlayerCountries(players.map((player) => player.country).filter(Boolean)),
+      );
   }, [canViewGlobalPlayerStats]);
 
   React.useEffect(() => {
@@ -1103,30 +1330,33 @@ export default function LeagueStatsConcept(): JSX.Element {
     api.matches
       .globalPlayerStats({
         currentDate: state.profile?.date,
+        countryCode: selectedGlobalCountryCode || undefined,
         federationSlug: selectedGlobalFederationSlug || undefined,
         name: selectedGlobalPlayerName || undefined,
         page: globalPlayerPage,
         pageSize: GlobalPlayerPageSize,
         sort: selectedGlobalPlayerSort,
+        role: selectedGlobalPlayerRole || undefined,
         teamId: selectedGlobalListTeamId ? Number(selectedGlobalListTeamId) : undefined,
         tierId: selectedGlobalPlayerTierId ? Number(selectedGlobalPlayerTierId) : undefined,
+        transferStatus: selectedGlobalTransferStatus || undefined,
         year: selectedGlobalYear || undefined,
       })
       .then(({ players, total }) => {
         setNumGlobalPlayers(total);
         setGlobalPlayers(players);
+        setSelectedGlobalPlayerPreviewId((current) =>
+          players.some((player) => String(player.id) === current)
+            ? current
+            : String(players[0]?.id || ''),
+        );
       })
       .finally(() => setGlobalPlayersLoading(false));
   }, [
     activeTab,
     canViewGlobalPlayerStats,
+    globalPlayerFilterRevision,
     globalPlayerPage,
-    selectedGlobalFederationSlug,
-    selectedGlobalListTeamId,
-    selectedGlobalPlayerName,
-    selectedGlobalPlayerSort,
-    selectedGlobalPlayerTierId,
-    selectedGlobalYear,
     state.profile?.date,
   ]);
 
@@ -1158,6 +1388,90 @@ export default function LeagueStatsConcept(): JSX.Element {
       .then((result: any[]) => setGlobalPlayerMatches(result.filter(isLeagueMatch)))
       .finally(() => setGlobalPlayerMatchesLoading(false));
   }, [activeTab, canViewGlobalPlayerStats, selectedGlobalPlayerId]);
+
+  React.useEffect(() => {
+    if (
+      !canViewGlobalPlayerStats ||
+      activeTab !== StatsTab.GLOBAL_PLAYERS ||
+      !selectedGlobalPlayerPreviewId
+    ) {
+      setGlobalPlayerPreviewProfile(null);
+      setGlobalPlayerPreviewAwards({ wins: 0, mvps: 0 });
+      return;
+    }
+
+    let cancelled = false;
+    api.players
+      .find({
+        include: { country: true, team: true, careerStints: { include: { team: true } } },
+        where: { id: Number(selectedGlobalPlayerPreviewId) },
+      })
+      .then((player: any) => {
+        if (!cancelled) setGlobalPlayerPreviewProfile(player || null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, canViewGlobalPlayerStats, selectedGlobalPlayerPreviewId]);
+
+  React.useEffect(() => {
+    if (!globalPlayerPreviewProfile) return;
+
+    let cancelled = false;
+    const championAwards = [
+      ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
+        (award) => award.target,
+      ),
+      Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    ];
+
+    Promise.all([
+      api.competitions.mvps({ playerId: globalPlayerPreviewProfile.id }),
+      api.competitions.all({
+        where: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          tier: { slug: { in: championAwards } },
+        },
+        include: { competitors: true, tier: true, matches: { include: { competitors: true } } },
+      }),
+    ]).then(([mvps, competitions]: [any[], any[]]) => {
+      if (cancelled) return;
+
+      const wins = competitions.filter((competition) => {
+        const finalMatch = competition.matches.reduce(
+          (latest: any, match: any) =>
+            !latest || new Date(match.date) > new Date(latest.date) ? match : latest,
+          null,
+        );
+        const winnerTeamId = competition.competitors.find(
+          (competitor: any) => competitor.position === 1,
+        )?.teamId;
+        return (
+          competition.tier.slug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE &&
+          winnerTeamId &&
+          finalMatch &&
+          globalPlayerPreviewProfile.careerStints.some(
+            (stint: any) =>
+              stint.teamId === winnerTeamId &&
+              stint.starter &&
+              isWithinStint(finalMatch.date, stint.startedAt, stint.endedAt),
+          )
+        );
+      }).length;
+
+      setGlobalPlayerPreviewAwards({
+        wins,
+        mvps: mvps.filter(
+          (mvp) => mvp.competition.tier.slug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        ).length,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [globalPlayerPreviewProfile]);
 
   React.useEffect(() => {
     if (
@@ -1405,15 +1719,36 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   const teammates = React.useMemo(() => {
     const selfId = state.profile?.player?.id;
-    const map = new Map<number, { id: number; name: string; avatar?: string }>();
+    const map = new Map<
+      number,
+      {
+        id: number;
+        name: string;
+        avatar?: string;
+        country?: { code: string; name: string };
+      }
+    >();
+
+    if (!selfId) return [];
 
     matchesByFilters.forEach((match: any) => {
+      const userPlayed =
+        (match.players || []).some((player: any) => player.id === selfId) ||
+        hasPlayerEvents(Number(selfId), match.events || []);
+      if (!userPlayed) return;
+
       const ownTeam = getCareerMatchCompetitor(match, careerStints, activeSelectedCareerTeamId);
       const userTeamStints = careerStints.filter(
         (stint: any) =>
           stint.teamId === ownTeam?.teamId &&
           isWithinStint(match.date, stint.startedAt, stint.endedAt),
       );
+      const sharedMapEvents = getPlayedGames(match)
+        .filter((game: any) => !activeSelectedMap || game.map === activeSelectedMap)
+        .map((game: any) => getEventsForGames(match, [game], true))
+        .filter((events: any[]) => hasPlayerEvents(selfId, events));
+      if (!sharedMapEvents.length) return;
+
       (match.players || []).forEach((player: any) => {
         if (player.id === selfId) {
           return;
@@ -1435,14 +1770,25 @@ export default function LeagueStatsConcept(): JSX.Element {
           ),
         );
 
-        if (hasOverlap) {
-          map.set(player.id, { id: player.id, name: player.name, avatar: player.avatar });
+        if (hasOverlap && sharedMapEvents.some((events) => hasPlayerEvents(player.id, events))) {
+          map.set(player.id, {
+            id: player.id,
+            name: player.name,
+            avatar: player.avatar,
+            country: player.country,
+          });
         }
       });
     });
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [matchesByFilters, careerStints, activeSelectedCareerTeamId, state.profile?.player?.id]);
+  }, [
+    matchesByFilters,
+    careerStints,
+    activeSelectedCareerTeamId,
+    activeSelectedMap,
+    state.profile?.player?.id,
+  ]);
 
   React.useEffect(() => {
     if (!teammates.length) {
@@ -1459,7 +1805,13 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [teammates, selectedTeammateId]);
 
   React.useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(teammates.length / TeammatePageSize));
+    setTeammatePage((page) => Math.min(page, totalPages));
+  }, [teammates.length]);
+
+  React.useEffect(() => {
     setMatchPage(1);
+    setWeaponPage(1);
   }, [
     activeTab,
     selectedCompetitionGroup,
@@ -1493,52 +1845,30 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   React.useEffect(() => {
     setTournamentPage(1);
-  }, [activeTab]);
-
-  React.useEffect(() => {
-    const enteredTeammatesTab =
-      activeTab === StatsTab.TEAMMATES && previousActiveTab.current !== StatsTab.TEAMMATES;
-    previousActiveTab.current = activeTab;
-
-    if (enteredTeammatesTab) {
-      shouldDefaultTeammateTeam.current = true;
-    }
-
-    if (activeTab !== StatsTab.TEAMMATES) {
-      return;
-    }
-
-    if (selectedCareerTeamId) {
-      shouldDefaultTeammateTeam.current = false;
-      return;
-    }
-
-    if (!shouldDefaultTeammateTeam.current) {
-      return;
-    }
-
-    const currentTeamId = state.profile?.teamId;
-    if (!currentTeamId) {
-      shouldDefaultTeammateTeam.current = false;
-      return;
-    }
-
-    if (currentTeamId && careerTeamOptions.some((team: any) => team.id === currentTeamId)) {
-      shouldDefaultTeammateTeam.current = false;
-      setSelectedCareerTeamId(String(currentTeamId));
-      return;
-    }
-
-    if (careerTeamOptions.length || careerStints.length) {
-      shouldDefaultTeammateTeam.current = false;
-    }
-  }, [activeTab, selectedCareerTeamId, state.profile?.teamId, careerTeamOptions, careerStints]);
+  }, [
+    activeTab,
+    selectedTeammateId,
+    activeSelectedCompetitionGroup,
+    activeSelectedSeason,
+    activeSelectedTimeframe,
+    activeSelectedMap,
+    activeSelectedMatchType,
+    activeSelectedCompetitionStage,
+    activeSelectedCareerTeamId,
+  ]);
 
   const teammatePerformances = React.useMemo(() => {
     if (!selectedTeammateId) return [] as MatchPerformance[];
     const teammateId = Number(selectedTeammateId);
+    const selfId = state.profile?.player?.id;
+    if (!selfId) return [] as MatchPerformance[];
 
     return matchesByFilters.flatMap((match: any) => {
+      const userPlayed =
+        (match.players || []).some((player: any) => player.id === selfId) ||
+        hasPlayerEvents(selfId, match.events || []);
+      if (!userPlayed) return [];
+
       const ownTeam = getCareerMatchCompetitor(match, careerStints, selectedCareerTeamId);
       const userTeamStints = careerStints.filter(
         (stint: any) =>
@@ -1570,9 +1900,13 @@ export default function LeagueStatsConcept(): JSX.Element {
         return [];
       }
 
-      const gamesForStats = activeSelectedMap
+      const candidateGames = activeSelectedMap
         ? getPlayedGames(match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(match);
+      const gamesForStats = candidateGames.filter((game: any) => {
+        const gameEvents = getEventsForGames(match, [game], true);
+        return hasPlayerEvents(selfId, gameEvents) && hasPlayerEvents(teammateId, gameEvents);
+      });
       if (!gamesForStats.length) {
         return [];
       }
@@ -1590,7 +1924,14 @@ export default function LeagueStatsConcept(): JSX.Element {
       );
       return [{ match, ...performance }];
     });
-  }, [matchesByFilters, selectedTeammateId, activeSelectedMap, careerStints, selectedCareerTeamId]);
+  }, [
+    matchesByFilters,
+    selectedTeammateId,
+    activeSelectedMap,
+    careerStints,
+    selectedCareerTeamId,
+    state.profile?.player?.id,
+  ]);
 
   const globalPlayerPerformances = React.useMemo(() => {
     if (!selectedGlobalPlayerId) return [] as MatchPerformance[];
@@ -1633,44 +1974,138 @@ export default function LeagueStatsConcept(): JSX.Element {
 
   const tournamentRows = React.useMemo(() => {
     const grouped = new Map<
-      number,
+      string,
       {
         label: string;
-        placement: string;
+        placement: number | null;
+        placementPriority: number;
+        placementKey: string;
+        placementTierSlug?: Constants.TierSlug;
         plusMinus: number;
         ratingSum: number;
         count: number;
         mapsPlayed: number;
         teamBlazon: string;
+        eventThumbnail: string;
         href: string;
         tier?: { lan?: boolean | null };
       }
     >();
 
-    ownPlayerPerformances.forEach((item: any) => {
-      const compId = item.match.competitionId || 0;
-      const ownTeam = getCareerMatchCompetitor(item.match, careerStints);
+    const sharedTeammateEvents = new Set(
+      teammatePerformances.map((item) => {
+        const ownTeam = getCareerMatchCompetitor(
+          item.match,
+          careerStints,
+          activeSelectedCareerTeamId,
+        );
+        return `${getStatisticsEventGroup(item.match.competition)}:${ownTeam?.teamId || 0}`;
+      }),
+    );
+    const teammateId = Number(selectedTeammateId);
+    const teammateEventPerformances =
+      activeTab === StatsTab.TEAMMATES && teammateId
+        ? matchesByFilters.flatMap((match: any) => {
+            const ownTeam = getCareerMatchCompetitor(
+              match,
+              careerStints,
+              activeSelectedCareerTeamId,
+            );
+            const eventTeamKey = `${getStatisticsEventGroup(match.competition)}:${ownTeam?.teamId || 0}`;
+            if (
+              !ownTeam ||
+              !sharedTeammateEvents.has(eventTeamKey) ||
+              getPlayerMatchCompetitor(match, teammateId, String(ownTeam.teamId))?.teamId !==
+                ownTeam.teamId
+            ) {
+              return [];
+            }
+
+            const games = getPlayedGames(match).filter((game: any) => {
+              if (activeSelectedMap && game.map !== activeSelectedMap) return false;
+              return hasPlayerEvents(teammateId, getEventsForGames(match, [game], true));
+            });
+            if (!games.length) return [];
+
+            const mapPerformances = games.map((game: any) =>
+              getPlayerPerformanceFromEvents(teammateId, getEventsForGames(match, [game], true)),
+            );
+            return [
+              {
+                match,
+                maps: games.length,
+                plusMinus: mapPerformances.reduce((sum, map) => sum + map.plusMinus, 0),
+                rating: mapPerformances.reduce((sum, map) => sum + map.rating, 0) / games.length,
+              },
+            ];
+          })
+        : [];
+    const eventPerformances =
+      activeTab === StatsTab.TEAMMATES
+        ? teammateEventPerformances
+        : activeTab === StatsTab.GLOBAL_PLAYERS
+          ? globalPlayerPerformances
+          : ownPlayerPerformances;
+    const eventPlayerId =
+      activeTab === StatsTab.GLOBAL_PLAYERS
+        ? Number(selectedGlobalPlayerId)
+        : state.profile?.player?.id;
+
+    eventPerformances.forEach((item: any) => {
+      const competition = item.match.competition;
+      const eventKey = getStatisticsEventGroup(competition);
+      const ownTeam =
+        activeTab === StatsTab.GLOBAL_PLAYERS && eventPlayerId
+          ? getPlayerMatchCompetitor(item.match, eventPlayerId, activeSelectedCareerTeamId)
+          : getCareerMatchCompetitor(item.match, careerStints, activeSelectedCareerTeamId);
       const placement = item.match.competition?.competitors?.find(
         (c: any) => c.teamId === ownTeam?.teamId,
       )?.position;
-      const existing = grouped.get(compId);
-      const playedMaps = getPlayedGames(item.match).length;
+      const placementPriority =
+        Constants.PrizePool[competition?.tier?.slug as Constants.TierSlug]?.total || 0;
+      const existing = grouped.get(eventKey);
+      const playedMaps =
+        activeTab === StatsTab.TEAMMATES ? item.maps : getPlayedGames(item.match).length;
 
       if (!existing) {
-        grouped.set(compId, {
-          label: getCompetitionLabel(item.match),
-          placement: placement ? `#${placement}` : '-',
+        grouped.set(eventKey, {
+          label: competition
+            ? getStatisticsEventTitle(competition)
+            : getCompetitionLabel(item.match),
+          placement: placement || null,
+          placementPriority,
+          placementKey: `${eventKey}:${ownTeam?.teamId || 0}`,
+          placementTierSlug: competition?.tier?.slug as Constants.TierSlug | undefined,
           plusMinus: item.plusMinus,
           ratingSum: item.rating * item.maps,
           count: item.maps,
           mapsPlayed: playedMaps,
           teamBlazon: ownTeam?.team.blazon || 'resources://blazonry/noteam.svg',
+          eventThumbnail:
+            Util.getCompetitionThumbnail({
+              federationSlug: competition?.federation?.slug,
+              organizer: competition?.organizer,
+              tierSlug: competition?.tier?.slug,
+            }) ||
+            Util.getCompetitionLogo(competition?.tier?.slug, competition?.federation?.slug, {
+              location: competition?.location,
+              organizer: competition?.organizer,
+            }),
           tier: item.match.competition?.tier,
           href: item.match.competition
             ? `/competitions?federationId=${item.match.competition.federationId}&season=${item.match.competition.season}&tierId=${item.match.competition.tierId}`
             : '/competitions',
         });
       } else {
+        if (
+          placement &&
+          (placementPriority > existing.placementPriority ||
+            (placementPriority === existing.placementPriority &&
+              (!existing.placement || placement < existing.placement)))
+        ) {
+          existing.placement = placement;
+          existing.placementPriority = placementPriority;
+        }
         existing.plusMinus += item.plusMinus;
         existing.ratingSum += item.rating * item.maps;
         existing.count += item.maps;
@@ -1680,9 +2115,179 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     return [...grouped.values()].map((row) => ({
       ...row,
+      placement:
+        eventFinalPlacements[row.placementKey] ||
+        getEventPlacementLabel(row.placement, row.placementTierSlug),
       rating: (row.ratingSum / row.count).toFixed(2),
     }));
-  }, [ownPlayerPerformances, careerStints]);
+  }, [
+    activeSelectedCareerTeamId,
+    activeTab,
+    careerStints,
+    eventFinalPlacements,
+    globalPlayerPerformances,
+    matchesByFilters,
+    ownPlayerPerformances,
+    selectedGlobalPlayerId,
+    selectedTeammateId,
+    state.profile?.player?.id,
+    teammatePerformances,
+  ]);
+
+  const eventPlacementKeys = React.useMemo(
+    () =>
+      tournamentRows
+        .map((row) => row.placementKey)
+        .sort()
+        .join('|'),
+    [tournamentRows],
+  );
+
+  React.useEffect(() => {
+    const requestedKeys = new Set(eventPlacementKeys.split('|').filter(Boolean));
+    if (!requestedKeys.size) {
+      setEventFinalPlacements({});
+      return;
+    }
+
+    let cancelled = false;
+    api.competitions
+      .all({
+        where: { status: Constants.CompetitionStatus.COMPLETED },
+        include: { competitors: true, federation: true, tier: true },
+      })
+      .then((competitions: any[]) => {
+        if (cancelled) return;
+
+        const finalPlacements: Record<string, string> = {};
+        const competitionsByEvent = groupBy(competitions, getStatisticsEventGroup);
+
+        Object.entries(competitionsByEvent).forEach(([eventKey, eventCompetitions]: any) => {
+          const rankedStages = [...eventCompetitions].sort((left: any, right: any) => {
+            const leftPrize =
+              Constants.PrizePool[left.tier?.slug as Constants.TierSlug]?.total || 0;
+            const rightPrize =
+              Constants.PrizePool[right.tier?.slug as Constants.TierSlug]?.total || 0;
+            return rightPrize - leftPrize;
+          });
+          const seenTeams = new Set<number>();
+          const standings: Array<{
+            teamId: number;
+            stage: number;
+            position: number;
+            tierSlug: Constants.TierSlug;
+          }> = [];
+          rankedStages
+            .flatMap((competition: any) => {
+              const tierSlug = competition.tier?.slug as Constants.TierSlug;
+              const stage = Constants.PrizePool[tierSlug]?.total || 0;
+              return competition.competitors.map((competitor: any) => ({
+                ...competitor,
+                stage,
+                tierSlug,
+              }));
+            })
+            .filter((competitor: any) => competitor.teamId && competitor.position)
+            .sort(
+              (left: any, right: any) => right.stage - left.stage || left.position - right.position,
+            )
+            .forEach((competitor: any) => {
+              if (seenTeams.has(competitor.teamId)) return;
+              seenTeams.add(competitor.teamId);
+              standings.push({
+                teamId: competitor.teamId,
+                stage: competitor.stage,
+                position: competitor.position,
+                tierSlug: competitor.tierSlug,
+              });
+            });
+
+          standings.forEach((standing, index) => {
+            const placementKey = `${eventKey}:${standing.teamId}`;
+            if (!requestedKeys.has(placementKey)) return;
+
+            let start = index;
+            let end = index;
+            while (
+              start > 0 &&
+              standings[start - 1].stage === standing.stage &&
+              standings[start - 1].position === standing.position
+            ) {
+              start -= 1;
+            }
+            while (
+              end + 1 < standings.length &&
+              standings[end + 1].stage === standing.stage &&
+              standings[end + 1].position === standing.position
+            ) {
+              end += 1;
+            }
+
+            const placement = index + 1;
+            const isIemEvent =
+              eventKey.startsWith('IEM_KRAKOW:') || eventKey.startsWith('IEM_COLOGNE:');
+            const iemRanges = [
+              [1, 1],
+              [2, 2],
+              [3, 4],
+              [5, 6],
+              [7, 8],
+              [9, 12],
+              [13, 16],
+            ];
+            const eplRanges = [
+              [1, 1],
+              [2, 2],
+              [3, 4],
+              [5, 8],
+              [9, 16],
+              [17, 24],
+              [25, 32],
+            ];
+            const europeRmrRanges = eventKey.includes(Constants.TierSlug.MAJOR_EUROPE_RMR_A)
+              ? [
+                  [1, 1],
+                  [2, 2],
+                  [3, 4],
+                  [5, 5],
+                  [6, 8],
+                  [9, 11],
+                  [12, 14],
+                  [15, 16],
+                ]
+              : eventKey.includes(Constants.TierSlug.MAJOR_EUROPE_RMR_B)
+                ? [
+                    [1, 1],
+                    [2, 2],
+                    [3, 3],
+                    [4, 5],
+                    [6, 8],
+                    [9, 11],
+                    [12, 14],
+                    [15, 16],
+                  ]
+                : undefined;
+            const configuredRanges = isIemEvent
+              ? iemRanges
+              : eventKey.startsWith('ESL_PRO_LEAGUE:')
+                ? eplRanges
+                : europeRmrRanges;
+            const placementRange = configuredRanges?.find(
+              ([rangeStart, rangeEnd]) => placement >= rangeStart && placement <= rangeEnd,
+            );
+
+            finalPlacements[placementKey] = placementRange
+              ? formatPlacementRange(placementRange[0], placementRange[1])
+              : formatPlacementRange(start + 1, end + 1);
+          });
+        });
+        setEventFinalPlacements(finalPlacements);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eventPlacementKeys]);
 
   const activeStatsPlayerId =
     activeTab === StatsTab.TEAMMATES
@@ -1691,13 +2296,227 @@ export default function LeagueStatsConcept(): JSX.Element {
         ? Number(selectedGlobalPlayerId)
         : state.profile?.player?.id;
 
+  React.useEffect(() => {
+    if (!activeStatsPlayerId) {
+      setActivePlayerProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+    setActivePlayerProfile(null);
+
+    api.players
+      .find({
+        include: {
+          country: true,
+          team: true,
+          careerStints: {
+            include: {
+              team: true,
+            },
+          },
+        },
+        where: { id: activeStatsPlayerId },
+      })
+      .then((player: any) => {
+        if (!cancelled) {
+          setActivePlayerProfile(player || null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStatsPlayerId]);
+
+  React.useEffect(() => {
+    if (!activePlayerProfile) {
+      setMajorAwardCounts({ wins: 0, mvps: 0 });
+      setCareerHonors([]);
+      setCareerMvps([]);
+      return;
+    }
+
+    let cancelled = false;
+    const playerId = activePlayerProfile.id;
+
+    const championAwards = [
+      ...Constants.Awards.filter((award) => award.type === Constants.AwardType.CHAMPION).map(
+        (award) => award.target,
+      ),
+      Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    ];
+
+    Promise.all([
+      api.competitions.mvps({ playerId }),
+      api.competitions.all({
+        where: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          tier: { slug: { in: championAwards } },
+        },
+        include: {
+          competitors: true,
+          federation: true,
+          tier: {
+            include: {
+              league: true,
+            },
+          },
+          matches: {
+            include: {
+              competitors: true,
+            },
+          },
+        },
+        orderBy: { season: 'desc' },
+      }),
+    ]).then(([mvps, competitions]: [any[], any[]]) => {
+      if (cancelled) return;
+
+      const honors = competitions.reduce<CareerHonor[]>((entries, competition) => {
+        const championshipMatch = competition.matches.reduce((latest: any, match: any) => {
+          if (!latest || new Date(match.date) > new Date(latest.date)) return match;
+          return latest;
+        }, null);
+        if (!championshipMatch) return entries;
+
+        const winnerTeamId =
+          competition.competitors.find((competitor: any) => competitor.position === 1)?.teamId ||
+          [...championshipMatch.competitors].sort(
+            (left: any, right: any) => (right.score || 0) - (left.score || 0),
+          )[0]?.teamId;
+
+        const wonTitle = (activePlayerProfile.careerStints || []).some(
+          (stint: any) =>
+            stint.teamId === winnerTeamId &&
+            stint.starter &&
+            isWithinStint(new Date(championshipMatch.date), stint.startedAt, stint.endedAt),
+        );
+        if (!wonTitle) return entries;
+
+        entries.push({
+          competitionId: competition.id,
+          federationId: competition.federationId,
+          tierId: competition.tier.id,
+          season: competition.season,
+          key: `${competition.tier.slug}__${competition.federation.slug}__${competition.location || ''}__${competition.organizer || ''}`,
+          title: getOfficialCompetitionTitle(competition),
+          tierSlug: competition.tier.slug,
+          federationSlug: competition.federation.slug,
+          location: competition.location,
+          organizer: competition.organizer,
+        });
+        return entries;
+      }, []);
+
+      const wins = honors.filter(
+        (honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+      ).length;
+
+      setMajorAwardCounts({
+        wins,
+        mvps: mvps.filter(
+          (mvp) => mvp.competition.tier.slug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+        ).length,
+      });
+      setCareerHonors(honors);
+      setCareerMvps(mvps);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePlayerProfile]);
+
+  const careerHonorGroups = React.useMemo(() => {
+    const groups = new Map<string, CareerHonor & { count: number }>();
+    careerHonors.forEach((honor) => {
+      const existing = groups.get(honor.key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        groups.set(honor.key, { ...honor, count: 1 });
+      }
+    });
+    return [...groups.values()];
+  }, [careerHonors]);
+  const notableHonors = React.useMemo(() => {
+    const majorHonors = careerHonors.filter(
+      (honor) => honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    );
+    const groupedNonMajorHonors = careerHonorGroups.filter(
+      (honor) => honor.tierSlug !== Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    );
+
+    return [...majorHonors, ...groupedNonMajorHonors].sort(
+      (left, right) => getHonorNotability(left.tierSlug) - getHonorNotability(right.tierSlug),
+    );
+  }, [careerHonors, careerHonorGroups]);
+  const showcaseHonors = notableHonors.slice(0, visibleHonorCount);
+  const mvpTooltip = React.useMemo(() => {
+    if (!careerMvps.length) return '';
+    return [
+      'MVP winner at:',
+      ...careerMvps.map((mvp) => getOfficialCompetitionTitle(mvp.competition)),
+    ].join('\n');
+  }, [careerMvps]);
+  const showCareerHonorsTooltip = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>, content: string) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const tooltipWidth = 280;
+      const tooltipHeight = Math.min(320, 32 + content.split('\n').length * 20);
+      const top =
+        rect.bottom + 8 + tooltipHeight <= window.innerHeight
+          ? rect.bottom + 8
+          : Math.max(12, rect.top - tooltipHeight - 8);
+
+      setCareerHonorsTooltip({
+        content,
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - tooltipWidth - 12)),
+        top,
+      });
+    },
+    [],
+  );
+  React.useLayoutEffect(() => {
+    const row = honorsRowRef.current;
+    const measure = honorsMeasureRef.current;
+    if (!row || !measure) return;
+
+    const updateVisibleHonors = () => {
+      const mvpWidth = careerMvps.length > 0 ? 144 : 0;
+      let usedWidth = mvpWidth;
+      let count = 0;
+
+      for (const card of measure.children) {
+        const gap = usedWidth > 0 ? 8 : 0;
+        const width = card.getBoundingClientRect().width;
+        if (usedWidth + gap + width > row.clientWidth) break;
+        usedWidth += gap + width;
+        count += 1;
+      }
+
+      setVisibleHonorCount(count);
+    };
+
+    updateVisibleHonors();
+    const observer = new ResizeObserver(updateVisibleHonors);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [careerMvps.length, notableHonors]);
+
   const weaponRows = React.useMemo(() => {
     const playerId = activeStatsPlayerId;
     if (!playerId) return [] as WeaponPerformance[];
 
     const grouped = new Map<string, { kills: number; headshots: number }>();
 
-    matchesByFilters.forEach((match: any) => {
+    const matchesForWeaponStats =
+      activeTab === StatsTab.TEAMMATES
+        ? teammatePerformances.map((performance: any) => performance.match)
+        : matchesByFilters;
+
+    matchesForWeaponStats.forEach((match: any) => {
       if (match.matchType === 'FACEIT_PUG') {
         return;
       }
@@ -1709,9 +2528,20 @@ export default function LeagueStatsConcept(): JSX.Element {
         return;
       }
 
-      const gamesForStats = activeSelectedMap
+      const candidateGames = activeSelectedMap
         ? getPlayedGames(match).filter((game: any) => game.map === activeSelectedMap)
         : getPlayedGames(match);
+      const gamesForStats = candidateGames.filter((game: any) => {
+        if (activeTab !== StatsTab.TEAMMATES || !state.profile?.player?.id) {
+          return true;
+        }
+
+        const gameEvents = getEventsForGames(match, [game], true);
+        return (
+          hasPlayerEvents(state.profile.player.id, gameEvents) &&
+          hasPlayerEvents(playerId, gameEvents)
+        );
+      });
       if (!gamesForStats.length) {
         return;
       }
@@ -1749,7 +2579,14 @@ export default function LeagueStatsConcept(): JSX.Element {
       .sort(
         (a, b) => b.kills - a.kills || b.hsPercent - a.hsPercent || a.label.localeCompare(b.label),
       );
-  }, [activeStatsPlayerId, matchesByFilters, activeSelectedMap]);
+  }, [
+    activeStatsPlayerId,
+    activeTab,
+    teammatePerformances,
+    matchesByFilters,
+    activeSelectedMap,
+    state.profile?.player?.id,
+  ]);
 
   const activePerformances =
     activeTab === StatsTab.TEAMMATES
@@ -1780,31 +2617,199 @@ export default function LeagueStatsConcept(): JSX.Element {
       mapsPlayed: totals.maps,
     };
   }, [activePerformances]);
+  const togetherRecord = React.useMemo(() => {
+    if (activeTab !== StatsTab.TEAMMATES) return { maps: 0, wins: 0, winRate: 0 };
+
+    const record = teammatePerformances.reduce(
+      (totals, item: any) => {
+        const ownTeam = getCareerMatchCompetitor(
+          item.match,
+          careerStints,
+          activeSelectedCareerTeamId,
+        );
+        getPlayedGames(item.match).forEach((game: any) => {
+          if (activeSelectedMap && game.map !== activeSelectedMap) return;
+          const own = game.teams?.find((team: any) => team.teamId === ownTeam?.teamId);
+          const opponent = game.teams?.find((team: any) => team.teamId !== ownTeam?.teamId);
+          if (!own || !opponent) return;
+          totals.maps += 1;
+          if ((own.score || 0) >= (opponent.score || 0)) totals.wins += 1;
+        });
+        return totals;
+      },
+      { maps: 0, wins: 0 },
+    );
+
+    return {
+      ...record,
+      winRate: record.maps ? Math.round((record.wins / record.maps) * 100) : 0,
+    };
+  }, [
+    activeSelectedCareerTeamId,
+    activeSelectedMap,
+    activeTab,
+    careerStints,
+    teammatePerformances,
+  ]);
+  const recentForm = React.useMemo(() => {
+    return activePerformances
+      .flatMap((item: any) => {
+        const ownTeam =
+          activeTab === StatsTab.GLOBAL_PLAYERS
+            ? getPlayerMatchCompetitor(item.match, activeStatsPlayerId, activeSelectedCareerTeamId)
+            : getCareerMatchCompetitor(item.match, careerStints, activeSelectedCareerTeamId);
+        const games = activeSelectedMap
+          ? getPlayedGames(item.match).filter((game: any) => game.map === activeSelectedMap)
+          : getPlayedGames(item.match);
+
+        return games.map((game: any) => {
+          const events = getEventsForGames(item.match, [game], true);
+          const { rating } = getPlayerPerformanceFromEvents(activeStatsPlayerId, events);
+          const ownGameTeam = game.teams?.find((team: any) => team.teamId === ownTeam?.teamId);
+          const opponentGameTeam = game.teams?.find((team: any) => team.teamId !== ownTeam?.teamId);
+
+          return {
+            date: item.match.date,
+            rating,
+            didWin:
+              ownGameTeam && opponentGameTeam
+                ? (ownGameTeam.score || 0) >= (opponentGameTeam.score || 0)
+                : item.plusMinus >= 0,
+          };
+        });
+      })
+      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+      .slice(0, 10)
+      .reverse();
+  }, [
+    activePerformances,
+    activeSelectedCareerTeamId,
+    activeSelectedMap,
+    activeStatsPlayerId,
+    activeTab,
+    careerStints,
+  ]);
+  const recentFormAverage = React.useMemo(
+    () =>
+      recentForm.length
+        ? recentForm.reduce((total, match) => total + match.rating, 0) / recentForm.length
+        : 0,
+    [recentForm],
+  );
+  const recentFormChange = React.useMemo(() => {
+    if (recentForm.length < 2) return 0;
+    const splitAt = Math.ceil(recentForm.length / 2);
+    const previous = recentForm.slice(0, splitAt);
+    const latest = recentForm.slice(splitAt);
+    const previousAverage =
+      previous.reduce((total, match) => total + match.rating, 0) / previous.length;
+    const latestAverage = latest.reduce((total, match) => total + match.rating, 0) / latest.length;
+    return previousAverage ? ((latestAverage - previousAverage) / previousAverage) * 100 : 0;
+  }, [recentForm]);
+  const recentFormChart = React.useMemo(() => {
+    if (!recentForm.length) return { coordinates: [], points: '', areaPoints: '' };
+
+    const min = 0.5;
+    const range = 1.5;
+    const coordinates = recentForm.map((match, index) => {
+      const x = recentForm.length === 1 ? 300 : 16 + (index * 568) / (recentForm.length - 1);
+      const y = Math.max(4, Math.min(96, 96 - ((match.rating - min) / range) * 92));
+      return { x, y };
+    });
+    const points = coordinates.map((point) => `${point.x},${point.y}`).join(' ');
+    const areaPoints = `${coordinates[0].x},96 ${points} ${coordinates.at(-1)?.x},96`;
+    return { coordinates, points, areaPoints };
+  }, [recentForm]);
 
   const featuredMapSlug =
     activeSelectedMap || getPlayedGames(activePerformances[0]?.match || {})[0]?.map || 'de_mirage';
   const featuredMapImage = Util.convertMapPool(featuredMapSlug, settingsAll.general.game, true);
-  const featuredMapLabel = Util.convertMapPool(featuredMapSlug, settingsAll.general.game);
   const hasMapSelected = !!activeSelectedMap;
-  const selectedFilterTeam = careerTeamOptions.find(
-    (team: any) => String(team.id) === activeSelectedCareerTeamId,
-  );
-  const headerTeamLabel =
-    activeTab === StatsTab.GLOBAL_PLAYERS
-      ? selectedFilterTeam?.name || 'Any team'
-      : activeTab !== StatsTab.TEAMMATES
-        ? selectedFilterTeam?.name || state.profile?.team?.name || 'Free Agent'
-        : selectedFilterTeam?.name || 'Any team';
-  const headerTeamLogo =
-    (activeTab === StatsTab.TEAMMATES || activeTab === StatsTab.GLOBAL_PLAYERS) &&
-    !activeSelectedCareerTeamId
-      ? null
-      : selectedFilterTeam?.blazon ||
-        state.profile?.team?.blazon ||
-        'resources://blazonry/noteam.svg';
   const selectedGlobalPlayer =
     globalPlayers.find((player) => String(player.id) === selectedGlobalPlayerId) ||
     selectedGlobalPlayerProfile;
+  const sharedTeammateStints = React.useMemo(() => {
+    if (activeTab !== StatsTab.TEAMMATES || !activePlayerProfile) return [];
+
+    const currentDate = new Date(state.profile?.date || Date.now());
+    const overlaps = new Map<
+      string,
+      {
+        team: CareerStintRecord['team'];
+        startedAt: Date;
+        endedAt: Date;
+      }
+    >();
+
+    (activePlayerProfile.careerStints || []).forEach((teammateStint: CareerStintRecord) => {
+      careerStints.forEach((ownStint) => {
+        if (
+          teammateStint.teamId !== ownStint.teamId ||
+          (activeSelectedCareerTeamId &&
+            String(teammateStint.teamId) !== activeSelectedCareerTeamId) ||
+          !stintsOverlap(
+            teammateStint.startedAt,
+            teammateStint.endedAt,
+            ownStint.startedAt,
+            ownStint.endedAt,
+          )
+        ) {
+          return;
+        }
+
+        const startedAt = new Date(
+          Math.max(
+            new Date(teammateStint.startedAt).getTime(),
+            new Date(ownStint.startedAt).getTime(),
+          ),
+        );
+        const endedAt = new Date(
+          Math.min(
+            teammateStint.endedAt
+              ? new Date(teammateStint.endedAt).getTime()
+              : currentDate.getTime(),
+            ownStint.endedAt ? new Date(ownStint.endedAt).getTime() : currentDate.getTime(),
+          ),
+        );
+        const key = `${teammateStint.teamId}_${startedAt.toISOString()}_${endedAt.toISOString()}`;
+        overlaps.set(key, {
+          team: teammateStint.team || ownStint.team,
+          startedAt,
+          endedAt,
+        });
+      });
+    });
+
+    return [...overlaps.values()].sort(
+      (left, right) => left.startedAt.getTime() - right.startedAt.getTime(),
+    );
+  }, [
+    activePlayerProfile,
+    activeSelectedCareerTeamId,
+    activeTab,
+    careerStints,
+    state.profile?.date,
+  ]);
+  const teammatePageCount = Math.max(1, Math.ceil(teammates.length / TeammatePageSize));
+  const pagedTeammates = teammates.slice(
+    (teammatePage - 1) * TeammatePageSize,
+    teammatePage * TeammatePageSize,
+  );
+  const headerPlayer =
+    activePlayerProfile ||
+    (activeTab === StatsTab.GLOBAL_PLAYERS
+      ? selectedGlobalPlayer
+      : activeTab === StatsTab.TEAMMATES
+        ? teammates.find((teammate) => String(teammate.id) === selectedTeammateId)
+        : state.profile?.player);
+  const headerPlayerTeam =
+    activeTab === StatsTab.TEAMMATES
+      ? sharedTeammateStints[0]?.team || null
+      : activePlayerProfile?.team ||
+        (activeTab === StatsTab.INDIVIDUAL ? state.profile?.team : null);
+  const headerPlayerIsAwper =
+    String(headerPlayer?.role).toUpperCase() === Constants.PlayerRole.SNIPER ||
+    String(headerPlayer?.role).toUpperCase() === Constants.UserRole.AWPER;
   const currentLoading =
     activeTab === StatsTab.GLOBAL_PLAYERS ? globalPlayerMatchesLoading : loading;
   const globalPlayerTotalPages = Math.max(1, Math.ceil(numGlobalPlayers / GlobalPlayerPageSize));
@@ -1827,6 +2832,10 @@ export default function LeagueStatsConcept(): JSX.Element {
       return games.map((game: any) => {
         const gameEvents = getEventsForGames(item.match, [game], true);
         const { plusMinus, rating } = getPlayerPerformanceFromEvents(playerId, gameEvents);
+        const yourRating =
+          activeTab === StatsTab.TEAMMATES && state.profile?.player?.id
+            ? getPlayerPerformanceFromEvents(state.profile.player.id, gameEvents).rating
+            : null;
 
         const ownGameTeam = game.teams?.find(
           (gameTeam: any) => gameTeam.teamId === ownTeam?.teamId,
@@ -1848,14 +2857,24 @@ export default function LeagueStatsConcept(): JSX.Element {
           oppScore: oppGameTeam?.score ?? 0,
           plusMinus,
           rating,
+          yourRating,
         };
       });
     });
-    const totalPages = Math.max(1, Math.ceil(flattenedRows.length / 15));
-    const pagedRows = flattenedRows.slice((matchPage - 1) * 15, matchPage * 15);
+    const matchHistoryPageSize =
+      activeTab === StatsTab.TEAMMATES
+        ? TeammateMatchHistoryPageSize
+        : activeTab === StatsTab.INDIVIDUAL
+          ? IndividualMatchHistoryPageSize
+          : MatchHistoryPageSize;
+    const totalPages = Math.max(1, Math.ceil(flattenedRows.length / matchHistoryPageSize));
+    const pagedRows = flattenedRows.slice(
+      (matchPage - 1) * matchHistoryPageSize,
+      matchPage * matchHistoryPageSize,
+    );
 
     return (
-      <article className="border-base-content/10 rounded-none border">
+      <article className="border-base-content/10 rounded-lg border">
         <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
           <button
             className={cx(
@@ -1864,8 +2883,21 @@ export default function LeagueStatsConcept(): JSX.Element {
             )}
             onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
           >
-            Match History
+            {activeTab === StatsTab.TEAMMATES ? 'Match History (Together)' : 'Match History'}
           </button>
+          {(activeTab === StatsTab.INDIVIDUAL ||
+            activeTab === StatsTab.GLOBAL_PLAYERS ||
+            activeTab === StatsTab.TEAMMATES) && (
+            <button
+              className={cx(
+                'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+                activeDetailView === StatsDetailView.EVENTS && 'btn-active!',
+              )}
+              onClick={() => setActiveDetailView(StatsDetailView.EVENTS)}
+            >
+              Events
+            </button>
+          )}
           {activeTab !== StatsTab.GLOBAL_PLAYERS && (
             <button
               className={cx(
@@ -1879,7 +2911,7 @@ export default function LeagueStatsConcept(): JSX.Element {
           )}
         </header>
         <div className="overflow-x-auto">
-          <table className="table-zebra table-sm table">
+          <table className="table-sm table">
             <thead>
               <tr>
                 <th>Team</th>
@@ -1890,12 +2922,15 @@ export default function LeagueStatsConcept(): JSX.Element {
                 <th className="text-center">Result</th>
                 <th className="text-center">Score</th>
                 <th className="text-center">+ / -</th>
-                <th className="text-center">Rating</th>
+                <th className="text-center">
+                  {activeTab === StatsTab.TEAMMATES ? 'Teammate Rating' : 'Rating'}
+                </th>
+                {activeTab === StatsTab.TEAMMATES && <th className="text-center">Your Rating</th>}
               </tr>
             </thead>
             <tbody>
-              {pagedRows.map((row) => (
-                <tr key={row.key}>
+              {pagedRows.map((row, rowIndex) => (
+                <tr key={row.key} className={rowIndex % 2 ? 'bg-base-200/50' : 'bg-base-100'}>
                   <td>
                     <span className="inline-flex items-center gap-2">
                       <img
@@ -1958,11 +2993,24 @@ export default function LeagueStatsConcept(): JSX.Element {
                   <td className={cx('text-center font-semibold', getRatingColorClass(row.rating))}>
                     {row.rating.toFixed(2)}
                   </td>
+                  {activeTab === StatsTab.TEAMMATES && (
+                    <td
+                      className={cx(
+                        'text-center font-semibold',
+                        getRatingColorClass(row.yourRating || 0),
+                      )}
+                    >
+                      {(row.yourRating || 0).toFixed(2)}
+                    </td>
+                  )}
                 </tr>
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={9} className="text-base-content/60 py-8 text-center text-sm">
+                  <td
+                    colSpan={activeTab === StatsTab.TEAMMATES ? 10 : 9}
+                    className="text-base-content/60 py-8 text-center text-sm"
+                  >
                     No matches for selected filters.
                   </td>
                 </tr>
@@ -1971,7 +3019,7 @@ export default function LeagueStatsConcept(): JSX.Element {
           </table>
         </div>
         {rows.length > 0 && (
-          <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
+          <footer className="border-base-content/10 bg-base-100 relative z-10 flex shrink-0 items-center justify-end gap-2 border-t px-3 py-2">
             <button
               className="btn btn-ghost btn-xs rounded-none"
               disabled={matchPage <= 1}
@@ -1995,655 +3043,1585 @@ export default function LeagueStatsConcept(): JSX.Element {
     );
   };
 
-  const renderWeaponTable = (rows: WeaponPerformance[]) => (
-    <article className="border-base-content/10 flex min-h-0 flex-col rounded-none border">
-      <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
-        <button
-          className={cx(
-            'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
-            activeDetailView === StatsDetailView.MATCH_HISTORY && 'btn-active!',
-          )}
-          onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
-        >
-          Match History
-        </button>
-        <button
-          className={cx(
-            'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
-            activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
-          )}
-          onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
-        >
-          Weapons
-        </button>
-      </header>
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-        <table className="table-zebra table-sm table">
-          <thead>
-            <tr>
-              <th>Weapon</th>
-              <th className="text-center">Kills</th>
-              <th className="text-center">HS Kills</th>
-              <th className="text-center">HS %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.weapon}>
-                <td>
-                  <span className="inline-flex items-center gap-3 font-semibold">
-                    <span className="border-base-content/10 bg-base-200/70 flex h-16 w-28 items-center justify-center border">
-                      {row.image ? (
-                        <img src={row.image} className="max-h-14 max-w-24 object-contain" />
-                      ) : (
-                        <span className="text-base-content/40 text-xs">-</span>
-                      )}
-                    </span>
-                    <span>{row.label}</span>
-                  </span>
-                </td>
-                <td className="text-center">{row.kills}</td>
-                <td className="text-center">{row.headshots}</td>
-                <td
-                  className={cx(
-                    'text-center font-semibold',
-                    row.hsPercent >= 50
-                      ? 'text-success'
-                      : row.hsPercent <= 20
-                        ? 'text-error'
-                        : 'text-inherit',
-                  )}
-                >
-                  {row.hsPercent}%
-                </td>
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={4} className="text-base-content/60 py-8 text-center text-sm">
-                  No weapon stats for selected filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </article>
-  );
+  const renderWeaponTable = (rows: WeaponPerformance[]) => {
+    const weaponPageSize =
+      activeTab === StatsTab.TEAMMATES ? TeammateWeaponPageSize : WeaponPageSize;
+    const totalPages = Math.max(1, Math.ceil(rows.length / weaponPageSize));
+    const pagedRows = rows.slice((weaponPage - 1) * weaponPageSize, weaponPage * weaponPageSize);
 
-  const renderGlobalPlayersList = () => (
-    <article className="border-base-content/10 flex h-full min-h-0 flex-col border">
-      <header className="border-base-content/10 grid grid-cols-1 gap-3 border-b p-3 xl:grid-cols-[1fr_180px_160px_130px_150px_180px]">
-        <input
-          type="text"
-          placeholder="Search players"
-          className="input input-sm input-bordered w-full rounded-none"
-          value={selectedGlobalPlayerName}
-          onChange={(event) => setSelectedGlobalPlayerName(event.target.value)}
-        />
-        <select
-          className="select select-sm select-bordered w-full rounded-none"
-          value={selectedGlobalListTeamId}
-          onChange={(event) => setSelectedGlobalListTeamId(event.target.value)}
-        >
-          <option value="">Any team</option>
-          {careerTeamOptions.map((team: any) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="select select-sm select-bordered w-full rounded-none"
-          value={selectedGlobalFederationSlug}
-          onChange={(event) => setSelectedGlobalFederationSlug(event.target.value)}
-        >
-          <option value="">Any federation</option>
-          <option value={Constants.FederationSlug.ESPORTS_EUROPA}>Europe</option>
-          <option value={Constants.FederationSlug.ESPORTS_ASIA}>Asia</option>
-          <option value={Constants.FederationSlug.ESPORTS_AMERICAS}>Americas</option>
-          <option value={Constants.FederationSlug.ESPORTS_OCE}>Oceania</option>
-        </select>
-        <select
-          className="select select-sm select-bordered w-full rounded-none"
-          value={selectedGlobalYear}
-          onChange={(event) => setSelectedGlobalYear(event.target.value)}
-        >
-          <option value="">All years</option>
-          {activeCareerYears.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-        <select
-          className="select select-sm select-bordered w-full rounded-none"
-          value={selectedGlobalPlayerTierId}
-          onChange={(event) => setSelectedGlobalPlayerTierId(event.target.value)}
-        >
-          <option value="">Any tier</option>
-          {Constants.Prestige.map((tierSlug, tierId) => (
-            <option key={tierSlug} value={tierId}>
-              {getTierDisplayLabel(tierSlug)}
-            </option>
-          ))}
-        </select>
-        <select
-          className="select select-sm select-bordered w-full rounded-none"
-          value={selectedGlobalPlayerSort}
-          onChange={(event) =>
-            setSelectedGlobalPlayerSort(
-              event.target.value as 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team',
-            )
-          }
-        >
-          <option value="rating">Sort by rating</option>
-          <option value="kills">Sort by kills</option>
-          <option value="deaths">Sort by deaths</option>
-          <option value="maps">Sort by maps</option>
-          <option value="name">Sort by name</option>
-          <option value="team">Sort by team</option>
-        </select>
-      </header>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="table-pin-rows table-sm table">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Team</th>
-              <th className="text-center">Tier</th>
-              <th className="text-center">Rating</th>
-              <th className="text-center">Maps</th>
-              <th className="text-center">K / D / A</th>
-            </tr>
-          </thead>
-          <tbody>
-            {globalPlayersLoading && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center">
-                  <span className="loading loading-bars loading-md" />
-                </td>
-              </tr>
+    return (
+      <article className="border-base-content/10 flex min-h-0 flex-col rounded-lg border">
+        <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.MATCH_HISTORY && 'btn-active!',
             )}
-            {!globalPlayersLoading &&
-              globalPlayers.map((player) => (
+            onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
+          >
+            {activeTab === StatsTab.TEAMMATES ? 'Match History (Together)' : 'Match History'}
+          </button>
+          {(activeTab === StatsTab.INDIVIDUAL || activeTab === StatsTab.TEAMMATES) && (
+            <button
+              className={cx(
+                'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+                activeDetailView === StatsDetailView.EVENTS && 'btn-active!',
+              )}
+              onClick={() => setActiveDetailView(StatsDetailView.EVENTS)}
+            >
+              Events
+            </button>
+          )}
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
+            )}
+            onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
+          >
+            Weapons
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <table className="table-zebra table-sm table">
+            <thead>
+              <tr>
+                <th>Weapon</th>
+                <th className="text-center">Kills</th>
+                <th className="text-center">HS Kills</th>
+                <th className="text-center">HS %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedRows.map((row) => (
                 <tr
-                  key={player.id}
-                  data-interaction-hover-sound="none"
-                  className="hover:bg-base-content/10 cursor-pointer"
-                  onClick={() => {
-                    setSelectedGlobalDetailCompetitionGroup('');
-                    setSelectedGlobalDetailMap('');
-                    setSelectedGlobalDetailSeason('');
-                    setSelectedGlobalDetailTimeframe('');
-                    setSelectedGlobalDetailMatchType('');
-                    setSelectedGlobalDetailCompetitionStage('');
-                    setSelectedGlobalDetailCareerTeamId('');
-                    setSelectedGlobalPlayerId(String(player.id));
-                    setActiveDetailView(StatsDetailView.MATCH_HISTORY);
-                  }}
+                  key={row.weapon}
+                  className={activeTab === StatsTab.TEAMMATES ? '[&>td]:py-1' : undefined}
                 >
                   <td>
-                    <span className="flex min-w-0 items-center gap-2">
-                      {player.country?.code && (
-                        <span className={cx('fp', player.country.code.toLowerCase())} />
-                      )}
-                      <span className="truncate font-semibold">{player.name}</span>
+                    <span className="inline-flex items-center gap-3 font-semibold">
+                      <span
+                        className={cx(
+                          'border-base-content/10 bg-base-200/70 flex items-center justify-center border',
+                          activeTab === StatsTab.TEAMMATES ? 'h-15 w-27' : 'h-16 w-28',
+                        )}
+                      >
+                        {row.image ? (
+                          <img
+                            src={row.image}
+                            className={cx(
+                              'object-contain',
+                              activeTab === StatsTab.TEAMMATES
+                                ? 'max-h-13 max-w-23'
+                                : 'max-h-14 max-w-24',
+                            )}
+                          />
+                        ) : (
+                          <span className="text-base-content/40 text-xs">-</span>
+                        )}
+                      </span>
+                      <span>{row.label}</span>
+                    </span>
+                  </td>
+                  <td className="text-center">{row.kills}</td>
+                  <td className="text-center">{row.headshots}</td>
+                  <td
+                    className={cx(
+                      'text-center font-semibold',
+                      row.hsPercent >= 50
+                        ? 'text-success'
+                        : row.hsPercent <= 20
+                          ? 'text-error'
+                          : 'text-inherit',
+                    )}
+                  >
+                    {row.hsPercent}%
+                  </td>
+                </tr>
+              ))}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={4} className="text-base-content/60 py-8 text-center text-sm">
+                    No weapon stats for selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 0 && (
+          <footer className="border-base-content/10 bg-base-100 relative z-10 flex shrink-0 items-center justify-end gap-2 border-t px-3 py-2">
+            <button
+              className="btn btn-ghost btn-xs rounded-none"
+              disabled={weaponPage <= 1}
+              onClick={() => setWeaponPage((page) => Math.max(1, page - 1))}
+            >
+              Prev
+            </button>
+            <span className="text-xs">
+              Page {weaponPage} / {totalPages}
+            </span>
+            <button
+              className="btn btn-ghost btn-xs rounded-none"
+              disabled={weaponPage >= totalPages}
+              onClick={() => setWeaponPage((page) => Math.min(totalPages, page + 1))}
+            >
+              Next
+            </button>
+          </footer>
+        )}
+      </article>
+    );
+  };
+
+  const renderEventTable = () => {
+    const eventPageSize =
+      activeTab === StatsTab.TEAMMATES ? TeammateMatchHistoryPageSize : MatchHistoryPageSize;
+    const totalPages = Math.max(1, Math.ceil(tournamentRows.length / eventPageSize));
+    const pagedRows = tournamentRows.slice(
+      (tournamentPage - 1) * eventPageSize,
+      tournamentPage * eventPageSize,
+    );
+
+    return (
+      <article className="border-base-content/10 rounded-lg border">
+        <header className="border-base-content/10 flex items-center gap-1 border-b px-3 py-2">
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.MATCH_HISTORY && 'btn-active!',
+            )}
+            onClick={() => setActiveDetailView(StatsDetailView.MATCH_HISTORY)}
+          >
+            {activeTab === StatsTab.TEAMMATES ? 'Match History (Together)' : 'Match History'}
+          </button>
+          <button
+            className={cx(
+              'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+              activeDetailView === StatsDetailView.EVENTS && 'btn-active!',
+            )}
+            onClick={() => setActiveDetailView(StatsDetailView.EVENTS)}
+          >
+            Events
+          </button>
+          {(activeTab === StatsTab.INDIVIDUAL || activeTab === StatsTab.TEAMMATES) && (
+            <button
+              className={cx(
+                'btn btn-ghost btn-sm rounded-none px-3 text-sm font-semibold',
+                activeDetailView === StatsDetailView.WEAPONS && 'btn-active!',
+              )}
+              onClick={() => setActiveDetailView(StatsDetailView.WEAPONS)}
+            >
+              Weapons
+            </button>
+          )}
+        </header>
+        <div className="overflow-x-auto">
+          <table className="table-sm table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Event</th>
+                <th>Team</th>
+                <th className="text-center">Maps</th>
+                <th className="text-center">+ / -</th>
+                <th className="text-center">Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedRows.map((row, rowIndex) => (
+                <tr
+                  key={`${row.label}-${rowIndex}`}
+                  className={rowIndex % 2 ? 'bg-base-200/50' : 'bg-base-100'}
+                >
+                  <td className={cx('font-semibold', row.placement === '1st' && 'text-warning')}>
+                    {row.placement}
+                  </td>
+                  <td>
+                    <span className="inline-flex items-center gap-2">
+                      <img src={row.eventThumbnail} className="size-5 object-contain" />
+                      <Link to={row.href} className="link link-hover font-semibold">
+                        {row.label}
+                      </Link>
                     </span>
                   </td>
                   <td>
-                    {player.team ? (
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        {player.team.blazon && (
-                          <img src={player.team.blazon} className="size-5 object-contain" />
-                        )}
-                        <span className="truncate">{player.team.name}</span>
-                      </span>
-                    ) : (
-                      '-'
-                    )}
+                    <img src={row.teamBlazon} className="h-5 w-5 object-contain" />
                   </td>
-                  <td className="text-center">
-                    {player.team?.tier !== undefined && player.team?.tier !== null
-                      ? getTierDisplayLabel(Constants.Prestige[player.team.tier])
-                      : '-'}
+                  <td className="text-center">{row.mapsPlayed}</td>
+                  <td
+                    className={cx(
+                      'text-center font-semibold',
+                      row.plusMinus > 0
+                        ? 'text-success'
+                        : row.plusMinus < 0
+                          ? 'text-error'
+                          : 'text-inherit',
+                    )}
+                  >
+                    {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(
+                      row.plusMinus,
+                    )}
                   </td>
                   <td
                     className={cx(
                       'text-center font-semibold',
-                      getRatingColorClass(player.rating || 0),
+                      getRatingColorClass(Number(row.rating)),
                     )}
                   >
-                    {(player.rating || 0).toFixed(2)}
-                  </td>
-                  <td className="text-center">{player.maps || 0}</td>
-                  <td className="text-center">
-                    {player.kills || 0} / {player.deaths || 0} / {player.assists || 0}
+                    {row.rating}
                   </td>
                 </tr>
               ))}
-            {!globalPlayersLoading && !globalPlayers.length && (
+              {!tournamentRows.length && (
+                <tr>
+                  <td colSpan={6} className="text-base-content/60 py-8 text-center text-sm">
+                    No events for selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {tournamentRows.length > 0 && (
+          <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
+            <button
+              className="btn btn-ghost btn-xs rounded-none"
+              disabled={tournamentPage <= 1}
+              onClick={() => setTournamentPage((page) => Math.max(1, page - 1))}
+            >
+              Prev
+            </button>
+            <span className="text-xs">
+              Page {tournamentPage} / {totalPages}
+            </span>
+            <button
+              className="btn btn-ghost btn-xs rounded-none"
+              disabled={tournamentPage >= totalPages}
+              onClick={() => setTournamentPage((page) => Math.min(totalPages, page + 1))}
+            >
+              Next
+            </button>
+          </footer>
+        )}
+      </article>
+    );
+  };
+
+  const featuredGlobalPlayer =
+    globalPlayers.find((player) => String(player.id) === selectedGlobalPlayerPreviewId) ||
+    globalPlayers[0];
+  const miniPreviewPlayer = globalPlayerPreviewProfile || featuredGlobalPlayer;
+  const miniPreviewTeam = globalPlayerPreviewProfile?.team || featuredGlobalPlayer?.team;
+  const miniPreviewIsAwper =
+    String(miniPreviewPlayer?.role).toUpperCase() === Constants.PlayerRole.SNIPER ||
+    String(miniPreviewPlayer?.role).toUpperCase() === Constants.UserRole.AWPER;
+  const globalActiveFilterLabels = [
+    selectedGlobalFederationSlug
+      ? selectedGlobalFederationSlug.replace('esports-', '').replace(/-/g, ' ')
+      : '',
+    selectedGlobalCountryCode,
+    selectedGlobalPlayerTierId
+      ? getTierDisplayLabel(Constants.Prestige[Number(selectedGlobalPlayerTierId)])
+      : '',
+    selectedGlobalPlayerRole === Constants.PlayerRole.SNIPER
+      ? 'AWPer'
+      : selectedGlobalPlayerRole === Constants.PlayerRole.RIFLER
+        ? 'Rifler'
+        : '',
+    selectedGlobalYear,
+  ].filter(Boolean);
+
+  const renderGlobalPlayersList = () => (
+    <article className="flex h-full min-h-0 flex-col gap-3">
+      <header className="border-base-content/10 grid min-h-28 shrink-0 grid-cols-[180px_260px_minmax(0,1fr)] overflow-hidden rounded-lg border">
+        <section className="border-base-content/10 flex flex-col justify-center border-r px-5">
+          <p className="text-base-content/60 text-xs">Players</p>
+          <p className="text-success mt-1 text-3xl font-black">
+            {numGlobalPlayers.toLocaleString()}
+          </p>
+          <p className="text-base-content/60 text-xs">total players</p>
+        </section>
+        <section className="border-base-content/10 flex flex-col justify-center border-r px-5">
+          <p className="text-base-content/60 text-xs">Active Filters</p>
+          <p className="mt-1 text-sm font-semibold">
+            {globalActiveFilterLabels.length ? globalActiveFilterLabels.join(' · ') : 'None'}
+          </p>
+          <p className="text-base-content/60 text-xs">
+            {globalActiveFilterLabels.length ? 'Showing filtered players' : 'Showing all players'}
+          </p>
+        </section>
+        {featuredGlobalPlayer ? (
+          <section className="relative flex min-w-0 items-center px-5">
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-42 overflow-hidden">
+              {miniPreviewTeam?.blazon && (
+                <img
+                  src={miniPreviewTeam.blazon}
+                  className="absolute inset-0 h-full w-full scale-110 object-contain object-center opacity-20"
+                />
+              )}
+              <img
+                src={miniPreviewPlayer?.avatar || 'resources://avatars/empty.png'}
+                className="absolute top-0 left-1/2 h-auto max-w-none -translate-x-1/2"
+                style={{ width: 180, maxWidth: 'none' }}
+              />
+            </div>
+            <div className="relative ml-40 min-w-0 px-2">
+              <div className="flex items-center gap-2">
+                {miniPreviewPlayer?.country?.code && (
+                  <span className={cx('fp', miniPreviewPlayer.country.code.toLowerCase())} />
+                )}
+                <p className="truncate text-xl font-bold">{miniPreviewPlayer?.name}</p>
+                {miniPreviewIsAwper && (
+                  <span
+                    className="bg-success text-success-content inline-flex size-6 items-center justify-center rounded-lg"
+                    title="Main AWPer"
+                  >
+                    <FaCrosshairs className="size-3" />
+                  </span>
+                )}
+              </div>
+              {miniPreviewTeam && (
+                <p className="text-base-content/80 mt-1 flex items-center gap-2 text-sm">
+                  {miniPreviewTeam.blazon && (
+                    <img src={miniPreviewTeam.blazon} className="size-5 object-contain" />
+                  )}
+                  {miniPreviewTeam.name}
+                </p>
+              )}
+              {(globalPlayerPreviewAwards.wins > 0 || globalPlayerPreviewAwards.mvps > 0) && (
+                <div className="mt-2 flex gap-2">
+                  {globalPlayerPreviewAwards.wins > 0 && (
+                    <span className="badge border-yellow-300 bg-yellow-500/20 text-xs font-semibold text-yellow-200">
+                      {globalPlayerPreviewAwards.wins}x Major winner
+                    </span>
+                  )}
+                  {globalPlayerPreviewAwards.mvps > 0 && (
+                    <span className="badge border-slate-300 bg-slate-500/30 text-xs font-semibold text-slate-100">
+                      {globalPlayerPreviewAwards.mvps}x Major MVP
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="ml-auto grid grid-cols-3 gap-2">
+              <div className="border-base-content/10 bg-base-200/40 min-w-24 rounded-lg border px-3 py-2">
+                <p
+                  className={cx(
+                    'text-xl font-black',
+                    getRatingColorClass(featuredGlobalPlayer.rating || 0),
+                  )}
+                >
+                  {(featuredGlobalPlayer.rating || 0).toFixed(2)}
+                </p>
+                <p className="text-base-content/60 text-xs">Rating</p>
+              </div>
+              <div className="border-base-content/10 bg-base-200/40 min-w-24 rounded-lg border px-3 py-2">
+                <p className="text-xl font-black">{featuredGlobalPlayer.maps || 0}</p>
+                <p className="text-base-content/60 text-xs">Maps played</p>
+              </div>
+              <div className="border-base-content/10 bg-base-200/40 min-w-36 rounded-lg border px-3 py-2">
+                <p className="text-lg font-black">
+                  {featuredGlobalPlayer.kills || 0} / {featuredGlobalPlayer.deaths || 0} /{' '}
+                  {featuredGlobalPlayer.assists || 0}
+                </p>
+                <p className="text-base-content/60 text-xs">K / D / A</p>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="text-base-content/50 flex items-center justify-center text-sm">
+            No player preview available
+          </section>
+        )}
+      </header>
+      <div className="border-base-content/10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="table-pin-rows table-sm table">
+            <thead>
               <tr>
-                <td colSpan={6} className="text-base-content/60 py-12 text-center text-sm">
-                  No players found.
-                </td>
+                <th>Player</th>
+                <th>Team</th>
+                <th className="text-center">Tier</th>
+                <th className="text-center">Rating</th>
+                <th className="text-center">Maps</th>
+                <th className="text-center">K / D / A</th>
+                <th className="w-12" aria-label="Open player statistics" />
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {globalPlayersLoading && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <span className="loading loading-bars loading-md" />
+                  </td>
+                </tr>
+              )}
+              {!globalPlayersLoading &&
+                globalPlayers.map((player, index) => (
+                  <tr
+                    key={player.id}
+                    data-interaction-hover-sound="none"
+                    className={cx(
+                      'hover:bg-base-content/10 cursor-pointer',
+                      String(player.id) === selectedGlobalPlayerPreviewId
+                        ? 'bg-primary/10'
+                        : index % 2
+                          ? 'bg-base-200/50'
+                          : 'bg-base-100',
+                    )}
+                    onClick={() => setSelectedGlobalPlayerPreviewId(String(player.id))}
+                  >
+                    <td>
+                      <span className="flex min-w-0 items-center gap-2">
+                        {player.country?.code && (
+                          <span className={cx('fp', player.country.code.toLowerCase())} />
+                        )}
+                        <span className="truncate font-semibold">{player.name}</span>
+                      </span>
+                    </td>
+                    <td>
+                      {player.team ? (
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          {player.team.blazon && (
+                            <img src={player.team.blazon} className="size-5 object-contain" />
+                          )}
+                          <span className="truncate">{player.team.name}</span>
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td className="text-center">
+                      {player.team?.tier !== undefined && player.team?.tier !== null
+                        ? getTierDisplayLabel(Constants.Prestige[player.team.tier])
+                        : '-'}
+                    </td>
+                    <td
+                      className={cx(
+                        'text-center font-semibold',
+                        getRatingColorClass(player.rating || 0),
+                      )}
+                    >
+                      {(player.rating || 0).toFixed(2)}
+                    </td>
+                    <td className="text-center">{player.maps || 0}</td>
+                    <td className="text-center">
+                      {player.kills || 0} / {player.deaths || 0} / {player.assists || 0}
+                    </td>
+                    <td className="w-12 text-center">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs rounded-lg"
+                        title={`View ${player.name}'s statistics`}
+                        aria-label={`View ${player.name}'s statistics`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedGlobalDetailCompetitionGroup('');
+                          setSelectedGlobalDetailMap('');
+                          setSelectedGlobalDetailSeason('');
+                          setSelectedGlobalDetailTimeframe('');
+                          setSelectedGlobalDetailMatchType('');
+                          setSelectedGlobalDetailCompetitionStage('');
+                          setSelectedGlobalDetailCareerTeamId('');
+                          setSelectedGlobalPlayerId(String(player.id));
+                          setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+                        }}
+                      >
+                        <FaChevronRight />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              {!globalPlayersLoading && !globalPlayers.length && (
+                <tr>
+                  <td colSpan={7} className="text-base-content/60 py-12 text-center text-sm">
+                    No players found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <footer className="border-base-content/10 flex items-center justify-between border-t px-3 py-2">
+          <Pagination
+            numPage={globalPlayerPage}
+            totalPages={globalPlayerTotalPages}
+            onChange={setGlobalPlayerPage}
+            onClick={setGlobalPlayerPage}
+          />
+          <span className="font-mono text-xs">{numGlobalPlayers} Results</span>
+        </footer>
       </div>
-      <footer className="border-base-content/10 flex items-center justify-between border-t px-3 py-2">
-        <Pagination
-          numPage={globalPlayerPage}
-          totalPages={globalPlayerTotalPages}
-          onChange={setGlobalPlayerPage}
-          onClick={setGlobalPlayerPage}
-        />
-        <span className="font-mono text-xs">{numGlobalPlayers} Results</span>
-      </footer>
     </article>
   );
 
   return (
-    <section className="bg-base-300/40 fixed inset-x-0 top-16 bottom-0 box-border min-h-0 overflow-hidden">
-      <header className="stack-x border-base-content/10 bg-base-200 w-full gap-0! border-b">
-        {Object.values(StatsTab)
-          .filter((tab) => tab !== StatsTab.GLOBAL_PLAYERS || canViewGlobalPlayerStats)
-          .map((tab) => (
-            <button
-              key={tab}
-              className={cx(
-                'btn btn-wide border-base-content/10 rounded-none border-0 border-r font-normal shadow-none',
-                activeTab === tab && 'btn-active!',
-              )}
-              onClick={() => {
-                if (selectedGlobalPlayerId) {
-                  closeGlobalPlayerDetail();
-                }
-                setActiveTab(tab);
-              }}
-            >
-              {tab === StatsTab.INDIVIDUAL
-                ? 'Individual'
-                : tab === StatsTab.TOURNAMENTS
-                  ? 'Tournaments'
-                  : tab === StatsTab.TEAMMATES
-                    ? 'Teammates'
-                    : 'All Players'}
-            </button>
-          ))}
-      </header>
-
-      <div
-        className={`grid h-[calc(100%-48px)] min-h-0 grid-cols-1 gap-0 ${activeTab === StatsTab.TOURNAMENTS || isGlobalPlayerListView ? '' : 'xl:grid-cols-[310px_1fr]'}`}
-      >
-        {activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
-          <aside className="border-base-content/10 bg-base-100 border-r p-4">
-            <h2 className="text-2xl font-bold">Filters</h2>
-            <p className="text-base-content/60 mt-1 text-xs">
-              Timeframe, competition, season, map and team filters.
-            </p>
-
-            {activeTab === StatsTab.TEAMMATES && (
-              <section className="border-base-content/10 mt-4 border p-2">
-                <p className="text-base-content/70 mb-2 text-xs uppercase">Teammates</p>
-                <div
-                  className={cx(
-                    'grid grid-cols-3 gap-2',
-                    teammates.length > 6 && 'max-h-36 overflow-y-auto pr-1',
-                  )}
-                >
-                  {teammates.map((teammate) => (
+    <>
+      <section className="bg-base-100 fixed inset-x-0 top-16 bottom-0 box-border min-h-0 overflow-hidden">
+        <div className="grid h-full min-h-0 grid-cols-1 gap-0 xl:grid-cols-[310px_1fr]">
+          <aside className="border-base-content/10 bg-base-100 min-h-0 border-r">
+            <header className="border-base-content/10 flex h-22 items-center border-b px-4">
+              <nav className="mode-tabs mode-tabs-compact" aria-label="Statistics view">
+                {Object.values(StatsTab)
+                  .filter(
+                    (tab) =>
+                      tab !== StatsTab.TOURNAMENTS &&
+                      (tab !== StatsTab.GLOBAL_PLAYERS || canViewGlobalPlayerStats),
+                  )
+                  .map((tab) => (
                     <button
-                      key={teammate.id}
-                      className={`border p-1 ${selectedTeammateId === String(teammate.id) ? 'border-primary' : 'border-base-content/10'}`}
-                      onClick={() => setSelectedTeammateId(String(teammate.id))}
+                      key={tab}
+                      className={cx(activeTab === tab && 'is-active')}
+                      onClick={() => {
+                        if (selectedGlobalPlayerId) {
+                          closeGlobalPlayerDetail();
+                        }
+                        setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+                        setActiveTab(tab);
+                      }}
                     >
-                      <img
-                        src={teammate.avatar || 'resources://avatars/empty.png'}
-                        className="mx-auto h-14 w-14 object-cover"
-                      />
+                      {tab === StatsTab.INDIVIDUAL
+                        ? 'Individual'
+                        : tab === StatsTab.TOURNAMENTS
+                          ? 'Events'
+                          : tab === StatsTab.TEAMMATES
+                            ? 'Teammates'
+                            : 'Players'}
                     </button>
                   ))}
+              </nav>
+            </header>
+
+            {isGlobalPlayerListView && (
+              <div className="min-h-0 overflow-y-auto p-4">
+                <h2 className="text-2xl font-bold">Filters</h2>
+                <p className="text-base-content/60 mt-1 text-xs">Find and filter players</p>
+                <div className="mt-4 space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Search players..."
+                    className="input input-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg"
+                    value={selectedGlobalPlayerName}
+                    onChange={(event) => {
+                      setSelectedGlobalPlayerName(event.target.value);
+                      setGlobalPlayerPage(1);
+                    }}
+                  />
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Federation</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalFederationSlug}
+                      onChange={(event) => {
+                        setSelectedGlobalFederationSlug(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any federation</option>
+                      <option value={Constants.FederationSlug.ESPORTS_EUROPA}>Europe</option>
+                      <option value={Constants.FederationSlug.ESPORTS_ASIA}>Asia</option>
+                      <option value={Constants.FederationSlug.ESPORTS_AMERICAS}>Americas</option>
+                      <option value={Constants.FederationSlug.ESPORTS_OCE}>Oceania</option>
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Country</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalCountryCode}
+                      onChange={(event) => {
+                        setSelectedGlobalCountryCode(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any country</option>
+                      {globalPlayerCountries.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Tier</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalPlayerTierId}
+                      onChange={(event) => {
+                        setSelectedGlobalPlayerTierId(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any tier</option>
+                      {Constants.Prestige.map((tierSlug, tierId) => (
+                        <option key={tierSlug} value={tierId}>
+                          {getTierDisplayLabel(tierSlug)}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Role</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalPlayerRole}
+                      onChange={(event) => {
+                        setSelectedGlobalPlayerRole(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any role</option>
+                      <option value={Constants.PlayerRole.RIFLER}>Rifler</option>
+                      <option value={Constants.PlayerRole.SNIPER}>AWPer</option>
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalListTeamId}
+                      onChange={(event) => {
+                        setSelectedGlobalListTeamId(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any team</option>
+                      {globalPlayerTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Season</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalYear}
+                      onChange={(event) => {
+                        setSelectedGlobalYear(event.target.value);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">All seasons</option>
+                      {activeCareerYears.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">
+                      Transfer status
+                    </label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalTransferStatus}
+                      onChange={(event) => {
+                        setSelectedGlobalTransferStatus(
+                          event.target.value as '' | 'listed' | 'retired',
+                        );
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="">Any status</option>
+                      <option value="listed">Transfer listed</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Sort by</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalPlayerSort}
+                      onChange={(event) => {
+                        setSelectedGlobalPlayerSort(
+                          event.target.value as
+                            | 'rating'
+                            | 'kills'
+                            | 'deaths'
+                            | 'maps'
+                            | 'name'
+                            | 'team',
+                        );
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      <option value="rating">Rating</option>
+                      <option value="kills">Kills</option>
+                      <option value="deaths">Deaths</option>
+                      <option value="maps">Maps</option>
+                      <option value="name">Name</option>
+                      <option value="team">Team</option>
+                    </select>
+                  </fieldset>
+                  <button
+                    type="button"
+                    className="btn btn-primary w-full rounded-lg"
+                    onClick={() => {
+                      setGlobalPlayerPage(1);
+                      setGlobalPlayerFilterRevision((revision) => revision + 1);
+                    }}
+                  >
+                    Apply filters
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline border-base-content/15 w-full rounded-lg"
+                    onClick={() => {
+                      setSelectedGlobalPlayerName('');
+                      setSelectedGlobalFederationSlug('');
+                      setSelectedGlobalCountryCode('');
+                      setSelectedGlobalPlayerTierId(
+                        String(Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO)),
+                      );
+                      setSelectedGlobalPlayerRole('');
+                      setSelectedGlobalListTeamId('');
+                      setSelectedGlobalYear('');
+                      setSelectedGlobalTransferStatus('');
+                      setSelectedGlobalPlayerSort('rating');
+                      setGlobalPlayerPage(1);
+                      setGlobalPlayerFilterRevision((revision) => revision + 1);
+                    }}
+                  >
+                    Reset filters
+                  </button>
                 </div>
-              </section>
+              </div>
             )}
 
-            <div className="mt-4 space-y-3">
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Competition</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedCompetitionGroup}
-                  onChange={(e) => setActiveSelectedCompetitionGroup(e.target.value)}
-                >
-                  <option value="">Any competition</option>
-                  {competitionOptions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Season</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedSeason}
-                  onChange={(e) => setActiveSelectedSeason(e.target.value)}
-                >
-                  <option value="">All seasons</option>
-                  {seasonOptions.map((season) => (
-                    <option key={season} value={season}>{`Season ${season}`}</option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Timeframe</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedTimeframe}
-                  onChange={(e) => setActiveSelectedTimeframe(e.target.value as TimeframeOption)}
-                >
-                  {TimeframeOptions.map((option) => (
-                    <option key={option || 'all'} value={option}>
-                      {TimeframeLabels[option]}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Map</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedMap}
-                  onChange={(e) => setActiveSelectedMap(e.target.value)}
-                >
-                  <option value="">Any map</option>
-                  {mapOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {Util.convertMapPool(m, settingsAll.general.game)}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Match type</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedMatchType}
-                  onChange={(e) => setActiveSelectedMatchType(e.target.value as MatchTypeOption)}
-                >
-                  {MatchTypeOptions.map((option) => (
-                    <option key={option || 'any'} value={option}>
-                      {MatchTypeLabels[option]}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">
-                  Competition stage
-                </label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedCompetitionStage}
-                  onChange={(e) =>
-                    setActiveSelectedCompetitionStage(e.target.value as CompetitionStageOption)
-                  }
-                >
-                  {CompetitionStageOptions.map((option) => (
-                    <option key={option || 'any'} value={option}>
-                      {CompetitionStageLabels[option]}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-              <fieldset>
-                <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
-                <select
-                  className="select select-sm select-bordered w-full rounded-none"
-                  value={activeSelectedCareerTeamId}
-                  onChange={(e) => setActiveSelectedCareerTeamId(e.target.value)}
-                >
-                  <option value="">Any team</option>
-                  {careerTeamOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            </div>
+            {activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
+              <div className="p-4">
+                <h2 className="text-2xl font-bold">Filters</h2>
+
+                <div className="mt-4 space-y-3">
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">
+                      Competition
+                    </label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedCompetitionGroup}
+                      onChange={(e) => setActiveSelectedCompetitionGroup(e.target.value)}
+                    >
+                      <option value="">Any competition</option>
+                      {competitionOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Season</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedSeason}
+                      onChange={(e) => setActiveSelectedSeason(e.target.value)}
+                    >
+                      <option value="">All seasons</option>
+                      {seasonOptions.map((season) => (
+                        <option key={season} value={season}>{`Season ${season}`}</option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Timeframe</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedTimeframe}
+                      onChange={(e) =>
+                        setActiveSelectedTimeframe(e.target.value as TimeframeOption)
+                      }
+                    >
+                      {TimeframeOptions.map((option) => (
+                        <option key={option || 'all'} value={option}>
+                          {TimeframeLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Map</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedMap}
+                      onChange={(e) => setActiveSelectedMap(e.target.value)}
+                    >
+                      <option value="">Any map</option>
+                      {mapOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {Util.convertMapPool(m, settingsAll.general.game)}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Match type</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedMatchType}
+                      onChange={(e) =>
+                        setActiveSelectedMatchType(e.target.value as MatchTypeOption)
+                      }
+                    >
+                      {MatchTypeOptions.map((option) => (
+                        <option key={option || 'any'} value={option}>
+                          {MatchTypeLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">
+                      Competition stage
+                    </label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedCompetitionStage}
+                      onChange={(e) =>
+                        setActiveSelectedCompetitionStage(e.target.value as CompetitionStageOption)
+                      }
+                    >
+                      {CompetitionStageOptions.map((option) => (
+                        <option key={option || 'any'} value={option}>
+                          {CompetitionStageLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Team</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={activeSelectedCareerTeamId}
+                      onChange={(e) => setActiveSelectedCareerTeamId(e.target.value)}
+                    >
+                      <option value="">Any team</option>
+                      {careerTeamOptions.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                </div>
+              </div>
+            )}
           </aside>
-        )}
 
-        <main
-          className={cx(
-            'min-h-0 p-3',
-            isGlobalPlayerListView
-              ? 'overflow-hidden'
-              : activeTab !== StatsTab.TOURNAMENTS && activeDetailView === StatsDetailView.WEAPONS
+          <main
+            className={cx(
+              'min-h-0 p-3',
+              activeTab === StatsTab.GLOBAL_PLAYERS
                 ? 'overflow-hidden'
-                : 'overflow-y-auto',
-          )}
-        >
-          {isGlobalPlayerListView && renderGlobalPlayersList()}
+                : 'overflow-x-hidden overflow-y-auto',
+            )}
+          >
+            {isGlobalPlayerListView && renderGlobalPlayersList()}
 
-          {currentLoading && (
-            <div className="flex h-full items-center justify-center">
-              <span className="loading loading-bars loading-md" />
-            </div>
-          )}
+            {currentLoading && (
+              <div className="flex h-full items-center justify-center">
+                <span className="loading loading-bars loading-md" />
+              </div>
+            )}
 
-          {!currentLoading && activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
-            <div className={cx(activeDetailView === StatsDetailView.WEAPONS && 'h-full min-h-0')}>
-              {activeTab === StatsTab.GLOBAL_PLAYERS && (
-                <header className="mb-3 flex items-center justify-between">
-                  <button
-                    className="btn btn-ghost btn-sm rounded-none"
-                    onClick={closeGlobalPlayerDetail}
-                  >
-                    Back to players
-                  </button>
-                  <span className="text-base-content/60 text-xs">
-                    Viewing individual statistics
-                  </span>
-                </header>
-              )}
-              <div
-                className={cx(
-                  'grid grid-cols-1 gap-3 2xl:grid-cols-[500px_1fr]',
-                  activeDetailView === StatsDetailView.WEAPONS && 'h-[calc(100%-44px)] min-h-0',
+            {!currentLoading && activeTab !== StatsTab.TOURNAMENTS && !isGlobalPlayerListView && (
+              <div className="space-y-3">
+                {activeTab === StatsTab.GLOBAL_PLAYERS && (
+                  <header className="flex items-center justify-between">
+                    <button
+                      className="btn btn-ghost btn-sm rounded-none"
+                      onClick={closeGlobalPlayerDetail}
+                    >
+                      Back to players
+                    </button>
+                    <span className="text-base-content/60 text-xs">
+                      Viewing individual statistics
+                    </span>
+                  </header>
                 )}
-              >
-                <article className="border-base-content/10 relative border">
+                {activeTab === StatsTab.TEAMMATES && (
+                  <section className="border-base-content/10 flex h-32 gap-2 overflow-hidden rounded-lg border p-2">
+                    {pagedTeammates.map((teammate) => (
+                      <button
+                        key={teammate.id}
+                        type="button"
+                        className={cx(
+                          'border-base-content/10 bg-base-200/35 hover:border-primary/60 relative min-w-0 flex-1 overflow-hidden rounded-lg border transition-colors',
+                          selectedTeammateId === String(teammate.id) &&
+                            'border-primary ring-primary/30 ring-1',
+                        )}
+                        onClick={() => {
+                          setSelectedTeammateId(String(teammate.id));
+                          setActiveDetailView(StatsDetailView.MATCH_HISTORY);
+                        }}
+                      >
+                        <img
+                          src={teammate.avatar || 'resources://avatars/empty.png'}
+                          className="absolute top-0 left-1/2 h-[112px] w-auto max-w-none -translate-x-1/2 object-contain"
+                        />
+                        <span className="from-base-300/95 absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t to-transparent px-2 pt-5 pb-1.5 text-sm font-bold">
+                          {teammate.country?.code && (
+                            <span className={cx('fp', teammate.country.code.toLowerCase())} />
+                          )}
+                          <span className="truncate">{teammate.name}</span>
+                        </span>
+                      </button>
+                    ))}
+                    {!teammates.length && (
+                      <div className="text-base-content/60 flex flex-1 items-center justify-center text-sm">
+                        No teammates match the selected filters.
+                      </div>
+                    )}
+                    {teammates.length > TeammatePageSize && (
+                      <div className="border-base-content/10 bg-base-200/35 flex w-16 shrink-0 flex-col items-center justify-center gap-2 rounded-lg border">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm rounded-lg"
+                          aria-label="Previous teammates"
+                          title="Previous teammates"
+                          disabled={teammatePage <= 1}
+                          onClick={() => {
+                            const nextPage = Math.max(1, teammatePage - 1);
+                            setTeammatePage(nextPage);
+                            const teammate = teammates[(nextPage - 1) * TeammatePageSize];
+                            if (teammate) setSelectedTeammateId(String(teammate.id));
+                          }}
+                        >
+                          <FaChevronLeft />
+                        </button>
+                        <span className="text-base-content/60 text-[10px]">
+                          {teammatePage}/{teammatePageCount}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm rounded-lg"
+                          aria-label="Next teammates"
+                          title="Next teammates"
+                          disabled={teammatePage >= teammatePageCount}
+                          onClick={() => {
+                            const nextPage = Math.min(teammatePageCount, teammatePage + 1);
+                            setTeammatePage(nextPage);
+                            const teammate = teammates[(nextPage - 1) * TeammatePageSize];
+                            if (teammate) setSelectedTeammateId(String(teammate.id));
+                          }}
+                        >
+                          <FaChevronRight />
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                )}
+                <article className="border-base-content/10 relative min-h-44 overflow-hidden rounded-lg border">
                   {hasMapSelected ? (
                     <img
                       src={featuredMapImage}
-                      className="h-full min-h-[520px] w-full object-cover"
+                      className="absolute inset-0 h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="bg-base-300/40 h-full min-h-[520px] w-full" />
+                    <div className="bg-base-300/40 absolute inset-0" />
                   )}
-                  <div className="from-base-300/95 via-base-300/80 to-base-300/45 absolute inset-0 bg-gradient-to-t p-4">
-                    {headerTeamLogo && (
+                  <div className="from-base-300/95 via-base-300/85 to-base-300/60 relative flex min-h-44 items-center bg-gradient-to-r p-5">
+                    <div className="border-base-content/10 pointer-events-none absolute inset-y-0 left-0 w-42 overflow-hidden border-r">
+                      {headerPlayerTeam?.blazon && (
+                        <img
+                          src={headerPlayerTeam.blazon}
+                          className="absolute inset-0 h-full w-full scale-110 object-contain object-center opacity-20"
+                        />
+                      )}
                       <img
-                        src={headerTeamLogo}
-                        className="absolute top-4 right-4 h-14 w-14 object-contain"
+                        src={headerPlayer?.avatar || 'resources://avatars/empty.png'}
+                        className="absolute top-0 left-1/2 h-auto max-w-none -translate-x-1/2"
+                        style={{ width: 240, maxWidth: 'none' }}
                       />
-                    )}
-                    <div className="mb-4 flex items-center gap-3">
-                      <img
-                        src={
-                          (activeTab === StatsTab.TEAMMATES
-                            ? teammates.find((t) => String(t.id) === selectedTeammateId)?.avatar
-                            : activeTab === StatsTab.GLOBAL_PLAYERS
-                              ? selectedGlobalPlayer?.avatar
-                              : state.profile?.player?.avatar) || 'resources://avatars/empty.png'
+                    </div>
+                    {headerPlayer?.id && (
+                      <button
+                        type="button"
+                        title="View team history"
+                        aria-label="View team history"
+                        className="border-base-content/15 bg-base-200/65 hover:border-primary/70 hover:bg-base-300 absolute top-2 left-[178px] flex size-7 items-center justify-center rounded-lg border"
+                        onClick={() =>
+                          api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                            target: '/transfer',
+                            payload: headerPlayer.id,
+                          })
                         }
-                        className="border-base-content/20 h-24 w-24 border object-cover"
-                      />
-                      <div>
-                        <p className="text-2xl font-bold">
-                          {activeTab === StatsTab.TEAMMATES
-                            ? teammates.find((t) => String(t.id) === selectedTeammateId)?.name ||
-                              'Teammate'
-                            : activeTab === StatsTab.GLOBAL_PLAYERS
-                              ? selectedGlobalPlayer?.name || 'Player'
-                              : state.profile?.player?.name || 'Player'}
-                        </p>
-                        <p className="text-base-content/70 text-xs">{headerTeamLabel}</p>
-                        <p className="text-primary text-xs">
-                          {hasMapSelected ? featuredMapLabel || featuredMapSlug : 'All maps'}
+                      >
+                        <FaExternalLinkAlt className="size-2.5" />
+                      </button>
+                    )}
+                    {headerPlayerIsAwper && (
+                      <span
+                        className="bg-success text-success-content absolute top-2 left-[218px] z-10 flex size-7 items-center justify-center rounded-lg"
+                        title="Main AWPer"
+                      >
+                        <FaCrosshairs className="size-3.5" />
+                      </span>
+                    )}
+                    <div className="ml-40 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {headerPlayer?.country?.code && (
+                          <span
+                            className={cx('fp', headerPlayer.country.code.toLowerCase())}
+                            title={headerPlayer.country.name}
+                          />
+                        )}
+                        <p className="truncate text-2xl font-bold">
+                          {headerPlayer?.name || 'Player'}
                         </p>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">Rating</p>
-                        <p className="text-3xl font-black">{summary.avgRating.toFixed(2)}</p>
-                      </article>
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">Avg Kills</p>
-                        <p className="text-3xl font-black">{summary.avgKills}</p>
-                      </article>
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">Kills</p>
-                        <p className="text-3xl font-black">{summary.kills}</p>
-                      </article>
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">Deaths</p>
-                        <p className="text-3xl font-black">{summary.deaths}</p>
-                      </article>
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">K/D</p>
-                        <p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p>
-                      </article>
-                      <article className="bg-base-200/55 p-4">
-                        <p className="text-xs uppercase opacity-70">Maps Played</p>
-                        <p className="text-3xl font-black">{summary.mapsPlayed}</p>
-                      </article>
+                      <div className="text-base-content/80 mt-1 flex items-center gap-2 text-sm">
+                        {!headerPlayer?.retiredAt && headerPlayerTeam?.blazon && (
+                          <img
+                            src={headerPlayerTeam.blazon}
+                            className="size-8 shrink-0 object-contain"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          {activeTab === StatsTab.TEAMMATES ? (
+                            <>
+                              <p className="truncate">
+                                {headerPlayerTeam?.name || 'Former teammate'}
+                              </p>
+                              <p className="text-base-content/60 text-xs">
+                                {sharedTeammateStints.length
+                                  ? sharedTeammateStints
+                                      .map((stint) => {
+                                        const days = Math.max(
+                                          1,
+                                          differenceInCalendarDays(stint.endedAt, stint.startedAt) +
+                                            1,
+                                        );
+                                        return `${formatAppDate(stint.startedAt)} – ${formatAppDate(stint.endedAt)} (${days} ${days === 1 ? 'day' : 'days'})`;
+                                      })
+                                      .join(' · ')
+                                  : 'Shared stint unavailable'}
+                              </p>
+                            </>
+                          ) : headerPlayer?.retiredAt ? (
+                            <p>
+                              Retired{' '}
+                              <span
+                                className="text-base-content/50 inline-flex cursor-help"
+                                aria-label={`Retired on ${formatAppDate(headerPlayer.retiredAt)}`}
+                                onMouseEnter={(event) =>
+                                  showCareerHonorsTooltip(
+                                    event,
+                                    `Retired on ${formatAppDate(headerPlayer.retiredAt)}`,
+                                  )
+                                }
+                                onMouseLeave={() => setCareerHonorsTooltip(null)}
+                              >
+                                (?)
+                              </span>
+                            </p>
+                          ) : (
+                            <p className="truncate">{headerPlayerTeam?.name || 'Free Agent'}</p>
+                          )}
+                          <p className="text-base-content/60 text-xs">
+                            {headerPlayer?.age
+                              ? `${headerPlayer.age} years old`
+                              : 'Age unavailable'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  {activeTab !== StatsTab.TEAMMATES &&
+                    (majorAwardCounts.wins > 0 || majorAwardCounts.mvps > 0) && (
+                      <div className="absolute bottom-1 left-[182px] flex flex-wrap gap-2">
+                        {majorAwardCounts.wins > 0 && (
+                          <span className="badge border-yellow-300 bg-yellow-500/20 px-3 py-2 font-semibold text-yellow-200">
+                            {majorAwardCounts.wins}x Major winner
+                          </span>
+                        )}
+                        {majorAwardCounts.mvps > 0 && (
+                          <span className="badge border-slate-300 bg-slate-500/30 px-3 py-2 font-semibold text-slate-100">
+                            {majorAwardCounts.mvps}x Major MVP
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  {activeTab !== StatsTab.TEAMMATES &&
+                    (notableHonors.length > 0 || careerMvps.length > 0) && (
+                      <section className="border-base-content/10 absolute top-3 right-4 bottom-3 left-[455px] min-w-0 overflow-hidden border-l pl-4">
+                        <header className="flex h-7 items-center gap-2">
+                          <FaTrophy className="text-base-content/70 size-4" />
+                          <h2 className="text-sm font-bold">Notable Trophies</h2>
+                          <span className="bg-base-content/15 h-px flex-1" />
+                          {headerPlayer?.id && showcaseHonors.length < notableHonors.length && (
+                            <button
+                              type="button"
+                              className="text-primary hover:text-primary/80 text-xs font-semibold"
+                              onClick={() =>
+                                api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                                  target: '/transfer',
+                                  payload: headerPlayer.id,
+                                })
+                              }
+                            >
+                              View all notable trophies <span aria-hidden="true">›</span>
+                            </button>
+                          )}
+                        </header>
+                        <div ref={honorsRowRef} className="mt-2 flex min-w-0 gap-2 overflow-hidden">
+                          {careerMvps.length > 0 && (
+                            <article
+                              className="border-base-content/10 bg-base-200/45 flex h-27 min-w-36 shrink-0 cursor-help flex-col items-center justify-center rounded-lg border px-3 text-center"
+                              aria-label={mvpTooltip}
+                              onMouseEnter={(event) => showCareerHonorsTooltip(event, mvpTooltip)}
+                              onMouseLeave={() => setCareerHonorsTooltip(null)}
+                            >
+                              <img
+                                src="resources://competitions/mvp.png"
+                                className="h-12 w-12 object-contain"
+                              />
+                              <p className="text-sm font-bold">MVP x{careerMvps.length}</p>
+                            </article>
+                          )}
+                          {showcaseHonors.map((honor, index) => (
+                            <Link
+                              key={`${honor.key}__${index}`}
+                              to={`/competitions?competitionId=${honor.competitionId}`}
+                              aria-label={`View ${honor.title}`}
+                              className={cx(
+                                'border-base-content/10 bg-base-200/45 hover:border-primary/60 flex h-27 min-w-36 shrink-0 flex-col items-center justify-center rounded-lg border px-3 text-center transition-colors',
+                                honor.tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE &&
+                                  'border-warning/60 bg-warning/10',
+                              )}
+                            >
+                              <img
+                                src={
+                                  Util.getCompetitionHonorThumbnail(honor) ||
+                                  Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                    location: honor.location,
+                                    organizer: honor.organizer,
+                                  })
+                                }
+                                className="h-12 w-12 object-contain"
+                              />
+                              <p className="max-w-56 text-center text-sm leading-tight font-bold">
+                                {honor.title}
+                              </p>
+                            </Link>
+                          ))}
+                        </div>
+                        <div
+                          ref={honorsMeasureRef}
+                          aria-hidden="true"
+                          className="pointer-events-none invisible fixed top-0 left-0 flex gap-2"
+                        >
+                          {notableHonors.map((honor, index) => (
+                            <div
+                              key={`${honor.key}__measure__${index}`}
+                              className="border-base-content/10 bg-base-200/45 flex h-27 min-w-36 shrink-0 flex-col items-center justify-center rounded-lg border px-3 text-center"
+                            >
+                              <img
+                                src={
+                                  Util.getCompetitionHonorThumbnail(honor) ||
+                                  Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                    location: honor.location,
+                                    organizer: honor.organizer,
+                                  })
+                                }
+                                className="h-12 w-12 object-contain"
+                              />
+                              <p className="max-w-56 text-center text-sm leading-tight font-bold">
+                                {honor.title}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
                 </article>
 
-                {activeTab !== StatsTab.GLOBAL_PLAYERS &&
-                activeDetailView === StatsDetailView.WEAPONS
-                  ? renderWeaponTable(weaponRows)
-                  : renderMatchTable(activePerformances)}
-              </div>
-            </div>
-          )}
+                <div
+                  className={cx(
+                    'grid gap-3',
+                    activeTab === StatsTab.TEAMMATES
+                      ? '2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]'
+                      : '2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]',
+                  )}
+                >
+                  <section className="border-base-content/10 flex min-h-0 flex-col rounded-lg border">
+                    <header className="border-base-content/10 border-b px-4 py-3">
+                      <h2 className="text-base font-bold">
+                        {activeTab === StatsTab.TEAMMATES
+                          ? 'Teammate Statistics (Together)'
+                          : 'Career Statistics'}
+                      </h2>
+                    </header>
+                    <div
+                      className={cx(
+                        'grid grid-cols-2 gap-3 p-3 xl:grid-cols-3',
+                        activeTab === StatsTab.TEAMMATES && 'flex-1 grid-rows-2',
+                      )}
+                    >
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">Rating</p>
+                            <p
+                              className={cx(
+                                'text-3xl font-black',
+                                getRatingColorClass(summary.avgRating),
+                              )}
+                            >
+                              {summary.avgRating.toFixed(2)}
+                            </p>
+                          </div>
+                          <FaChartBar className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">Kills</p>
+                            <p className="text-3xl font-black">{summary.kills}</p>
+                          </div>
+                          <FaCrosshairs className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">Deaths</p>
+                            <p className="text-3xl font-black">{summary.deaths}</p>
+                          </div>
+                          <FaSkull className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">Avg Kills</p>
+                            <p className="text-3xl font-black">{summary.avgKills}</p>
+                          </div>
+                          <FaCrosshairs className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">K/D</p>
+                            <p className="text-3xl font-black">{summary.kdRatio.toFixed(2)}</p>
+                          </div>
+                          <GiCrossedSwords className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                      <article className="bg-base-200/55 border-base-content/10 rounded border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase opacity-70">Maps Played</p>
+                            <p className="text-3xl font-black">{summary.mapsPlayed}</p>
+                          </div>
+                          <FaMap className="text-base-content/60 mt-1 size-5" />
+                        </div>
+                      </article>
+                    </div>
+                  </section>
 
-          {!loading && activeTab === StatsTab.TOURNAMENTS && (
-            <article className="border-base-content/10 border">
-              <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
-                Participated tournaments
-              </header>
-              <div className="overflow-x-auto">
-                <table className="table-zebra table-sm table">
-                  <thead>
-                    <tr>
-                      <th>Team</th>
-                      <th>
-                        <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
-                          <span />
-                          <span>Tournament</span>
-                        </span>
-                      </th>
-                      <th>Placement</th>
-                      <th className="text-center">+ / -</th>
-                      <th>Rating</th>
-                      <th>Maps</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tournamentRows
-                      .slice((tournamentPage - 1) * 15, tournamentPage * 15)
-                      .map((row, idx) => (
-                        <tr key={row.label + idx}>
-                          <td>
-                            <img src={row.teamBlazon} className="h-8 w-8 object-contain" />
-                          </td>
-                          <td>
-                            <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
-                              <span className="inline-flex justify-start">
-                                {row.tier?.lan && <CompetitionLocationTag tier={row.tier} />}
-                              </span>
-                              <Link to={row.href} className="link link-hover">
-                                {row.label}
-                              </Link>
-                            </span>
-                          </td>
-                          <td
+                  <section className="border-base-content/10 flex min-h-0 flex-col rounded-lg border">
+                    <header className="border-base-content/10 flex items-center justify-between border-b px-4 py-3">
+                      <h2 className="text-sm font-bold">
+                        {activeTab === StatsTab.TEAMMATES
+                          ? 'Performance (Together)'
+                          : 'Recent Form'}
+                      </h2>
+                      <span className="text-base-content/60 text-xs">Last 10 Maps</span>
+                    </header>
+                    {activeTab === StatsTab.TEAMMATES && (
+                      <div className="grid grid-cols-3 gap-2 px-3 pt-3">
+                        <div className="border-base-content/10 bg-base-200/35 rounded border px-3 py-2">
+                          <p className="text-xl font-black">{togetherRecord.maps}</p>
+                          <p className="text-base-content/60 text-xs">Maps together</p>
+                        </div>
+                        <div className="border-base-content/10 bg-base-200/35 rounded border px-3 py-2">
+                          <p className="text-xl font-black">{togetherRecord.wins}</p>
+                          <p className="text-base-content/60 text-xs">Wins together</p>
+                        </div>
+                        <div className="border-base-content/10 bg-base-200/35 rounded border px-3 py-2">
+                          <p
                             className={cx(
-                              'font-semibold',
-                              row.placement === '#1' ? 'text-warning' : 'text-inherit',
+                              'text-xl font-black',
+                              togetherRecord.winRate > 50
+                                ? 'text-success'
+                                : togetherRecord.winRate < 50
+                                  ? 'text-error'
+                                  : 'text-base-content',
                             )}
                           >
-                            {row.placement}
-                          </td>
-                          <td
-                            className={
-                              row.plusMinus > 0
-                                ? 'text-success text-center font-semibold'
-                                : row.plusMinus < 0
-                                  ? 'text-error text-center font-semibold'
-                                  : 'text-center font-semibold text-inherit'
-                            }
-                          >
-                            {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(
-                              row.plusMinus,
-                            )}
-                          </td>
-                          <td
-                            className={cx('font-semibold', getRatingColorClass(Number(row.rating)))}
-                          >
-                            {row.rating}
-                          </td>
-                          <td>{row.mapsPlayed}</td>
-                        </tr>
-                      ))}
-                    {!tournamentRows.length && (
-                      <tr>
-                        <td colSpan={6} className="text-base-content/60 py-8 text-center text-sm">
-                          No tournament records for selected filters.
-                        </td>
-                      </tr>
+                            {togetherRecord.winRate}%
+                          </p>
+                          <p className="text-base-content/60 text-xs">Win rate together</p>
+                        </div>
+                      </div>
                     )}
-                  </tbody>
-                </table>
+                    {recentForm.length ? (
+                      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_8.25rem] items-stretch gap-3 p-3">
+                        <div className="grid min-h-0 min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-2">
+                          <div className="text-base-content/60 flex h-full min-h-28 flex-col justify-between py-0.5 text-right text-[10px]">
+                            <span>2.00</span>
+                            <span>1.50</span>
+                            <span>1.00</span>
+                            <span>0.50</span>
+                          </div>
+                          <div className="relative h-full min-h-0 min-w-0">
+                            <svg
+                              viewBox="0 0 600 100"
+                              preserveAspectRatio="none"
+                              className="border-base-content/10 h-full min-h-28 w-full overflow-visible border-b bg-[#07161c]"
+                              aria-label="Rating across the last 10 maps"
+                              role="img"
+                            >
+                              <defs>
+                                <linearGradient id="recent-form-fill" x1="0" x2="0" y1="0" y2="1">
+                                  <stop offset="0%" stopColor="#39d98a" stopOpacity="0.22" />
+                                  <stop offset="100%" stopColor="#39d98a" stopOpacity="0.01" />
+                                </linearGradient>
+                              </defs>
+                              {[4, 26, 48, 70, 92].map((line) => (
+                                <line
+                                  key={line}
+                                  x1="16"
+                                  x2="584"
+                                  y1={line}
+                                  y2={line}
+                                  stroke="#31505a"
+                                  strokeOpacity="0.36"
+                                  strokeWidth="0.45"
+                                />
+                              ))}
+                              {recentFormChart.coordinates.map((point) => (
+                                <line
+                                  key={`vertical-${point.x}`}
+                                  x1={point.x}
+                                  x2={point.x}
+                                  y1="4"
+                                  y2="96"
+                                  stroke="#31505a"
+                                  strokeOpacity="0.24"
+                                  strokeWidth="0.45"
+                                />
+                              ))}
+                              <polygon
+                                points={recentFormChart.areaPoints}
+                                fill="url(#recent-form-fill)"
+                              />
+                              {recentFormChart.coordinates.slice(1).map((point, index) => {
+                                const previous = recentFormChart.coordinates[index];
+                                const isLowSegment =
+                                  recentForm[index].rating <= Rating.LOW &&
+                                  recentForm[index + 1].rating <= Rating.LOW;
+                                return (
+                                  <line
+                                    key={`rating-segment-${index}`}
+                                    x1={previous.x}
+                                    y1={previous.y}
+                                    x2={point.x}
+                                    y2={point.y}
+                                    stroke={isLowSegment ? '#fb7165' : '#67e8a4'}
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    vectorEffect="non-scaling-stroke"
+                                  />
+                                );
+                              })}
+                            </svg>
+                            {recentForm.map((match, index) => {
+                              const point = recentFormChart.coordinates[index];
+                              return (
+                                <span
+                                  key={`${index}-${match.rating}`}
+                                  className={cx(
+                                    'pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full',
+                                    match.rating >= Rating.HIGH
+                                      ? 'bg-success'
+                                      : match.rating <= Rating.LOW
+                                        ? 'bg-[#fb7165]'
+                                        : 'bg-base-content',
+                                  )}
+                                  style={{ left: `${(point.x / 600) * 100}%`, top: `${point.y}%` }}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <aside className="flex flex-col justify-center gap-2">
+                          <div className="border-base-content/10 bg-base-200/35 rounded border p-3 text-center">
+                            <p
+                              className={cx(
+                                'text-xl font-black',
+                                getRatingColorClass(recentFormAverage),
+                              )}
+                            >
+                              {recentFormAverage.toFixed(2)}
+                            </p>
+                            <p className="text-base-content/60 text-xs">Average rating</p>
+                          </div>
+                          <div className="border-base-content/10 bg-base-200/35 rounded border p-3 text-center">
+                            <p
+                              className={cx(
+                                'text-lg font-black',
+                                recentFormChange >= 0 ? 'text-success' : 'text-error',
+                              )}
+                            >
+                              {recentFormChange >= 0 ? '↑' : '↓'}{' '}
+                              {Math.abs(recentFormChange).toFixed(0)}%
+                            </p>
+                            <p className="text-base-content/60 text-xs">vs. previous 10</p>
+                          </div>
+                        </aside>
+                      </div>
+                    ) : (
+                      <p className="text-base-content/60 px-4 py-16 text-center text-sm">
+                        No recent matches available.
+                      </p>
+                    )}
+                  </section>
+                </div>
+
+                {activeDetailView === StatsDetailView.EVENTS &&
+                (activeTab === StatsTab.INDIVIDUAL ||
+                  activeTab === StatsTab.GLOBAL_PLAYERS ||
+                  activeTab === StatsTab.TEAMMATES)
+                  ? renderEventTable()
+                  : activeTab !== StatsTab.GLOBAL_PLAYERS &&
+                      activeDetailView === StatsDetailView.WEAPONS
+                    ? renderWeaponTable(weaponRows)
+                    : renderMatchTable(activePerformances)}
               </div>
-              {tournamentRows.length > 0 && (
-                <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
-                  <button
-                    className="btn btn-ghost btn-xs rounded-none"
-                    disabled={tournamentPage <= 1}
-                    onClick={() => setTournamentPage((page) => Math.max(1, page - 1))}
-                  >
-                    Prev
-                  </button>
-                  <span className="text-xs">
-                    Page {tournamentPage} / {Math.max(1, Math.ceil(tournamentRows.length / 15))}
-                  </span>
-                  <button
-                    className="btn btn-ghost btn-xs rounded-none"
-                    disabled={tournamentPage >= Math.max(1, Math.ceil(tournamentRows.length / 15))}
-                    onClick={() =>
-                      setTournamentPage((page) =>
-                        Math.min(Math.max(1, Math.ceil(tournamentRows.length / 15)), page + 1),
-                      )
-                    }
-                  >
-                    Next
-                  </button>
-                </footer>
-              )}
-            </article>
-          )}
-        </main>
-      </div>
-    </section>
+            )}
+
+            {!loading && activeTab === StatsTab.TOURNAMENTS && (
+              <article className="border-base-content/10 border">
+                <header className="border-base-content/10 border-b px-4 py-3 text-sm font-semibold">
+                  Participated tournaments
+                </header>
+                <div className="overflow-x-auto">
+                  <table className="table-zebra table-sm table">
+                    <thead>
+                      <tr>
+                        <th>Team</th>
+                        <th>
+                          <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
+                            <span />
+                            <span>Tournament</span>
+                          </span>
+                        </th>
+                        <th>Placement</th>
+                        <th className="text-center">+ / -</th>
+                        <th>Rating</th>
+                        <th>Maps</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tournamentRows
+                        .slice((tournamentPage - 1) * 15, tournamentPage * 15)
+                        .map((row, idx) => (
+                          <tr key={row.label + idx}>
+                            <td>
+                              <img src={row.teamBlazon} className="h-8 w-8 object-contain" />
+                            </td>
+                            <td>
+                              <span className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2">
+                                <span className="inline-flex justify-start">
+                                  {row.tier?.lan && <CompetitionLocationTag tier={row.tier} />}
+                                </span>
+                                <Link to={row.href} className="link link-hover">
+                                  {row.label}
+                                </Link>
+                              </span>
+                            </td>
+                            <td
+                              className={cx(
+                                'font-semibold',
+                                row.placement === '#1' ? 'text-warning' : 'text-inherit',
+                              )}
+                            >
+                              {row.placement}
+                            </td>
+                            <td
+                              className={
+                                row.plusMinus > 0
+                                  ? 'text-success text-center font-semibold'
+                                  : row.plusMinus < 0
+                                    ? 'text-error text-center font-semibold'
+                                    : 'text-center font-semibold text-inherit'
+                              }
+                            >
+                              {new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero' }).format(
+                                row.plusMinus,
+                              )}
+                            </td>
+                            <td
+                              className={cx(
+                                'font-semibold',
+                                getRatingColorClass(Number(row.rating)),
+                              )}
+                            >
+                              {row.rating}
+                            </td>
+                            <td>{row.mapsPlayed}</td>
+                          </tr>
+                        ))}
+                      {!tournamentRows.length && (
+                        <tr>
+                          <td colSpan={6} className="text-base-content/60 py-8 text-center text-sm">
+                            No tournament records for selected filters.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {tournamentRows.length > 0 && (
+                  <footer className="border-base-content/10 flex items-center justify-end gap-2 border-t px-3 py-2">
+                    <button
+                      className="btn btn-ghost btn-xs rounded-none"
+                      disabled={tournamentPage <= 1}
+                      onClick={() => setTournamentPage((page) => Math.max(1, page - 1))}
+                    >
+                      Prev
+                    </button>
+                    <span className="text-xs">
+                      Page {tournamentPage} / {Math.max(1, Math.ceil(tournamentRows.length / 15))}
+                    </span>
+                    <button
+                      className="btn btn-ghost btn-xs rounded-none"
+                      disabled={
+                        tournamentPage >= Math.max(1, Math.ceil(tournamentRows.length / 15))
+                      }
+                      onClick={() =>
+                        setTournamentPage((page) =>
+                          Math.min(Math.max(1, Math.ceil(tournamentRows.length / 15)), page + 1),
+                        )
+                      }
+                    >
+                      Next
+                    </button>
+                  </footer>
+                )}
+              </article>
+            )}
+          </main>
+        </div>
+      </section>
+      {careerHonorsTooltip &&
+        createPortal(
+          <div
+            className="bg-neutral text-neutral-content pointer-events-none fixed z-[9999] max-w-[280px] rounded px-3 py-2 text-left text-xs leading-relaxed whitespace-pre-line shadow-lg"
+            style={careerHonorsTooltip}
+          >
+            {careerHonorsTooltip.content}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

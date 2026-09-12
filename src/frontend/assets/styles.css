@@ -680,6 +680,28 @@ meter::-webkit-meter-bar {
   }
 }
 
+/* Shared compact segmented navigation used by calendar-style view switches. */
+.mode-tabs {
+  @apply border-base-content/15 bg-base-200/35 flex overflow-hidden rounded-lg border;
+}
+
+.mode-tabs button {
+  @apply text-base-content/75 hover:text-base-content h-10 px-6 text-sm font-bold transition-colors;
+}
+
+.mode-tabs button.is-active {
+  @apply text-primary border-primary bg-primary/10;
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.mode-tabs-compact {
+  @apply w-[294px] max-w-full;
+}
+
+.mode-tabs-compact button {
+  @apply min-w-0 flex-1 px-1 text-xs;
+}
+
 @utility calendar-dashboard {
   & {
     @apply box-border flex h-full min-w-0 flex-col overflow-hidden;
@@ -707,19 +729,6 @@ meter::-webkit-meter-bar {
 
   .calendar-toolbar-icon svg {
     @apply size-5;
-  }
-
-  .calendar-mode-tabs {
-    @apply border-base-content/15 bg-base-200/35 flex overflow-hidden rounded-lg border;
-  }
-
-  .calendar-mode-tabs button {
-    @apply text-base-content/75 hover:text-base-content h-10 px-6 text-sm font-bold transition-colors;
-  }
-
-  .calendar-mode-tabs button.is-active {
-    @apply text-primary border-primary bg-primary/10;
-    box-shadow: inset 0 -2px 0 var(--color-primary);
   }
 
   .calendar-month-controls {
