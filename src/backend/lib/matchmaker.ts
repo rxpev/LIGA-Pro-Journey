@@ -1,6 +1,7 @@
 import type { PrismaClient, Player, Prisma } from "@prisma/client";
 import { shuffle } from "lodash";
 import { levelFromElo } from "@liga/backend/lib/levels";
+import { calculatePlacement, getCompletedPlacementMatches, FACEIT_FIRST_LOBBY_ELO } from "@liga/backend/lib/faceit-placement";
 
 type BotCandidate = Player & {
   country: { code: string; continent: { federationId: number } };
@@ -304,7 +305,14 @@ export class FaceitMatchmaker {
     });
 
     const userDb = fullPlayer;
-    const userElo = baseProfile.faceitElo;
+    const placementMatches = baseProfile.faceitElo === 0
+      ? await getCompletedPlacementMatches(prisma, baseProfile.id)
+      : [];
+    const userElo = baseProfile.faceitElo > 0
+      ? baseProfile.faceitElo
+      : placementMatches.length
+        ? calculatePlacement(placementMatches, userDb.id)
+        : FACEIT_FIRST_LOBBY_ELO;
     const queueElo = Number.isFinite(user.queueElo) ? Math.round(user.queueElo as number) : userElo;
     const federationId =
       userDb.team?.competitionFederationId ??
@@ -416,8 +424,8 @@ export class FaceitMatchmaker {
       name: userDb.name,
       xp: userDb.xp,
       elo: userElo,
-      rank: rankingByPlayerId.get(userDb.id) ?? null,
-      level: levelFromElo(userElo),
+      rank: baseProfile.faceitElo > 0 ? rankingByPlayerId.get(userDb.id) ?? null : null,
+      level: baseProfile.faceitElo > 0 ? levelFromElo(userElo) : 0,
       role: userDb.role,
       personality: userDb.personality,
       userControlled: true,

@@ -43,7 +43,7 @@ export default function registerProfileHandlers() {
           name: playerName,
           date: Constants.NewSaveSeasonStartDate,
           season: 0,
-          faceitElo: 1200,
+          faceitElo: 0,
           simulateNpcMatchStats: Boolean(simulateNpcMatchStats),
 
           player: {

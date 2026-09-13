@@ -1,4 +1,4 @@
-export const FACEIT_LEVEL_TEN_MIN_ELO = 2000;
+export const FACEIT_LEVEL_TEN_MIN_ELO = 2001;
 
 export function levelFromElo(elo: number): number {
   // tweak ranges to taste

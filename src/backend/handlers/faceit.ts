@@ -15,6 +15,7 @@ import { Eagers } from '@liga/shared';
 import { sample } from 'lodash';
 import { Engine } from '@liga/backend/lib';
 import { Util } from '@liga/shared';
+import { FACEIT_PLACEMENT_MATCHES } from '@liga/backend/lib/faceit-placement';
 
 // ------------------------------
 // Types sent to frontend
@@ -162,9 +163,10 @@ async function getFaceitLeaderboard(
           player.country?.continent?.federation?.slug ||
           null,
         faceitElo: playerElo,
-        faceitLevel: levelFromElo(playerElo),
+        faceitLevel: playerElo > 0 ? levelFromElo(playerElo) : 0,
       };
     })
+    .filter((entry: any) => entry.faceitElo > 0)
     .filter((entry: any) => {
       if (options?.federationId == null) return true;
       return entry.federationId === options.federationId;
@@ -417,7 +419,9 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
       eloDelta: Number(match.faceitEloDelta || 0),
       map: match.games?.[0]?.map || 'unknown',
     });
-    currentEloAfterMatch -= Number(match.faceitEloDelta || 0);
+    currentEloAfterMatch = match.faceitRating != null
+      ? 0
+      : currentEloAfterMatch - Number(match.faceitEloDelta || 0);
 
     const mapSlug = match.games?.[0]?.map || 'unknown';
     let matchKills = 0;
@@ -570,7 +574,9 @@ export default function registerFaceitHandlers() {
         : [];
       return {
         faceitElo: profile.faceitElo,
-        faceitLevel: levelFromElo(profile.faceitElo),
+        faceitLevel: profile.faceitElo > 0 ? levelFromElo(profile.faceitElo) : 0,
+        placementMatchesPlayed: Math.min(lifetime.matchesPlayed, FACEIT_PLACEMENT_MATCHES),
+        placementMatchesRequired: FACEIT_PLACEMENT_MATCHES,
         recent,
         lifetime,
         leaderboard,

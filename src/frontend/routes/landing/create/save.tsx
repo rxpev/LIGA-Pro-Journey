@@ -60,6 +60,9 @@ export default function Save() {
           role: selectedRole,
           simulateNpcMatchStats,
         });
+        // A deleted save number can be reused. Its old FACEIT welcome state
+        // must not carry over to this new career.
+        localStorage.removeItem(`faceit-save-${newSaveId}:welcome-seen`);
 
         // Skip team-based season init (since teamless)
         setStatus(t('landing.create.statusWorldgen'));

@@ -10,7 +10,7 @@ export default async function seedProfile(prisma: PrismaClient) {
       data: {
         name: existing.name || 'Player Career',
         settings: existing.settings || JSON.stringify(Constants.Settings),
-        faceitElo: existing.faceitElo ?? 1200,
+        faceitElo: existing.faceitElo ?? 0,
         simulateNpcMatchStats: existing.simulateNpcMatchStats ?? false,
       },
     });
@@ -22,7 +22,7 @@ export default async function seedProfile(prisma: PrismaClient) {
       name: 'Player Career',
       date: new Date(),
       settings: JSON.stringify(Constants.Settings),
-      faceitElo: 1200,
+      faceitElo: 0,
       simulateNpcMatchStats: false,
       playerId: null,
     },

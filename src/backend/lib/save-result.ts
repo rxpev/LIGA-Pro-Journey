@@ -1,6 +1,7 @@
 import { DatabaseClient, sealActiveSaveIntegrity } from "@liga/backend/lib";
 import { Constants, Util } from "@liga/shared";
 import * as XpEconomy from "@liga/backend/lib/xp-economy";
+import { calculatePlacement, getCompletedPlacementMatches, FACEIT_PLACEMENT_MATCHES } from "@liga/backend/lib/faceit-placement";
 
 type MatchPlayerLite = {
   id: number;
@@ -171,6 +172,10 @@ export async function saveFaceitResult(
     };
   });
 
+  const placementMatches = profile.faceitElo === 0
+    ? await getCompletedPlacementMatches(prisma, profile.id)
+    : [];
+
   await prisma.match.update({
     where: { id: dbMatchId },
     data: {
@@ -223,11 +228,20 @@ export async function saveFaceitResult(
     eloLoss = p.eloLoss ?? 0;
   } catch { }
 
-  const delta = playerWin ? eloGain : -eloLoss;
+  const isPlacement = profile.faceitElo === 0 && placementMatches.length < FACEIT_PLACEMENT_MATCHES;
+  const completedPlacements = placementMatches.length + 1;
+  const placementElo = isPlacement && completedPlacements === FACEIT_PLACEMENT_MATCHES
+    ? calculatePlacement([...placementMatches, {
+        faceitIsWin: playerWin,
+        payload: dbMatch?.payload ?? '{}',
+        events: eventsToCreate,
+      }], profile.player.id)
+    : null;
+  const delta = isPlacement ? null : playerWin ? eloGain : -eloLoss;
 
   await prisma.profile.update({
     where: { id: profile.id },
-    data: { faceitElo: profile.faceitElo + delta },
+    data: { faceitElo: placementElo ?? (profile.faceitElo + (delta ?? 0)) },
   });
 
   await Promise.all(
@@ -236,7 +250,7 @@ export async function saveFaceitResult(
       .map((bot) =>
         prisma.player.update({
           where: { id: bot.id },
-          data: { elo: { increment: delta } },
+          data: { elo: { increment: playerWin ? eloGain : -eloLoss } },
         })
       )
   );
@@ -245,7 +259,7 @@ export async function saveFaceitResult(
     teamB.map((bot) =>
       prisma.player.update({
         where: { id: bot.id },
-        data: { elo: { increment: -delta } },
+        data: { elo: { increment: playerWin ? -eloGain : eloLoss } },
       })
     )
   );
@@ -256,8 +270,8 @@ export async function saveFaceitResult(
       faceitIsWin: playerWin,
       faceitTeammates: JSON.stringify(teamA),
       faceitOpponents: JSON.stringify(teamB),
-      faceitRating: null,
       faceitEloDelta: delta,
+      faceitRating: placementElo,
     },
   });
 

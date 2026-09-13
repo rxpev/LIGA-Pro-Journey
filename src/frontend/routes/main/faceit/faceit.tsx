@@ -24,6 +24,7 @@ import level7 from '../../../assets/faceit/7.png';
 import level8 from '../../../assets/faceit/8.png';
 import level9 from '../../../assets/faceit/9.png';
 import level10 from '../../../assets/faceit/10.png';
+import unrankedIcon from '../../../assets/faceit/unranked.png';
 import killsIcon from '../../../assets/faceit/kills.png';
 import deathsIcon from '../../../assets/faceit/deaths.png';
 import headshotIcon from '../../../assets/faceit/headshot.png';
@@ -32,7 +33,7 @@ import { Constants, Util } from '@liga/shared';
 import { useAudio } from '@liga/frontend/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { FaChevronDown, FaUserFriends, FaUserPlus, FaUsers } from 'react-icons/fa';
+import { FaArrowRight, FaChartLine, FaChevronDown, FaFileContract, FaUserFriends, FaUserPlus, FaUsers } from 'react-icons/fa';
 
 export const LEVEL_IMAGES = [
   null,
@@ -204,10 +205,14 @@ export default function Faceit(): JSX.Element {
       return null;
     }
   });
+  const [saveIdResolved, setSaveIdResolved] = useState(false);
+  const [profileReady, setProfileReady] = useState(false);
+  const [welcomeSaveId, setWelcomeSaveId] = useState<number | null>(null);
 
   // PROFILE + STATS
   const [elo, setElo] = useState(0);
   const [level, setLevel] = useState(0);
+  const [placementMatchesPlayed, setPlacementMatchesPlayed] = useState(0);
   const [recent, setRecent] = useState<RecentMatch[]>([]);
   const [lifetime, setLifetime] = useState<any | null>(null);
   const [last20, setLast20] = useState<any | null>(null);
@@ -283,6 +288,7 @@ export default function Faceit(): JSX.Element {
 
     setElo(profileData.faceitElo);
     setLevel(profileData.faceitLevel);
+    setPlacementMatchesPlayed(profileData.placementMatchesPlayed ?? 3);
     const sortedRecent = [...enrichedRecent].sort((a, b) => {
       const aTime = a.date ? new Date(a.date).getTime() : 0;
       const bTime = b.date ? new Date(b.date).getTime() : 0;
@@ -298,6 +304,7 @@ export default function Faceit(): JSX.Element {
     if (last20Stats) setLast20(last20Stats);
     setDaily(profileData.daily ?? null);
     setQueueError(null);
+    setProfileReady(true);
   };
 
   // Auto-remove match room ONLY if already closed
@@ -386,14 +393,44 @@ export default function Faceit(): JSX.Element {
     api.database
       .current()
       .then((id) => {
-        const normalized = Number.isFinite(id) && id > 0 ? id : null;
+        const normalizedId = Number(id);
+        const normalized = Number.isFinite(normalizedId) && normalizedId > 0 ? normalizedId : null;
         setCurrentSaveId(normalized);
         if (normalized) {
           localStorage.setItem('liga-active-save-id', String(normalized));
         }
+        setSaveIdResolved(true);
       })
-      .catch(() => setCurrentSaveId(null));
+      .catch(() => {
+        // Keep the save ID supplied when the main window opened if the IPC
+        // lookup briefly fails during navigation.
+        setSaveIdResolved(true);
+      });
   }, [state.profile?.name, state.profile?.updatedAt]);
+
+  useEffect(() => {
+    if (!saveIdResolved || !profileReady || loading || !currentSaveId) return;
+    if (level !== 0 || placementMatchesPlayed !== 0 || activeMatch) return;
+
+    const welcomeKey = `faceit-save-${currentSaveId}:welcome-seen`;
+    try {
+      if (localStorage.getItem(welcomeKey)) return;
+    } catch {
+      // Still show the guide when storage is unavailable.
+    }
+    setWelcomeSaveId(currentSaveId);
+  }, [saveIdResolved, profileReady, loading, currentSaveId, level, placementMatchesPlayed, activeMatch]);
+
+  const dismissWelcome = () => {
+    if (welcomeSaveId) {
+      try {
+        localStorage.setItem(`faceit-save-${welcomeSaveId}:welcome-seen`, '1');
+      } catch {
+        // Dismiss for this visit even if storage is unavailable.
+      }
+    }
+    setWelcomeSaveId(null);
+  };
 
   useEffect(() => {
     if (!viewMatchId) return;
@@ -775,7 +812,7 @@ export default function Faceit(): JSX.Element {
   }
 
   const [low, high] = LEVEL_RANGES[level] ?? [0, 100];
-  const pct = level === 10 ? 100 : ((elo - low) / (high - low)) * 100;
+  const pct = level === 0 ? 0 : level === 10 ? 100 : ((elo - low) / (high - low)) * 100;
 
   const currentMatch = showMatchRoom && activeMatch ? activeMatch : null;
 
@@ -785,6 +822,93 @@ export default function Faceit(): JSX.Element {
         loading ? 'faceit-page-content--entering' : ''
       }`}
     >
+      {welcomeSaveId === currentSaveId && !loading && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="faceit-welcome-title"
+            className="max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-[#ffffff20] bg-[#0f0f0f] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+          >
+            <div className="mb-5 flex items-center gap-4">
+              <img src={unrankedIcon} className="h-12 w-12 object-contain" alt="Unranked badge" />
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff7300]">Your FACEIT journey</div>
+                <h2 id="faceit-welcome-title" className="text-2xl font-bold">Welcome to FACEIT</h2>
+              </div>
+            </div>
+
+            <div className="mb-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[#ffffff20] bg-[#151515] px-4 py-4" aria-label="Unranked, three placement matches, then your FACEIT level">
+              <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
+                <div className="flex h-10 items-center justify-center">
+                  <img src={unrankedIcon} className="h-10 w-10 object-contain" alt="" />
+                </div>
+                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Unranked</span>
+              </div>
+              <FaArrowRight className="mt-3 text-[#ff7300]" aria-hidden="true" />
+              <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
+                <div className="flex h-10 items-center justify-center gap-1.5">
+                  {[1, 2, 3].map((matchNumber) => (
+                    <span key={matchNumber} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#ff7300]/60 bg-[#ff7300]/10 text-xs font-bold text-[#ff7300]">
+                      {matchNumber}
+                    </span>
+                  ))}
+                </div>
+                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Placements</span>
+              </div>
+              <FaArrowRight className="mt-3 text-[#ff7300]" aria-hidden="true" />
+              <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
+                <div className="flex h-10 items-center justify-center -space-x-2">
+                  {[level3, level7, level10].map((badge, index) => (
+                    <img key={badge} src={badge} className="h-8 w-8 object-contain" alt="" style={{ zIndex: 3 - index }} />
+                  ))}
+                </div>
+                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Ranked</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 rounded-lg border border-[#ffffff15] bg-[#151515] p-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#ffffff08]">
+                  <img src={unrankedIcon} className="h-9 w-9 object-contain" alt="" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">Start unranked</div>
+                  <p className="text-sm leading-5 text-neutral-400">Your FACEIT ELO and level stay hidden during placements.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 rounded-lg border border-[#ffffff15] bg-[#151515] p-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#ff7300]/10 text-xl text-[#ff7300]">
+                  <FaChartLine aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">Play three placement matches</div>
+                  <p className="text-sm leading-5 text-neutral-400">Your K/D and match results shape your placement. After match three, your starting ELO and FACEIT level appear.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 rounded-lg border border-[#ffffff15] bg-[#151515] p-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#ff7300]/10 text-xl text-[#ff7300]">
+                  <FaFileContract aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">Get noticed by teams</div>
+                  <p className="text-sm leading-5 text-neutral-400">Keep playing FACEIT matches so teams can notice your performances and send offers.</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              autoFocus
+              data-interaction-sound="confirm"
+              className="mt-6 w-full rounded-md bg-orange-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+              onClick={dismissWelcome}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
       {/* SCOREBOARD OVERLAY */}
       {viewMatchId && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-8">
@@ -824,6 +948,7 @@ export default function Faceit(): JSX.Element {
           pct={pct}
           low={low}
           high={high}
+          placementMatchesPlayed={placementMatchesPlayed}
         />
       ) : (
         <>
@@ -833,6 +958,7 @@ export default function Faceit(): JSX.Element {
             pct={pct}
             low={low}
             high={high}
+            placementMatchesPlayed={placementMatchesPlayed}
             activeMatch={activeMatch}
             currentPlayerId={state.profile?.playerId ?? state.profile?.player?.id ?? null}
             profileTeammates={(state.profile?.team?.players ?? []).map((player: any) => ({
@@ -897,6 +1023,7 @@ interface FaceitHeaderProps {
   pct: number;
   low: number;
   high: number;
+  placementMatchesPlayed?: number;
   activeMatch: MatchRoomData | null;
   currentPlayerId: number | null;
   profileTeammates: MatchPlayer[];
@@ -915,6 +1042,7 @@ export function FaceitHeader({
   pct,
   low,
   high,
+  placementMatchesPlayed = 3,
   activeMatch,
   currentPlayerId,
   profileTeammates,
@@ -1923,10 +2051,14 @@ export function FaceitHeader({
             document.body,
           )}
 
-        <img src={LEVEL_IMAGES[level]} className="h-10 w-10" />
+        <img src={level === 0 ? unrankedIcon : LEVEL_IMAGES[level]} className="h-10 w-10" alt={level === 0 ? 'Unranked' : `FACEIT level ${level}`} />
 
         <div className="flex w-56 flex-col">
-          <div className="text-xl font-bold">{elo}</div>
+          <div className="text-xl font-bold">{level === 0 ? 'Unranked' : elo}</div>
+
+          {level === 0 ? (
+            <div className="text-xs text-neutral-400">Placement matches: {placementMatchesPlayed}/3</div>
+          ) : <>
 
           <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-700">
             <div
@@ -1942,6 +2074,7 @@ export function FaceitHeader({
             </span>
             <span>{level === 10 ? '∞' : high}</span>
           </div>
+          </>}
         </div>
 
         {partyDropdownOpen &&
@@ -2410,7 +2543,7 @@ function NormalFaceitBody({
 
                         {m.eloDelta != null && (
                           <span className={`mt-1 text-xs ${eloClass}`}>
-                            Elo: {m.eloDelta > 0 ? '+' : ''}
+                            ELO: {m.eloDelta > 0 ? '+' : ''}
                             {m.eloDelta}
                           </span>
                         )}

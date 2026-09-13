@@ -115,9 +115,7 @@ export default function registerDatabaseHandlers() {
   });
 
   ipcMain.handle(Constants.IPCRoute.DATABASE_CURRENT, async () => {
-    const dbPath = DatabaseClient.path || '';
-    const match = dbPath.match(/save_(\d+)\.db$/);
-    return match ? Number(match[1]) : 0;
+    return DatabaseClient.id;
   });
   // GENERIC QUERIES
   ipcMain.handle(

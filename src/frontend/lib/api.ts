@@ -216,6 +216,8 @@ export default {
       ipcRenderer.invoke('faceit:getProfile') as Promise<{
         faceitElo: number;
         faceitLevel: number;
+        placementMatchesPlayed: number;
+        placementMatchesRequired: number;
         recent: any[];
         lifetime: {
           matchesPlayed: number;

@@ -36,6 +36,7 @@ import faceitLevel7 from '../../assets/faceit/7.png';
 import faceitLevel8 from '../../assets/faceit/8.png';
 import faceitLevel9 from '../../assets/faceit/9.png';
 import faceitLevel10 from '../../assets/faceit/10.png';
+import faceitUnranked from '../../assets/faceit/unranked.png';
 
 /** @type {Player} */
 type Player =
@@ -574,7 +575,7 @@ export default function TransferModal() {
     });
   }, []);
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
-  const faceitLevel = typeof faceitElo === 'number' ? levelFromElo(faceitElo) : null;
+  const faceitLevel = typeof faceitElo === 'number' && faceitElo > 0 ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
   const hasTop20Appearances = top20Appearances.length > 0;
   const hasHonors = mvps.length > 0 || Object.keys(honorGroups).length > 0;
@@ -823,16 +824,16 @@ export default function TransferModal() {
                 )}
                 <div className="player-profile-stat">
                   <span className="player-profile-label">
-                    <FaChartLine /> FACEIT Elo
+                    <FaChartLine /> FACEIT ELO
                   </span>
                   <strong className="flex items-center gap-2 text-2xl">
                     <img src={faceitLogo} className="size-5 object-contain" alt="" />
                     <img
-                      src={FACEIT_LEVEL_IMAGES[faceitLevel ?? 1]}
+                      src={faceitElo === 0 ? faceitUnranked : FACEIT_LEVEL_IMAGES[faceitLevel ?? 1]}
                       className="size-5 object-contain"
                       alt=""
                     />
-                    {typeof faceitElo === 'number' ? faceitElo.toLocaleString() : 'N/A'}
+                    {faceitElo === 0 ? 'Unranked' : typeof faceitElo === 'number' ? faceitElo.toLocaleString() : 'N/A'}
                   </strong>
                 </div>
               </div>

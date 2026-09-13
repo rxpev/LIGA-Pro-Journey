@@ -9,6 +9,7 @@ import { AppStateContext } from "@liga/frontend/redux";
 import { useAudio } from "@liga/frontend/hooks";
 import type { PlayingStatus } from "@liga/frontend/redux/state";
 import awperIcon from "../../../assets/awper.png";
+import unrankedIcon from "../../../assets/faceit/unranked.png";
 import {
   faceitMatchCompleted,
   faceitRoomSet,
@@ -65,6 +66,7 @@ export interface MatchRoomProps {
   pct: number;
   low: number;
   high: number;
+  placementMatchesPlayed?: number;
 }
 
 // Map pool entry from api.mapPool.find
@@ -99,6 +101,7 @@ function getTeamAvgLevel(team: MatchPlayer[]): number {
 }
 
 function resolvePlayerLevel(player: Pick<MatchPlayer, "level" | "elo">): number {
+  if (player.level === 0) return 0;
   if (Number.isInteger(player.level) && player.level >= 1 && player.level <= 10) {
     return player.level;
   }
@@ -209,6 +212,7 @@ export default function MatchRoom({
   pct,
   low,
   high,
+  placementMatchesPlayed,
 }: MatchRoomProps): JSX.Element {
   const { state, dispatch } = React.useContext(AppStateContext);
   const audioNegativeAlert = useAudio("negative-alert.wav");
@@ -728,6 +732,7 @@ export default function MatchRoom({
         pct={pct}
         low={low}
         high={high}
+        placementMatchesPlayed={placementMatchesPlayed}
         activeMatch={room as any}
         currentPlayerId={state.profile?.playerId ?? state.profile?.player?.id ?? null}
         profileTeammates={((state.profile?.team?.players as any[]) ?? []).map((player: any) => ({
@@ -876,7 +881,7 @@ export default function MatchRoom({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="opacity-70">{p.elo}</span>
+                          <span className="opacity-70">{playerLevel === 0 ? '?' : p.elo}</span>
                           {rankBadge ? (
                             <div className="relative ml-8 w-8 h-8 overflow-visible">
                               <img
@@ -887,8 +892,8 @@ export default function MatchRoom({
                             </div>
                           ) : (
                             <img
-                              src={LEVEL_IMAGES[playerLevel]}
-                              className="w-8 h-8"
+                              src={playerLevel === 0 ? unrankedIcon : LEVEL_IMAGES[playerLevel]}
+                              className="h-8 w-8"
                               alt={`Level ${playerLevel}`}
                             />
                           )}
@@ -1024,7 +1029,7 @@ export default function MatchRoom({
                     <div className="mt-auto pt-2 text-center">
                       <div>Win Chance: {(expectedWinA * 100).toFixed(1)}%</div>
                       <div className="mt-1 opacity-70">
-                        Elo Gain: +{eloGain} / Loss: -{eloLoss}
+                        {level === 0 ? 'Placement match · ELO revealed after match 3' : `ELO Gain: +${eloGain} / Loss: -${eloLoss}`}
                       </div>
 
                       <button
@@ -1129,7 +1134,7 @@ export default function MatchRoom({
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="opacity-70">{p.elo}</span>
+                          <span className="opacity-70">{playerLevel === 0 ? '?' : p.elo}</span>
                           {rankBadge ? (
                             <div className="relative ml-8 w-8 h-8 overflow-visible">
                               <img
@@ -1140,8 +1145,8 @@ export default function MatchRoom({
                             </div>
                           ) : (
                             <img
-                              src={LEVEL_IMAGES[playerLevel]}
-                              className="w-8 h-8"
+                              src={playerLevel === 0 ? unrankedIcon : LEVEL_IMAGES[playerLevel]}
+                              className="h-8 w-8"
                               alt={`Level ${playerLevel}`}
                             />
                           )}
