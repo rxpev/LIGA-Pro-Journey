@@ -11,7 +11,7 @@ import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import { localeUpdate, profileUpdate, shortlistUpdate } from '@liga/frontend/redux/actions';
 import { useAudio, useTheme } from '@liga/frontend/hooks';
 import { MemoryRouter, Route, Routes as RouterRoutes } from 'react-router-dom';
-import { FaArrowLeft } from 'react-icons/fa';
+import { FaTimes } from 'react-icons/fa';
 
 type InAppModalRequest = ModalRequest & {
   inAppModal?: boolean;
@@ -205,21 +205,24 @@ function ModalContent(props: {
           <header className="border-base-content/10 bg-base-200 flex h-12 shrink-0 items-center justify-end border-b px-4">
             <button
               type="button"
-              aria-label="Back"
+              aria-label="Close modal"
               data-interaction-sound="back"
-              className="btn btn-ghost btn-sm"
+              className="in-app-modal-close-button"
               onClick={props.onClose}
             >
-              <FaArrowLeft className="size-5" />
+              <FaTimes />
             </button>
           </header>
         ) : (
-          <FaArrowLeft
-            aria-label="Close"
+          <button
+            type="button"
+            aria-label="Close modal"
             data-interaction-sound="back"
-            className="absolute top-5 right-5 z-[110] size-5 cursor-pointer"
+            className="in-app-modal-close-button absolute top-4 right-4 z-[110]"
             onClick={props.onClose}
-          />
+          >
+            <FaTimes />
+          </button>
         )}
         <div
           className={`w-full ${hasHeader ? 'min-h-0 flex-1 overflow-auto' : 'h-full'} [&>main]:!h-full [&>main]:!w-full`}

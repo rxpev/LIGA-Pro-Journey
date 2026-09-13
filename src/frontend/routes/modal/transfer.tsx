@@ -7,7 +7,17 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { FaChartBar, FaNewspaper, FaStar } from 'react-icons/fa';
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaChartBar,
+  FaChartLine,
+  FaNewspaper,
+  FaStar,
+  FaTrophy,
+  FaUsers,
+  FaMap,
+} from 'react-icons/fa';
 import { levelFromElo } from '@liga/backend/lib/levels';
 import { Bot, Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
@@ -50,6 +60,7 @@ type Player =
 
 type HonorOccurrence = {
   key: string;
+  competitionId: number;
   teamId: number;
   season: number;
   date: Date;
@@ -62,6 +73,7 @@ type HonorOccurrence = {
 
 type MvpOccurrence = {
   id: number;
+  competitionId: number;
   key: string;
   teamId: number | null;
   season: number | null;
@@ -73,6 +85,7 @@ type MvpOccurrence = {
 type HonorGroup = {
   key: string;
   count: number;
+  competitionIds: number[];
   seasons: number[];
   titles: string[];
   tierSlug: string;
@@ -266,6 +279,23 @@ export default function TransferModal() {
   const [activeTooltip, setActiveTooltip] = React.useState<ActiveTooltip | null>(null);
   const [ratingGames, setRatingGames] = React.useState<RatingGame[]>([]);
   const [top20Appearances, setTop20Appearances] = React.useState<Top20Appearance[]>([]);
+  const top20Ref = React.useRef<HTMLDivElement>(null);
+  const [top20Page, setTop20Page] = React.useState(0);
+  const [top20PageSize, setTop20PageSize] = React.useState(1);
+  React.useEffect(() => {
+    const node = top20Ref.current;
+    if (!node) return;
+    const update = () => setTop20PageSize(Math.max(1, Math.floor(node.clientWidth / 64)));
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    update();
+    return () => observer.disconnect();
+  }, [top20Appearances]);
+  React.useEffect(() => {
+    setTop20Page((page) =>
+      Math.min(page, Math.max(0, Math.ceil(top20Appearances.length / top20PageSize) - 1)),
+    );
+  }, [top20Appearances, top20PageSize]);
 
   React.useEffect(() => {
     if (!location.state) return;
@@ -315,6 +345,7 @@ export default function TransferModal() {
 
           return {
             id: award.id,
+            competitionId: award.competitionId,
             key: `${award.competitionId}:${award.playerId}`,
             teamId: award.teamId,
             season: award.competition.season,
@@ -423,6 +454,7 @@ export default function TransferModal() {
 
           acc.push({
             key,
+            competitionId: competition.id,
             teamId: winnerTeamId,
             season: competition.season,
             date: championshipDate,
@@ -490,6 +522,7 @@ export default function TransferModal() {
         acc[honor.key] = {
           key: honor.key,
           count: 0,
+          competitionIds: [],
           seasons: [],
           titles: [],
           tierSlug: honor.tierSlug,
@@ -500,6 +533,7 @@ export default function TransferModal() {
       }
 
       acc[honor.key].count += 1;
+      acc[honor.key].competitionIds.push(honor.competitionId);
       acc[honor.key].seasons.push(honor.season);
       if (!acc[honor.key].titles.includes(honor.title)) {
         acc[honor.key].titles.push(honor.title);
@@ -544,6 +578,7 @@ export default function TransferModal() {
   const playerRating = player ? getRatingSummary(ratingGames) : null;
   const hasTop20Appearances = top20Appearances.length > 0;
   const hasHonors = mvps.length > 0 || Object.keys(honorGroups).length > 0;
+  const hasRankingOrMajor = hasTop20Appearances || majorWinCount > 0 || majorMvpCount > 0;
   const openPlayerStatistics = React.useCallback(() => {
     if (!player) return;
 
@@ -581,6 +616,10 @@ export default function TransferModal() {
     );
     api.window.close(Constants.WindowIdentifier.Modal, true);
   }, []);
+  const openMainPage = React.useCallback((target: string) => {
+    api.window.send<ModalRequest>(Constants.WindowIdentifier.Main, { target }, 0);
+    api.window.close(Constants.WindowIdentifier.Modal, true);
+  }, []);
 
   if (!player) {
     return (
@@ -593,348 +632,418 @@ export default function TransferModal() {
   }
 
   return (
-    <main className="divide-base-content/10 flex h-screen w-screen flex-col divide-y">
-      {/* PLAYER CARD */}
-      <section className="flex">
-        <figure
-          className={cx(
-            'flex w-1/5 items-end justify-center p-0',
-            hasTop20Appearances
-              ? 'h-[278px] overflow-hidden'
-              : 'border-base-content/10 h-[246px] overflow-hidden border-b',
-          )}
-        >
-          <Image
-            src={player.avatar || 'resources://avatars/empty.png'}
-            className="mt-auto h-[390px] w-auto max-w-none object-contain"
-          />
-        </figure>
-
-        <table className="table table-fixed">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Country</th>
-              <th>Team</th>
-              <th>Age</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr className="border-base-content/10 border-l">
-              <td className="truncate">{player.name}</td>
-              <td>
-                <span className={cx('fp', 'mr-2', player.country.code.toLowerCase())} />
-                {player.country.name}
-              </td>
-              <td className="truncate">
-                {player.retiredAt ? (
-                  <span>
-                    Retired{' '}
-                    <span
-                      className="inline-flex cursor-help text-base-content/50"
-                      aria-label={`Retired on ${formatAppDate(player.retiredAt)}`}
-                      onMouseEnter={(event) =>
-                        showTooltip(event, `Retired on ${formatAppDate(player.retiredAt)}`)
-                      }
-                      onMouseLeave={() => setActiveTooltip(null)}
-                    >
-                      (?)
-                    </span>
-                  </span>
-                ) : player.team ? (
-                  <>
-                    <img src={player.team.blazon} className="inline-block size-6" />
-                    <span className="inline-flex items-baseline gap-1">
-                      {player.team.name}
-                      {!player.starter && (
-                        <span className="text-[8px] text-red-400 uppercase">(BENCHED)</span>
-                      )}
-                    </span>
-                  </>
-                ) : (
-                  'Free Agent'
+    <main className="player-profile text-base-content h-screen w-screen overflow-hidden">
+      <div className="player-profile-shell flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="player-profile-top grid shrink-0 grid-cols-[220px_minmax(0,1fr)]">
+            <figure
+              className={cx(
+                'player-profile-portrait relative m-0 flex items-end overflow-hidden',
+                hasRankingOrMajor ? 'min-h-[270px]' : 'min-h-[235px]',
+              )}
+            >
+              {player.team?.blazon && (
+                <img
+                  src={player.team.blazon}
+                  className="pointer-events-none absolute top-1/2 left-1/2 size-64 -translate-x-1/2 -translate-y-1/2 object-contain opacity-20"
+                  alt=""
+                  aria-hidden="true"
+                />
+              )}
+              <Image
+                src={player.avatar || 'resources://avatars/empty.png'}
+                className={cx(
+                  'relative z-10 mx-auto w-auto max-w-none translate-y-6 object-contain',
+                  hasRankingOrMajor ? 'h-[275px]' : 'h-[240px]',
                 )}
-              </td>
-              <td>{player.age ? `${player.age} years` : 'N/A'}</td>
-            </tr>
-            {hasTop20Appearances && (
-              <tr className="border-base-content/10 border-l">
-                <td className="py-1.5 text-xs font-bold uppercase opacity-70">Top 20</td>
-                <td colSpan={3} className="py-1.5 text-right">
-                  <span className="inline-flex max-w-full justify-end gap-2 overflow-x-auto overflow-y-hidden text-xs font-semibold whitespace-nowrap">
-                    {top20Appearances.map((appearance) => (
-                      <button
-                        key={`${appearance.articleId}-${appearance.rank}-${appearance.year}`}
-                        type="button"
-                        className="link-hover text-base-content/70 hover:text-primary cursor-pointer underline-offset-2"
-                        title={`Open Top 20 players of ${appearance.year}`}
-                        data-interaction-sound="click"
-                        onClick={() => openTop20Article(appearance.articleId)}
-                      >
-                        #{appearance.rank} ('{String(appearance.year).slice(-2)})
-                      </button>
-                    ))}
-                  </span>
-                </td>
-              </tr>
-            )}
-          </tbody>
-
-          <thead>
-            <tr>
-              <th colSpan={2} className="py-2">
-                Stats
-              </th>
-              <th colSpan={2} className="py-2 text-right">
-                <span className="inline-flex flex-nowrap justify-end gap-2 whitespace-nowrap">
-                  {majorWinCount > 0 && (
-                    <span className="badge border-yellow-300 bg-yellow-500/20 px-3 py-2 font-semibold text-yellow-200">
-                      {majorWinCount}x Major winner
-                    </span>
-                  )}
-                  {majorMvpCount > 0 && (
-                    <span className="badge border-slate-300 bg-slate-500/30 px-3 py-2 font-semibold text-slate-100">
-                      {majorMvpCount}x Major MVP
-                    </span>
-                  )}
-                </span>
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr>
-              <td colSpan={4} className="px-4 py-2">
-                <div className="flex items-end gap-4">
-                  <div className="flex-1">
-                    {state.profile?.simulateNpcMatchStats ? (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-base-200/40 stack-y gap-2 p-3">
-                          <p className="text-xs">Rating</p>
-                          <p
-                            className={cx(
-                              'text-3xl font-black tabular-nums',
-                              playerRating
-                                ? getRatingColorClass(playerRating.rating)
-                                : 'text-muted',
-                            )}
-                          >
-                            {playerRating ? playerRating.rating.toFixed(2) : '-'}
-                          </p>
-                        </div>
-                        <div className="bg-base-200/40 stack-y gap-2 p-3">
-                          <p className="text-xs">Maps Played</p>
-                          <p className="text-3xl font-black tabular-nums">
-                            {playerRating ? playerRating.maps : 0}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <XPBar
-                        className="w-full"
-                        title="Total XP"
-                        value={Bot.Exp.getTotalXP(player.xp)}
-                        max={100}
-                      />
-                    )}
-                  </div>
-                  <span className="h-5 w-px bg-white/20" />
-                  <div className="relative mb-0.5 flex items-center gap-2">
-                    {state.profile?.simulateNpcMatchStats && (
-                      <div className="absolute bottom-9 left-1/2 flex -translate-x-1/2 items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-square border-base-content/20 bg-base-200/80 hover:bg-primary hover:text-primary-content size-8 min-h-0"
-                          title="View detailed player statistics"
-                          aria-label="View detailed player statistics"
-                          data-interaction-sound="click"
-                          onClick={openPlayerStatistics}
-                        >
-                          <FaChartBar className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-square border-base-content/20 bg-base-200/80 hover:bg-primary hover:text-primary-content size-8 min-h-0"
-                          title="View related news"
-                          aria-label="View related news"
-                          data-interaction-sound="click"
-                          onClick={openNewsPlaceholder}
-                        >
-                          <FaNewspaper className="size-4" />
-                        </button>
-                      </div>
-                    )}
-                    <img src={faceitLogo} className="h-5 w-5 object-contain" />
-                    <img
-                      src={FACEIT_LEVEL_IMAGES[faceitLevel ?? 1] || FACEIT_LEVEL_IMAGES[1]}
-                      className="h-5 w-5 object-contain"
-                    />
-                    <span className="text-sm font-semibold tabular-nums">
-                      {typeof faceitElo === 'number' ? faceitElo : 'N/A'}
-                    </span>
+              />
+            </figure>
+            <div className="flex min-w-0 flex-col p-4">
+              <div className="border-base-content/10 flex items-center justify-between gap-3 border-b pr-12 pb-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <h1 className="truncate text-3xl font-black tracking-tight">{player.name}</h1>
+                  <button
+                    type="button"
+                    className="player-profile-action shrink-0"
+                    data-interaction-sound="click"
+                    onClick={openPlayerStatistics}
+                  >
+                    <FaChartBar /> Statistics
+                  </button>
+                  <button
+                    type="button"
+                    className="player-profile-action shrink-0"
+                    data-interaction-sound="click"
+                    onClick={openNewsPlaceholder}
+                  >
+                    <FaNewspaper /> News
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 py-3">
+                <div>
+                  <p className="player-profile-label">Country</p>
+                  <div className="flex items-center gap-2">
+                    <span className={cx('fp', player.country.code.toLowerCase())} />
+                    {player.country.name}
                   </div>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      {hasHonors && (
-        <section className="border-base-content/10 flex min-h-12 max-w-full min-w-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-t px-4 py-2">
-          {mvps.length > 0 && (
-            <div
-              className="flex shrink-0 items-center gap-2"
-              aria-label={mvpTooltip}
-              onMouseEnter={(event) => showTooltip(event, mvpTooltip)}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              <Image className="h-9 w-9 object-contain" src={MVP_MEDAL_SRC} />
-              {mvps.length > 1 && <span className="text-base font-bold">x{mvps.length}</span>}
-            </div>
-          )}
-          {Object.values(honorGroups).map((honor) => {
-            const honorTooltip =
-              honor.titles.length === 1
-                ? honor.titles[0]
-                : ['Tournament wins at:', ...honor.titles].join('\n');
-            const isMajor = Util.isMajorStageTier(honor.tierSlug);
-
-            return (
-              <div
-                key={honor.key}
-                className="flex shrink-0 cursor-help items-center gap-2"
-                onMouseEnter={(event) => showTooltip(event, honorTooltip)}
-                onMouseLeave={() => setActiveTooltip(null)}
-              >
-                <span className="relative inline-flex">
-                  <Image
-                    className="h-12 w-12 object-contain"
-                    src={
-                      Util.getCompetitionHonorThumbnail(honor) ||
-                      Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                        location: honor.location,
-                        organizer: honor.organizer,
-                      })
-                    }
-                  />
-                  {isMajor && <MajorHonorBadge />}
-                </span>
-                {honor.count > 1 && <span className="text-base font-bold">x{honor.count}</span>}
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      <section className="flex-1 overflow-y-auto">
-        <table className="table-pin-rows table table-fixed">
-          <thead>
-            <tr>
-              <th className="w-3/12">Time period</th>
-              <th className="w-4/12">Team</th>
-              {state.profile?.simulateNpcMatchStats && (
-                <th className="w-2/12 text-right">Rating</th>
-              )}
-              <th className="w-3/12">Honors</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {teamHistory.length === 0 && (
-              <tr>
-                <td
-                  colSpan={state.profile?.simulateNpcMatchStats ? 4 : 3}
-                  className="py-8 text-center opacity-60"
-                >
-                  No team history available.
-                </td>
-              </tr>
-            )}
-
-            {teamHistory.map((stint) => {
-              const stintHonors = honors.filter(
-                (honor) =>
-                  honor.teamId === stint.teamId &&
-                  isWithinStint(honor.date, stint.startedAt, stint.endedAt),
-              );
-              const stintRating =
-                state.profile?.simulateNpcMatchStats && stint.teamId
-                  ? getRatingSummary(
-                      ratingGames,
-                      (game) =>
-                        isWithinStint(new Date(game.date), stint.startedAt, stint.endedAt) &&
-                        game.teamIds.includes(stint.teamId),
-                    )
-                  : null;
-
-              return (
-                <tr key={stint.id}>
-                  <td className="truncate">
-                    {formatStintDate(stint.startedAt)} -{' '}
-                    {stint.endedAt ? formatStintDate(stint.endedAt) : 'Present'}
-                  </td>
-                  <td className="h-12">
-                    {stint.team ? (
-                      <div className="flex items-center gap-2">
-                        <img src={stint.team.blazon} className="inline-block size-6" />
-                        <span className="inline-flex items-baseline gap-1">
-                          {stint.team.name}
-                          {!stint.starter && (
-                            <span className="text-[8px] text-red-400 uppercase">(BENCHED)</span>
+                <div className="border-base-content/10 border-l pl-4">
+                  <p className="player-profile-label">Team</p>
+                  <div className="flex items-center gap-2 truncate">
+                    {player.retiredAt ? (
+                      <span title={`Retired on ${formatAppDate(player.retiredAt)}`}>Retired</span>
+                    ) : player.team ? (
+                      <button
+                        type="button"
+                        className="hover:text-primary flex min-w-0 items-center gap-2 text-left"
+                        title={`Open ${player.team.name} team page`}
+                        data-interaction-sound="click"
+                        onClick={() => openMainPage(`/teams?teamId=${player.team!.id}`)}
+                      >
+                        <img src={player.team.blazon} className="size-6 object-contain" alt="" />{' '}
+                        <span className="truncate">
+                          {player.team.name}
+                          {!player.starter && (
+                            <small className="ml-1 text-red-400">(BENCHED)</small>
                           )}
                         </span>
-                      </div>
+                      </button>
                     ) : (
-                      <span className="opacity-70">Free Agent</span>
+                      'Free Agent'
                     )}
-                  </td>
-
-                  {state.profile?.simulateNpcMatchStats && (
-                    <td
+                  </div>
+                </div>
+                <div className="border-base-content/10 border-l pl-4">
+                  <p className="player-profile-label">Age</p>
+                  <div>{player.age ? `${player.age} years` : 'N/A'}</div>
+                </div>
+              </div>
+              {hasRankingOrMajor && (
+                <div className="player-profile-panel mb-2 flex min-w-0 items-center gap-3 p-2">
+                  {hasTop20Appearances && (
+                    <>
+                      <span className="text-base-content/60 shrink-0 text-xs font-bold uppercase">
+                        Top 20
+                      </span>
+                      <button
+                        type="button"
+                        className={cx('player-profile-arrow', top20Page === 0 && 'invisible')}
+                        aria-label="Previous Top 20 entries"
+                        disabled={top20Page === 0}
+                        onClick={() => setTop20Page((page) => page - 1)}
+                      >
+                        <FaArrowLeft />
+                      </button>
+                      <div
+                        ref={top20Ref}
+                        className="player-profile-rankings flex min-w-0 flex-1 overflow-hidden whitespace-nowrap"
+                      >
+                        {top20Appearances
+                          .slice(top20Page * top20PageSize, (top20Page + 1) * top20PageSize)
+                          .map((appearance) => (
+                            <button
+                              key={`${appearance.articleId}-${appearance.rank}-${appearance.year}`}
+                              type="button"
+                              className="text-base-content/70 hover:text-primary w-[64px] shrink-0 text-center text-xs font-bold"
+                              title={`Open Top 20 players of ${appearance.year}`}
+                              data-interaction-sound="click"
+                              onClick={() => openTop20Article(appearance.articleId)}
+                            >
+                              #{appearance.rank} ('{String(appearance.year).slice(-2)})
+                            </button>
+                          ))}
+                      </div>
+                      <button
+                        type="button"
+                        className={cx(
+                          'player-profile-arrow',
+                          (top20Page + 1) * top20PageSize >= top20Appearances.length && 'invisible',
+                        )}
+                        aria-label="Next Top 20 entries"
+                        disabled={(top20Page + 1) * top20PageSize >= top20Appearances.length}
+                        onClick={() => setTop20Page((page) => page + 1)}
+                      >
+                        <FaArrowRight />
+                      </button>
+                    </>
+                  )}
+                  {(majorWinCount > 0 || majorMvpCount > 0) && (
+                    <div
                       className={cx(
-                        'text-right font-semibold tabular-nums',
-                        stintRating ? getRatingColorClass(stintRating.rating) : 'text-muted',
+                        'ml-auto flex shrink-0 gap-2 text-xs',
+                        hasTop20Appearances && 'border-base-content/10 border-l pl-3',
                       )}
                     >
-                      {stintRating ? stintRating.rating.toFixed(2) : '—'}
-                    </td>
+                      {majorWinCount > 0 && (
+                        <span className="player-profile-major-badge">
+                          <FaTrophy /> {majorWinCount}x Major winner
+                        </span>
+                      )}
+                      {majorMvpCount > 0 && (
+                        <span className="player-profile-mvp-badge">
+                          <FaStar /> {majorMvpCount}x Major MVP
+                        </span>
+                      )}
+                    </div>
                   )}
-
-                  <td>
-                    {stintHonors.length === 0 ? (
-                      <span className="opacity-60">—</span>
-                    ) : (
-                      <div className="flex h-10 max-w-full min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap">
-                        {stintHonors.map((honor, idx) => (
-                          <div
-                            key={`${stint.id}-${honor.key}-${honor.season}-${idx}`}
-                            className="shrink-0 cursor-help"
-                            onMouseEnter={(event) => showTooltip(event, honor.title)}
-                            onMouseLeave={() => setActiveTooltip(null)}
-                          >
-                            <span className="relative inline-flex">
-                              <Image
-                                className="h-9 w-9 object-contain"
-                                src={Util.getCompetitionHonorThumbnail(honor) || Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                                  location: honor.location,
-                                  organizer: honor.organizer,
-                                })}
+                </div>
+              )}
+              <div className="grid flex-1 grid-cols-3 gap-3">
+                <div className="player-profile-stat">
+                  <span className="player-profile-label">
+                    <FaChartBar /> Rating
+                  </span>
+                  {state.profile?.simulateNpcMatchStats ? (
+                    <strong
+                      className={cx(
+                        playerRating
+                          ? getRatingColorClass(playerRating.rating)
+                          : 'text-base-content/40',
+                      )}
+                    >
+                      {playerRating ? playerRating.rating.toFixed(2) : '—'}
+                    </strong>
+                  ) : (
+                    <XPBar
+                      className="w-full"
+                      title="Total XP"
+                      value={Bot.Exp.getTotalXP(player.xp)}
+                      max={100}
+                    />
+                  )}
+                </div>
+                <div className="player-profile-stat">
+                  <span className="player-profile-label">
+                    <FaMap /> Maps Played
+                  </span>
+                  <strong>
+                    {state.profile?.simulateNpcMatchStats ? (playerRating?.maps ?? 0) : '—'}
+                  </strong>
+                </div>
+                <div className="player-profile-stat">
+                  <span className="player-profile-label">
+                    <FaChartLine /> FACEIT Elo
+                  </span>
+                  <strong className="flex items-center gap-2 text-2xl">
+                    <img src={faceitLogo} className="size-5 object-contain" alt="" />
+                    <img
+                      src={FACEIT_LEVEL_IMAGES[faceitLevel ?? 1]}
+                      className="size-5 object-contain"
+                      alt=""
+                    />
+                    {typeof faceitElo === 'number' ? faceitElo.toLocaleString() : 'N/A'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </div>
+          {hasHonors && (
+            <section className="player-profile-panel mx-3 mb-2 shrink-0 overflow-hidden">
+              <div className="player-profile-section-heading">
+                <h2>
+                  <FaTrophy /> Career Trophies
+                </h2>
+                <span>{honors.length} trophies</span>
+              </div>
+              <div className="player-profile-honors flex min-h-[65px] items-center gap-4 overflow-x-auto px-4 py-1">
+                {mvps.length > 0 && (
+                  <button
+                    type="button"
+                    className="player-profile-honor"
+                    aria-label={mvpTooltip}
+                    title="Open latest MVP tournament"
+                    data-interaction-sound="click"
+                    onClick={() =>
+                      openMainPage(
+                        `/competitions?competitionId=${
+                          mvps.reduce((latest, award) =>
+                            award.date > latest.date ? award : latest,
+                          ).competitionId
+                        }`,
+                      )
+                    }
+                    onMouseEnter={(event) => showTooltip(event, mvpTooltip)}
+                    onMouseLeave={() => setActiveTooltip(null)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Image className="size-11 object-contain" src={MVP_MEDAL_SRC} />
+                      <b>x{mvps.length}</b>
+                    </div>
+                  </button>
+                )}
+                {Object.values(honorGroups).map((honor) => (
+                  <button
+                    type="button"
+                    key={honor.key}
+                    className="player-profile-honor"
+                    title={`Open ${honor.titles[0]} tournament`}
+                    data-interaction-sound="click"
+                    onClick={() =>
+                      openMainPage(`/competitions?competitionId=${honor.competitionIds[0]}`)
+                    }
+                    onMouseEnter={(event) =>
+                      showTooltip(
+                        event,
+                        honor.titles.length === 1
+                          ? honor.titles[0]
+                          : ['Tournament wins at:', ...honor.titles].join('\n'),
+                      )
+                    }
+                    onMouseLeave={() => setActiveTooltip(null)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="relative">
+                        <Image
+                          className="size-11 object-contain"
+                          src={
+                            Util.getCompetitionHonorThumbnail(honor) ||
+                            Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                              location: honor.location,
+                              organizer: honor.organizer,
+                            })
+                          }
+                        />
+                        {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
+                      </span>
+                      <b>x{honor.count}</b>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          <section className="player-profile-panel mx-3 mb-3 flex min-h-[180px] flex-1 flex-col overflow-hidden">
+            <div className="player-profile-section-heading">
+              <h2>
+                <FaUsers /> Team History
+              </h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="player-profile-history w-full table-fixed text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className="w-[24%]">Time period</th>
+                    <th className="w-[32%]">Team</th>
+                    {state.profile?.simulateNpcMatchStats && <th className="w-[12%]">Rating</th>}
+                    <th>Trophies</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamHistory.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={state.profile?.simulateNpcMatchStats ? 4 : 3}
+                        className="text-base-content/50 py-8 text-center"
+                      >
+                        No team history available.
+                      </td>
+                    </tr>
+                  )}
+                  {teamHistory.map((stint) => {
+                    const stintHonors = honors.filter(
+                      (honor) =>
+                        honor.teamId === stint.teamId &&
+                        isWithinStint(honor.date, stint.startedAt, stint.endedAt),
+                    );
+                    const stintRating =
+                      state.profile?.simulateNpcMatchStats && stint.teamId
+                        ? getRatingSummary(
+                            ratingGames,
+                            (game) =>
+                              isWithinStint(new Date(game.date), stint.startedAt, stint.endedAt) &&
+                              game.teamIds.includes(stint.teamId),
+                          )
+                        : null;
+                    return (
+                      <tr key={stint.id}>
+                        <td>
+                          {formatStintDate(stint.startedAt)} -{' '}
+                          {stint.endedAt ? formatStintDate(stint.endedAt) : 'Present'}
+                        </td>
+                        <td>
+                          {stint.team ? (
+                            <button
+                              type="button"
+                              className="hover:text-primary flex items-center gap-2 text-left"
+                              title={`Open ${stint.team.name} team page`}
+                              data-interaction-sound="click"
+                              onClick={() => openMainPage(`/teams?teamId=${stint.team!.id}`)}
+                            >
+                              <img
+                                src={stint.team.blazon}
+                                className="size-7 object-contain"
+                                alt=""
                               />
-                              {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
+                              <span className="truncate">
+                                {stint.team.name}
+                                {!stint.starter && (
+                                  <small className="ml-1 text-red-400">(BENCHED)</small>
+                                )}
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="text-base-content/50">Free Agent</span>
+                          )}
+                        </td>
+                        {state.profile?.simulateNpcMatchStats && (
+                          <td
+                            className={cx(
+                              'font-semibold tabular-nums',
+                              stintRating
+                                ? getRatingColorClass(stintRating.rating)
+                                : 'text-base-content/50',
+                            )}
+                          >
+                            {stintRating ? stintRating.rating.toFixed(2) : '—'}
+                          </td>
+                        )}
+                        <td>
+                          {stintHonors.length ? (
+                            <div className="flex h-12 max-w-full items-center gap-2 overflow-x-auto overflow-y-hidden">
+                              {stintHonors.map((honor, idx) => (
+                                <button
+                                  type="button"
+                                  key={`${stint.id}-${honor.key}-${idx}`}
+                                  className="relative shrink-0 cursor-pointer"
+                                  title={`Open ${honor.title} tournament`}
+                                  data-interaction-sound="click"
+                                  onClick={() =>
+                                    openMainPage(
+                                      `/competitions?competitionId=${honor.competitionId}`,
+                                    )
+                                  }
+                                  onMouseEnter={(event) => showTooltip(event, honor.title)}
+                                  onMouseLeave={() => setActiveTooltip(null)}
+                                >
+                                  <Image
+                                    className="size-8 object-contain"
+                                    src={
+                                      Util.getCompetitionHonorThumbnail(honor) ||
+                                      Util.getCompetitionLogo(
+                                        honor.tierSlug,
+                                        honor.federationSlug,
+                                        { location: honor.location, organizer: honor.organizer },
+                                      )
+                                    }
+                                  />
+                                  {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-base-content/50">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
       {activeTooltip &&
         createPortal(
           <div
