@@ -790,9 +790,14 @@ export default function TransferModal() {
                 </div>
               )}
               <div className="grid flex-1 grid-cols-3 gap-3">
-                <div className="player-profile-stat">
+                <div
+                  className={cx(
+                    'player-profile-stat',
+                    !state.profile?.simulateNpcMatchStats && 'col-span-2',
+                  )}
+                >
                   <span className="player-profile-label">
-                    <FaChartBar /> Rating
+                    <FaChartBar /> {state.profile?.simulateNpcMatchStats ? 'Rating' : 'Total XP'}
                   </span>
                   {state.profile?.simulateNpcMatchStats ? (
                     <strong
@@ -805,22 +810,17 @@ export default function TransferModal() {
                       {playerRating ? playerRating.rating.toFixed(2) : '—'}
                     </strong>
                   ) : (
-                    <XPBar
-                      className="w-full"
-                      title="Total XP"
-                      value={Bot.Exp.getTotalXP(player.xp)}
-                      max={100}
-                    />
+                    <XPBar className="w-full" value={Bot.Exp.getTotalXP(player.xp)} max={100} />
                   )}
                 </div>
-                <div className="player-profile-stat">
-                  <span className="player-profile-label">
-                    <FaMap /> Maps Played
-                  </span>
-                  <strong>
-                    {state.profile?.simulateNpcMatchStats ? (playerRating?.maps ?? 0) : '—'}
-                  </strong>
-                </div>
+                {state.profile?.simulateNpcMatchStats && (
+                  <div className="player-profile-stat">
+                    <span className="player-profile-label">
+                      <FaMap /> Maps Played
+                    </span>
+                    <strong>{playerRating?.maps ?? 0}</strong>
+                  </div>
+                )}
                 <div className="player-profile-stat">
                   <span className="player-profile-label">
                     <FaChartLine /> FACEIT Elo
