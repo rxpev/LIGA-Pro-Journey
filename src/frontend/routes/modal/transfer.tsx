@@ -693,7 +693,19 @@ export default function TransferModal() {
                   <p className="player-profile-label">Team</p>
                   <div className="flex items-center gap-2 truncate">
                     {player.retiredAt ? (
-                      <span title={`Retired on ${formatAppDate(player.retiredAt)}`}>Retired</span>
+                      <span>
+                        Retired{' '}
+                        <span
+                          className="text-base-content/50 inline-flex cursor-help"
+                          aria-label={`Retired on ${formatAppDate(player.retiredAt)}`}
+                          onMouseEnter={(event) =>
+                            showTooltip(event, `Retired on ${formatAppDate(player.retiredAt)}`)
+                          }
+                          onMouseLeave={() => setActiveTooltip(null)}
+                        >
+                          (?)
+                        </span>
+                      </span>
                     ) : player.team ? (
                       <button
                         type="button"

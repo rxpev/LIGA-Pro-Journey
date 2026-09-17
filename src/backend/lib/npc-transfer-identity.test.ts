@@ -3,10 +3,13 @@ import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
+  getNpcTransferRecruitmentPolicy,
   getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
   isNpcTransferCompatible,
+  inferNpcTransferRecruitmentPolicy,
+  serializeNpcTransferRecruitmentPolicy,
   sortNpcTransferCandidatesByFit,
   USER_OFFER_FIT_BUCKET_WEIGHTS,
 } from './npc-transfer-identity';
@@ -514,6 +517,72 @@ assert.ok(
     proTier: tiers.pro,
   }) > 0,
   'lower-league promotion boost also applies to Americas teams',
+);
+
+const persistedChinesePolicyTeam = {
+  ...fiveChineseTeam,
+  players: fiveChineseTeam.players.slice(0, 4),
+  npcRecruitmentPolicy: serializeNpcTransferRecruitmentPolicy({
+    version: 1,
+    type: 'national-lock',
+    countryId: countries.china.id,
+    region: 'Asia',
+  }),
+};
+assert.deepEqual(
+  getNpcTransferTeamIdentity(persistedChinesePolicyTeam),
+  {
+    type: 'national-lock',
+    countryId: countries.china.id,
+    count: 4,
+    region: 'Asia',
+  },
+  'persisted national locks survive a temporary vacancy',
+);
+assert.equal(
+  isNpcTransferCompatible(persistedChinesePolicyTeam, player(101, countries.denmark)),
+  false,
+  'persisted national locks reject a regional substitute during a vacancy',
+);
+
+const persistedRegionalTeam = {
+  ...europeanRegionalTeam,
+  npcRecruitmentPolicy: serializeNpcTransferRecruitmentPolicy({
+    version: 1,
+    type: 'regional',
+    region: 'Europe',
+  }),
+};
+assert.deepEqual(
+  getNpcTransferTeamIdentity({
+    ...persistedRegionalTeam,
+    players: [1, 2, 3, 4, 5].map((id) => player(id, countries.germany)),
+  }),
+  {
+    type: 'national-lock',
+    countryId: countries.germany.id,
+    count: 5,
+    region: 'Europe',
+  },
+  'a complete same-country roster upgrades a prior regional policy to a lock',
+);
+assert.deepEqual(
+  getNpcTransferRecruitmentPolicy(persistedChinesePolicyTeam),
+  {
+    version: 1,
+    type: 'national-lock',
+    countryId: countries.china.id,
+    region: 'Asia',
+  },
+  'policy serialization round-trips with only supported fields',
+);
+assert.equal(
+  inferNpcTransferRecruitmentPolicy({
+    ...russianMajorityCisTeam,
+    players: [1, 2, 3, 4, 5].map((id) => player(id, countries.russia)),
+  }).type,
+  'national-lock',
+  'five same-country CIS starters take national-lock precedence',
 );
 
 console.log('npc-transfer-identity tests passed');

@@ -1626,8 +1626,7 @@ async function getCompletedTransfersForNews() {
   });
 }
 
-async function getCompetitionMvpSeedsForNews(publishedAt: Date) {
-  const mvps = await findCompetitionMvps({});
+async function getCompetitionMvpSeedsForNews(publishedAt: Date, mvps: CompetitionMvpSeed[]) {
   const storyDates = new Map<number, Date>(
     await Promise.all(
       mvps.map(
@@ -6156,11 +6155,24 @@ export async function generateAutomaticItems(date?: Date) {
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
 
   const transfers = await getCompletedTransfersForNews();
-  const mvpSeeds = includeStatistics ? await getCompetitionMvpSeedsForNews(publishedAt) : [];
   const allMvps = includeStatistics ? await findCompetitionMvps({}) : [];
+  // Existing articles are immutable: createDrafts already discards these
+  // keys. Avoid reconstructing their statistics, graphics and prose first.
+  // Keep the complete transfer/MVP arrays for unpublished stories' context.
+  const existingItems = await DatabaseClient.prisma.newsItem.findMany({
+    where: { OR: [
+      { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:transfer:` } },
+      { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:competition-mvp:` } },
+    ] },
+    select: { eventKey: true },
+  });
+  const publishedKeys = new Set(existingItems.map((item) => item.eventKey));
+  const mvpSeeds = includeStatistics ? await getCompetitionMvpSeedsForNews(publishedAt,
+    allMvps.filter((mvp) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:competition-mvp:${mvp.competitionId}`)),
+  ) : [];
   const transferDrafts = (
     await Promise.all(
-      transfers.map((transfer) =>
+      transfers.filter((transfer) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`)).map((transfer) =>
         buildTransferDraft(
           transfer,
           transfers,

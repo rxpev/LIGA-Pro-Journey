@@ -26,6 +26,7 @@ import {
   Worldgen,
 } from '@liga/backend/lib';
 import { Bot, Eagers, Constants, Util } from '@liga/shared';
+import { numericUpdateBatches, rankingSnapshotStatement } from '../lib/simulation-bulk-writes';
 
 /**
  * Prevents the main window from closing immediately while the calendar advances.
@@ -37,6 +38,15 @@ function disableClose(event: Electron.Event) {
 }
 
 const calendarPhaseTimings = new Map<string, { count: number; totalMs: number }>();
+let tickStartedAt = 0;
+let tickDate: Date | undefined;
+
+function recordCalendarPhase(phase: string, elapsedMs: number) {
+  const timing = calendarPhaseTimings.get(phase) || { count: 0, totalMs: 0 };
+  timing.count += 1;
+  timing.totalMs += elapsedMs;
+  calendarPhaseTimings.set(phase, timing);
+}
 
 async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>) {
   const startedAt = performance.now();
@@ -44,10 +54,7 @@ async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>
     return await callback();
   } finally {
     const elapsedMs = performance.now() - startedAt;
-    const timing = calendarPhaseTimings.get(phase) || { count: 0, totalMs: 0 };
-    timing.count += 1;
-    timing.totalMs += elapsedMs;
-    calendarPhaseTimings.set(phase, timing);
+    recordCalendarPhase(phase, elapsedMs);
   }
 }
 
@@ -179,6 +186,7 @@ async function reconcileOverdueMatchdays(
  * Engine middleware: start of each tick.
  */
 async function onTickStart() {
+  tickStartedAt = performance.now();
   Engine.Runtime.Instance.log.info(
     'Running %s middleware...',
     Engine.MiddlewareType.TICK_START.toUpperCase(),
@@ -186,9 +194,10 @@ async function onTickStart() {
 
   const profile = await DatabaseClient.prisma.profile.findFirst();
   if (!profile) return Promise.resolve();
+  tickDate = profile.date;
 
-  await reconcileDueCompetitionStarts(profile);
-  await reconcileOverdueMatchdays(profile);
+  await measureCalendarPhase('reconcile-competition-starts', () => reconcileDueCompetitionStarts(profile));
+  await measureCalendarPhase('reconcile-matchdays', () => reconcileOverdueMatchdays(profile));
 
   // Fetch global calendar events for today (calendar-day window, not exact timestamp).
   // This avoids missing entries due to timezone/DST/millisecond drift.
@@ -222,21 +231,23 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   // today's input (for example, when it reschedules contract checks). Mark
   // only entries that still exist rather than failing the entire calendar run
   // when one has been removed.
-  await Promise.all(
-    input.map((calendar) =>
-      DatabaseClient.prisma.calendar.updateMany({
-        where: { id: calendar.id },
+  await measureCalendarPhase('calendar-completion', async () => {
+    for (let offset = 0; offset < input.length; offset += 500) {
+      await DatabaseClient.prisma.calendar.updateMany({
+        where: { id: { in: input.slice(offset, offset + 500).map((entry) => entry.id) } },
         data: { completed: true },
-      }),
-    ),
-  );
+      });
+    }
+  });
 
   const updatedCompetitions = await measureCalendarPhase('record-match-results', () =>
-    Worldgen.recordMatchResults(),
+    Worldgen.recordMatchResults(recordCalendarPhase),
   );
 
   // npc transfers
-  await measureCalendarPhase('npc-transfers', () => Worldgen.sendNPCTransferOffer());
+  await measureCalendarPhase('npc-transfers', () =>
+    Worldgen.sendNPCTransferOffer(measureCalendarPhase),
+  );
 
   // keep team country identities synced even for teams that did not pass
   // through a direct roster-change recalculation hook this tick
@@ -286,17 +297,8 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   // have been applied, before moving the in-game date into the next month.
   if (isSameDay(profile.date, endOfMonth(profile.date))) {
     const snapshotDate = endOfDay(profile.date);
-    const rankings = await DatabaseClient.prisma.$queryRaw<Array<{ teamId: number; rank: number }>>`
-      SELECT id AS teamId, RANK() OVER (ORDER BY elo DESC) AS rank FROM "Team"
-    `;
-    await Promise.all(
-      rankings.map((item) =>
-        DatabaseClient.prisma.teamRankingSnapshot.upsert({
-          where: { teamId_date: { teamId: item.teamId, date: snapshotDate } },
-          create: { teamId: item.teamId, rank: Number(item.rank), date: snapshotDate },
-          update: { rank: Number(item.rank) },
-        }),
-      ),
+    await measureCalendarPhase('monthly-rankings', () =>
+      DatabaseClient.prisma.$executeRaw(rankingSnapshotStatement(snapshotDate)),
     );
   }
 
@@ -308,11 +310,20 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
 
   const isStartOfIsoWeek = getISODay(profile.date) === 1;
   if (isStartOfIsoWeek) {
-    await simulateWeeklyNpcFaceitElo(DatabaseClient.prisma, profile.playerId);
+    await measureCalendarPhase('weekly-faceit', () =>
+      simulateWeeklyNpcFaceitElo(DatabaseClient.prisma, profile.playerId),
+    );
   }
 
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents;
   if (mainWindow) mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, profile);
+
+  const elapsed = performance.now() - tickStartedAt;
+  if (elapsed >= 1000 && tickDate) Engine.Runtime.Instance.log.info(
+    'Slow calendar day %s: %dms, %d calendar entries, %d NPC matches',
+    format(tickDate, 'yyyy-MM-dd'), Math.round(elapsed), input.length,
+    input.filter((entry) => entry.type === Constants.CalendarEntry.MATCHDAY_NPC).length,
+  );
 
   return Promise.resolve();
 }
@@ -461,19 +472,14 @@ async function simulateWeeklyNpcFaceitElo(
   for (let i = 0; i < players.length; i += chunkSize) {
     const chunk = players.slice(i, i + chunkSize);
 
-    await prisma.$transaction(
-      chunk.map((player) => {
-        const delta = randomWeeklyFaceitDeltaForXp(player.xp, player.elo);
-
-        return prisma.player.update({
-          where: { id: player.id },
-          data: {
-            // Increment from the player's CURRENT Elo in DB at write time.
-            elo: { increment: delta },
-          },
-        });
-      }),
-    );
+    // Draw the same deltas in the same player order. SQL increments the
+    // current database value, rather than assigning the earlier snapshot.
+    const updates = chunk.map((player) => ({
+      id: player.id,
+      data: { elo: randomWeeklyFaceitDeltaForXp(player.xp, player.elo) },
+    }));
+    await prisma.$transaction(numericUpdateBatches('Player', updates, true)
+      .map((statement) => prisma.$executeRaw(statement)));
 
     await prisma.player.updateMany({
       where: {
@@ -536,19 +542,24 @@ async function onLoopFinish() {
  * Register calendar handlers.
  */
 export default function () {
+  const registerEvent = (type: string, callback: Engine.MiddlewareCallback) =>
+    Engine.Runtime.Instance.register(type, (entry, status) =>
+      measureCalendarPhase(`event-${type}`, () => callback(entry, status)),
+    );
   // Engine middleware registration.
   Engine.Runtime.Instance.register(Engine.MiddlewareType.TICK_START, onTickStart);
   Engine.Runtime.Instance.register(Engine.MiddlewareType.TICK_END, onTickEnd);
   Engine.Runtime.Instance.register(Engine.MiddlewareType.LOOP_FINISH, onLoopFinish);
 
   // Worldgen handlers (global world events).
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.COMPETITION_START,
     Worldgen.onCompetitionStart,
   );
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.MATCHDAY_NPC, (entry: Calendar) =>
-    measureCalendarPhase('npc-matchday', () => Worldgen.onMatchdayNPC(entry)),
+  registerEvent(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
+  Engine.Runtime.Instance.registerBatch(Constants.CalendarEntry.MATCHDAY_NPC, (entries) =>
+    measureCalendarPhase('npc-matchday', () =>
+      Worldgen.onMatchdayNPCBatch(entries as Calendar[], recordCalendarPhase)),
   );
 
   Engine.Runtime.Instance.register(
@@ -574,36 +585,36 @@ export default function () {
     },
   );
 
-  Engine.Runtime.Instance.register(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
-  Engine.Runtime.Instance.register(
+  registerEvent(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
+  registerEvent(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
     Worldgen.onPlayerContractExpire,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
     Worldgen.onPlayerScoutingCheck,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
     Worldgen.onPlayerContractReview,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
     Worldgen.onPlayerContractExtensionEval,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
     Worldgen.onNpcRetirementCheck,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.NPC_REGEN_INTAKE,
     Worldgen.onNpcRegenIntake,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
     Worldgen.onTransferOfferExpiryCheck,
   );
-  Engine.Runtime.Instance.register(
+  registerEvent(
     Constants.CalendarEntry.TRANSFER_PARSE,
     Worldgen.onTransferParse,
   );

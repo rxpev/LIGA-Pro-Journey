@@ -22,8 +22,28 @@ type TeamLike = {
   id?: number;
   countryId?: number | null;
   competitionFederationId?: number | null;
+  /** Serialized persistent policy written by save maintenance. */
+  npcRecruitmentPolicy?: string | NpcTransferRecruitmentPolicy | null;
   country?: CountryLike;
   players?: PlayerLike[] | null;
+};
+
+export type NpcTransferRecruitmentPolicyType =
+  | 'national-lock'
+  | 'national-core'
+  | 'cis-core'
+  | 'regional';
+
+/**
+ * The policy is deliberately small and JSON serializable because saves are
+ * SQLite databases shared by several game versions. The roster can become
+ * temporarily incomplete, but this value keeps the recruitment rule stable.
+ */
+export type NpcTransferRecruitmentPolicy = {
+  version: 1;
+  type: NpcTransferRecruitmentPolicyType;
+  countryId?: number | null;
+  region?: RegionIdentity;
 };
 
 export type UserOfferFitBucket = 'national' | 'regional' | 'other';
@@ -58,6 +78,168 @@ export type NpcTransferTeamIdentity =
       type: 'regional';
       region: RegionIdentity;
     };
+
+function isRegionIdentity(value: unknown): value is RegionIdentity {
+  return (
+    value === 'Europe' ||
+    value === 'Other' ||
+    value === 'South America' ||
+    value === 'Asia' ||
+    value === 'North America'
+  );
+}
+
+function parseNpcTransferRecruitmentPolicy(
+  value: TeamLike['npcRecruitmentPolicy'],
+): NpcTransferRecruitmentPolicy | null {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null;
+  const policy = parsed as Record<string, unknown>;
+  const type = policy.type;
+  if (
+    type !== 'national-lock' &&
+    type !== 'national-core' &&
+    type !== 'cis-core' &&
+    type !== 'regional'
+  ) {
+    return null;
+  }
+
+  const countryId = policy.countryId;
+  if (
+    (type === 'national-lock' || type === 'national-core') &&
+    (typeof countryId !== 'number' || !Number.isInteger(countryId) || countryId <= 0)
+  ) {
+    return null;
+  }
+
+  const region = isRegionIdentity(policy.region) ? policy.region : undefined;
+  return {
+    version: 1,
+    type,
+    countryId: typeof countryId === 'number' ? countryId : null,
+    region,
+  };
+}
+
+export function serializeNpcTransferRecruitmentPolicy(policy: NpcTransferRecruitmentPolicy) {
+  return JSON.stringify(policy);
+}
+
+function identityFromPolicy(
+  policy: NpcTransferRecruitmentPolicy,
+  team: TeamLike,
+  starters: PlayerLike[],
+): NpcTransferTeamIdentity {
+  const region = policy.region ?? getNpcTransferRegionIdentity(team);
+  const countryId = policy.countryId;
+  const count =
+    countryId == null
+      ? 0
+      : starters.filter((player) => player.countryId === countryId).length;
+
+  if ((policy.type === 'national-lock' || policy.type === 'national-core') && countryId != null) {
+    return { type: policy.type, countryId, count, region };
+  }
+
+  if (policy.type === 'cis-core') {
+    const countryCounts = new Map<number, number>();
+    starters.forEach((player) => {
+      if (player.countryId != null && isNpcTransferCisCountry(player)) {
+        countryCounts.set(player.countryId, (countryCounts.get(player.countryId) ?? 0) + 1);
+      }
+    });
+    const [dominantCountryId, dominantCount] =
+      [...countryCounts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0] ?? [];
+    return {
+      type: 'cis-core',
+      count: starters.filter(isNpcTransferCisCountry).length,
+      region,
+      dominantCountryId: dominantCountryId ?? null,
+      dominantCount: dominantCount ?? 0,
+    };
+  }
+
+  return { type: 'regional', region };
+}
+
+/**
+ * Resolve a policy for a new team from its current roster. A national lock is
+ * inferred only from a complete five-player same-country roster, which avoids
+ * turning an originally mixed team into a permanent lock merely because its
+ * current majority is four players.
+ */
+export function inferNpcTransferRecruitmentPolicy(team: TeamLike): NpcTransferRecruitmentPolicy {
+  const starters = (team.players ?? []).filter((player) => player.starter !== false);
+  const currentCounts = new Map<number, number>();
+  starters.forEach((player) => {
+    if (player.countryId != null) {
+      currentCounts.set(player.countryId, (currentCounts.get(player.countryId) ?? 0) + 1);
+    }
+  });
+
+  const currentLock = [...currentCounts.entries()].find(
+    ([, count]) => count >= 5 && starters.length >= 5,
+  );
+  const lock = currentLock ? { countryId: currentLock[0], count: currentLock[1] } : null;
+
+  if (lock) {
+    return {
+      version: 1,
+      type: 'national-lock',
+      countryId: lock.countryId,
+      region: getNpcTransferRegionIdentity(team),
+    };
+  }
+
+  const dominantCurrent = [...currentCounts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0] - b[0],
+  )[0];
+  if (dominantCurrent && dominantCurrent[1] >= 3) {
+    const cisCount = starters.filter(isNpcTransferCisCountry).length;
+    if (cisCount >= 3 && cisCount >= Math.ceil(starters.length * 0.6)) {
+      return {
+        version: 1,
+        type: 'cis-core',
+        region: getNpcTransferRegionIdentity(team),
+      };
+    }
+
+    return {
+      version: 1,
+      type: 'national-core',
+      countryId: dominantCurrent[0],
+      region: getNpcTransferRegionIdentity(team),
+    };
+  }
+
+  const cisCount = starters.filter(isNpcTransferCisCountry).length;
+  if (cisCount >= 3 && cisCount >= Math.ceil(starters.length * 0.6)) {
+    return {
+      version: 1,
+      type: 'cis-core',
+      region: getNpcTransferRegionIdentity(team),
+    };
+  }
+
+  return {
+    version: 1,
+    type: 'regional',
+    region: getNpcTransferRegionIdentity(team),
+  };
+}
+
+export function getNpcTransferRecruitmentPolicy(team: TeamLike) {
+  return parseNpcTransferRecruitmentPolicy(team.npcRecruitmentPolicy);
+}
 
 const REGION_STORAGE_CODES: Record<string, RegionIdentity> = {
   eu: 'Europe',
@@ -119,6 +301,31 @@ export function isNpcTransferCisCountry(entity: { country?: CountryLike }) {
 
 export function getNpcTransferTeamIdentity(team: TeamLike): NpcTransferTeamIdentity {
   const starters = (team.players ?? []).filter((player) => player.starter !== false);
+  const persistedPolicy = getNpcTransferRecruitmentPolicy(team);
+  if (persistedPolicy) {
+    // A team that later becomes a complete five-player national roster earns a
+    // lock even if it began as a regional team. The caller persists this
+    // upgrade on its next roster maintenance pass.
+    const currentCounts = new Map<number, number>();
+    starters.forEach((player) => {
+      if (player.countryId != null) {
+        currentCounts.set(player.countryId, (currentCounts.get(player.countryId) ?? 0) + 1);
+      }
+    });
+    const currentLock = [...currentCounts.entries()].find(
+      ([, count]) => count >= 5 && starters.length >= 5,
+    );
+    if (currentLock && persistedPolicy.type !== 'national-lock') {
+      return {
+        type: 'national-lock',
+        countryId: currentLock[0],
+        count: currentLock[1],
+        region: getNpcTransferRegionIdentity(team),
+      };
+    }
+    return identityFromPolicy(persistedPolicy, team, starters);
+  }
+
   const countryCounts = new Map<number, number>();
   let cisCount = 0;
 
@@ -135,6 +342,13 @@ export function getNpcTransferTeamIdentity(team: TeamLike): NpcTransferTeamIdent
   const region = getNpcTransferRegionIdentity(team);
   const dominantStarter = starters.find((player) => player.countryId === countryId);
   const dominantCountryIsCis = dominantStarter ? isNpcTransferCisCountry(dominantStarter) : false;
+
+  // A complete five-player same-country roster is always a national lock,
+  // including Russian/CIS teams. CIS precedence used to silently weaken this
+  // case and let a non-national candidate through after a vacancy.
+  if (countryId != null && count >= 5 && starters.length >= 5) {
+    return { type: 'national-lock', countryId, count, region };
+  }
 
   if (cisCount >= 3 && cisCount >= Math.ceil(starters.length * 0.6)) {
     return {
@@ -336,6 +550,9 @@ export function sortNpcTransferCandidatesByFit<T extends PlayerLike & { xp?: num
 
 export const __npcTransferIdentityTest = {
   getNpcTransferTeamIdentity,
+  getNpcTransferRecruitmentPolicy,
+  inferNpcTransferRecruitmentPolicy,
+  serializeNpcTransferRecruitmentPolicy,
   getNpcTransferRegionIdentity,
   isNpcTransferRegionalSquadIdentity,
   isNpcTransferCisCountry,

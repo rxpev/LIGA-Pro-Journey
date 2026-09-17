@@ -44,6 +44,11 @@ export interface MiddlewareCallback {
   (data?: unknown, status?: LoopStatus): Promise<unknown>;
 }
 
+/** A handler for adjacent calendar entries of the same generic type. */
+export interface MiddlewareBatchCallback {
+  (items: Array<{ type: string } & unknown>): Promise<unknown>;
+}
+
 /** @interface */
 export interface Middleware {
   type: MiddlewareType | string;
@@ -90,6 +95,10 @@ export class Runtime {
     [MiddlewareType.TICK_START]: [] as Middleware[],
     generic: [] as Middleware[],
   };
+
+  // Adjacent-only batching keeps every different calendar event as a strict
+  // chronological boundary.
+  private batchMiddleware = new Map<string, MiddlewareBatchCallback>();
 
   /**
    * The input data for each tick.
@@ -189,8 +198,19 @@ export class Runtime {
         // run generic middleware sequentially to keep calendar side-effects deterministic
         // (multiple same-day competition starts can otherwise race each other).
         const genericResults = [] as unknown[];
-        for (const item of this.input) {
-          genericResults.push(await this.runGenericMiddleware(item));
+        for (let index = 0; index < this.input.length;) {
+          const item = this.input[index];
+          const batch = this.batchMiddleware.get(item.type);
+          if (!batch) {
+            genericResults.push(await this.runGenericMiddleware(item));
+            index += 1;
+            continue;
+          }
+
+          let end = index + 1;
+          while (end < this.input.length && this.input[end].type === item.type) end += 1;
+          genericResults.push(await batch(this.input.slice(index, end)));
+          index = end;
         }
 
         // run tick middleware after generic handlers complete
@@ -202,13 +222,15 @@ export class Runtime {
 
         // run the end tick middleware and bump our tick count
         if (this.middleware.onTickEnd) {
-          performance.measure(perfMarkname, perfMarkname);
           await Promise.all(
             this.middleware.onTickEnd.map((item) =>
               item.callback(this.input, terminate ? LoopStatus.TERMINATED : LoopStatus.RUNNING),
             ),
           );
         }
+
+        // Include result recording, transfers, news and all end-of-day work.
+        performance.measure(perfMarkname, perfMarkname);
 
         if (this.abortController.signal.aborted) {
           this.log.warn('Engine stop signal detected!');
@@ -236,6 +258,13 @@ export class Runtime {
     }
 
     return Promise.resolve();
+  }
+
+  public registerBatch(type: string, callback: MiddlewareBatchCallback) {
+    if (this.batchMiddleware.has(type)) {
+      throw new Error(`Batch middleware already registered for '${type}'.`);
+    }
+    this.batchMiddleware.set(type, callback);
   }
 
   /**

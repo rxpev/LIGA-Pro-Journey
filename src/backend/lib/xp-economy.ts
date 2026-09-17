@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Constants, Chance, Util, Bot } from '@liga/shared';
 import DatabaseClient from './database-client';
 import { computeLifetimeStats } from './faceitstats';
+import { numericUpdateBatches } from './simulation-bulk-writes';
 
 const XP_MAX = 100;
 const TEAM_DELTA_MAX = 2;
@@ -12,6 +13,15 @@ const USER_TEAMMATE_SEASON_XP_HARD_CAP = 7;
 const USER_TEAMMATE_SEASON_XP_SOFT_CAP_GATE = 25;
 
 type TeamWithPlayers = Prisma.TeamGetPayload<{ include: { players: true } }>;
+type MatchXpSource = {
+  profileId?: number | null;
+  competition?: {
+    season: number | null;
+    federationId: number;
+    federation?: { slug: string } | null;
+    tier?: { slug: string; league?: { slug: string } | null } | null;
+  } | null;
+};
 type MatchXpContext = {
   tierSlug?: string | null;
   leagueSlug?: string | null;
@@ -254,12 +264,13 @@ function getMatchXpMultiplier(context?: MatchXpContext) {
 }
 
 async function loadMatchXpContext(params: {
+  matchContext?: MatchXpSource;
   matchId: number;
   homeTeam: TeamWithPlayers;
   awayTeam: TeamWithPlayers;
   profile?: { id?: number | null; teamId: number | null; playerId: number | null };
 }): Promise<MatchXpContext | undefined> {
-  const match = await DatabaseClient.prisma.match.findFirst({
+  const match = params.matchContext ?? await DatabaseClient.prisma.match.findFirst({
     where: { id: params.matchId },
     include: {
       competition: {
@@ -375,6 +386,7 @@ function computeTeamStrength(
 }
 
 export async function applyMatchXpFromSim(params: {
+  matchContext?: MatchXpSource;
   matchId: number;
   homeTeam: TeamWithPlayers;
   awayTeam: TeamWithPlayers;
@@ -386,6 +398,7 @@ export async function applyMatchXpFromSim(params: {
 
   const { homeTeam, awayTeam, simulationResult, profile } = params;
   const matchXpContext = await loadMatchXpContext({
+    matchContext: params.matchContext,
     matchId: params.matchId,
     homeTeam,
     awayTeam,
@@ -466,12 +479,8 @@ export async function applyMatchXpFromSim(params: {
   if (!updates.length) return;
 
   await prisma.$transaction(
-    updates.map((u) =>
-      prisma.player.update({
-        where: { id: u.id },
-        data: { xp: u.newXp },
-      }),
-    ),
+    numericUpdateBatches('Player', updates.map((u) => ({ id: u.id, data: { xp: u.newXp } })))
+      .map((statement) => prisma.$executeRaw(statement)),
   );
 }
 

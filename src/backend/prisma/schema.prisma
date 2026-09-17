@@ -522,6 +522,11 @@ model Team {
   competitionFederation   Federation? @relation("competitionFederation", fields: [competitionFederationId], references: [id])
   competitionFederationId Int?
 
+  // Persistent NPC recruitment policy. This remains stable while a roster is
+  // temporarily below five starters; the JSON shape is versioned in
+  // npc-transfer-identity.ts for compatibility with old saves.
+  npcRecruitmentPolicy String?
+
   // improves sorting performance
   @@index([elo, id])
   @@index([competitionFederationId])

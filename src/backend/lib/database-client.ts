@@ -44,6 +44,11 @@ import { glob } from 'glob';
 import { Constants, Eagers, Util, is } from '@liga/shared';
 import { syncLeagueSchedule } from '@liga/backend/prisma/seeds/030-leagues';
 import { backfillCompetitionLocations } from './competition-locations';
+import {
+  getNpcTransferRecruitmentPolicy,
+  inferNpcTransferRecruitmentPolicy,
+  serializeNpcTransferRecruitmentPolicy,
+} from './npc-transfer-identity';
 
 /** @interface */
 interface PrismaMigration {
@@ -584,6 +589,12 @@ export default class DatabaseClient {
         await DatabaseClient.ensureInitialCareerStints(pool[id].client);
       }
       await DatabaseClient.reconcileActiveCareerStints(pool[id].client);
+      // New saves get a policy from their initial roster. Existing saves are
+      // intentionally left on their current behavior; this maintenance does
+      // not rewrite existing roster state.
+      if (id === 0 || saveMeta.created) {
+        await DatabaseClient.repairNpcRecruitmentPolicies(pool[id].client);
+      }
       if (id !== 0) {
         await DatabaseClient.repairShortCompletedMatchPlayerLinks(pool[id].client);
       }
@@ -596,6 +607,68 @@ export default class DatabaseClient {
     }
 
     return pool[id].client;
+  }
+
+  /**
+   * Initializes the persistent NPC recruitment policy on a new save from its
+   * initial roster. Existing saves are intentionally left untouched.
+   *
+   * The operation is idempotent: once a valid policy is stored it is never
+   * recomputed from a temporarily incomplete roster.
+   */
+  private static async repairNpcRecruitmentPolicies(prisma: PrismaClientExtended) {
+    const teams = await prisma.team.findMany({
+      select: {
+        id: true,
+        npcRecruitmentPolicy: true,
+        country: {
+          select: {
+            code: true,
+            continent: { select: { code: true } },
+          },
+        },
+        players: {
+          where: { starter: true },
+          select: {
+            id: true,
+            starter: true,
+            countryId: true,
+            country: {
+              select: {
+                code: true,
+                continent: { select: { code: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const updates: Array<{ id: number; policy: string }> = [];
+    for (const team of teams) {
+      if (getNpcTransferRecruitmentPolicy(team as any)) continue;
+
+      const policy = inferNpcTransferRecruitmentPolicy(team as any);
+      updates.push({
+        id: team.id,
+        policy: serializeNpcTransferRecruitmentPolicy(policy),
+      });
+    }
+
+    if (!updates.length) return;
+    await prisma.$transaction(
+      updates.map((update) =>
+        prisma.team.update({
+          where: { id: update.id },
+          data: { npcRecruitmentPolicy: update.policy },
+        }),
+      ),
+    );
+    DatabaseClient.log.info(
+      'Initialized %d NPC recruitment polic%s.',
+      updates.length,
+      updates.length === 1 ? 'y' : 'ies',
+    );
   }
 
   /**
