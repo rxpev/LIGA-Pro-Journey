@@ -170,6 +170,8 @@ export default {
           name: string;
           country: {
             code: string;
+            name: string;
+            continent: { code: string };
           };
         }>
       >,

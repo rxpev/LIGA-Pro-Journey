@@ -275,6 +275,28 @@ type MajorPrizePoolCard = {
   placement: number;
 };
 
+type HistoricalPrizePoolLineup = Awaited<ReturnType<typeof api.competitions.participantLineup>>;
+
+function getPrizePoolCountryCode(
+  competitor: CompetitionCompetitor | undefined,
+  historicalLineups: Record<string, HistoricalPrizePoolLineup>,
+) {
+  if (!competitor?.team) {
+    return undefined;
+  }
+
+  const historicalLineup = historicalLineups[`${competitor.competitionId}:${competitor.team.id}`];
+
+  if (!historicalLineup) {
+    return competitor.team.country?.code?.toLowerCase();
+  }
+
+  return Util.getTeamDisplayCountry({
+    country: competitor.team.country,
+    players: historicalLineup,
+  }).code.toLowerCase();
+}
+
 function getPlacementLabel(start: number, end: number) {
   return start === end
     ? Util.toOrdinalSuffix(start)
@@ -394,6 +416,9 @@ export default function () {
     Awaited<ReturnType<typeof api.competitions.winners>>
   >([]);
   const [showAllPrizePool, setShowAllPrizePool] = React.useState(false);
+  const [prizePoolLineupsByCompetitor, setPrizePoolLineupsByCompetitor] = React.useState<
+    Record<string, HistoricalPrizePoolLineup>
+  >({});
   const [selectedStandingGroup, setSelectedStandingGroup] = React.useState<string | null>(null);
   const [eseaPlayoffCompetition, setEseaPlayoffCompetition] =
     React.useState<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>();
@@ -1489,6 +1514,42 @@ export default function () {
     });
   }, [competition, iemEventCompetitions, isIemEvent, prizePool]);
   const displayedPrizePoolCards = isIemEvent ? iemPrizePoolCards : prizePoolCards;
+  React.useEffect(() => {
+    const prizePoolCompetitors = [
+      ...displayedPrizePoolCards,
+      ...displayedMajorPrizePoolCards,
+    ];
+    const competitors = Array.from(
+      new Set(
+        prizePoolCompetitors.flatMap((card) =>
+          card.competitor?.teamId
+            ? [`${card.competitor.competitionId}:${card.competitor.teamId}`]
+            : [],
+        ),
+      ),
+    ).map((key) => key.split(':').map(Number) as [number, number]);
+    let isCurrent = true;
+
+    setPrizePoolLineupsByCompetitor({});
+
+    Promise.all(
+      competitors.map(
+        async ([competitionId, teamId]) =>
+          [
+            `${competitionId}:${teamId}`,
+            await api.competitions.participantLineup(competitionId, teamId),
+          ] as const,
+      ),
+    ).then((lineups) => {
+      if (isCurrent) {
+        setPrizePoolLineupsByCompetitor(Object.fromEntries(lineups));
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [displayedMajorPrizePoolCards, displayedPrizePoolCards]);
   const iemStandingsCompetitors = React.useMemo(
     () =>
       isIemEvent
@@ -3243,11 +3304,11 @@ export default function () {
                               className="link-hover inline-flex max-w-full items-center justify-center gap-1.5 truncate text-xs font-bold"
                               title={competitor.team.name}
                             >
-                              {competitor.team.country?.code && (
+                              {getPrizePoolCountryCode(competitor, prizePoolLineupsByCompetitor) && (
                                 <span
                                   className={cx(
                                     'fp shrink-0',
-                                    competitor.team.country.code.toLowerCase(),
+                                    getPrizePoolCountryCode(competitor, prizePoolLineupsByCompetitor),
                                   )}
                                 />
                               )}
@@ -3294,11 +3355,11 @@ export default function () {
                                 className="link-hover inline-flex max-w-full items-center justify-center gap-1.5 truncate text-xs font-bold"
                                 title={competitor.team.name}
                               >
-                                {competitor.team.country?.code && (
+                                {getPrizePoolCountryCode(competitor, prizePoolLineupsByCompetitor) && (
                                   <span
                                     className={cx(
                                       'fp shrink-0',
-                                      competitor.team.country.code.toLowerCase(),
+                                      getPrizePoolCountryCode(competitor, prizePoolLineupsByCompetitor),
                                     )}
                                   />
                                 )}

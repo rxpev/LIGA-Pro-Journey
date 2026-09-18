@@ -204,6 +204,8 @@ export default function registerDatabaseHandlers() {
                 country: {
                   select: {
                     code: true,
+                    name: true,
+                    continent: { select: { code: true } },
                   },
                 },
               },
@@ -250,6 +252,8 @@ export default function registerDatabaseHandlers() {
               country: {
                 select: {
                   code: true,
+                  name: true,
+                  continent: { select: { code: true } },
                 },
               },
             },
@@ -274,6 +278,8 @@ export default function registerDatabaseHandlers() {
                 country: {
                   select: {
                     code: true,
+                    name: true,
+                    continent: { select: { code: true } },
                   },
                 },
               },
