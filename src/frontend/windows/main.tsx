@@ -100,10 +100,6 @@ const routes = createMemoryRouter([
         element: <Routes.Main.Squad />,
       },
       {
-        path: '/players',
-        element: <Routes.Main.Players />,
-      },
-      {
         path: '/calendar',
         element: <Routes.Main.Calendar />,
       },
@@ -440,7 +436,6 @@ function Root() {
     ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
     ['/calendar', t('navigation.calendar')],
     ['/inbox', t('navigation.inbox')],
-    ['/players', t('navigation.players')],
   ];
   const isFaceitRoute = location.pathname.startsWith('/faceit');
 

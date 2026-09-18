@@ -7,7 +7,6 @@ import Calendar from './calendar';
 import Competitions from './competitions';
 import Dashboard from './dashboard';
 import Inbox from './inbox';
-import Players from './players';
 import Squad from './squad';
 import Stats from './stats';
 import Teams from './teams';
@@ -26,7 +25,6 @@ export default {
   Calendar,
   Dashboard,
   Inbox,
-  Players,
   Squad,
   Stats,
   Faceit,

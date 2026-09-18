@@ -17,7 +17,6 @@ const MAIN_TAB_PATHS = [
   '/competitions',
   '/calendar',
   '/inbox',
-  '/players',
 ];
 
 type Page = {
