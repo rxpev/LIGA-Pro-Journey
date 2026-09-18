@@ -31,7 +31,10 @@ declare interface RouteContextCompetitions {
 
 /** @interface */
 declare interface RouteContextTeams {
-  team: Awaited<ReturnType<typeof api.teams.all<typeof import('../shared/eagers').team>>>[number];
+  team: Omit<
+    Awaited<ReturnType<typeof api.teams.all<typeof import('../shared/eagers').team>>>[number],
+    'players'
+  >;
 }
 
 /** @interface */

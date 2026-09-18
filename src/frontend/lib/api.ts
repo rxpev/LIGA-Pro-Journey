@@ -431,7 +431,7 @@ export default {
       role?: string;
       teamId?: number;
       tierId?: number;
-      transferStatus?: 'listed' | 'retired';
+      transferStatus?: 'active' | 'freeAgent' | 'listed' | 'retired';
       year?: string;
     }) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_GLOBAL_PLAYER_STATS, params) as Promise<{
@@ -440,7 +440,13 @@ export default {
           name: string;
           avatar?: string | null;
           country?: { code: string; name: string } | null;
-          team?: { id: number; name: string; blazon?: string | null; tier?: number | null } | null;
+          team?: {
+            id: number;
+            name: string;
+            blazon?: string | null;
+            tier?: number | null;
+            tierSlug?: string | null;
+          } | null;
           rating: number;
           kills: number;
           deaths: number;
@@ -459,6 +465,23 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PLAYER_RATING_GAMES, playerId) as Promise<
         Array<{ date: Date | string; teamIds: number[]; rating: number }>
       >,
+    playersRatingGames: (playerIds: number[], teamId: number) =>
+      ipcRenderer.invoke(
+        Constants.IPCRoute.MATCHES_PLAYERS_RATING_GAMES,
+        playerIds,
+        teamId,
+      ) as Promise<
+        Record<number, Array<{ date: Date | string; teamIds: number[]; rating: number }>>
+      >,
+    playerStatMatches: <T = typeof Eagers.match>(
+      query: Prisma.MatchFindManyArgs,
+      playerId: number,
+    ) =>
+      ipcRenderer.invoke(
+        Constants.IPCRoute.MATCHES_PLAYER_STAT_MATCHES,
+        query,
+        playerId,
+      ) as Promise<Array<Prisma.MatchGetPayload<T>>>,
     playerAllTimeStats: (playerId: number) =>
       ipcRenderer.invoke(Constants.IPCRoute.MATCHES_PLAYER_ALL_TIME_STATS, playerId) as Promise<{
         assists: number;

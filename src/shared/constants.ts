@@ -352,6 +352,8 @@ export enum IPCRoute {
   MATCHES_GLOBAL_PLAYER_STATS = '/matches/global-player-stats',
   MATCHES_PLAYER_ALL_TIME_STATS = '/matches/player-all-time-stats',
   MATCHES_PLAYER_RATING_GAMES = '/matches/player-rating-games',
+  MATCHES_PLAYERS_RATING_GAMES = '/matches/players-rating-games',
+  MATCHES_PLAYER_STAT_MATCHES = '/matches/player-stat-matches',
   MATCHES_PREVIOUS = '/matches/previous',
   MATCHES_RECENT_PLAYER_RATINGS = '/matches/recent-player-ratings',
   MATCHES_UPCOMING = '/matches/upcoming',

@@ -376,8 +376,13 @@ export default function TransferModal() {
             };
           };
           matches: {
-            include: {
-              competitors: true;
+            orderBy: { date: 'desc' };
+            take: 1;
+            select: {
+              date: true;
+              competitors: {
+                select: { score: true; teamId: true };
+              };
             };
           };
         };
@@ -397,8 +402,13 @@ export default function TransferModal() {
             },
           },
           matches: {
-            include: {
-              competitors: true,
+            orderBy: { date: 'desc' },
+            take: 1,
+            select: {
+              date: true,
+              competitors: {
+                select: { score: true, teamId: true },
+              },
             },
           },
         },
@@ -408,18 +418,7 @@ export default function TransferModal() {
         const stints = player.careerStints ?? [];
 
         const occurrences = competitions.reduce<HonorOccurrence[]>((acc, competition) => {
-          const championshipMatch = competition.matches.reduce<
-            (typeof competition.matches)[number] | null
-          >(
-            (
-              latest: (typeof competition.matches)[number] | null,
-              match: (typeof competition.matches)[number],
-            ) => {
-              if (!latest || match.date > latest.date) return match;
-              return latest;
-            },
-            null,
-          );
+          const championshipMatch = competition.matches[0];
 
           if (!championshipMatch) return acc;
 
@@ -575,7 +574,8 @@ export default function TransferModal() {
     });
   }, []);
   const faceitElo = player?.profile?.faceitElo ?? player?.elo ?? null;
-  const faceitLevel = typeof faceitElo === 'number' && faceitElo > 0 ? levelFromElo(faceitElo) : null;
+  const faceitLevel =
+    typeof faceitElo === 'number' && faceitElo > 0 ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
   const hasTop20Appearances = top20Appearances.length > 0;
   const hasHonors = mvps.length > 0 || Object.keys(honorGroups).length > 0;
@@ -845,7 +845,11 @@ export default function TransferModal() {
                       className="size-5 object-contain"
                       alt=""
                     />
-                    {faceitElo === 0 ? 'Unranked' : typeof faceitElo === 'number' ? faceitElo.toLocaleString() : 'N/A'}
+                    {faceitElo === 0
+                      ? 'Unranked'
+                      : typeof faceitElo === 'number'
+                        ? faceitElo.toLocaleString()
+                        : 'N/A'}
                   </strong>
                 </div>
               </div>

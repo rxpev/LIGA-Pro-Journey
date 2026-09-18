@@ -40,7 +40,19 @@ type RankingDivisionOption = {
 };
 
 type TeamPlayer = Awaited<ReturnType<typeof api.players.all<typeof Eagers.player>>>[number];
-type Team = Awaited<ReturnType<typeof api.teams.all<typeof Eagers.team>>>[number];
+const TeamListQuery = {
+  include: {
+    competitionFederation: true,
+    country: {
+      include: {
+        continent: {
+          include: { federation: true },
+        },
+      },
+    },
+  },
+} as const;
+type Team = Awaited<ReturnType<typeof api.teams.all<typeof TeamListQuery>>>[number];
 type NewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type TeamHonor = {
   federationId: number;
@@ -675,9 +687,7 @@ export default function () {
   const [federations, setFederations] = React.useState<
     Awaited<ReturnType<typeof api.federations.all>>
   >([]);
-  const [teams, setTeams] = React.useState<
-    Awaited<ReturnType<typeof api.teams.all<typeof Eagers.team>>>
-  >([]);
+  const [teams, setTeams] = React.useState<Team[]>([]);
   const [team, setTeam] = React.useState<(typeof teams)[number]>();
   const [competition, setCompetition] =
     React.useState<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>();
@@ -833,13 +843,13 @@ export default function () {
   // initial data fetch
   React.useEffect(() => {
     api.federations.all().then(setFederations);
-    api.teams.all<typeof Eagers.team>(Eagers.team).then(setTeams);
+    api.teams.all<typeof TeamListQuery>(TeamListQuery).then(setTeams);
   }, []);
 
   React.useEffect(() => {
     api.teams
-      .all<typeof Eagers.team>({
-        ...Eagers.team,
+      .all<typeof TeamListQuery>({
+        ...TeamListQuery,
         orderBy: {
           elo: 'desc',
         },

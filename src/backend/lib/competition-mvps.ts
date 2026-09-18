@@ -631,7 +631,14 @@ export async function findCompetitionMvps(options: { competitionId?: number; pla
     return [];
   }
 
-  await backfillMissingCompetitionMvps(options.competitionId);
+  // Competition-scoped views may repair one legacy record cheaply. Player profile
+  // reads must stay read-only: backfilling every historical competition here made
+  // opening a player increasingly expensive with every completed season.
+  if (options.competitionId) {
+    await backfillMissingCompetitionMvps(options.competitionId);
+  } else {
+    await ensureCompetitionMvpTable();
+  }
 
   const where: string[] = [];
   const params: unknown[] = [];

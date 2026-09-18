@@ -29,7 +29,7 @@ type GlobalPlayerStatsParams = {
   role?: string;
   teamId?: number;
   tierId?: number;
-  transferStatus?: 'listed' | 'retired';
+  transferStatus?: 'active' | 'freeAgent' | 'listed' | 'retired';
   year?: string;
 };
 
@@ -38,7 +38,13 @@ type GlobalPlayerStatsRow = {
   name: string;
   avatar?: string | null;
   country?: { code: string; name: string } | null;
-  team?: { id: number; name: string; blazon?: string | null; tier?: number | null } | null;
+  team?: {
+    id: number;
+    name: string;
+    blazon?: string | null;
+    tier?: number | null;
+    tierSlug?: string | null;
+  } | null;
   rating: number;
   kills: number;
   deaths: number;
@@ -311,6 +317,40 @@ export default function () {
     DatabaseClient.prisma.match.count({ where }),
   );
   ipcMain.handle(
+    Constants.IPCRoute.MATCHES_PLAYER_STAT_MATCHES,
+    async (_, query: Prisma.MatchFindManyArgs, playerId: number) => {
+      if (!Number.isFinite(playerId)) return [];
+
+      const matchRows = await DatabaseClient.prisma.$queryRaw<Array<{ matchId: number }>>`
+        WITH "playerMatches" AS (
+          SELECT "matchId" FROM "MatchPlayerGameStat" WHERE "playerId" = ${playerId}
+          UNION
+          SELECT "matchId" FROM "MatchEvent" WHERE "attackerId" = ${playerId}
+          UNION
+          SELECT "matchId" FROM "MatchEvent" WHERE "assistId" = ${playerId}
+          UNION
+          SELECT "matchId" FROM "MatchEvent" WHERE "victimId" = ${playerId}
+        )
+        SELECT "playerMatches"."matchId" AS "matchId"
+        FROM "playerMatches"
+        INNER JOIN "Match" ON "Match"."id" = "playerMatches"."matchId"
+        WHERE 1 = 1
+          AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+          AND "Match"."competitionId" IS NOT NULL
+          AND "Match"."matchType" <> 'FACEIT_PUG'
+      `;
+      const matchIds = matchRows.map((row) => row.matchId);
+      if (!matchIds.length) return [];
+
+      return DatabaseClient.prisma.match.findMany({
+        ...query,
+        where: {
+          AND: [query.where || {}, { id: { in: matchIds } }],
+        },
+      });
+    },
+  );
+  ipcMain.handle(
     Constants.IPCRoute.MATCHES_GLOBAL_PLAYER_STATS,
     async (_, params: GlobalPlayerStatsParams) => {
       const page = Math.max(1, Number(params.page || 1));
@@ -322,8 +362,6 @@ export default function () {
         cached && Date.now() - cached.createdAt < GLOBAL_PLAYER_STATS_CACHE_TTL_MS
           ? cached.players
           : await (async () => {
-              await backfillMissingMatchPlayerGameStats();
-
               const matchWhere = [
                 '"Match"."status" = ?',
                 '"Match"."competitionId" IS NOT NULL',
@@ -370,12 +408,45 @@ export default function () {
 
               const playerWhere = ['1 = 1'];
               const playerParams: unknown[] = [];
+              const seasonEnd = params.year
+                ? new Date(Number(params.year), 11, 31, 23, 59, 59, 999)
+                : null;
+              const teamAlias = seasonEnd ? '"SeasonTeam"' : '"Team"';
+              const seasonTeamJoin = seasonEnd
+                ? `
+                  LEFT JOIN "CareerStint" AS "SeasonStint"
+                    ON "SeasonStint"."playerId" = "Player"."id"
+                    AND "SeasonStint"."startedAt" <= ?
+                    AND (
+                      "SeasonStint"."endedAt" IS NULL
+                      OR "SeasonStint"."endedAt" >= ?
+                    )
+                  LEFT JOIN "Team" AS "SeasonTeam"
+                    ON "SeasonTeam"."id" = "SeasonStint"."teamId"
+                  LEFT JOIN (
+                    SELECT
+                      "HistoricalCompetitor"."teamId" AS "teamId",
+                      MIN("HistoricalTier"."slug") AS "tierSlug"
+                    FROM "CompetitionToTeam" AS "HistoricalCompetitor"
+                    INNER JOIN "Competition" AS "HistoricalCompetition"
+                      ON "HistoricalCompetition"."id" = "HistoricalCompetitor"."competitionId"
+                    INNER JOIN "Tier" AS "HistoricalTier"
+                      ON "HistoricalTier"."id" = "HistoricalCompetition"."tierId"
+                    WHERE "HistoricalCompetition"."season" = ${Number(params.year) - 2025}
+                      AND "HistoricalTier"."slug" IN (${Constants.Prestige.map((slug) => `'${slug}'`).join(',')})
+                    GROUP BY "HistoricalCompetitor"."teamId"
+                  ) AS "HistoricalDivision"
+                    ON "HistoricalDivision"."teamId" = "SeasonTeam"."id"
+                `
+                : '';
+              const seasonTeamParams: unknown[] = seasonEnd ? [seasonEnd, seasonEnd] : [];
+              const historicalTierSelect = seasonEnd ? '"HistoricalDivision"."tierSlug"' : 'NULL';
               if (params.teamId) {
-                playerWhere.push('"Player"."teamId" = ?');
+                playerWhere.push(`${teamAlias}."id" = ?`);
                 playerParams.push(params.teamId);
               }
               if (params.tierId !== undefined && params.tierId !== null) {
-                playerWhere.push('"Team"."tier" = ?');
+                playerWhere.push(`${teamAlias}."tier" = ?`);
                 playerParams.push(params.tierId);
               }
               if (params.federationSlug) {
@@ -391,7 +462,22 @@ export default function () {
                 playerParams.push(params.role);
               }
               if (params.transferStatus === 'listed') {
-                playerWhere.push('"Player"."transferListed" = 1');
+                playerWhere.push(
+                  '"Player"."transferListed" = 1',
+                  '"Player"."teamId" IS NOT NULL',
+                  '"Player"."starter" = 0',
+                  '"Player"."retiredAt" IS NULL',
+                );
+              }
+              if (params.transferStatus === 'active') {
+                playerWhere.push('"Player"."teamId" IS NOT NULL', '"Player"."retiredAt" IS NULL');
+              }
+              if (params.transferStatus === 'freeAgent') {
+                playerWhere.push(
+                  '"Player"."teamId" IS NULL',
+                  '"Player"."transferListed" = 1',
+                  '"Player"."retiredAt" IS NULL',
+                );
               }
               if (params.transferStatus === 'retired') {
                 playerWhere.push('"Player"."retiredAt" IS NOT NULL');
@@ -412,6 +498,7 @@ export default function () {
                   teamName: string | null;
                   teamBlazon: string | null;
                   teamTier: number | null;
+                  teamTierSlug: string | null;
                 }>
               >(
                 `
@@ -421,120 +508,105 @@ export default function () {
                     "Player"."avatar" AS "avatar",
                     "Country"."code" AS "countryCode",
                     "Country"."name" AS "countryName",
-                    "Team"."id" AS "teamId",
-                    "Team"."name" AS "teamName",
-                    "Team"."blazon" AS "teamBlazon",
-                    "Team"."tier" AS "teamTier"
+                    ${teamAlias}."id" AS "teamId",
+                    ${teamAlias}."name" AS "teamName",
+                    ${teamAlias}."blazon" AS "teamBlazon",
+                    ${teamAlias}."tier" AS "teamTier",
+                    ${historicalTierSelect} AS "teamTierSlug"
                   FROM "Player"
                   LEFT JOIN "Country" ON "Country"."id" = "Player"."countryId"
                   LEFT JOIN "Team" ON "Team"."id" = "Player"."teamId"
-                  LEFT JOIN "Federation" ON "Federation"."id" = "Team"."competitionFederationId"
+                  ${seasonTeamJoin}
+                  LEFT JOIN "Federation" ON "Federation"."id" = ${teamAlias}."competitionFederationId"
                   WHERE ${playerWhere.join(' AND ')}
                   ORDER BY "Player"."id" ASC
                 `,
+                ...seasonTeamParams,
                 ...playerParams,
               );
 
               const byPlayer = new Map<
                 number,
-                GlobalPlayerStatsRow & {
-                  ratingMaps: number;
-                  ratingSum: number;
-                }
+                GlobalPlayerStatsRow & { ratingMaps: number; ratingSum: number }
               >();
               const playerById = new Map(playerCandidates.map((player) => [player.id, player]));
               const playerIds = playerCandidates.map((player) => player.id);
-              const batchSize = 100;
-
-              for (let index = 0; index < playerIds.length; index += batchSize) {
-                const batchIds = playerIds.slice(index, index + batchSize);
-                const placeholders = batchIds.map(() => '?').join(',');
-                const batchRows = await DatabaseClient.prisma.$queryRawUnsafe<
+              if (playerIds.length) {
+                const statRows = await DatabaseClient.prisma.$queryRawUnsafe<
                   Array<{
                     playerId: number;
-                    matchId: number;
                     kills: bigint | number;
                     assists: bigint | number;
                     deaths: bigint | number;
+                    maps: bigint | number;
                   }>
                 >(
                   `
                     SELECT
                       "MatchPlayerGameStat"."playerId" AS "playerId",
-                      "MatchPlayerGameStat"."matchId" AS "matchId",
-                      "MatchPlayerGameStat"."kills" AS "kills",
-                      "MatchPlayerGameStat"."assists" AS "assists",
-                      "MatchPlayerGameStat"."deaths" AS "deaths"
+                      SUM("MatchPlayerGameStat"."kills") AS "kills",
+                      SUM("MatchPlayerGameStat"."assists") AS "assists",
+                      SUM("MatchPlayerGameStat"."deaths") AS "deaths",
+                      COUNT(*) AS "maps"
                     FROM "MatchPlayerGameStat"
                     INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+                    INNER JOIN "Player" ON "Player"."id" = "MatchPlayerGameStat"."playerId"
+                    LEFT JOIN "Country" ON "Country"."id" = "Player"."countryId"
+                    LEFT JOIN "Team" ON "Team"."id" = "Player"."teamId"
+                    ${seasonTeamJoin}
+                    LEFT JOIN "Federation" ON "Federation"."id" = ${teamAlias}."competitionFederationId"
                     WHERE ${matchWhere.join(' AND ')}
-                      AND "MatchPlayerGameStat"."playerId" IN (${placeholders})
+                      AND ${playerWhere.join(' AND ')}
+                    GROUP BY "MatchPlayerGameStat"."playerId"
                   `,
+                  ...seasonTeamParams,
                   ...matchParams,
-                  ...batchIds,
+                  ...playerParams,
                 );
 
-                batchRows.forEach((row) => {
+                statRows.forEach((row) => {
                   const candidate = playerById.get(row.playerId);
-                  if (!candidate) {
-                    return;
-                  }
-
-                  const player =
-                    byPlayer.get(row.playerId) ||
-                    ({
-                      id: row.playerId,
-                      name: candidate.name,
-                      avatar: candidate.avatar,
-                      country:
-                        candidate.countryCode && candidate.countryName
-                          ? { code: candidate.countryCode, name: candidate.countryName }
-                          : null,
-                      team: candidate.teamId
-                        ? {
-                            id: candidate.teamId,
-                            name: candidate.teamName || '',
-                            blazon: candidate.teamBlazon,
-                            tier: candidate.teamTier,
-                          }
-                        : null,
-                      rating: 0,
-                      kills: 0,
-                      deaths: 0,
-                      assists: 0,
-                      maps: 0,
-                      ratingMaps: 0,
-                      ratingSum: 0,
-                    } as GlobalPlayerStatsRow & {
-                      ratingMaps: number;
-                      ratingSum: number;
-                    });
-
+                  if (!candidate) return;
+                  const maps = Number(row.maps);
                   const kills = Number(row.kills);
                   const assists = Number(row.assists);
                   const deaths = Number(row.deaths);
-                  const rating = Util.getPlayerRating(kills, deaths, assists);
 
-                  player.kills += kills;
-                  player.assists += assists;
-                  player.deaths += deaths;
-                  player.maps += 1;
-
-                  if (Number.isFinite(rating)) {
-                    player.ratingMaps += 1;
-                    player.ratingSum += rating;
-                  }
-
-                  byPlayer.set(row.playerId, player);
+                  byPlayer.set(row.playerId, {
+                    id: row.playerId,
+                    name: candidate.name,
+                    avatar: candidate.avatar,
+                    country:
+                      candidate.countryCode && candidate.countryName
+                        ? { code: candidate.countryCode, name: candidate.countryName }
+                        : null,
+                    team: candidate.teamId
+                      ? {
+                          id: candidate.teamId,
+                          name: candidate.teamName || '',
+                          blazon: candidate.teamBlazon,
+                          tier: candidate.teamTier,
+                          tierSlug: candidate.teamTierSlug,
+                        }
+                      : null,
+                    rating: 0,
+                    kills,
+                    deaths,
+                    assists,
+                    maps,
+                    ratingMaps: maps,
+                    ratingSum:
+                      maps * Util.getPlayerRating(kills / maps, deaths / maps, assists / maps),
+                  } as GlobalPlayerStatsRow & { ratingMaps: number; ratingSum: number });
                 });
               }
 
-              const players = [...byPlayer.values()].map(({ ratingMaps, ratingSum, ...player }) => {
-                return {
+              const players = [...byPlayer.values()].map(
+                ({ ratingMaps, ratingSum, ...player }) => ({
                   ...player,
                   rating: ratingMaps ? ratingSum / ratingMaps : 0,
-                };
-              });
+                }),
+              );
 
               if (competitionIds.length && players.length) {
                 const playerIds = players.map((player) => player.id);
@@ -647,8 +719,6 @@ export default function () {
       return [];
     }
 
-    await backfillMissingMatchPlayerGameStats();
-
     const rows = await DatabaseClient.prisma.$queryRaw<
       Array<{
         date: Date | string;
@@ -701,12 +771,94 @@ export default function () {
       })
       .filter(Boolean);
   });
+  ipcMain.handle(
+    Constants.IPCRoute.MATCHES_PLAYERS_RATING_GAMES,
+    async (_, requestedPlayerIds: number[], teamId: number) => {
+      const playerIds = [...new Set(requestedPlayerIds.filter(Number.isFinite))];
+      if (!playerIds.length) {
+        return {};
+      }
+
+      const rows = await DatabaseClient.prisma.$queryRawUnsafe<
+        Array<{
+          playerId: number;
+          date: Date | string;
+          teamIds: string | null;
+          kills: bigint | number;
+          assists: bigint | number;
+          deaths: bigint | number;
+        }>
+      >(
+        `
+          SELECT
+            "MatchPlayerGameStat"."playerId" AS "playerId",
+            "Match"."date" AS "date",
+            (
+              SELECT GROUP_CONCAT("MatchToTeam"."teamId")
+              FROM "MatchToTeam"
+              WHERE "MatchToTeam"."matchId" = "MatchPlayerGameStat"."matchId"
+                AND "MatchToTeam"."teamId" IS NOT NULL
+            ) AS "teamIds",
+            "MatchPlayerGameStat"."kills" AS "kills",
+            "MatchPlayerGameStat"."assists" AS "assists",
+            "MatchPlayerGameStat"."deaths" AS "deaths"
+          FROM "MatchPlayerGameStat"
+          INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+          WHERE "Match"."status" = ?
+            AND "Match"."competitionId" IS NOT NULL
+            AND "Match"."matchType" <> 'FACEIT_PUG'
+            AND "MatchPlayerGameStat"."playerId" IN (${playerIds.map(() => '?').join(',')})
+            AND EXISTS (
+              SELECT 1 FROM "MatchToTeam"
+              WHERE "MatchToTeam"."matchId" = "Match"."id"
+                AND "MatchToTeam"."teamId" = ?
+            )
+          ORDER BY "Match"."date" DESC
+        `,
+        Constants.MatchStatus.COMPLETED,
+        ...playerIds,
+        teamId,
+      );
+      const gamesByPlayer: Record<
+        number,
+        Array<{ date: Date | string; teamIds: number[]; rating: number }>
+      > = Object.fromEntries(
+        playerIds.map(
+          (
+            playerId,
+          ): [number, Array<{ date: Date | string; teamIds: number[]; rating: number }>] => [
+            playerId,
+            [],
+          ],
+        ),
+      );
+
+      rows.forEach((row) => {
+        const rating = Util.getPlayerRating(
+          Number(row.kills),
+          Number(row.deaths),
+          Number(row.assists),
+        );
+
+        if (Number.isFinite(rating)) {
+          gamesByPlayer[row.playerId].push({
+            date: row.date,
+            teamIds: String(row.teamIds || '')
+              .split(',')
+              .map(Number)
+              .filter(Number.isFinite),
+            rating,
+          });
+        }
+      });
+
+      return gamesByPlayer;
+    },
+  );
   ipcMain.handle(Constants.IPCRoute.MATCHES_PLAYER_ALL_TIME_STATS, async (_, playerId: number) => {
     if (!Number.isFinite(playerId)) {
       return null;
     }
-
-    await backfillMissingMatchPlayerGameStats();
 
     const rows = await DatabaseClient.prisma.$queryRaw<
       Array<{

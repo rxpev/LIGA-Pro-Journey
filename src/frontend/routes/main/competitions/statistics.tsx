@@ -135,6 +135,14 @@ export default function Statistics(): JSX.Element {
     () => `MVP winner at:\n${getCompetitionTitle(competition)}`,
     [competition],
   );
+  const updateCompetitionIds = React.useCallback((nextIds: number[]) => {
+    setCompetitionIds((currentIds) =>
+      currentIds.length === nextIds.length &&
+      currentIds.every((currentId, index) => currentId === nextIds[index])
+        ? currentIds
+        : nextIds,
+    );
+  }, []);
 
   React.useEffect(() => {
     setPage(1);
@@ -145,7 +153,7 @@ export default function Statistics(): JSX.Element {
     const iemEventTierSlugs = IEM_EVENT_TIER_SLUGS[tierSlug];
     const playoffTier = LINKED_PLAYOFF_TIER_BY_TIER[tierSlug];
 
-    setCompetitionIds([competition.id]);
+    updateCompetitionIds([competition.id]);
 
     if (iemEventTierSlugs) {
       let isCurrent = true;
@@ -161,7 +169,7 @@ export default function Statistics(): JSX.Element {
         })
         .then((competitions) => {
           if (isCurrent) {
-            setCompetitionIds(competitions.map((item) => item.id));
+            updateCompetitionIds(competitions.map((item) => item.id));
           }
         });
 
@@ -184,7 +192,7 @@ export default function Statistics(): JSX.Element {
         })
         .then((championsCompetition) => {
           if (isCurrent && championsCompetition) {
-            setCompetitionIds([competition.id, championsCompetition.id]);
+            updateCompetitionIds([competition.id, championsCompetition.id]);
           }
         });
 
@@ -210,14 +218,20 @@ export default function Statistics(): JSX.Element {
       })
       .then((playoffCompetition) => {
         if (isCurrent && playoffCompetition) {
-          setCompetitionIds([competition.id, playoffCompetition.id]);
+          updateCompetitionIds([competition.id, playoffCompetition.id]);
         }
       });
 
     return () => {
       isCurrent = false;
     };
-  }, [competition.federationId, competition.id, competition.season, competition.tier.slug]);
+  }, [
+    competition.federationId,
+    competition.id,
+    competition.season,
+    competition.tier.slug,
+    updateCompetitionIds,
+  ]);
 
   React.useEffect(() => {
     let isCurrent = true;

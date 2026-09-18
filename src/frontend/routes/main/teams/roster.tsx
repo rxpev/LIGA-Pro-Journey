@@ -846,28 +846,31 @@ export default function () {
       return;
     }
 
-    Promise.all(
-      timelinePlayers.map((player) =>
-        api.matches.playerRatingGames(player.id).then((games) => {
-          const teamGames = games.filter((game) => game.teamIds.includes(team.id));
-          const ratingSum = teamGames.reduce((sum, game) => sum + game.rating, 0);
+    api.matches
+      .playersRatingGames(
+        timelinePlayers.map((player) => player.id),
+        team.id,
+      )
+      .then((gamesByPlayer) => {
+        const playerRatings = Object.fromEntries(
+          timelinePlayers.map((player) => {
+            const games = gamesByPlayer[player.id] || [];
+            const teamGames = games.filter((game) => game.teamIds.includes(team.id));
+            const ratingSum = teamGames.reduce((sum, game) => sum + game.rating, 0);
 
-          return [
-            player.id,
-            games,
-            {
-              maps: teamGames.length,
-              rating: teamGames.length ? ratingSum / teamGames.length : 0,
-            },
-          ] as const;
-        }),
-      ),
-    ).then((rows) => {
-      setRatingGamesByPlayer(
-        Object.fromEntries(rows.map(([playerId, games]) => [playerId, games])),
-      );
-      setRatings(Object.fromEntries(rows.map(([playerId, , rating]) => [playerId, rating])));
-    });
+            return [
+              player.id,
+              {
+                maps: teamGames.length,
+                rating: teamGames.length ? ratingSum / teamGames.length : 0,
+              },
+            ];
+          }),
+        );
+
+        setRatingGamesByPlayer(gamesByPlayer);
+        setRatings(playerRatings);
+      });
   }, [state.profile?.simulateNpcMatchStats, team.id, timelinePlayers]);
 
   const sortedPlayers = React.useMemo(

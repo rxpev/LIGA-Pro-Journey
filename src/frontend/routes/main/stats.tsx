@@ -74,6 +74,7 @@ type StatsPlayerOption = {
     name: string;
     blazon?: string;
     tier?: number | null;
+    tierSlug?: string | null;
   } | null;
   rating?: number;
   kills?: number;
@@ -782,7 +783,16 @@ function getPlayerEventWhere(playerId: number) {
 function getPlayerScopedMatchEventsEager(playerId: number) {
   return {
     include: {
-      ...Eagers.match.include,
+      _count: { select: { events: true } },
+      competition: {
+        include: {
+          competitors: { include: { team: { include: { country: true } } } },
+          federation: true,
+          tier: { include: { league: true } },
+        },
+      },
+      competitors: { include: { team: { include: { country: true } } } },
+      games: { include: { teams: { include: { team: true } } } },
       events: {
         where: getPlayerEventWhere(playerId),
         orderBy: {
@@ -1095,7 +1105,7 @@ export default function LeagueStatsConcept(): JSX.Element {
   const [selectedGlobalCountryCode, setSelectedGlobalCountryCode] = React.useState('');
   const [selectedGlobalPlayerRole, setSelectedGlobalPlayerRole] = React.useState('');
   const [selectedGlobalTransferStatus, setSelectedGlobalTransferStatus] = React.useState<
-    '' | 'listed' | 'retired'
+    '' | 'active' | 'freeAgent' | 'listed' | 'retired'
   >('');
   const [selectedGlobalPlayerTierId, setSelectedGlobalPlayerTierId] = React.useState<string>(
     String(Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO)),
@@ -1293,9 +1303,6 @@ export default function LeagueStatsConcept(): JSX.Element {
           }
         : {
             status: Constants.MatchStatus.COMPLETED,
-            events: {
-              some: getPlayerEventWhere(Number(playerId)),
-            },
             competitionId: {
               not: null as null,
             },
@@ -1304,16 +1311,19 @@ export default function LeagueStatsConcept(): JSX.Element {
             },
           };
 
-    api.matches
-      .all({
-        ...(activeTab === StatsTab.TEAMMATES
-          ? Eagers.matchEvents
-          : getPlayerScopedMatchEventsEager(Number(playerId))),
-        where,
-        orderBy: {
-          date: 'desc',
-        },
-      })
+    const query = {
+      ...(activeTab === StatsTab.TEAMMATES
+        ? Eagers.matchEvents
+        : getPlayerScopedMatchEventsEager(Number(playerId))),
+      where,
+      orderBy: { date: 'desc' as const },
+    };
+    const request =
+      activeTab === StatsTab.TEAMMATES
+        ? api.matches.all(query)
+        : api.matches.playerStatMatches(query, Number(playerId));
+
+    request
       .then((result: any[]) => setMatches(result.filter(isLeagueMatch)))
       .finally(() => setLoading(false));
   }, [activeTab, careerTeamIds, state.profile?.player?.id]);
@@ -1373,18 +1383,18 @@ export default function LeagueStatsConcept(): JSX.Element {
 
     setGlobalPlayerMatchesLoading(true);
     api.matches
-      .all({
-        ...getPlayerScopedMatchEventsEager(Number(selectedGlobalPlayerId)),
-        where: {
-          ...buildOfficialMatchWhere({}),
-          events: {
-            some: getPlayerEventWhere(Number(selectedGlobalPlayerId)),
+      .playerStatMatches(
+        {
+          ...getPlayerScopedMatchEventsEager(Number(selectedGlobalPlayerId)),
+          where: {
+            ...buildOfficialMatchWhere({}),
+          },
+          orderBy: {
+            date: 'desc',
           },
         },
-        orderBy: {
-          date: 'desc',
-        },
-      })
+        Number(selectedGlobalPlayerId),
+      )
       .then((result: any[]) => setGlobalPlayerMatches(result.filter(isLeagueMatch)))
       .finally(() => setGlobalPlayerMatchesLoading(false));
   }, [activeTab, canViewGlobalPlayerStats, selectedGlobalPlayerId]);
@@ -1433,17 +1443,21 @@ export default function LeagueStatsConcept(): JSX.Element {
           status: Constants.CompetitionStatus.COMPLETED,
           tier: { slug: { in: championAwards } },
         },
-        include: { competitors: true, tier: true, matches: { include: { competitors: true } } },
+        include: {
+          competitors: true,
+          tier: true,
+          matches: {
+            orderBy: { date: 'desc' },
+            take: 1,
+            include: { competitors: true },
+          },
+        },
       }),
     ]).then(([mvps, competitions]: [any[], any[]]) => {
       if (cancelled) return;
 
       const wins = competitions.filter((competition) => {
-        const finalMatch = competition.matches.reduce(
-          (latest: any, match: any) =>
-            !latest || new Date(match.date) > new Date(latest.date) ? match : latest,
-          null,
-        );
+        const finalMatch = competition.matches[0];
         const winnerTeamId = competition.competitors.find(
           (competitor: any) => competitor.position === 1,
         )?.teamId;
@@ -2363,6 +2377,8 @@ export default function LeagueStatsConcept(): JSX.Element {
             },
           },
           matches: {
+            orderBy: { date: 'desc' },
+            take: 1,
             include: {
               competitors: true,
             },
@@ -2374,10 +2390,7 @@ export default function LeagueStatsConcept(): JSX.Element {
       if (cancelled) return;
 
       const honors = competitions.reduce<CareerHonor[]>((entries, competition) => {
-        const championshipMatch = competition.matches.reduce((latest: any, match: any) => {
-          if (!latest || new Date(match.date) > new Date(latest.date)) return match;
-          return latest;
-        }, null);
+        const championshipMatch = competition.matches[0];
         if (!championshipMatch) return entries;
 
         const winnerTeamId =
@@ -3318,7 +3331,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     String(miniPreviewPlayer?.role).toUpperCase() === Constants.UserRole.AWPER;
   const globalActiveFilterLabels = [
     selectedGlobalFederationSlug
-      ? selectedGlobalFederationSlug.replace('esports-', '').replace(/-/g, ' ')
+      ? Util.getCompetitionOnlineLocationName(selectedGlobalFederationSlug)
       : '',
     selectedGlobalCountryCode,
     selectedGlobalPlayerTierId
@@ -3493,8 +3506,12 @@ export default function LeagueStatsConcept(): JSX.Element {
                       )}
                     </td>
                     <td className="text-center">
-                      {player.team?.tier !== undefined && player.team?.tier !== null
-                        ? getTierDisplayLabel(Constants.Prestige[player.team.tier])
+                      {player.team?.tierSlug ||
+                      (player.team?.tier !== undefined && player.team?.tier !== null)
+                        ? getTierDisplayLabel(
+                            (player.team?.tierSlug ||
+                              Constants.Prestige[player.team!.tier!]) as Constants.TierSlug,
+                          )
                         : '-'}
                     </td>
                     <td
@@ -3713,20 +3730,20 @@ export default function LeagueStatsConcept(): JSX.Element {
                     </select>
                   </fieldset>
                   <fieldset>
-                    <label className="label pb-1 text-xs font-semibold uppercase">
-                      Transfer status
-                    </label>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Status</label>
                     <select
                       className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
                       value={selectedGlobalTransferStatus}
                       onChange={(event) => {
                         setSelectedGlobalTransferStatus(
-                          event.target.value as '' | 'listed' | 'retired',
+                          event.target.value as '' | 'active' | 'freeAgent' | 'listed' | 'retired',
                         );
                         setGlobalPlayerPage(1);
                       }}
                     >
                       <option value="">Any status</option>
+                      <option value="active">Active</option>
+                      <option value="freeAgent">Free agents</option>
                       <option value="listed">Transfer listed</option>
                       <option value="retired">Retired</option>
                     </select>
