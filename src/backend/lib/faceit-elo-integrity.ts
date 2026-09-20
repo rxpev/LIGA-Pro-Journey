@@ -5,6 +5,7 @@ const VALID_FACEIT_ELO_DELTAS = new Set([-40, -35, -30, -25, -20, 10, 15, 20, 25
 
 type FaceitEloIntegrityResult = {
   valid: boolean;
+  repairable: boolean;
   expectedElo: number;
   actualElo: number;
   invalidDeltaMatchIds: number[];
@@ -35,36 +36,62 @@ export async function verifyFaceitEloIntegrity(
   const placementIndex = completedFaceitMatches.findIndex(
     (match: { faceitRating: number | null }) => match.faceitRating !== null,
   );
-  const hasPlacements = placementIndex === 2 && completedFaceitMatches
-    .slice(0, 3)
-    .every((match: { faceitEloDelta: number | null }) => match.faceitEloDelta === null);
-  const legacyCareer = !hasPlacements && completedFaceitMatches.every(
-    (match: { faceitEloDelta: number | null }) => match.faceitEloDelta !== null,
-  ) && Number(profile.faceitElo) !== 0;
-  const inPlacements = !hasPlacements && !legacyCareer && completedFaceitMatches.length < 3 &&
-    completedFaceitMatches.every((match: { faceitEloDelta: number | null }) => match.faceitEloDelta === null);
-  const ratedMatches = hasPlacements ? completedFaceitMatches.slice(3)
-    : inPlacements ? [] : completedFaceitMatches;
+  const hasPlacements =
+    placementIndex === 2 &&
+    completedFaceitMatches
+      .slice(0, 3)
+      .every((match: { faceitEloDelta: number | null }) => match.faceitEloDelta === null);
+  const legacyCareer =
+    !hasPlacements &&
+    completedFaceitMatches.every(
+      (match: { faceitEloDelta: number | null }) => match.faceitEloDelta !== null,
+    ) &&
+    Number(profile.faceitElo) !== 0;
+  const inPlacements =
+    !hasPlacements &&
+    !legacyCareer &&
+    completedFaceitMatches.length < 3 &&
+    completedFaceitMatches.every(
+      (match: { faceitEloDelta: number | null }) => match.faceitEloDelta === null,
+    );
+  const ratedMatches = hasPlacements
+    ? completedFaceitMatches.slice(3)
+    : inPlacements
+      ? []
+      : completedFaceitMatches;
 
   const invalidDeltaMatchIds = ratedMatches
-    .filter((match: { faceitEloDelta: number | null }) =>
-      match.faceitEloDelta === null || !isValidFaceitEloDelta(Number(match.faceitEloDelta)),
+    .filter(
+      (match: { faceitEloDelta: number | null }) =>
+        match.faceitEloDelta === null || !isValidFaceitEloDelta(Number(match.faceitEloDelta)),
     )
     .map((match: { id: number }) => match.id);
 
   const baseline = hasPlacements
     ? Math.round(Number(completedFaceitMatches[2].faceitRating))
-    : legacyCareer ? FACEIT_STARTING_ELO : 0;
+    : legacyCareer
+      ? FACEIT_STARTING_ELO
+      : 0;
   const expectedElo = ratedMatches.reduce(
     (elo: number, match: { faceitEloDelta: number | null }) =>
       elo + Number(match.faceitEloDelta || 0),
     baseline,
   );
   const actualElo = Number(profile.faceitElo ?? 0);
+  const hasRecognizedHistory = hasPlacements || legacyCareer || inPlacements;
+  const valid =
+    invalidDeltaMatchIds.length === 0 && actualElo === expectedElo && hasRecognizedHistory;
 
   return {
-    valid: invalidDeltaMatchIds.length === 0 && actualElo === expectedElo &&
-      (hasPlacements || legacyCareer || (inPlacements && actualElo === 0)),
+    valid,
+    // A valid match history is authoritative when only the cached profile Elo
+    // disagrees. This lets the connect path repair a stale/tampered seal without
+    // accepting malformed match deltas or an unrecognized placement history.
+    repairable:
+      !valid &&
+      invalidDeltaMatchIds.length === 0 &&
+      hasRecognizedHistory &&
+      actualElo !== expectedElo,
     expectedElo,
     actualElo,
     invalidDeltaMatchIds,

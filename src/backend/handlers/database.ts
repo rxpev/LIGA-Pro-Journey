@@ -14,7 +14,11 @@ import {
 } from '@liga/backend/lib';
 import { Util, Constants, Eagers } from '@liga/shared';
 import { verifyFaceitEloIntegrity } from '@liga/backend/lib/faceit-elo-integrity';
-import { removeLegacySaveIntegrity, verifySaveIntegrity } from '@liga/backend/lib/save-integrity';
+import {
+  removeLegacySaveIntegrity,
+  sealSaveIntegrity,
+  verifySaveIntegrity,
+} from '@liga/backend/lib/save-integrity';
 import { isSaveIntegrityDevModeEnabled } from '@liga/backend/lib/save-integrity-dev-mode';
 
 export default function registerDatabaseHandlers() {
@@ -72,7 +76,24 @@ export default function registerDatabaseHandlers() {
       await removeLegacySaveIntegrity(DatabaseClient.path);
     }
 
-    const faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
+    let faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
+
+    if (!faceitEloIntegrity.valid && faceitEloIntegrity.repairable && databaseId !== 0) {
+      log.warn(
+        'Repairing FACEIT ELO from match history: actual=%d expected=%d',
+        faceitEloIntegrity.actualElo,
+        faceitEloIntegrity.expectedElo,
+      );
+
+      profile = await prisma.profile.update({
+        where: { id: profile.id },
+        data: { faceitElo: faceitEloIntegrity.expectedElo },
+      });
+      if (!isSaveIntegrityDevModeEnabled()) {
+        await sealSaveIntegrity(prisma as any, DatabaseClient.path);
+      }
+      faceitEloIntegrity = await verifyFaceitEloIntegrity(prisma, profile);
+    }
 
     if (!faceitEloIntegrity.valid) {
       log.warn(
