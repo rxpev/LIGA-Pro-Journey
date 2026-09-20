@@ -52,6 +52,12 @@ export default function () {
     Boolean(state.windowData.landing?.user?.name?.trim()) &&
     Boolean(state.windowData.landing?.user?.countryId);
 
+  // The save route owns the full-screen loading state. Keep it outside the
+  // setup shell so the New Career panel does not remain visible underneath it.
+  if (location.pathname === '/create/4') {
+    return <Outlet />;
+  }
+
   return (
     <section className="landing-create-panel">
       <header className="landing-create-panel__intro">

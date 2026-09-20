@@ -847,7 +847,7 @@ export default function Faceit(): JSX.Element {
             role="dialog"
             aria-modal="true"
             aria-labelledby="faceit-welcome-title"
-            className="max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-[#ffffff20] bg-[#0f0f0f] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
+            className="faceit-welcome-panel max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-[#ffffff20] bg-[#0f0f0f] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
           >
             <div className="mb-5 flex items-center gap-4">
               <img src={unrankedIcon} className="h-12 w-12 object-contain" alt="Unranked badge" />
