@@ -431,7 +431,13 @@ export default function registerProfileHandlers() {
 
     await DatabaseClient.forget(id);
     await removeSaveIntegrity(dbPath);
-    return fs.promises.unlink(dbPath);
+    await fs.promises.unlink(dbPath);
+    // A deleted SQLite save must not leave WAL/SHM state behind when its id
+    // is reused for a newly-created career.
+    await Promise.all([
+      fs.promises.unlink(`${dbPath}-wal`).catch(() => Promise.resolve()),
+      fs.promises.unlink(`${dbPath}-shm`).catch(() => Promise.resolve()),
+    ]);
   });
 
   /**

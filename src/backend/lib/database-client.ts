@@ -1170,6 +1170,37 @@ export default class DatabaseClient {
     });
   }
 
+  /**
+   * Detects an additive column migration whose column is already present.
+   *
+   * A save can have a partially-updated migration ledger (for example after
+   * an interrupted upgrade or after a save file was replaced in-place).  In
+   * that case replaying `ALTER TABLE ... ADD COLUMN` fails even though the
+   * desired schema is already present.  Treating that statement as applied
+   * lets the migration ledger catch up without hiding unrelated SQL errors.
+   */
+  private static async isAlreadyAppliedAddColumn(
+    cnx: sqlite3.Database,
+    query: string,
+  ): Promise<boolean> {
+    const match = query.match(
+      /^\s*ALTER\s+TABLE\s+(?:"((?:""|[^"])*)"|([^\s]+))\s+ADD\s+COLUMN\s+(?:"((?:""|[^"])*)"|([^\s(]+))/i,
+    );
+    if (!match) return false;
+
+    const unquote = (value: string | undefined) => value?.replace(/""/g, '"') ?? '';
+    const tableName = unquote(match[1] ?? match[2]);
+    const columnName = unquote(match[3] ?? match[4]);
+    if (!tableName || !columnName) return false;
+
+    const pragmaTableName = tableName.replace(/"/g, '""');
+    const columns = await DatabaseClient.allSqlite<{ name: string }>(
+      cnx,
+      `PRAGMA table_info("${pragmaTableName}")`,
+    );
+    return columns.some((column) => column.name === columnName);
+  }
+
   private static getSqlite<T>(
     cnx: sqlite3.Database,
     query: string,
@@ -1333,6 +1364,33 @@ export default class DatabaseClient {
     ]);
   }
 
+  /**
+   * Invalidates session-local state associated with a save file.
+   *
+   * Save ids can be reused after a save is deleted.  These caches are keyed
+   * by path rather than by the database contents, so retaining an entry here
+   * would make a newly-created database look like the deleted one.
+   */
+  private static invalidateDatabasePath(savePath: string): void {
+    const normalizedPath = path.normalize(savePath);
+    migratedDatabasePaths.delete(normalizedPath);
+    maintainedDatabasePaths.delete(normalizedPath);
+
+    // Older callers populated these sets before paths were normalized.  Keep
+    // invalidation defensive so a path casing/separator change cannot leave a
+    // stale entry behind on Windows.
+    for (const databasePath of migratedDatabasePaths) {
+      if (path.normalize(databasePath) === normalizedPath) {
+        migratedDatabasePaths.delete(databasePath);
+      }
+    }
+    for (const databasePath of maintainedDatabasePaths) {
+      if (path.normalize(databasePath) === normalizedPath) {
+        maintainedDatabasePaths.delete(databasePath);
+      }
+    }
+  }
+
   private static async repairRootSaveFromTemplate(rootSavePath: string): Promise<void> {
     const localRootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
     const settings = await DatabaseClient.getRootSaveSettings(rootSavePath).catch(
@@ -1442,7 +1500,14 @@ export default class DatabaseClient {
    * @method
    */
   public static async forget(id: number) {
+    const savePath =
+      pool[id]?.path ?? path.join(DatabaseClient.basePath, Util.getSaveFileName(id));
+    DatabaseClient.invalidateDatabasePath(savePath);
+
     if (!pool[id]) {
+      if (activeId === id) {
+        activeId = 0;
+      }
       return;
     }
 
@@ -1555,6 +1620,8 @@ export default class DatabaseClient {
         schema.hasProfileTable,
       );
 
+      DatabaseClient.invalidateDatabasePath(newSavePath);
+      await DatabaseClient.removeSqliteSidecars(newSavePath);
       await fs.promises.unlink(newSavePath);
     } catch (_) {
       await fs.promises.mkdir(path.dirname(newSavePath), { recursive: true });
@@ -1563,6 +1630,8 @@ export default class DatabaseClient {
     // bail early if we're using a modded save
     try {
       await DatabaseClient.initModdedDatabase(newSavePath);
+      DatabaseClient.invalidateDatabasePath(newSavePath);
+      await DatabaseClient.removeSqliteSidecars(newSavePath);
       return Promise.resolve({ path: newSavePath, created: true });
     } catch (error) {
       this.log.info(error);
@@ -1576,6 +1645,8 @@ export default class DatabaseClient {
         await DatabaseClient.migrate(0);
       }
 
+      DatabaseClient.invalidateDatabasePath(newSavePath);
+      await DatabaseClient.removeSqliteSidecars(newSavePath);
       await fs.promises.copyFile(rootSavePath, newSavePath);
       return Promise.resolve({ path: newSavePath, created: true });
     } catch (error) {
@@ -1716,6 +1787,15 @@ export default class DatabaseClient {
         await DatabaseClient.runSqlite(cnx, 'BEGIN TRANSACTION');
 
         for (const query of queries) {
+          if (await DatabaseClient.isAlreadyAppliedAddColumn(cnx, query)) {
+            DatabaseClient.log.warn(
+              'Skipping already-present column while applying migration `%s` to %s.',
+              migration.name,
+              targetDBPath,
+            );
+            continue;
+          }
+
           await DatabaseClient.runSqlite(cnx, query);
         }
 
