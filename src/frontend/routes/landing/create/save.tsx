@@ -4,7 +4,7 @@
  * @module
  */
 import React from 'react';
-import { Constants } from '@liga/shared';
+import { Constants, Util } from '@liga/shared';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import type { PlayerCareerRole } from '@liga/frontend/redux/state';
@@ -32,6 +32,7 @@ export default function Save() {
   const playerAge = windowData?.user?.age;
   const countryId = windowData?.user?.countryId;
   const selectedRole = location.state?.role || windowData?.role?.selectedRole;
+  const equipment = windowData?.equipment ?? Constants.Settings.gameSettings;
   const simulateNpcMatchStats = windowData?.statistics?.simulateNpcMatchStats ?? true;
 
   // compute new save ID
@@ -47,6 +48,19 @@ export default function Save() {
       }
 
       try {
+        // Preserve the audio preferences from the main menu profile before switching databases.
+        const sourceSettings = state.profile?.settings
+          ? Util.loadSettings(state.profile.settings)
+          : (await api.profiles
+              .current()
+              .then((profile) => (profile?.settings ? Util.loadSettings(profile.settings) : null))
+              .catch((): null => null)) || Constants.Settings;
+        const audioSettings = {
+          volume: sourceSettings.general.volume,
+          musicVolume: sourceSettings.general.musicVolume,
+          faceitMatchFoundTune: sourceSettings.general.faceitMatchFoundTune,
+        };
+
         setStatus(t('shared.connectingToDatabase'));
         await api.database.connect(String(newSaveId));
         localStorage.setItem('liga-active-save-id', String(newSaveId));
@@ -58,6 +72,8 @@ export default function Save() {
           age: playerAge,
           countryId,
           role: selectedRole,
+          equipment,
+          audioSettings,
           simulateNpcMatchStats,
         });
         // A deleted save number can be reused. Its old FACEIT welcome state

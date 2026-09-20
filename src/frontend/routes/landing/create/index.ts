@@ -7,6 +7,7 @@ import Create from './create';
 import Save from './save';
 import User from './user';
 import Role from './role';
+import Equipment from './equipment';
 import Statistics from './statistics';
 
 /**
@@ -20,4 +21,5 @@ export default {
   Statistics,
   User,
   Role,
+  Equipment,
 };

@@ -375,7 +375,9 @@ export default function () {
                   max={1}
                   step={0.01}
                   value={settings.general.volume}
-                  onChange={(event) => onSettingsUpdate('general.volume', event.target.value)}
+                  onChange={(event) =>
+                    onSettingsUpdate('general.volume', Number(event.target.value))
+                  }
                 />
               </article>
             </section>
@@ -391,7 +393,9 @@ export default function () {
                   max={1}
                   step={0.01}
                   value={settings.general.musicVolume}
-                  onChange={(event) => onSettingsUpdate('general.musicVolume', event.target.value)}
+                  onChange={(event) =>
+                    onSettingsUpdate('general.musicVolume', Number(event.target.value))
+                  }
                 />
               </article>
             </section>

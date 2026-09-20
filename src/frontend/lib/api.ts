@@ -612,6 +612,16 @@ export default {
       age: number;
       countryId: number;
       role: string;
+      equipment?: {
+        isUSP: boolean;
+        isM4A1: boolean;
+        isCZ: boolean;
+      };
+      audioSettings?: {
+        volume: number | string;
+        musicVolume: number | string;
+        faceitMatchFoundTune: string | null;
+      };
       simulateNpcMatchStats?: boolean;
     }) => ipcRenderer.invoke('profiles:createPlayerCareer', data) as Promise<Profile>,
 

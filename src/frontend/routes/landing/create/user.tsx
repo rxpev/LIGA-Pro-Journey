@@ -14,7 +14,7 @@ import { AppState } from '@liga/frontend/redux/state';
 import { windowDataUpdate } from '@liga/frontend/redux/actions';
 import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { CountrySelect, findCountryOptionByValue } from '@liga/frontend/components/select';
-import { FaInfoCircle, FaUpload } from 'react-icons/fa';
+import { FaArrowLeft, FaInfoCircle, FaUpload } from 'react-icons/fa';
 import worldMap from '@liga/frontend/assets/career-world-map.png';
 import europeWorldMap from '@liga/frontend/assets/career-world-map-europe.png';
 import americasWorldMap from '@liga/frontend/assets/career-world-map-americas.png';
@@ -370,10 +370,11 @@ export default function () {
         <button
           type="button"
           className="btn"
+          aria-label="Back to main menu"
           onMouseDown={audioRelease}
           onClick={() => navigate('/')}
         >
-          Cancel
+          <FaArrowLeft />
         </button>
         <button
           type="button"
@@ -383,7 +384,7 @@ export default function () {
           onMouseDown={() => canContinue && audioClick()}
         >
           {!!formState.isSubmitting && <span className="loading loading-spinner"></span>}
-          Next Step <span>›</span>
+          Continue <span>›</span>
         </button>
       </footer>
     </div>

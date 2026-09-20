@@ -45,12 +45,19 @@ export default function () {
         path: '/create',
       },
       { id: 'role', title: 'Role', subtitle: 'Choose your playstyle', path: '/create/2' },
+      {
+        id: 'equipment',
+        title: 'Equipment',
+        subtitle: 'Choose your loadout',
+        path: '/create/3',
+      },
     ],
     [t],
   );
   const canAccessRole =
     Boolean(state.windowData.landing?.user?.name?.trim()) &&
     Boolean(state.windowData.landing?.user?.countryId);
+  const canAccessEquipment = canAccessRole && Boolean(state.windowData.landing?.role?.selectedRole);
 
   // The save route owns the full-screen loading state. Keep it outside the
   // setup shell so the New Career panel does not remain visible underneath it.
@@ -86,6 +93,10 @@ export default function () {
               )}
               onClick={() => {
                 if (step.id === 'role' && !canAccessRole) {
+                  audioNegativeAlert();
+                  return;
+                }
+                if (step.id === 'equipment' && !canAccessEquipment) {
                   audioNegativeAlert();
                   return;
                 }

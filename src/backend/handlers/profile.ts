@@ -170,10 +170,21 @@ export default function registerProfileHandlers() {
         age: number;
         countryId: number;
         role: string;
+        equipment?: {
+          isUSP?: boolean;
+          isM4A1?: boolean;
+          isCZ?: boolean;
+        };
+        audioSettings?: {
+          volume?: number | string;
+          musicVolume?: number | string;
+          faceitMatchFoundTune?: string | null;
+        };
         simulateNpcMatchStats?: boolean;
       },
     ) => {
-      const { playerName, age, countryId, role, simulateNpcMatchStats } = data;
+      const { playerName, age, countryId, role, equipment, audioSettings, simulateNpcMatchStats } =
+        data;
 
       if (!Number.isInteger(age) || age < 14 || age > 60) {
         throw new Error('Player age must be a whole number between 14 and 60.');
@@ -181,6 +192,27 @@ export default function registerProfileHandlers() {
 
       // Always use the single root profile
       const existing = await DatabaseClient.prisma.profile.findFirst();
+      const settings = Util.loadSettings(existing.settings);
+      settings.gameSettings = {
+        isUSP: equipment?.isUSP === true,
+        isM4A1: equipment?.isM4A1 === true,
+        isCZ: equipment?.isCZ === true,
+      };
+      const normalizeVolume = (value: number | string | undefined, fallback: number) => {
+        const normalized = typeof value === 'number' ? value : Number(value);
+        return Number.isFinite(normalized) ? Math.max(0, Math.min(1, normalized)) : fallback;
+      };
+      settings.general.volume = normalizeVolume(audioSettings?.volume, settings.general.volume);
+      settings.general.musicVolume = normalizeVolume(
+        audioSettings?.musicVolume,
+        settings.general.musicVolume,
+      );
+      if (
+        audioSettings?.faceitMatchFoundTune === null ||
+        typeof audioSettings?.faceitMatchFoundTune === 'string'
+      ) {
+        settings.general.faceitMatchFoundTune = audioSettings.faceitMatchFoundTune;
+      }
 
       // 1. CREATE / UPDATE PROFILE
       const profile = await DatabaseClient.prisma.profile.update({
@@ -190,6 +222,7 @@ export default function registerProfileHandlers() {
           date: Constants.NewSaveSeasonStartDate,
           season: 0,
           faceitElo: 0,
+          settings: JSON.stringify(settings),
           simulateNpcMatchStats: Boolean(simulateNpcMatchStats),
 
           player: {

@@ -17,6 +17,12 @@ export interface PlayerCareerUser {
 
 export type PlayerCareerRole = 'RIFLER' | 'AWPER' | 'IGL';
 
+export interface PlayerCareerEquipment {
+  isUSP: boolean;
+  isM4A1: boolean;
+  isCZ: boolean;
+}
+
 export type PlayingStatus =
   | 'PREPARING_MATCH'
   | 'COPYING_FILES'
@@ -80,6 +86,7 @@ export interface AppState {
     [Constants.WindowIdentifier.Landing]: {
       user?: PlayerCareerUser;
       role?: { selectedRole?: PlayerCareerRole };
+      equipment?: PlayerCareerEquipment;
       statistics?: { simulateNpcMatchStats?: boolean };
       today: Date;
     };

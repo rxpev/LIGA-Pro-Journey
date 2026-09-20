@@ -115,7 +115,7 @@ export default function Role() {
     }
 
     audioClick();
-    navigate('/create/4', { state: { role: selectedRole } });
+    navigate('/create/3');
   };
 
   return (
@@ -226,7 +226,7 @@ export default function Role() {
           className={cx('btn btn-primary', !selectedRole && 'cursor-not-allowed opacity-50')}
           aria-disabled={!selectedRole}
         >
-          Create Career <span>›</span>
+          Continue <span>›</span>
         </button>
       </footer>
     </div>

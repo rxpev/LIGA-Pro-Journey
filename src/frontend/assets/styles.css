@@ -3384,6 +3384,202 @@ button.inbox-chats-nav:hover {
   line-height: 0;
 }
 
+.landing-create-equipment-step {
+  display: grid;
+  min-height: 100%;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.landing-create-equipment-step__content {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1.6rem;
+  padding: 1.5rem 1.65rem;
+}
+
+.landing-create-equipment-step__heading > span {
+  display: block;
+  padding-left: 0.7rem;
+  border-left: 0.15rem solid #ff5e13;
+  color: #ff7b3c;
+  font-family: 'BEBAS NEUE', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landing-create-equipment-step__heading > p {
+  margin: 0.35rem 0 0 0.85rem;
+  color: rgb(222 234 243 / 68%);
+  font-size: 0.78rem;
+}
+
+.landing-create-equipment-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.landing-create-equipment-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  overflow: hidden;
+  padding: 1.5rem;
+  border: 1px solid rgb(185 211 230 / 30%);
+  color: #edf3f8;
+  background:
+    linear-gradient(180deg, rgb(13 20 25 / 55%), rgb(3 7 10 / 88%)),
+    radial-gradient(circle at 50% 42%, rgb(255 255 255 / 7%), transparent 43%);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.landing-create-equipment-card:hover {
+  border-color: rgb(255 123 60 / 62%);
+  transform: translateY(-0.12rem);
+}
+
+.landing-create-equipment-card--selected {
+  border-color: #ff6a27;
+  background:
+    linear-gradient(180deg, rgb(82 30 10 / 52%), rgb(3 7 10 / 92%)),
+    radial-gradient(circle at 50% 42%, rgb(255 94 19 / 16%), transparent 48%);
+  box-shadow: 0 0 24px rgb(255 94 19 / 23%);
+}
+
+.landing-create-equipment-card > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.landing-create-equipment-card:has(input:focus-visible) {
+  outline: 2px solid #ff7b3c;
+  outline-offset: 2px;
+}
+
+.landing-create-equipment-card__state {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid rgb(185 211 230 / 34%);
+  color: #fff;
+  background: rgb(3 7 10 / 60%);
+  font-size: 0.7rem;
+}
+
+.landing-create-equipment-card--selected .landing-create-equipment-card__state {
+  border-color: #ff6a27;
+  background: #ff5e13;
+}
+
+.landing-create-equipment-card__slot {
+  color: rgb(222 234 243 / 58%);
+  font-family: 'BEBAS NEUE', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.landing-create-equipment-card__weapon {
+  display: grid;
+  width: min(100%, 14rem);
+  height: 8rem;
+  place-items: center;
+}
+
+.landing-create-equipment-card__weapon img {
+  width: 100%;
+  max-height: 7rem;
+  object-fit: contain;
+  opacity: 0.82;
+  filter: drop-shadow(0 0.8rem 0.9rem rgb(0 0 0 / 56%));
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.landing-create-equipment-card:hover .landing-create-equipment-card__weapon img,
+.landing-create-equipment-card--selected .landing-create-equipment-card__weapon img {
+  opacity: 1;
+  transform: scale(1.04);
+}
+
+.landing-create-equipment-card > strong {
+  font-family: 'BEBAS NEUE', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-create-equipment-card__choice {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgb(185 211 230 / 18%);
+  color: rgb(237 243 248 / 76%);
+  font-family: 'BEBAS NEUE', sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-create-equipment-card__toggle {
+  display: flex;
+  width: 2.5rem;
+  height: 1.35rem;
+  align-items: center;
+  padding: 0.15rem;
+  border: 1px solid rgb(185 211 230 / 35%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 45%);
+}
+
+.landing-create-equipment-card__toggle > span {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: rgb(222 234 243 / 70%);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.landing-create-equipment-card__toggle--enabled {
+  border-color: #ff6a27;
+  background: rgb(255 94 19 / 32%);
+}
+
+.landing-create-equipment-card__toggle--enabled > span {
+  background: #ff6a27;
+  transform: translateX(1.1rem);
+}
+
 /* Custom Games uses the same tactical panel language as the landing menu. */
 .landing-custom-games {
   color: #edf3f8;
