@@ -331,6 +331,7 @@ export enum IPCRoute {
   DATABASE_CURRENT = '/database/current',
   EMAILS_ALL = '/emails/all',
   EMAILS_DELETE = '/emails/delete',
+  EMAILS_FACEIT_OPENING_REPLY = '/emails/faceit-opening/reply',
   EMAILS_NEW = '/emails/new',
   EMAILS_UPDATE_DIALOGUE = '/emails/update/dialogue',
   EMAILS_UPDATE_MANY = '/emails/update/many',

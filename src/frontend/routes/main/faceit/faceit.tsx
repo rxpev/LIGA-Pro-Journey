@@ -33,7 +33,15 @@ import { Constants, Util } from '@liga/shared';
 import { useAudio } from '@liga/frontend/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { FaArrowRight, FaChartLine, FaChevronDown, FaFileContract, FaUserFriends, FaUserPlus, FaUsers } from 'react-icons/fa';
+import {
+  FaArrowRight,
+  FaChartLine,
+  FaChevronDown,
+  FaFileContract,
+  FaUserFriends,
+  FaUserPlus,
+  FaUsers,
+} from 'react-icons/fa';
 
 export const LEVEL_IMAGES = [
   null,
@@ -188,7 +196,10 @@ const getMatchRoomClientId = (room?: MatchRoomData | null) =>
 export default function Faceit(): JSX.Element {
   const { state, dispatch } = React.useContext(AppStateContext);
   const location = useLocation();
-  const routeState = (location.state || {}) as { skipFaceitLoadingAnimation?: boolean };
+  const routeState = (location.state || {}) as {
+    skipFaceitLoadingAnimation?: boolean;
+    openIncomingFriendRequest?: boolean;
+  };
   const skipLoadingAnimation = routeState.skipFaceitLoadingAnimation === true;
 
   const activeMatch = state.faceitMatchRoom;
@@ -419,7 +430,15 @@ export default function Faceit(): JSX.Element {
       // Still show the guide when storage is unavailable.
     }
     setWelcomeSaveId(currentSaveId);
-  }, [saveIdResolved, profileReady, loading, currentSaveId, level, placementMatchesPlayed, activeMatch]);
+  }, [
+    saveIdResolved,
+    profileReady,
+    loading,
+    currentSaveId,
+    level,
+    placementMatchesPlayed,
+    activeMatch,
+  ]);
 
   const dismissWelcome = () => {
     if (welcomeSaveId) {
@@ -765,7 +784,7 @@ export default function Faceit(): JSX.Element {
         }
       };
 
-      const queuedRoom = res.matchId ? res.room : res.room ?? res;
+      const queuedRoom = res.matchId ? res.room : (res.room ?? res);
       const partyAdjusted = res.matchId
         ? queuedRoom
         : await applyPartyToTeams({
@@ -833,37 +852,59 @@ export default function Faceit(): JSX.Element {
             <div className="mb-5 flex items-center gap-4">
               <img src={unrankedIcon} className="h-12 w-12 object-contain" alt="Unranked badge" />
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff7300]">Your FACEIT journey</div>
-                <h2 id="faceit-welcome-title" className="text-2xl font-bold">Welcome to FACEIT</h2>
+                <div className="text-xs font-bold tracking-[0.18em] text-[#ff7300] uppercase">
+                  Your FACEIT journey
+                </div>
+                <h2 id="faceit-welcome-title" className="text-2xl font-bold">
+                  Welcome to FACEIT
+                </h2>
               </div>
             </div>
 
-            <div className="mb-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[#ffffff20] bg-[#151515] px-4 py-4" aria-label="Unranked, three placement matches, then your FACEIT level">
+            <div
+              className="mb-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-[#ffffff20] bg-[#151515] px-4 py-4"
+              aria-label="Unranked, three placement matches, then your FACEIT level"
+            >
               <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
                 <div className="flex h-10 items-center justify-center">
                   <img src={unrankedIcon} className="h-10 w-10 object-contain" alt="" />
                 </div>
-                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Unranked</span>
+                <span className="text-[10px] leading-4 font-bold tracking-wide text-neutral-400 uppercase">
+                  Unranked
+                </span>
               </div>
               <FaArrowRight className="mt-3 text-[#ff7300]" aria-hidden="true" />
               <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
                 <div className="flex h-10 items-center justify-center gap-1.5">
                   {[1, 2, 3].map((matchNumber) => (
-                    <span key={matchNumber} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#ff7300]/60 bg-[#ff7300]/10 text-xs font-bold text-[#ff7300]">
+                    <span
+                      key={matchNumber}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-[#ff7300]/60 bg-[#ff7300]/10 text-xs font-bold text-[#ff7300]"
+                    >
                       {matchNumber}
                     </span>
                   ))}
                 </div>
-                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Placements</span>
+                <span className="text-[10px] leading-4 font-bold tracking-wide text-neutral-400 uppercase">
+                  Placements
+                </span>
               </div>
               <FaArrowRight className="mt-3 text-[#ff7300]" aria-hidden="true" />
               <div className="grid grid-rows-[40px_16px] justify-items-center gap-2">
                 <div className="flex h-10 items-center justify-center -space-x-2">
                   {[level3, level7, level10].map((badge, index) => (
-                    <img key={badge} src={badge} className="h-8 w-8 object-contain" alt="" style={{ zIndex: 3 - index }} />
+                    <img
+                      key={badge}
+                      src={badge}
+                      className="h-8 w-8 object-contain"
+                      alt=""
+                      style={{ zIndex: 3 - index }}
+                    />
                   ))}
                 </div>
-                <span className="text-[10px] font-bold uppercase leading-4 tracking-wide text-neutral-400">Ranked</span>
+                <span className="text-[10px] leading-4 font-bold tracking-wide text-neutral-400 uppercase">
+                  Ranked
+                </span>
               </div>
             </div>
 
@@ -874,7 +915,9 @@ export default function Faceit(): JSX.Element {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white">Start unranked</div>
-                  <p className="text-sm leading-5 text-neutral-400">Your FACEIT ELO and level stay hidden during placements.</p>
+                  <p className="text-sm leading-5 text-neutral-400">
+                    Your FACEIT ELO and level stay hidden during placements.
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-4 rounded-lg border border-[#ffffff15] bg-[#151515] p-4">
@@ -883,7 +926,10 @@ export default function Faceit(): JSX.Element {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white">Play three placement matches</div>
-                  <p className="text-sm leading-5 text-neutral-400">Your K/D and match results shape your placement. After match three, your starting ELO and FACEIT level appear.</p>
+                  <p className="text-sm leading-5 text-neutral-400">
+                    Your K/D and match results shape your placement. After match three, your
+                    starting ELO and FACEIT level appear.
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-4 rounded-lg border border-[#ffffff15] bg-[#151515] p-4">
@@ -892,7 +938,10 @@ export default function Faceit(): JSX.Element {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white">Get noticed by teams</div>
-                  <p className="text-sm leading-5 text-neutral-400">Keep playing FACEIT matches so teams can notice your performances and send offers.</p>
+                  <p className="text-sm leading-5 text-neutral-400">
+                    Keep playing FACEIT matches so teams can notice your performances and send
+                    offers.
+                  </p>
                 </div>
               </div>
             </div>
@@ -985,6 +1034,7 @@ export default function Faceit(): JSX.Element {
               ),
             )}
             currentDate={state.profile?.date ?? new Date()}
+            openIncomingFriendRequest={routeState.openIncomingFriendRequest === true}
           />
 
           <NormalFaceitBody
@@ -1034,6 +1084,7 @@ interface FaceitHeaderProps {
   currentTeamCountryId: number | null;
   countryFederationById: Record<number, number>;
   currentDate: Date | string | number | null;
+  openIncomingFriendRequest?: boolean;
 }
 
 export function FaceitHeader({
@@ -1053,16 +1104,19 @@ export function FaceitHeader({
   currentTeamCountryId,
   countryFederationById,
   currentDate,
+  openIncomingFriendRequest = false,
 }: FaceitHeaderProps) {
   const displayPct = level === 10 ? 100 : pct;
   const [friendsDropdownOpen, setFriendsDropdownOpen] = useState(false);
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
   const [friends, setFriends] = useState<MatchPlayer[]>([]);
   const [pendingRequests, setPendingRequests] = useState<number[]>([]);
+  const [incomingFriendRequest, setIncomingFriendRequest] = useState<MatchPlayer | null>(null);
   const [friendsTab, setFriendsTab] = useState<'suggestions'>('suggestions');
   const friendsButtonRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [friendsHydrated, setFriendsHydrated] = useState(false);
+  const openedIncomingRequestRef = useRef(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({
     top: 0,
     left: 0,
@@ -1108,6 +1162,22 @@ export function FaceitHeader({
     (suffix: string) => `${storagePrefix}:${suffix}`,
     [storagePrefix],
   );
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey('opening-friend-request'));
+      const parsed = stored ? JSON.parse(stored) : null;
+      const resolvedId = localStorage.getItem(storageKey('opening-friend-request-resolved'));
+      if (parsed && resolvedId === String(parsed.id)) {
+        localStorage.removeItem(storageKey('opening-friend-request'));
+        setIncomingFriendRequest(null);
+      } else {
+        setIncomingFriendRequest(parsed);
+      }
+    } catch {
+      setIncomingFriendRequest(null);
+    }
+  }, [storageKey]);
 
   useEffect(() => {
     try {
@@ -1246,6 +1316,17 @@ export function FaceitHeader({
       }
     }
 
+    try {
+      const guaranteed = JSON.parse(
+        localStorage.getItem(storageKey('opening-friend-guarantee')) || 'null',
+      ) as { playerId?: number; dayKey?: string } | null;
+      if (guaranteed?.dayKey === dayKey && Number.isInteger(guaranteed.playerId)) {
+        merged[guaranteed.playerId!] = { online: true, accepts: true };
+      }
+    } catch {
+      // Ignore malformed local state; regular daily friend behavior still applies.
+    }
+
     setDailyFriendStatus(merged);
     localStorage.setItem(statusKey, JSON.stringify(merged));
   }, [dayKey, friends, storageKey]);
@@ -1255,6 +1336,22 @@ export function FaceitHeader({
     setPartyDropdownOpen(false);
     setFriendsDropdownOpen(false);
   }, [partyLocked]);
+
+  useEffect(() => {
+    if (
+      !openIncomingFriendRequest ||
+      !friendsHydrated ||
+      !incomingFriendRequest ||
+      partyLocked ||
+      openedIncomingRequestRef.current
+    ) {
+      return;
+    }
+
+    openedIncomingRequestRef.current = true;
+    setPartyDropdownOpen(false);
+    setFriendsDropdownOpen(true);
+  }, [openIncomingFriendRequest, friendsHydrated, incomingFriendRequest, partyLocked]);
 
   useEffect(() => {
     if (!friendsHydrated) return;
@@ -1839,6 +1936,33 @@ export function FaceitHeader({
     });
   };
 
+  const acceptIncomingFriendRequest = () => {
+    if (!incomingFriendRequest || friends.length >= 30 || partyLocked) return;
+
+    const acceptedFriend = incomingFriendRequest;
+
+    setFriends((prev) =>
+      prev.some((friend) => friend.id === acceptedFriend.id) ? prev : [...prev, acceptedFriend],
+    );
+    const guaranteedStatus = { online: true, accepts: true };
+    setDailyFriendStatus((current) => ({
+      ...current,
+      [acceptedFriend.id]: guaranteedStatus,
+    }));
+    localStorage.setItem(
+      storageKey('opening-friend-guarantee'),
+      JSON.stringify({ playerId: acceptedFriend.id, dayKey }),
+    );
+    localStorage.setItem(
+      storageKey(`friends-status-${dayKey}`),
+      JSON.stringify({ ...dailyFriendStatus, [acceptedFriend.id]: guaranteedStatus }),
+    );
+    localStorage.setItem(storageKey('opening-friend-request-resolved'), String(acceptedFriend.id));
+    localStorage.removeItem(storageKey('opening-friend-request'));
+    toast.success(`${acceptedFriend.name} is now your friend!`);
+    setIncomingFriendRequest(null);
+  };
+
   const sendFriendRequest = (teammate: MatchPlayer) => {
     if (partyLocked) return;
     if (pendingRequests.includes(teammate.id)) return;
@@ -1941,11 +2065,20 @@ export function FaceitHeader({
               setPartyDropdownOpen(false);
             }}
             disabled={partyLocked}
-            className="flex h-10 items-center gap-2 rounded border border-[#ffffff25] bg-[#111] px-3 text-sm font-semibold tracking-wide uppercase hover:bg-[#1a1a1a] disabled:opacity-40"
+            className={`flex h-10 items-center gap-2 rounded border bg-[#111] px-3 text-sm font-semibold tracking-wide uppercase hover:bg-[#1a1a1a] disabled:opacity-40 ${
+              incomingFriendRequest
+                ? 'faceit-friends-request-pulse border-[#ff7300]'
+                : 'border-[#ffffff25]'
+            }`}
           >
             <FaUserFriends className="text-[#d4d4d4]" />
             Friends
             <span className="text-[#7cd75c]">{friends.length}</span>
+            {incomingFriendRequest && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#ff7300] px-1 text-[9px] font-bold text-white">
+                1
+              </span>
+            )}
             <FaChevronDown className="text-xs opacity-70" />
           </button>
         </div>
@@ -1958,6 +2091,35 @@ export function FaceitHeader({
               className="fixed z-[9999] rounded-md border border-[#ffffff30] bg-[#090909] p-3 shadow-2xl"
             >
               <div className="mb-2 text-sm font-semibold">Friends</div>
+
+              {incomingFriendRequest && (
+                <div className="mb-3 rounded border border-[#ff730080] bg-[#ff730012] p-2">
+                  <div className="mb-2 text-[10px] font-bold tracking-wide text-[#ff7300] uppercase">
+                    Incoming friend request
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{incomingFriendRequest.name}</div>
+                      <div className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
+                        <img
+                          src={LEVEL_IMAGES[resolvePlayerLevel(incomingFriendRequest)]}
+                          className="h-5 w-5"
+                          alt={`Level ${resolvePlayerLevel(incomingFriendRequest)}`}
+                        />
+                        {incomingFriendRequest.elo} ELO
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={acceptIncomingFriendRequest}
+                      disabled={friends.length >= 30 || partyLocked}
+                      className="rounded bg-[#ff7300] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                    >
+                      {friends.length >= 30 ? 'Full' : 'Accept'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                 {friends.length === 0 ? (
@@ -2051,30 +2213,37 @@ export function FaceitHeader({
             document.body,
           )}
 
-        <img src={level === 0 ? unrankedIcon : LEVEL_IMAGES[level]} className="h-10 w-10" alt={level === 0 ? 'Unranked' : `FACEIT level ${level}`} />
+        <img
+          src={level === 0 ? unrankedIcon : LEVEL_IMAGES[level]}
+          className="h-10 w-10"
+          alt={level === 0 ? 'Unranked' : `FACEIT level ${level}`}
+        />
 
         <div className="flex w-56 flex-col">
           <div className="text-xl font-bold">{level === 0 ? 'Unranked' : elo}</div>
 
           {level === 0 ? (
-            <div className="text-xs text-neutral-400">Placement matches: {placementMatchesPlayed}/3</div>
-          ) : <>
+            <div className="text-xs text-neutral-400">
+              Placement matches: {placementMatchesPlayed}/3
+            </div>
+          ) : (
+            <>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-700">
+                <div
+                  className="h-full bg-[#ff7300]"
+                  style={{ width: `${Math.min(100, Math.max(0, displayPct))}%` }}
+                />
+              </div>
 
-          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-700">
-            <div
-              className="h-full bg-[#ff7300]"
-              style={{ width: `${Math.min(100, Math.max(0, displayPct))}%` }}
-            />
-          </div>
-
-          <div className="mt-1 flex justify-between text-xs opacity-80">
-            <span>{low}</span>
-            <span className="w-full text-center">
-              {level === 10 ? 'MAX LEVEL' : `-${elo - low}/+${high - elo}`}
-            </span>
-            <span>{level === 10 ? '∞' : high}</span>
-          </div>
-          </>}
+              <div className="mt-1 flex justify-between text-xs opacity-80">
+                <span>{low}</span>
+                <span className="w-full text-center">
+                  {level === 10 ? 'MAX LEVEL' : `-${elo - low}/+${high - elo}`}
+                </span>
+                <span>{level === 10 ? '∞' : high}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {partyDropdownOpen &&

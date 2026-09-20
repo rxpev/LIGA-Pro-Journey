@@ -826,6 +826,544 @@ meter::-webkit-meter-bar {
   }
 }
 
+/* Inbox follows the compact dark cards used throughout the modernized main tabs. */
+.inbox-dashboard {
+  @apply bg-base-100 text-base-content flex h-full min-w-0 flex-col overflow-hidden;
+}
+.inbox-topbar {
+  @apply border-base-content/10 flex shrink-0 items-center justify-between gap-5 border-b px-7 py-5;
+}
+.inbox-heading,
+.inbox-top-actions,
+.inbox-toolbar,
+.inbox-categories,
+.inbox-bulk-actions,
+.inbox-control,
+.inbox-search {
+  @apply flex items-center;
+}
+.inbox-heading {
+  @apply min-w-0 gap-5;
+}
+.inbox-heading-icon {
+  @apply border-base-content/15 bg-base-200 text-primary grid size-15 shrink-0 place-items-center rounded-2xl border text-2xl;
+}
+.inbox-heading h1 {
+  @apply text-2xl leading-tight font-black;
+}
+.inbox-heading p {
+  @apply text-base-content/60 mt-1 text-sm;
+}
+.inbox-top-actions {
+  @apply gap-4;
+}
+.inbox-search,
+.inbox-control,
+.inbox-tab,
+.inbox-more {
+  @apply border-base-content/15 bg-base-200/55 text-base-content rounded-xl border text-sm transition-colors;
+}
+.inbox-search {
+  @apply text-base-content/55 h-11 w-88 gap-3 px-4;
+}
+.inbox-search input {
+  @apply text-base-content min-w-0 flex-1 bg-transparent outline-none;
+}
+.inbox-search input::placeholder {
+  @apply text-base-content/45 italic;
+}
+.inbox-control {
+  @apply h-11 justify-center gap-3 px-4 whitespace-nowrap;
+}
+.inbox-control:hover:not(:disabled),
+.inbox-more:hover,
+.inbox-tab:hover {
+  @apply bg-base-content/10;
+}
+.inbox-control:disabled {
+  @apply cursor-not-allowed opacity-40;
+}
+.inbox-chevron {
+  @apply ml-5;
+}
+.inbox-menu-wrap {
+  @apply relative;
+}
+.inbox-dropdown {
+  @apply border-base-content/15 bg-base-200 absolute top-full z-20 mt-2 min-w-42 overflow-hidden rounded-xl border shadow-xl;
+}
+.inbox-dropdown.is-right {
+  @apply right-0;
+}
+.inbox-dropdown button {
+  @apply hover:bg-base-content/10 block w-full px-4 py-3 text-left text-sm;
+}
+.inbox-toolbar {
+  @apply min-h-17 shrink-0 justify-between gap-4 px-7;
+}
+.inbox-categories,
+.inbox-bulk-actions {
+  @apply gap-3;
+}
+.inbox-tab {
+  @apply h-10 min-w-26 px-4;
+}
+.inbox-tab span {
+  @apply text-base-content/60 ml-3;
+}
+.inbox-tab.is-active {
+  @apply border-primary bg-primary/15 text-primary;
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+.inbox-checkbox {
+  @apply border-base-content/35 grid size-4 place-items-center rounded-sm border text-[9px];
+}
+.inbox-checkbox.is-checked {
+  @apply border-primary bg-primary text-primary-content;
+}
+.inbox-content {
+  @apply grid min-h-0 flex-1 grid-cols-[minmax(320px,33%)_minmax(0,1fr)] gap-4 px-5 pb-5;
+}
+.inbox-list {
+  @apply border-base-content/15 bg-base-200/25 min-h-0 overflow-y-auto rounded-xl border;
+}
+.inbox-list-item {
+  @apply border-base-content/12 hover:bg-base-content/5 relative flex min-h-25 w-full items-center gap-4 border-b px-5 py-3 text-left;
+}
+.inbox-list-item.is-selected {
+  @apply border-primary/65 bg-primary/10;
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+.inbox-list-item.is-unread .inbox-list-copy strong {
+  @apply text-base-content;
+}
+.inbox-avatar {
+  @apply border-base-content/20 bg-base-300 size-16 shrink-0 rounded-xl border object-cover;
+}
+.inbox-list-copy {
+  @apply flex min-w-0 flex-1 flex-col gap-0.5;
+}
+.inbox-list-copy strong,
+.inbox-subject,
+.inbox-preview {
+  @apply block truncate;
+}
+.inbox-list-copy strong {
+  @apply font-bold;
+}
+.inbox-subject {
+  @apply text-sm;
+}
+.inbox-preview {
+  @apply text-base-content/60 text-sm;
+}
+.inbox-list-meta {
+  @apply flex h-16 shrink-0 flex-col items-end justify-between;
+}
+.inbox-list-meta time {
+  @apply text-base-content/65 text-xs;
+}
+.inbox-badge,
+.inbox-status {
+  @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs;
+}
+.inbox-badge {
+  @apply border-base-content/25 bg-base-300/40 text-base-content/75;
+}
+.inbox-badge.is-offers {
+  @apply border-primary/55 bg-primary/10 text-primary;
+}
+.inbox-badge.is-accepted,
+.inbox-status.is-accepted {
+  @apply border-primary/45 bg-primary/10 text-primary;
+}
+.inbox-badge.is-rejected,
+.inbox-badge.is-expired,
+.inbox-status.is-rejected,
+.inbox-status.is-expired {
+  @apply border-base-content/30 bg-base-300/40 text-base-content/70;
+}
+.inbox-badge.is-system {
+  @apply border-base-content/30 bg-base-content/10 text-base-content/70;
+}
+.inbox-detail {
+  @apply border-base-content/15 bg-base-200/30 min-h-0 min-w-0 overflow-y-auto rounded-xl border;
+}
+.inbox-detail-card {
+  @apply p-5;
+}
+.inbox-detail-heading,
+.inbox-detail-actions,
+.inbox-detail-grid,
+.inbox-team-heading,
+.inbox-team-info,
+.inbox-sender-team {
+  @apply flex;
+}
+.inbox-detail-heading {
+  @apply items-start justify-between gap-4 px-3 pb-5;
+}
+.inbox-detail-title h2 {
+  @apply text-xl font-black;
+}
+.inbox-detail-title p {
+  @apply mt-1 font-semibold;
+}
+.inbox-detail-title time {
+  @apply text-base-content/60 mt-1 block text-xs;
+}
+.inbox-detail-actions {
+  @apply items-center gap-5;
+}
+.inbox-status {
+  @apply rounded-xl px-3 py-2 font-bold;
+}
+.inbox-more {
+  @apply size-10;
+}
+.inbox-detail-grid {
+  @apply min-w-0 items-start gap-4;
+}
+.inbox-thread {
+  @apply border-base-content/15 bg-base-100/30 min-w-0 flex-1 rounded-xl border p-5;
+}
+.inbox-message {
+  @apply text-base-content/80 border-base-content/15 border-b pb-4 leading-relaxed last:border-b-0;
+}
+.inbox-message p {
+  @apply mb-4;
+}
+.inbox-message strong {
+  @apply text-base-content;
+}
+.inbox-message ul {
+  @apply border-base-content/15 mb-5 list-none border-b pb-5;
+}
+.inbox-message li {
+  @apply my-2;
+}
+.inbox-message hr {
+  @apply border-base-content/15 my-5;
+}
+.inbox-message button {
+  @apply btn border-base-content/15 bg-base-200 mr-3 mb-2;
+}
+.inbox-message button.btn-primary {
+  @apply bg-primary text-primary-content;
+}
+.inbox-message button:disabled {
+  @apply cursor-not-allowed opacity-40;
+}
+.inbox-thread-status,
+.inbox-closed-note {
+  @apply text-base-content/60 border-base-content/15 bg-base-200/55 my-3 flex items-center gap-3 rounded-lg border p-3 text-sm;
+}
+.inbox-context {
+  @apply flex w-[36%] min-w-58 flex-col gap-4;
+}
+.inbox-sender-card,
+.inbox-team-card {
+  @apply border-base-content/15 bg-base-100/25 rounded-xl border p-4;
+}
+.inbox-sender-card {
+  @apply flex gap-4;
+}
+.inbox-sender-card > img {
+  @apply border-base-content/15 bg-base-300 h-42 w-30 shrink-0 rounded-lg border object-cover;
+}
+.inbox-sender-card > div {
+  @apply min-w-0 flex-1;
+}
+.inbox-sender-card h3,
+.inbox-team-card h3 {
+  @apply text-lg font-bold;
+}
+.inbox-sender-card p {
+  @apply text-base-content/60 text-sm;
+}
+.inbox-sender-team {
+  @apply border-base-content/15 mt-5 items-center gap-3 border-t pt-4;
+}
+.inbox-sender-team span {
+  @apply min-w-0;
+}
+.inbox-sender-team strong,
+.inbox-sender-team small {
+  @apply block truncate;
+}
+.inbox-sender-team small {
+  @apply text-base-content/55 text-xs;
+}
+.inbox-team-heading {
+  @apply items-center justify-between gap-2;
+}
+.inbox-team-heading a {
+  @apply text-primary text-xs whitespace-nowrap;
+}
+.inbox-team-info {
+  @apply border-base-content/15 mt-4 items-center gap-5 border-t pt-4;
+}
+.inbox-team-info p {
+  @apply text-base-content/70 my-2 flex items-center gap-3 text-sm;
+}
+.inbox-team-info p svg {
+  @apply text-primary;
+}
+.inbox-empty {
+  @apply text-base-content/55 grid min-h-48 place-content-center text-center text-sm;
+}
+.inbox-detail-empty {
+  @apply h-full gap-4;
+}
+.inbox-detail-empty svg {
+  @apply mx-auto size-12;
+}
+@media (max-width: 1150px) {
+  .inbox-topbar,
+  .inbox-toolbar {
+    @apply px-4;
+  }
+  .inbox-content {
+    @apply grid-cols-[minmax(280px,38%)_minmax(0,1fr)] px-3;
+  }
+  .inbox-context {
+    @apply w-full flex-row;
+  }
+  .inbox-detail-grid {
+    @apply flex-col;
+  }
+  .inbox-sender-card,
+  .inbox-team-card {
+    @apply flex-1;
+  }
+  .inbox-search {
+    @apply w-55;
+  }
+}
+
+/* The Inbox is a read-only messenger: conversation rail on the left, chat on the right. */
+.inbox-dashboard .inbox-content {
+  @apply divide-base-content/10 grid min-h-0 flex-1 grid-cols-4 gap-0 divide-x p-0;
+}
+.inbox-conversations {
+  @apply bg-base-200/20 flex min-h-0 min-w-0 flex-col overflow-hidden;
+}
+.inbox-conversations-toolbar {
+  @apply flex shrink-0 flex-col;
+  background: linear-gradient(180deg, rgb(18 31 38 / 72%) 0%, rgb(12 24 30 / 35%) 100%);
+}
+.inbox-conversations-title {
+  @apply flex min-h-16 items-center justify-between gap-3 px-4;
+}
+.inbox-conversations-title h2 {
+  @apply text-2xl font-black;
+}
+.inbox-new-message {
+  @apply bg-primary text-primary-content hover:bg-primary/90 h-10 rounded-lg px-4 text-xs font-bold shadow-md transition-colors;
+}
+.inbox-search-row {
+  @apply flex items-center gap-2 px-3 pb-3;
+}
+.inbox-conversations .inbox-search {
+  @apply bg-base-100/40 h-10 min-w-0 flex-1 rounded-lg;
+}
+.inbox-filter-button {
+  @apply border-base-content/15 bg-base-100/40 text-base-content/65 hover:bg-base-content/10 flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors;
+}
+.inbox-filter-button svg {
+  @apply size-4;
+}
+.inbox-chat-folders {
+  @apply border-base-content/10 flex flex-col border-t pt-1;
+}
+.inbox-chats-nav {
+  @apply text-base-content/85 flex h-11 w-full items-center gap-3 px-4 text-left text-sm font-semibold transition-colors;
+}
+button.inbox-chats-nav:hover {
+  @apply bg-base-content/5;
+}
+.inbox-chats-nav.is-static {
+  @apply cursor-default;
+}
+.inbox-chats-nav.is-active {
+  background: linear-gradient(90deg, rgb(255 115 74 / 14%) 0%, rgb(255 115 74 / 5%) 100%);
+}
+.inbox-chats-nav > svg {
+  @apply text-base-content/70 size-4;
+}
+.inbox-chats-nav.is-active > svg {
+  @apply text-primary;
+}
+.inbox-chats-nav > strong {
+  @apply bg-base-content/10 text-base-content/70 ml-auto flex size-5 items-center justify-center rounded-full text-[0.65rem] font-black;
+}
+.inbox-chats-nav.is-active > strong {
+  @apply bg-primary text-primary-content;
+}
+.inbox-folder-divider {
+  @apply bg-base-content/15 mx-4 mt-4 mb-3 h-px;
+}
+.inbox-conversations .inbox-list {
+  @apply min-h-0 flex-1 overflow-y-auto rounded-none border-0 bg-transparent;
+}
+.inbox-conversations .inbox-list-item {
+  @apply min-h-21 gap-3 px-4 py-3;
+}
+.inbox-conversations .inbox-list-item.is-selected {
+  @apply border-b-base-content/12!;
+  background: linear-gradient(90deg, rgb(255 115 74 / 13%) 0%, rgb(255 115 74 / 7%) 100%);
+}
+.inbox-list-archive-action {
+  @apply border-base-content/15 bg-base-100/35 text-base-content/60 hover:border-primary/50 hover:text-primary absolute right-3 bottom-2 flex size-7 items-center justify-center rounded-lg border transition-colors;
+}
+.inbox-list-archive-action svg {
+  @apply size-3.5;
+}
+.inbox-list-item:has(.inbox-list-archive-action) .inbox-preview {
+  @apply pr-9;
+}
+.inbox-avatar-wrap {
+  @apply relative shrink-0;
+}
+.inbox-conversations .inbox-avatar {
+  @apply size-13 rounded-full;
+}
+.inbox-unread-dot {
+  @apply border-base-200 bg-primary absolute right-0 bottom-0 size-3 rounded-full border-2;
+}
+.inbox-list-heading {
+  @apply flex min-w-0 items-center justify-between gap-3;
+}
+.inbox-list-heading strong {
+  @apply truncate text-sm font-bold;
+}
+.inbox-list-heading time {
+  @apply text-base-content/50 shrink-0 text-[0.65rem];
+}
+.inbox-conversations .inbox-preview {
+  @apply mt-1 truncate text-sm;
+}
+.inbox-dashboard .inbox-detail {
+  @apply border-base-content/15 bg-base-200/20 col-span-3 my-4 mr-4 ml-3 overflow-hidden rounded-xl border;
+}
+.inbox-chat {
+  @apply flex h-full min-h-0 flex-col;
+}
+.inbox-chat-header {
+  @apply border-base-content/10 bg-base-200/35 flex min-h-20 shrink-0 items-center gap-3 border-b px-5 py-3;
+}
+.inbox-chat-header > img {
+  @apply border-base-content/20 bg-base-300 size-12 rounded-full border object-cover;
+}
+.inbox-chat-header h2 {
+  @apply text-base font-black;
+}
+.inbox-archive-button {
+  @apply border-base-content/15 bg-base-100/35 text-base-content/70 hover:border-primary/50 hover:text-primary ml-auto flex size-10 items-center justify-center rounded-lg border transition-colors;
+}
+.inbox-archive-button svg {
+  @apply size-4;
+}
+.inbox-dashboard .inbox-thread {
+  @apply flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-none border-0 bg-transparent p-6;
+}
+.inbox-chat-row {
+  @apply flex w-full items-end gap-3;
+}
+.inbox-chat-row.is-player {
+  @apply justify-end;
+}
+.inbox-date-divider {
+  @apply text-base-content/45 flex w-full items-center gap-4 text-[0.7rem];
+}
+.inbox-date-divider::before,
+.inbox-date-divider::after {
+  @apply bg-base-content/15 h-px flex-1 content-[''];
+}
+.inbox-date-divider span {
+  @apply shrink-0 px-1;
+}
+.inbox-chat-avatar {
+  @apply border-base-content/20 bg-base-300 size-10 shrink-0 rounded-full border object-cover;
+}
+.inbox-chat-message-wrap {
+  @apply flex max-w-[72%] min-w-0 flex-col items-start;
+}
+.inbox-chat-row.is-player .inbox-chat-message-wrap {
+  @apply items-end;
+}
+.inbox-chat-author {
+  @apply text-base-content/65 mb-1 px-1 text-xs font-bold;
+}
+.inbox-dashboard .inbox-message {
+  @apply border-info/30 bg-info/10 text-base-content/90 w-full rounded-2xl rounded-bl-md border px-5 py-4 leading-relaxed shadow-sm;
+}
+.inbox-chat-row.is-player .inbox-message {
+  @apply border-primary/35 bg-primary/15 rounded-br-md rounded-bl-2xl;
+}
+.inbox-dashboard .inbox-message p {
+  @apply mb-3 last:mb-0;
+}
+.inbox-chat-message-wrap > time {
+  @apply text-base-content/45 mt-1 px-1 text-[0.65rem];
+}
+.inbox-reply-actions {
+  @apply ml-auto flex items-center gap-2 pr-13;
+}
+.inbox-reply-actions .btn {
+  @apply min-w-30 rounded-xl;
+}
+.inbox-reply-actions .btn-ghost {
+  @apply border-base-content/15 bg-base-200/55;
+}
+.inbox-faceit-guide {
+  @apply bg-primary text-primary-content hover:bg-primary/90 mr-13 ml-auto flex w-fit min-w-62 items-center justify-between gap-5 rounded-xl px-4 py-3 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl;
+}
+.inbox-faceit-guide-copy {
+  @apply flex flex-col items-start leading-tight;
+}
+.inbox-faceit-guide-copy strong {
+  @apply text-xs font-black;
+}
+.inbox-faceit-guide-copy small {
+  @apply mt-1 text-[0.65rem] font-medium opacity-75;
+}
+.inbox-faceit-guide-icon {
+  @apply bg-primary-content/15 flex size-8 shrink-0 items-center justify-center rounded-full;
+}
+
+@keyframes faceit-friend-request-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 115 0 / 55%);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgb(255 115 0 / 0%);
+  }
+}
+.faceit-friends-request-pulse {
+  animation: faceit-friend-request-pulse 1.5s ease-out infinite;
+}
+.inbox-dashboard .inbox-thread-status,
+.inbox-dashboard .inbox-closed-note {
+  @apply mx-auto my-0 w-fit rounded-full px-4 py-2;
+}
+
+@media (max-width: 1150px) {
+  .inbox-dashboard .inbox-content {
+    @apply grid-cols-[minmax(270px,36%)_minmax(0,1fr)] gap-0 p-0;
+  }
+  .inbox-dashboard .inbox-detail {
+    @apply col-span-1 m-3;
+  }
+  .inbox-chat-message-wrap {
+    @apply max-w-[84%];
+  }
+  .inbox-conversations .inbox-search {
+    @apply w-full;
+  }
+}
+
 /* Calendar-style segmented controls, sized for five region options. */
 @utility region-filter-tabs {
   & {
@@ -1682,29 +2220,6 @@ meter::-webkit-meter-bar {
     .calendar-grid-panel {
       @apply min-h-150;
     }
-  }
-}
-
-@utility news-hltv-theme {
-  & {
-    --color-primary: #445870;
-    --color-primary-content: #ffffff;
-    --color-base-100: #1c2024;
-    --color-base-200: #2c3844;
-    --color-base-300: #445870;
-    --color-base-content: #88a4c0;
-    --color-neutral: #222830;
-    --color-neutral-content: #88a4c0;
-    --color-info: #88a4c0;
-    --color-info-content: #1c2024;
-  }
-
-  & > header {
-    @apply bg-base-200;
-  }
-
-  main {
-    @apply bg-base-100;
   }
 }
 

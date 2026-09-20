@@ -10,9 +10,155 @@ import log from 'electron-log';
 import { ipcMain } from 'electron';
 import { glob } from 'glob';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { Constants, Util } from '@liga/shared';
+import { Constants, Eagers, Util } from '@liga/shared';
 import { DatabaseClient, DiscordPresence, Game, WindowManager, Worldgen } from '@liga/backend/lib';
 import { removeSaveIntegrity } from '@liga/backend/lib/save-integrity';
+
+const FACEIT_OPENING_MESSAGE = `Hey!
+
+I saw you recently joined FACEIT and are interested in taking the game more seriously. I just started playing on FACEIT as well, and I’m looking for people to grind with and improve together. If we build some good chemistry and perform well, maybe we can eventually get noticed by teams.
+
+If you’re interested, we could play a few matches sometime. I sent you a friend request!`;
+const FACEIT_OPENING_DELAY_MS = 5_000;
+const FACEIT_OPENING_WINDOW_RETRY_MS = 250;
+const FACEIT_OPENING_MAX_WINDOW_RETRIES = 120;
+
+/**
+ * Adds the opening FACEIT conversation for a new player career.
+ *
+ * The sender is picked from the same federation as the user's country and is
+ * kept close to the 1400-ELO starting bracket. This is called only by the
+ * career-creation handler, so opening an existing save does not create it.
+ */
+async function createFaceitOpeningChat(
+  countryId: number,
+  sentAt: Date,
+  playerRole: string,
+  notify = true,
+) {
+  const country = await DatabaseClient.prisma.country.findUnique({
+    where: { id: countryId },
+    select: { continent: { select: { federationId: true } } },
+  });
+
+  if (!country) return;
+
+  const eligibleRoleWhere: Prisma.PlayerWhereInput =
+    playerRole.toUpperCase() === Constants.UserRole.AWPER
+      ? { role: { notIn: [Constants.PlayerRole.SNIPER, Constants.UserRole.AWPER] } }
+      : {};
+  const regionalWhere: Prisma.PlayerWhereInput = {
+    ...eligibleRoleWhere,
+    userControlled: false,
+    retiredAt: null,
+    OR: [
+      { team: { competitionFederationId: country.continent.federationId } },
+      { teamId: null, country: { continent: { federationId: country.continent.federationId } } },
+    ],
+  };
+
+  const regionalPlayers = await DatabaseClient.prisma.player.findMany({
+    where: { ...regionalWhere, elo: { gte: 1300, lte: 1500 } },
+    select: { id: true, name: true, elo: true },
+  });
+
+  let candidates = regionalPlayers;
+  if (!candidates.length) {
+    const nearbyPlayers = await DatabaseClient.prisma.player.findMany({
+      where: { ...regionalWhere, elo: { gt: 0 } },
+      select: { id: true, name: true, elo: true },
+    });
+    candidates = nearbyPlayers
+      .sort((a, b) => Math.abs(a.elo - 1400) - Math.abs(b.elo - 1400))
+      .slice(0, 20);
+  }
+
+  // World/Other countries may not have a seeded regional pool yet. Keep the
+  // opening conversation guaranteed by falling back to the global 1400 bracket.
+  if (!candidates.length) {
+    candidates = await DatabaseClient.prisma.player.findMany({
+      where: {
+        ...eligibleRoleWhere,
+        userControlled: false,
+        retiredAt: null,
+        elo: { gte: 1300, lte: 1500 },
+      },
+      select: { id: true, name: true, elo: true },
+    });
+  }
+
+  if (!candidates.length) return;
+
+  const player = candidates[Math.floor(Math.random() * candidates.length)];
+  const senderRole = `FACEIT Player [player:${player.id}]`;
+  const sender = await DatabaseClient.prisma.persona.upsert({
+    where: { name: player.name },
+    update: { role: senderRole },
+    create: { name: player.name, role: senderRole },
+  });
+
+  await Worldgen.sendEmail(
+    `FACEIT friend request from ${player.name}`,
+    FACEIT_OPENING_MESSAGE,
+    sender,
+    sentAt,
+    notify,
+  );
+}
+
+function scheduleFaceitOpeningChat(countryId: number, sentAt: Date, playerRole: string) {
+  let retries = 0;
+
+  const deliver = () => {
+    const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main, false);
+    const mainWindowReady =
+      mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoadingMainFrame();
+
+    if (!mainWindowReady && retries < FACEIT_OPENING_MAX_WINDOW_RETRIES) {
+      retries += 1;
+      setTimeout(deliver, FACEIT_OPENING_WINDOW_RETRY_MS);
+      return;
+    }
+
+    void createFaceitOpeningChat(countryId, sentAt, playerRole, Boolean(mainWindowReady)).catch(
+      (error) => log.error('Could not send the opening FACEIT chat.', error),
+    );
+  };
+
+  setTimeout(deliver, FACEIT_OPENING_DELAY_MS);
+}
+
+async function resolveFaceitOpeningPlayer(sender: { name: string; role: string }) {
+  const playerId = Number(sender.role.match(/\[player:(\d+)\]/i)?.[1]);
+  const elo = Number(sender.role.match(/(\d+)\s+ELO/i)?.[1]);
+  const select = {
+    id: true,
+    name: true,
+    elo: true,
+    role: true,
+    countryId: true,
+    teamId: true,
+    team: { select: { countryId: true } },
+  } as const;
+
+  if (Number.isInteger(playerId) && playerId > 0) {
+    const exactPlayer = await DatabaseClient.prisma.player.findUnique({
+      where: { id: playerId },
+      select,
+    });
+    if (exactPlayer) return exactPlayer;
+  }
+
+  return DatabaseClient.prisma.player.findFirst({
+    where: {
+      name: sender.name,
+      ...(Number.isFinite(elo) && elo > 0 ? { elo } : {}),
+      userControlled: false,
+    },
+    select,
+    orderBy: { id: 'asc' },
+  });
+}
 
 export default function registerProfileHandlers() {
   ipcMain.handle(
@@ -69,7 +215,83 @@ export default function registerProfileHandlers() {
         },
       });
 
+      // Let the main window finish mounting, then deliver this as a real
+      // incoming message so the normal Inbox notification sound plays.
+      scheduleFaceitOpeningChat(countryId, profile.date, role);
+
       return profile;
+    },
+  );
+
+  ipcMain.handle(
+    Constants.IPCRoute.EMAILS_FACEIT_OPENING_REPLY,
+    async (_, choice: 'accept' | 'decline') => {
+      if (choice !== 'accept' && choice !== 'decline') {
+        throw new Error('Invalid FACEIT opening reply.');
+      }
+
+      const profile = await DatabaseClient.prisma.profile.findFirst();
+      if (!profile) throw new Error('Profile not found.');
+
+      const email = await DatabaseClient.prisma.email.findFirst({
+        where: { subject: { startsWith: 'FACEIT friend request from ' } },
+        orderBy: { id: 'desc' },
+        include: { from: true },
+      });
+      if (!email) throw new Error('FACEIT opening conversation not found.');
+
+      const playerPersona = await DatabaseClient.prisma.persona.upsert({
+        where: { name: `__player_profile_${profile.id}` },
+        update: { role: 'Player' },
+        create: { name: `__player_profile_${profile.id}`, role: 'Player' },
+      });
+      const existingReply = await DatabaseClient.prisma.dialogue.findFirst({
+        where: { emailId: email.id, fromId: playerPersona.id },
+      });
+
+      if (!existingReply) {
+        const content =
+          choice === 'accept' ? "Sure! I'll add you." : "No thank you, I'll try my luck on my own.";
+
+        await DatabaseClient.prisma.$transaction([
+          DatabaseClient.prisma.dialogue.updateMany({
+            where: { emailId: email.id },
+            data: { completed: true },
+          }),
+          DatabaseClient.prisma.dialogue.create({
+            data: {
+              content,
+              sentAt: profile.date,
+              emailId: email.id,
+              fromId: playerPersona.id,
+            },
+          }),
+        ]);
+      }
+
+      const [updatedEmail, openingPlayer] = await Promise.all([
+        DatabaseClient.prisma.email.findUnique({
+          where: { id: email.id },
+          include: Eagers.email.include,
+        }),
+        resolveFaceitOpeningPlayer(email.from),
+      ]);
+
+      return {
+        email: updatedEmail,
+        recommendation:
+          choice === 'accept' && openingPlayer
+            ? {
+                id: openingPlayer.id,
+                name: openingPlayer.name,
+                elo: openingPlayer.elo,
+                role: openingPlayer.role,
+                countryId: openingPlayer.countryId,
+                teamId: openingPlayer.teamId,
+                teamCountryId: openingPlayer.team?.countryId ?? null,
+              }
+            : null,
+      };
     },
   );
 

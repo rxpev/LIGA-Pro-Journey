@@ -11,15 +11,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import { Pagination } from '@liga/frontend/components';
-import {
-  FaBolt,
-  FaCheckDouble,
-  FaClock,
-  FaFlask,
-  FaNewspaper,
-  FaSyncAlt,
-  FaTrash,
-} from 'react-icons/fa';
+import { FaBolt, FaClock, FaNewspaper } from 'react-icons/fa';
 
 type NewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type NewsTopic = NewsItem['topic'] | 'ALL' | 'SHORTS';
@@ -1644,9 +1636,7 @@ export default function () {
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [filter, setFilter] = React.useState<NewsTopic>('ALL');
   const [page, setPage] = React.useState(1);
-  const [working, setWorking] = React.useState(false);
-
-  const refresh = React.useCallback(() => {
+  const loadItems = React.useCallback(() => {
     api.news.all().then((data) => {
       setItems(data);
       setSelectedId((current) => requestedArticleId || current || data[0]?.id || null);
@@ -1654,16 +1644,16 @@ export default function () {
   }, [requestedArticleId]);
 
   React.useEffect(() => {
-    refresh();
+    loadItems();
     const removeNewsItemsUpdatedListener = api.ipc.on(
       Constants.IPCRoute.NEWS_ITEMS_UPDATED,
-      refresh,
+      loadItems,
     );
 
     return () => {
       removeNewsItemsUpdatedListener();
     };
-  }, [refresh]);
+  }, [loadItems]);
 
   React.useEffect(() => {
     setRequestedArticleId(routeArticleId);
@@ -1726,10 +1716,7 @@ export default function () {
   );
 
   const selected = React.useMemo(
-    () =>
-      filteredItems.find((item) => item.id === selectedId) ||
-      filteredItems[0] ||
-      null,
+    () => filteredItems.find((item) => item.id === selectedId) || filteredItems[0] || null,
     [filteredItems, selectedId],
   );
   const selectedPayload = React.useMemo(() => (selected ? parsePayload(selected) : {}), [selected]);
@@ -1785,60 +1772,16 @@ export default function () {
       .then(setItems);
   }, [selected?.id]);
 
-  const markAllRead = () =>
-    api.news
-      .updateMany({
-        where: { read: false },
-        data: { read: true },
-      })
-      .then(setItems);
-
-  const generateTestItems = () =>
-    Promise.resolve(setWorking(true))
-      .then(() => api.news.generateTest())
-      .then(() => refresh())
-      .finally(() => setWorking(false));
-
-  const clearTestItems = () =>
-    Promise.resolve(setWorking(true))
-      .then(() => api.news.clearTest())
-      .then(() => {
-        setSelectedId(null);
-        refresh();
-      })
-      .finally(() => setWorking(false));
-
   return (
-    <div id="news" className="dashboard news-hltv-theme">
-      <header>
-        <button disabled={working} onClick={refresh}>
-          <FaSyncAlt />
-          Refresh
-        </button>
-        <button disabled={working} onClick={generateTestItems}>
-          <FaFlask />
-          Run Generator
-        </button>
-        <button disabled={working || !items.some((item) => !item.read)} onClick={markAllRead}>
-          <FaCheckDouble />
-          Mark Read
-        </button>
-        <button disabled={working || !items.length} onClick={clearTestItems}>
-          <FaTrash />
-          Clear Generated
-        </button>
-      </header>
+    <div id="news" className="dashboard">
       <main>
         <section className="divide-base-content/10 divide-y">
           <header className="bg-base-100 sticky top-0 z-10 p-3">
-            <div className="join w-full">
+            <nav className="mode-tabs w-full" aria-label="News category">
               {FILTERS.map((item) => (
                 <button
                   key={item.value}
-                  className={cx(
-                    'btn join-item btn-sm flex-1',
-                    filter === item.value && 'btn-primary',
-                  )}
+                  className={cx('min-w-0 flex-1', filter === item.value && 'is-active')}
                   onClick={() => {
                     setFilter(item.value);
                     setSelectedId(null);
@@ -1847,7 +1790,7 @@ export default function () {
                   {item.label}
                 </button>
               ))}
-            </div>
+            </nav>
           </header>
           {!filteredItems.length && (
             <article className="center h-96 gap-3 px-6 text-center">

@@ -18,12 +18,6 @@ const PLAYER_HONOR_TIER_SLUGS = [
   ),
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
 ];
-const RETIREMENT_NOTABLE_TIER_SLUGS = [
-  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
-  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
-  Constants.TierSlug.BLAST_FINALS,
-  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
-];
 const TOP_PLAYERS_OF_YEAR_SIZE = 20;
 const TOP_PLAYERS_OF_YEAR_MIN_MAPS = 12;
 const TOP_PLAYERS_OF_YEAR_MIN_BIG_EVENT_MAPS = 8;
@@ -730,6 +724,62 @@ function formatDurationAsCompound(duration: string) {
   }
 
   return `${match[1]}-${match[2].slice(0, -1)}`;
+}
+
+function retirementHeadline(player: string, seed: number) {
+  return pickVariant(
+    [
+      `${player} retires from competitive play`,
+      `${player} announces retirement`,
+      `${player} calls time on career`,
+      `${player} ends competitive career`,
+      `${player} steps away from competition`,
+      `${player} hangs up the mouse`,
+      `${player} retires from Counter-Strike`,
+      `${player} brings career to an end`,
+      `${player} bows out of competition`,
+      `${player} ends career`,
+      `${player} walks away from professional play`,
+      `${player} closes the chapter on career`,
+      `${player} officially retires`,
+      `${player} steps down from professional play`,
+      `${player} concludes competitive career`,
+      `${player} calls an end to playing career`,
+      `${player} leaves competitive scene`,
+      `${player} retires from professional Counter-Strike`,
+      `${player} ends run as professional player`,
+      `${player} says farewell to competition`,
+    ],
+    seed,
+  );
+}
+
+function retirementSummary(player: string, seed: number) {
+  return pickVariant(
+    [
+      `${player} brings the curtain down on his playing career`,
+      `${player} steps away from the server after a long spell in competition`,
+      `${player} closes the book on his time as a professional player`,
+      `${player} leaves active competition behind`,
+      `${player} moves on from professional play`,
+      `${player} calls time on life as an active competitor`,
+      `${player} ends his journey as a professional player`,
+      `${player} steps away from the competitive scene`,
+      `${player} concludes his time in professional competition`,
+      `${player} bows out from active play`,
+      `${player} leaves the professional scene behind`,
+      `${player} brings his time as an active player to a close`,
+      `${player} moves away from competitive Counter-Strike`,
+      `${player} ends his chapter as an active competitor`,
+      `${player} steps off the competitive stage`,
+      `${player} draws a line under his playing career`,
+      `${player} signs off from professional competition`,
+      `${player} exits the scene as an active player`,
+      `${player} closes out his time in the professional game`,
+      `${player} walks away from active competition`,
+    ],
+    seed + 7,
+  );
 }
 
 function formatMapIconName(map: string) {
@@ -6028,20 +6078,416 @@ async function createDrafts(drafts: NewsDraft[]) {
   return created;
 }
 
-/**
- * Creates the single retirement story appropriate for an NPC's final career
- * situation. The article intentionally has no copy yet: retirement coverage is
- * currently a title, player image, and (where a template exists) thank-you card.
- */
-export async function createNpcRetirementItem(args: {
-  playerId: number;
-  publishedAt: Date;
-}) {
+type RetirementStint = {
+  id: number;
+  teamId: number | null;
+  starter: boolean;
+  startedAt: Date;
+  endedAt: Date | null;
+  team: {
+    id: number;
+    name: string;
+    slug: string;
+    blazon: string | null;
+  } | null;
+};
+
+async function getRetirementTitles(stints: RetirementStint[], publishedAt: Date) {
+  const teamIds = [...new Set(stints.map((stint) => stint.teamId).filter(Boolean))] as number[];
+  const titleGroups = await Promise.all(
+    teamIds.map((teamId) =>
+      getRecentTeamTitles(teamId, publishedAt, { careerStints: stints }, null),
+    ),
+  );
+
+  return [...new Map(titleGroups.flat().map((title) => [title.competitionId, title])).values()];
+}
+
+async function getRetirementTop20History(playerId: number) {
+  const items = await DatabaseClient.prisma.newsItem.findMany({
+    orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
+    select: { eventKey: true, payload: true },
+    where: { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:top-players:` } },
+  });
+  const finishes: Array<{ rank: number; year: number }> = [];
+
+  for (const item of items) {
+    if (!item.payload) continue;
+
+    try {
+      const payload = JSON.parse(item.payload) as Record<string, unknown>;
+      const year = getTopPlayerRankingPayloadYear(item, payload);
+      const ranking = Array.isArray(payload.ranking) ? payload.ranking : [];
+      const entry = ranking.find(
+        (candidate) =>
+          candidate &&
+          typeof candidate === 'object' &&
+          Number((candidate as { playerId?: unknown }).playerId) === playerId,
+      ) as { rank?: unknown } | undefined;
+      const rank = Number(entry?.rank);
+
+      if (year && Number.isFinite(rank)) finishes.push({ rank, year });
+    } catch {
+      // Older or manually authored news can have non-JSON payloads.
+    }
+  }
+
+  if (!finishes.length) return null;
+  const bestRank = Math.min(...finishes.map((finish) => finish.rank));
+
+  return {
+    appearances: finishes.length,
+    bestRank,
+    bestYears: finishes.filter((finish) => finish.rank === bestRank).map((finish) => finish.year),
+  };
+}
+
+async function getRetirementMajorHistory(playerId: number, stints: RetirementStint[]) {
+  const competitions = await DatabaseClient.prisma.competition.findMany({
+    include: {
+      competitors: { include: { team: true } },
+      federation: true,
+      matches: {
+        include: { competitors: { include: { team: true } }, players: { select: { id: true } } },
+        orderBy: [{ round: 'desc' }, { date: 'desc' }, { id: 'desc' }],
+        where: { players: { some: { id: playerId } } },
+      },
+      tier: { include: { league: true } },
+    },
+    where: {
+      matches: { some: { players: { some: { id: playerId } } } },
+      tier: { league: { slug: Constants.LeagueSlug.ESPORTS_MAJOR } },
+    },
+  });
+  const eventKey = (competition: (typeof competitions)[number]) =>
+    `${competition.season ?? 0}:${competition.location || ''}:${competition.organizer || ''}`;
+  const appearances = new Set(competitions.map(eventKey)).size;
+  const playoffCompetitions = competitions.filter(
+    (competition) => competition.tier.slug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  );
+  const wins = playoffCompetitions.filter((competition) => {
+    const winningTeamId = competition.competitors.find(
+      (competitor) => competitor.position === 1,
+    )?.teamId;
+
+    return Boolean(
+      winningTeamId &&
+        competition.matches.some(
+          (match) =>
+            findCareerStintForTeam({ careerStints: stints }, winningTeamId, match.date)?.starter,
+        ),
+    );
+  });
+  const deepestMatch = playoffCompetitions
+    .flatMap((competition) => competition.matches.map((match) => ({ competition, match })))
+    .sort(
+      (a, b) =>
+        (b.match.round ?? 0) - (a.match.round ?? 0) ||
+        b.match.date.getTime() - a.match.date.getTime(),
+    )
+    .map(({ competition, match }) => {
+      const ownTeamId = stints.find(
+        (stint) =>
+          stint.starter &&
+          stint.startedAt <= match.date &&
+          (!stint.endedAt || stint.endedAt >= startOfDay(match.date)),
+      )?.teamId;
+      const own = match.competitors.find((competitor) => competitor.teamId === ownTeamId);
+      const opponent = match.competitors.find((competitor) => competitor.teamId !== ownTeamId);
+
+      if (!own || !opponent || (own.score ?? 0) >= (opponent.score ?? 0)) return null;
+
+      return {
+        opponent: opponent.team,
+        score: `${own.score ?? 0}-${opponent.score ?? 0}`,
+        stage: Util.getMatchRoundLabel({ ...match, competition }).toLocaleLowerCase(),
+      };
+    })
+    .find(Boolean);
+
+  return { appearances, playoffAppearances: playoffCompetitions.length, wins, deepestMatch };
+}
+
+function buildRetirementMajorSentence(
+  age: number | null,
+  history: Awaited<ReturnType<typeof getRetirementMajorHistory>>,
+  seed: number,
+) {
+  if (!history.appearances) return null;
+  const subject = age ? `The ${age}-year-old` : 'The veteran';
+  const appearances = `${history.appearances} Major${history.appearances === 1 ? '' : 's'}`;
+  const winningCities = history.wins.map(
+    (win) => Util.getCompetitionHostingLocationCity(win.location) || win.location || 'the Major',
+  );
+
+  if (winningCities.length === 1) {
+    return pickVariant(
+      [
+        `${subject} has participated in ${appearances}, winning his only title in ${winningCities[0]}.`,
+        `${subject} has attended ${appearances}, with his sole triumph coming in ${winningCities[0]}.`,
+        `${subject} has competed at ${appearances}, lifting the trophy once in ${winningCities[0]}.`,
+        `${subject} has made ${history.appearances} Major appearances, winning his lone championship in ${winningCities[0]}.`,
+        `${subject} has featured at ${appearances}, with ${winningCities[0]} producing his only title.`,
+        `${subject} has taken part in ${appearances}, winning the event once in ${winningCities[0]}.`,
+        `${subject} has played at ${appearances}, claiming his only trophy in ${winningCities[0]}.`,
+        `${subject} has reached ${appearances} over his career, with his lone victory coming in ${winningCities[0]}.`,
+        `${subject} has appeared at ${appearances}, winning his one and only title in ${winningCities[0]}.`,
+        `${subject} has competed on the Major stage ${history.appearances} times, lifting the trophy once in ${winningCities[0]}.`,
+        `${subject} has participated in ${history.appearances} editions of the Major, with ${winningCities[0]} marking his only championship.`,
+        `${subject} has made ${history.appearances} trips to the Major stage, winning on one occasion in ${winningCities[0]}.`,
+        `${subject} has been present at ${appearances}, with his only successful title run coming in ${winningCities[0]}.`,
+        `${subject} has accumulated ${history.appearances} Major appearances, winning the trophy once in ${winningCities[0]}.`,
+        `${subject} has contested ${appearances}, with his sole championship arriving in ${winningCities[0]}.`,
+        `${subject} has qualified for ${appearances}, turning one of those appearances into a title in ${winningCities[0]}.`,
+        `${subject} has competed at ${appearances} throughout his career, winning his only crown in ${winningCities[0]}.`,
+        `${subject} has ${history.appearances} Major appearances to his name, with ${winningCities[0]} standing as his lone title-winning run.`,
+        `${subject} has taken to the Major stage ${history.appearances} times, winning once in ${winningCities[0]}.`,
+        `${subject} has played in ${appearances}, with his only championship coming at the event in ${winningCities[0]}.`,
+      ],
+      seed + 31,
+    );
+  }
+
+  if (winningCities.length > 1) {
+    const cities = formatLinkedList(winningCities);
+    return pickVariant(
+      [
+        `${subject} has participated in ${appearances}, claiming titles in ${cities}.`,
+        `${subject} has attended ${appearances}, lifting trophies in ${cities}.`,
+        `${subject} has made ${history.appearances} Major appearances, winning championships in ${cities}.`,
+        `${subject} has featured at ${appearances}, with title runs coming in ${cities}.`,
+        `${subject} has played at ${appearances}, collecting titles in ${cities}.`,
+        `${subject} has taken part in ${appearances}, winning multiple times with victories in ${cities}.`,
+        `${subject} has reached the Major stage ${history.appearances} times, converting appearances into victories in ${cities}.`,
+        `${subject} has appeared at ${appearances}, winning trophies at the events held in ${cities}.`,
+        `${subject} has competed on the Major stage ${history.appearances} times, emerging victorious in ${cities}.`,
+        `${subject} has participated in ${history.appearances} editions of the Major, winning in ${cities}.`,
+        `${subject} has made ${history.appearances} trips to the Major stage, lifting trophies in ${cities}.`,
+        `${subject} has been present at ${appearances}, with championship runs in ${cities}.`,
+        `${subject} has accumulated ${history.appearances} Major appearances and titles earned in ${cities}.`,
+        `${subject} has contested ${appearances}, coming out on top in ${cities}.`,
+        `${subject} has qualified for ${appearances}, winning the tournament in ${cities}.`,
+        `${subject} has competed at ${appearances} throughout his career, securing titles in ${cities}.`,
+        `${subject} has ${history.appearances} Major appearances to his name, including championship runs in ${cities}.`,
+        `${subject} has taken to the Major stage ${history.appearances} times, winning in ${cities}.`,
+        `${subject} has played in ${appearances}, adding trophies from ${cities} to his career record.`,
+      ],
+      seed + 31,
+    );
+  }
+
+  if (history.playoffAppearances) {
+    const playoffSummary = pickVariant(
+      [
+        `${subject} has participated in ${appearances}, reaching the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has attended ${appearances} and reached the knockout stage ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has competed at ${appearances}, making the playoffs on ${history.playoffAppearances} occasion${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has made ${history.appearances} Major appearances and advanced to the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has featured at ${appearances}, including ${history.playoffAppearances} playoff run${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has taken part in ${appearances}, progressing beyond the group stage ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has played at ${appearances}, making ${history.playoffAppearances} playoff appearance${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has reached the Major stage ${history.appearances} times and made the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has appeared at ${appearances}, advancing to the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has competed on the Major stage ${history.appearances} times, reaching the playoffs on ${history.playoffAppearances} occasion${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has participated in ${history.appearances} editions of the Major, making the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has made ${history.appearances} trips to the Major stage, reaching the knockout rounds ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has been present at ${appearances}, with ${history.playoffAppearances} playoff appearance${history.playoffAppearances === 1 ? '' : 's'} to his name.`,
+        `${subject} has accumulated ${history.appearances} Major appearances and ${history.playoffAppearances} playoff berth${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has contested ${appearances}, making the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has qualified for ${appearances}, reaching the playoffs on ${history.playoffAppearances} occasion${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has competed at ${appearances} throughout his career, advancing to the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has ${history.appearances} Major appearances to his name, including ${history.playoffAppearances} playoff run${history.playoffAppearances === 1 ? '' : 's'}.`,
+        `${subject} has taken to the Major stage ${history.appearances} times and reached the playoffs ${history.playoffAppearances} time${history.playoffAppearances === 1 ? '' : 's'}.`,
+      ],
+      seed + 31,
+    );
+    const deepestRun = history.deepestMatch
+      ? ` His deepest run ended in the ${history.deepestMatch.stage} against ${teamLink(history.deepestMatch.opponent)}, where his team lost ${history.deepestMatch.score}.`
+      : '';
+
+    return `${playoffSummary}${deepestRun}`;
+  }
+
+  return pickVariant(
+    [
+      `${subject} has participated in ${appearances}, never reaching the playoffs in those appearances.`,
+      `${subject} has attended ${appearances} but did not advance to the playoff stage in any of them.`,
+      `${subject} has competed at ${appearances}, with none of those runs progressing to the playoffs.`,
+      `${subject} has made ${history.appearances} Major appearances without ever reaching the knockout stage.`,
+      `${subject} has featured at ${appearances}, though each campaign ended before the playoffs.`,
+      `${subject} has taken part in ${appearances} without making a playoff appearance.`,
+      `${subject} has played at ${appearances}, but never progressed beyond the pre-playoff stages.`,
+      `${subject} has reached the Major stage ${history.appearances} times, with all of those campaigns ending before the playoffs.`,
+      `${subject} has appeared at ${appearances} without advancing to the knockout rounds.`,
+      `${subject} has competed on the Major stage ${history.appearances} times but never reached the playoffs.`,
+      `${subject} has participated in ${history.appearances} editions of the Major, falling short of the playoffs on each occasion.`,
+      `${subject} has made ${history.appearances} trips to the Major stage without securing a playoff berth.`,
+      `${subject} has been present at ${appearances}, though none of those appearances resulted in a playoff run.`,
+      `${subject} has accumulated ${history.appearances} Major appearances, with his teams unable to reach the playoffs in any of them.`,
+      `${subject} has contested ${appearances} without ever advancing to the knockout portion of the event.`,
+      `${subject} has qualified for ${appearances}, but each appearance ended before the playoff stage.`,
+      `${subject} has competed at ${appearances} throughout his career without making it into the playoffs.`,
+      `${subject} has ${history.appearances} Major appearances to his name, though no playoff berths came from those campaigns.`,
+      `${subject} has taken to the Major stage ${history.appearances} times, with every attempt ending short of the playoffs.`,
+      `${subject} has played in ${appearances}, but a place in the playoffs eluded him on each occasion.`,
+    ],
+    seed + 31,
+  );
+}
+
+function buildRetirementAchievementSentences(
+  mvps: CompetitionMvpSeed[],
+  top20: Awaited<ReturnType<typeof getRetirementTop20History>>,
+  seed: number,
+) {
+  const sentences: string[] = [];
+
+  if (mvps.length === 1) {
+    const mvp = mvps[0];
+    const event = competitionLink(mvp.competition, getMvpTournamentLabel(mvp.competition));
+    sentences.push(
+      pickVariant(
+        [
+          `In his career, he earned an MVP at ${event} after posting a standout ${formatRating(mvp.rating)} rating across ${mvp.maps} maps.`,
+          `His career included one MVP award, secured at ${event} with a ${formatRating(mvp.rating)} average over ${mvp.maps} maps.`,
+          `He claimed his sole career MVP at ${event}, where he averaged ${formatRating(mvp.rating)} across ${mvp.maps} maps.`,
+          `His lone MVP medal came at ${event} after a ${formatRating(mvp.rating)}-rated performance over ${mvp.maps} maps.`,
+          `He earned the only MVP of his career at ${event}, posting a ${formatRating(mvp.rating)} rating across ${mvp.maps} maps.`,
+          `${event} produced his sole career MVP, with a ${formatRating(mvp.rating)} average across ${mvp.maps} maps.`,
+          `He walked away from ${event} with his only MVP medal after averaging ${formatRating(mvp.rating)} over ${mvp.maps} maps.`,
+          `His standout run at ${event} earned him his lone MVP, backed by a ${formatRating(mvp.rating)} rating across ${mvp.maps} maps.`,
+          `He collected one MVP during his career, coming at ${event} after a ${formatRating(mvp.rating)} average over ${mvp.maps} maps.`,
+          `His only MVP honor arrived at ${event}, where he registered a ${formatRating(mvp.rating)} rating across ${mvp.maps} maps.`,
+          `He secured his sole individual MVP accolade at ${event} with a ${formatRating(mvp.rating)} average over ${mvp.maps} maps.`,
+          `The highlight of his individual awards came at ${event}, where a ${formatRating(mvp.rating)} rating across ${mvp.maps} maps earned him MVP.`,
+          `He finished his career with one MVP to his name, earned at ${event} after averaging ${formatRating(mvp.rating)} over ${mvp.maps} maps.`,
+          `His lone MVP-winning campaign came at ${event}, where he posted ${formatRating(mvp.rating)} across ${mvp.maps} maps.`,
+          `He added an MVP medal to his career at ${event} following a ${formatRating(mvp.rating)}-rated run over ${mvp.maps} maps.`,
+          `${event} marked the only occasion he earned MVP honors, after recording ${formatRating(mvp.rating)} across ${mvp.maps} maps.`,
+          `He was named MVP once during his career, doing so at ${event} with a ${formatRating(mvp.rating)} average across ${mvp.maps} maps.`,
+          `His sole MVP award followed a standout ${event} run in which he averaged ${formatRating(mvp.rating)} over ${mvp.maps} maps.`,
+          `He claimed career MVP honors at ${event} after putting up a ${formatRating(mvp.rating)} rating through ${mvp.maps} maps.`,
+          `His only MVP medal came courtesy of a ${formatRating(mvp.rating)} average across ${mvp.maps} maps at ${event}.`,
+        ],
+        seed + 41,
+      ),
+    );
+  } else if (mvps.length > 1) {
+    const notable = mvps.slice().sort((a, b) => b.score - a.score)[0];
+    const event = competitionLink(notable.competition, getMvpTournamentLabel(notable.competition));
+    sentences.push(
+      pickVariant(
+        [
+          `He earned multiple MVPs over the course of his career, most notably at ${event}.`,
+          `His career included several MVP medals, with ${event} standing out among them.`,
+          `He collected multiple MVP awards during his career, headlined by his triumph at ${event}.`,
+          `His individual résumé features several MVPs, including a notable one at ${event}.`,
+          `He was named MVP on multiple occasions, with ${event} among his most significant honors.`,
+          `Several MVP medals came his way throughout his career, most notably at ${event}.`,
+          `His career produced multiple MVP-winning performances, with ${event} serving as one of the highlights.`,
+          `He added numerous MVP awards to his name, including a standout accolade at ${event}.`,
+          `He finished his career with multiple MVPs, with the award at ${event} among the most prominent.`,
+          `His individual success included several MVP honors, led by his performance at ${event}.`,
+          `He claimed MVP honors on multiple occasions, with ${event} marking a particularly notable achievement.`,
+          `His trophy cabinet also includes several MVP medals, most notably the one earned at ${event}.`,
+          `He built up multiple MVP awards across his career, with ${event} providing one of the defining moments.`,
+          `He enjoyed repeated individual success during his career, earning several MVPs including one at ${event}.`,
+          `His list of individual accolades includes multiple MVP medals, highlighted by ${event}.`,
+          `He was a multiple-time MVP winner, with his ${event} award standing among his biggest individual achievements.`,
+          `His career saw him collect several MVP honors, including a memorable award at ${event}.`,
+          `He earned MVP recognition multiple times, with ${event} featuring prominently among those successes.`,
+          `He leaves behind a career containing several MVP medals, most notably from ${event}.`,
+          `His individual honors span multiple MVP awards, with ${event} representing one of the most significant.`,
+        ],
+        seed + 41,
+      ),
+    );
+  }
+
+  if (top20) {
+    const bestYear = top20.bestYears[0];
+    sentences.push(
+      top20.appearances === 1
+        ? pickVariant(
+            [
+              `He made the Top 20 list once during his career, reaching No. ${top20.bestRank} in ${bestYear}.`,
+              `His lone Top 20 appearance came in ${bestYear}, when he finished at No. ${top20.bestRank}.`,
+              `He featured in the Top 20 once, earning the No. ${top20.bestRank} spot in ${bestYear}.`,
+              `His career included one Top 20 placement, with a No. ${top20.bestRank} finish in ${bestYear}.`,
+              `He broke into the Top 20 on one occasion, placing No. ${top20.bestRank} in ${bestYear}.`,
+              `His only appearance in the Top 20 came in ${bestYear} at No. ${top20.bestRank}.`,
+              `He earned a single Top 20 placement during his career, finishing No. ${top20.bestRank} in ${bestYear}.`,
+              `${bestYear} marked his lone Top 20 appearance, where he was ranked No. ${top20.bestRank}.`,
+              `He reached the Top 20 once in his career, landing at No. ${top20.bestRank} in ${bestYear}.`,
+              `His sole Top 20 recognition arrived in ${bestYear} with a No. ${top20.bestRank} placement.`,
+              `He was named among the Top 20 players once, taking the No. ${top20.bestRank} position in ${bestYear}.`,
+              `His career saw one Top 20 inclusion, which came at No. ${top20.bestRank} in ${bestYear}.`,
+              `He entered the Top 20 rankings once, finishing ${bestYear} in the No. ${top20.bestRank} spot.`,
+              `His only Top 20 finish was recorded in ${bestYear}, when he placed No. ${top20.bestRank}.`,
+              `He secured one career Top 20 appearance, reaching No. ${top20.bestRank} in ${bestYear}.`,
+              `He appeared on the Top 20 list once, earning the No. ${top20.bestRank} ranking in ${bestYear}.`,
+              `His sole year among the Top 20 came in ${bestYear}, where he finished No. ${top20.bestRank}.`,
+              `He made a single appearance in the Top 20, placing No. ${top20.bestRank} for ${bestYear}.`,
+              `${bestYear} produced his only Top 20 recognition, with a final ranking of No. ${top20.bestRank}.`,
+              `He cracked the Top 20 once during his career, reaching a career placement of No. ${top20.bestRank} in ${bestYear}.`,
+            ],
+            seed + 47,
+          )
+        : pickVariant(
+            [
+              `He made the Top 20 list ${top20.appearances} times, with his highest placement being No. ${top20.bestRank} in ${bestYear}.`,
+              `He featured in the Top 20 on ${top20.appearances} occasions, peaking at No. ${top20.bestRank} in ${bestYear}.`,
+              `His career included ${top20.appearances} Top 20 appearances, highlighted by a No. ${top20.bestRank} finish in ${bestYear}.`,
+              `He was ranked among the Top 20 ${top20.appearances} times, reaching a career-best No. ${top20.bestRank} in ${bestYear}.`,
+              `He earned ${top20.appearances} Top 20 placements throughout his career, with No. ${top20.bestRank} in ${bestYear} marking his highest.`,
+              `His ${top20.appearances} appearances in the Top 20 were headlined by a No. ${top20.bestRank} ranking in ${bestYear}.`,
+              `He broke into the Top 20 ${top20.appearances} times, recording his best finish of No. ${top20.bestRank} in ${bestYear}.`,
+              `Across his career, he made ${top20.appearances} Top 20 lists and peaked at No. ${top20.bestRank} in ${bestYear}.`,
+              `He secured ${top20.appearances} Top 20 appearances, with his strongest placement coming at No. ${top20.bestRank} in ${bestYear}.`,
+              `His career saw him named among the Top 20 on ${top20.appearances} occasions, including a peak of No. ${top20.bestRank} in ${bestYear}.`,
+              `He finished inside the Top 20 ${top20.appearances} times, reaching his highest position of No. ${top20.bestRank} in ${bestYear}.`,
+              `He accumulated ${top20.appearances} Top 20 placements, with ${bestYear} producing his career-best ranking of No. ${top20.bestRank}.`,
+              `He appeared on the Top 20 list ${top20.appearances} times, topping out at No. ${top20.bestRank} in ${bestYear}.`,
+              `His individual record includes ${top20.appearances} Top 20 appearances, led by a No. ${top20.bestRank} finish in ${bestYear}.`,
+              `He achieved ${top20.appearances} Top 20 rankings during his career, with his peak coming at No. ${top20.bestRank} in ${bestYear}.`,
+              `He was included in the Top 20 ${top20.appearances} times, reaching a high of No. ${top20.bestRank} in ${bestYear}.`,
+              `He collected ${top20.appearances} Top 20 appearances over his career, with No. ${top20.bestRank} in ${bestYear} standing as his best result.`,
+              `His ${top20.appearances} Top 20 finishes included a career-high No. ${top20.bestRank} placement in ${bestYear}.`,
+              `He reached the Top 20 on ${top20.appearances} occasions, with his strongest year ending in a No. ${top20.bestRank} ranking.`,
+              `His career produced ${top20.appearances} Top 20 appearances, with his highest position coming at No. ${top20.bestRank} in ${bestYear}.`,
+            ],
+            seed + 47,
+          ),
+    );
+    if (top20.bestYears.length > 1) {
+      const repeatedYears = top20.bestYears.slice(1);
+      const yearList = formatLinkedList(repeatedYears.map(String));
+      sentences.push(
+        pickVariant(
+          [
+            `He matched that career-best ranking again in ${yearList}, making it another time he reached No. ${top20.bestRank}.`,
+            `The same No. ${top20.bestRank} placement was repeated in ${yearList}, giving him multiple finishes at his career-high position.`,
+            `He also reached No. ${top20.bestRank} in ${yearList}, matching the best ranking of his career.`,
+            `That peak was not a one-off, as he returned to the No. ${top20.bestRank} spot again in ${yearList}.`,
+            `He achieved his career-best No. ${top20.bestRank} ranking on multiple occasions, doing so in ${formatLinkedList(top20.bestYears.map(String))}.`,
+          ],
+          seed + 49,
+        ),
+      );
+    }
+  }
+
+  return sentences;
+}
+
+/** Creates the single retirement story appropriate for an NPC's final career situation. */
+export async function createNpcRetirementItem(args: { playerId: number; publishedAt: Date }) {
   const player = await DatabaseClient.prisma.player.findFirst({
     where: { id: args.playerId },
     select: {
       id: true,
       name: true,
+      age: true,
       avatar: true,
       starter: true,
       team: {
@@ -6054,9 +6500,13 @@ export async function createNpcRetirementItem(args: {
       },
       country: { select: { code: true } },
       careerStints: {
-        orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }, { id: 'desc' }],
-        take: 1,
+        orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
         select: {
+          id: true,
+          teamId: true,
+          starter: true,
+          startedAt: true,
+          endedAt: true,
           team: {
             select: {
               id: true,
@@ -6072,57 +6522,303 @@ export async function createNpcRetirementItem(args: {
 
   if (!player) return null;
 
-  const [topTeamIds, transferShortTeamIds, notableTrophy] = await Promise.all([
+  const [topTeamIds, transferShortTeamIds] = await Promise.all([
     getTopTeamIds(),
     getTransferShortTeamIds(),
-    DatabaseClient.prisma.competitionToTeam.findFirst({
-      where: {
-        position: 1,
-        competition: {
-          OR: [
-            { tier: { slug: { in: RETIREMENT_NOTABLE_TIER_SLUGS } } },
-            { tier: { league: { slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE } } },
-          ],
-          matches: { some: { players: { some: { id: player.id } } } },
-        },
-      },
-      select: { id: true },
-    }),
   ]);
   const currentTeam = player.team;
-  const lastTeam = player.careerStints[0]?.team || null;
+  const firstStint = player.careerStints.find((stint) => stint.team && stint.starter) || null;
+  const lastStint =
+    player.careerStints
+      .slice()
+      .reverse()
+      .find((stint) => stint.team) || null;
+  const lastTeam = lastStint?.team || null;
   const currentTeamIsTop = !!currentTeam && topTeamIds.has(currentTeam.id);
   const lastTeamIsTop = !!lastTeam && topTeamIds.has(lastTeam.id);
   const currentTeamIsShortEligible = !!currentTeam && transferShortTeamIds.has(currentTeam.id);
   const lastTeamIsShortEligible = !!lastTeam && transferShortTeamIds.has(lastTeam.id);
-  const wasBenchedAtTopTeam = !!currentTeam && !player.starter && currentTeamIsTop;
-
-  // Top-team bench retirements are full farewell stories. Teamless veterans with
-  // a major title and the last eligible stints keep their deserved visibility;
-  // lower eligible divisions use the short format used for transfer coverage.
-  const type = wasBenchedAtTopTeam || (!currentTeam && (!!notableTrophy || lastTeamIsTop))
-    ? 'ARTICLE'
-    : currentTeamIsShortEligible || (!currentTeam && lastTeamIsShortEligible)
-      ? 'SHORT'
-      : null;
+  const [majorHistory, careerMvps, top20History, careerTitles] = await Promise.all([
+    getRetirementMajorHistory(player.id, player.careerStints),
+    findCompetitionMvps({ playerId: player.id }),
+    getRetirementTop20History(player.id),
+    getRetirementTitles(player.careerStints, args.publishedAt),
+  ]);
+  const hasArticleLevelAchievement = Boolean(
+    majorHistory.wins.length || careerMvps.length || top20History,
+  );
+  // The final team determines visibility in the same way as transfer coverage:
+  // top-30 teams and players with elite individual/career honors receive an
+  // article; players whose current or most recent team is short-eligible receive
+  // a short; lower-visibility retirements are not shown.
+  const type =
+    currentTeamIsTop || (!currentTeam && lastTeamIsTop) || hasArticleLevelAchievement
+      ? 'ARTICLE'
+      : currentTeamIsShortEligible || (!currentTeam && lastTeamIsShortEligible)
+        ? 'SHORT'
+        : null;
   if (!type) return null;
 
   const relatedTeam = currentTeam || lastTeam;
   // A retirement announced while the player is still on a team gets that
   // team's farewell treatment, whether it is a top-story article or a short.
   // Teamless last-stint coverage stays deliberately minimal for now.
-  const thankYouGraphic =
-    currentTeam && (wasBenchedAtTopTeam || type === 'SHORT')
-      ? getThankYouGraphic(currentTeam, player)
-      : null;
+  const thankYouGraphic = currentTeam ? getThankYouGraphic(currentTeam, player) : null;
   const publishedAt = new Date(startOfDay(args.publishedAt).getTime() + player.id);
+  const isRetirementShort = type === 'SHORT';
+  const headline = isRetirementShort
+    ? retirementHeadline(player.name, player.id)
+    : `${player.name} retires`;
+  const summary = isRetirementShort ? retirementSummary(player.name, player.id) : '';
+  const firstTeam = firstStint?.team || null;
+  const firstTeamLabel = teamLink(firstTeam);
+  const lastTeamLabel = teamLink(relatedTeam);
+  const firstStintEnd = firstStint?.endedAt || args.publishedAt;
+  const finalActiveStint =
+    player.careerStints
+      .slice()
+      .reverse()
+      .find((stint) => stint.starter && stint.teamId === relatedTeam?.id) || null;
+  const finalActiveEnd = finalActiveStint?.endedAt || args.publishedAt;
+  const includeRetirementShortCopy = isRetirementShort;
+  const [firstStats, finalStats, firstTitles] = includeRetirementShortCopy
+    ? await Promise.all([
+        firstStint && firstTeam
+          ? getPlayerAggregateStats(player.id, firstTeam.id, firstStint.startedAt, firstStintEnd)
+          : null,
+        finalActiveStint && relatedTeam
+          ? getPlayerAggregateStats(
+              player.id,
+              relatedTeam.id,
+              finalActiveStint.startedAt,
+              finalActiveEnd,
+            )
+          : null,
+        firstStint && firstTeam
+          ? getRecentTeamTitles(firstTeam.id, firstStintEnd, player, firstStint.startedAt)
+          : [],
+      ])
+    : [null, null, []];
+  const immediateContext = relatedTeam
+    ? pickVariant(
+        [
+          `${playerLink(player)} had most recently represented ${lastTeamLabel} before stepping away from competition.`,
+          `${playerLink(player)}'s final spell came with ${lastTeamLabel}, where he remained until announcing his retirement.`,
+          `The decision comes after ${playerLink(player)}'s most recent stint with ${lastTeamLabel}.`,
+          `${playerLink(player)} had last competed under the ${lastTeamLabel} banner before calling time on his career.`,
+          `${playerLink(player)} most recently featured for ${lastTeamLabel} prior to his retirement.`,
+          `${playerLink(player)}'s final chapter as an active competitor was spent with ${lastTeamLabel}.`,
+          `The retirement follows ${playerLink(player)}'s latest stint with ${lastTeamLabel}.`,
+          `${playerLink(player)} had been part of ${lastTeamLabel} before deciding to step away from professional play.`,
+          `${playerLink(player)} leaves competition after most recently playing for ${lastTeamLabel}.`,
+          `${playerLink(player)}'s last appearance in professional play came as part of ${lastTeamLabel}.`,
+          `The announcement brings an end to a spell that most recently saw ${playerLink(player)} compete for ${lastTeamLabel}.`,
+          `${playerLink(player)} had remained with ${lastTeamLabel} up until his decision to retire.`,
+          `${playerLink(player)} closes out his playing career following a final stint with ${lastTeamLabel}.`,
+          `${playerLink(player)}'s most recent home was ${lastTeamLabel} before he opted to retire from competition.`,
+          `The retirement comes after ${playerLink(player)} spent his latest period in the professional scene with ${lastTeamLabel}.`,
+          `${playerLink(player)} had last been active with ${lastTeamLabel} before announcing the end of his career.`,
+          `${playerLink(player)} steps away after his most recent competitive stint with ${lastTeamLabel}.`,
+          `${playerLink(player)} ends his playing career after last representing ${lastTeamLabel}.`,
+          `The decision to retire follows ${playerLink(player)}'s time with ${lastTeamLabel}, his most recent organization.`,
+          `${playerLink(player)}'s final active roster appearance came with ${lastTeamLabel} before he stepped away from competition.`,
+        ],
+        player.id + 11,
+      )
+    : null;
+  const firstCareerSentence = firstTeam
+    ? pickVariant(
+        [
+          `His career began with ${firstTeamLabel}, where he first entered professional competition.`,
+          `His professional journey started with ${firstTeamLabel}.`,
+          `His first recorded team was ${firstTeamLabel}, marking the beginning of his competitive career.`,
+          `His career got underway with ${firstTeamLabel}.`,
+          `His first steps in professional play came with ${firstTeamLabel}.`,
+          `His competitive career started under the ${firstTeamLabel} banner.`,
+          `His journey in the professional scene began with ${firstTeamLabel}.`,
+          `His first stint in competitive play came with ${firstTeamLabel}.`,
+          `His career started at ${firstTeamLabel}, where he made his first appearances at the professional level.`,
+          `His first chapter in professional competition was with ${firstTeamLabel}.`,
+          `His earliest recorded stint came as part of ${firstTeamLabel}.`,
+          `His path through the professional scene began with ${firstTeamLabel}.`,
+          `His introduction to professional competition came with ${firstTeamLabel}.`,
+          `His first known team in the competitive scene was ${firstTeamLabel}.`,
+          `His playing career began at ${firstTeamLabel} before later moves elsewhere.`,
+          `His first recorded appearances came while representing ${firstTeamLabel}.`,
+          `His professional career traces back to an initial stint with ${firstTeamLabel}.`,
+          `His first spell in the scene came with ${firstTeamLabel}.`,
+          `His career began to take shape during his time with ${firstTeamLabel}.`,
+          `His opening chapter as a professional player came with ${firstTeamLabel}.`,
+        ],
+        player.id + 17,
+      )
+    : null;
+  const firstStatsSentence = firstStats
+    ? firstTitles.length
+      ? pickVariant(
+          [
+            `During that stint, he played ${mapCountLabel(firstStats.maps)} and recorded an average rating of ${formatRating(firstStats.rating)}, helping the team win ${formatCompetitionTitleList(firstTitles)}.`,
+            `Across ${mapCountLabel(firstStats.maps)} during the stint, he averaged a ${formatRating(firstStats.rating)} rating while helping the team claim ${formatCompetitionTitleList(firstTitles)}.`,
+            `His time with the team saw him play ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average, alongside victories at ${formatCompetitionTitleList(firstTitles)}.`,
+            `Over the course of the stint, he featured in ${mapCountLabel(firstStats.maps)} and averaged ${formatRating(firstStats.rating)}, helping the side lift trophies at ${formatCompetitionTitleList(firstTitles)}.`,
+            `He recorded a ${formatRating(firstStats.rating)} average rating across ${mapCountLabel(firstStats.maps)} while contributing to triumphs at ${formatCompetitionTitleList(firstTitles)}.`,
+            `Across his stint, he played ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average and collected titles at ${formatCompetitionTitleList(firstTitles)}.`,
+            `His spell with the team included ${mapCountLabel(firstStats.maps)} at an average rating of ${formatRating(firstStats.rating)}, as well as wins at ${formatCompetitionTitleList(firstTitles)}.`,
+            `During his time in the lineup, he averaged ${formatRating(firstStats.rating)} across ${mapCountLabel(firstStats.maps)} and helped secure ${formatCompetitionTitleList(firstTitles)}.`,
+            `He accumulated ${mapCountLabel(firstStats.maps)} during the stint, posting a ${formatRating(firstStats.rating)} average while winning ${formatCompetitionTitleList(firstTitles)}.`,
+            `Over ${mapCountLabel(firstStats.maps)} with the team, he averaged ${formatRating(firstStats.rating)} and was part of title-winning runs at ${formatCompetitionTitleList(firstTitles)}.`,
+            `His stint produced a ${formatRating(firstStats.rating)} average across ${mapCountLabel(firstStats.maps)} and brought silverware at ${formatCompetitionTitleList(firstTitles)}.`,
+            `He featured across ${mapCountLabel(firstStats.maps)} during the spell, averaging ${formatRating(firstStats.rating)} while helping the team come out on top at ${formatCompetitionTitleList(firstTitles)}.`,
+            `Throughout his time with the team, he played ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average and contributed to victories at ${formatCompetitionTitleList(firstTitles)}.`,
+            `His run in the lineup saw him average ${formatRating(firstStats.rating)} over ${mapCountLabel(firstStats.maps)} while adding ${formatCompetitionTitleList(firstTitles)} to his list of achievements.`,
+            `Across ${mapCountLabel(firstStats.maps)} during the stint, he maintained a ${formatRating(firstStats.rating)} average and helped the team lift trophies at ${formatCompetitionTitleList(firstTitles)}.`,
+            `He ended the stint with ${mapCountLabel(firstStats.maps)} played at a ${formatRating(firstStats.rating)} average, having also won ${formatCompetitionTitleList(firstTitles)}.`,
+            `During the spell, he registered a ${formatRating(firstStats.rating)} rating across ${mapCountLabel(firstStats.maps)} and celebrated title wins at ${formatCompetitionTitleList(firstTitles)}.`,
+            `His time on the active roster saw him play ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average while contributing to successes at ${formatCompetitionTitleList(firstTitles)}.`,
+            `He posted an average rating of ${formatRating(firstStats.rating)} over ${mapCountLabel(firstStats.maps)}, with the stint also yielding trophies at ${formatCompetitionTitleList(firstTitles)}.`,
+            `Across the entirety of the spell, he averaged ${formatRating(firstStats.rating)} through ${mapCountLabel(firstStats.maps)} and helped the team secure ${formatCompetitionTitleList(firstTitles)}.`,
+          ],
+          player.id + 23,
+        )
+      : pickVariant(
+          [
+            `During that stint, he played ${mapCountLabel(firstStats.maps)} and recorded an average rating of ${formatRating(firstStats.rating)}.`,
+            `Across ${mapCountLabel(firstStats.maps)} during the stint, he averaged a ${formatRating(firstStats.rating)} rating.`,
+            `His time with the team saw him play ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average rating.`,
+            `Over the course of the stint, he featured in ${mapCountLabel(firstStats.maps)} and averaged ${formatRating(firstStats.rating)}.`,
+            `He recorded a ${formatRating(firstStats.rating)} average rating across ${mapCountLabel(firstStats.maps)} during his time with the team.`,
+            `Across his stint, he played ${mapCountLabel(firstStats.maps)} while maintaining a ${formatRating(firstStats.rating)} average.`,
+            `His spell with the team included ${mapCountLabel(firstStats.maps)} played at an average rating of ${formatRating(firstStats.rating)}.`,
+            `During his time in the lineup, he averaged ${formatRating(firstStats.rating)} across ${mapCountLabel(firstStats.maps)}.`,
+            `He accumulated ${mapCountLabel(firstStats.maps)} during the stint, posting a ${formatRating(firstStats.rating)} average rating.`,
+            `Over ${mapCountLabel(firstStats.maps)} with the team, he recorded an average rating of ${formatRating(firstStats.rating)}.`,
+            `His stint produced a ${formatRating(firstStats.rating)} average rating across ${mapCountLabel(firstStats.maps)}.`,
+            `He featured across ${mapCountLabel(firstStats.maps)} during the spell, averaging a ${formatRating(firstStats.rating)} rating.`,
+            `Throughout his time with the team, he played ${mapCountLabel(firstStats.maps)} and posted a ${formatRating(firstStats.rating)} average.`,
+            `His run in the lineup saw him average ${formatRating(firstStats.rating)} over ${mapCountLabel(firstStats.maps)}.`,
+            `Across ${mapCountLabel(firstStats.maps)} played during the stint, he maintained an average rating of ${formatRating(firstStats.rating)}.`,
+            `He ended the stint with ${mapCountLabel(firstStats.maps)} played and a ${formatRating(firstStats.rating)} average rating.`,
+            `During the spell, he registered a ${formatRating(firstStats.rating)} rating across ${mapCountLabel(firstStats.maps)}.`,
+            `His time on the active roster saw him play ${mapCountLabel(firstStats.maps)} at a ${formatRating(firstStats.rating)} average.`,
+            `He posted an average rating of ${formatRating(firstStats.rating)} over ${mapCountLabel(firstStats.maps)} during the stint.`,
+            `Across the entirety of the spell, he averaged ${formatRating(firstStats.rating)} through ${mapCountLabel(firstStats.maps)}.`,
+          ],
+          player.id + 23,
+        )
+    : null;
+  const majorSentence = isRetirementShort && majorHistory.appearances
+    ? buildRetirementMajorSentence(player.age, majorHistory, player.id)
+    : null;
+  const isDifferentFinalSpell = Boolean(
+    finalActiveStint &&
+      firstStint &&
+      (finalActiveStint.teamId !== firstStint.teamId || finalActiveStint.id !== firstStint.id),
+  );
+  const finalDuration = finalActiveStint
+    ? formatContractDuration(finalActiveStint.startedAt, finalActiveEnd)
+    : null;
+  const wasBenchedBeforeRetirement = Boolean(
+    (currentTeam && !player.starter) || (!currentTeam && lastStint?.starter === false),
+  );
+  const finalStintSentence =
+    isDifferentFinalSpell && finalStats && finalDuration && relatedTeam
+      ? wasBenchedBeforeRetirement
+        ? pickVariant(
+            [
+              `During his final stint with ${lastTeamLabel}, he averaged a ${formatRating(finalStats.rating)} rating over ${finalDuration} before being moved to the bench.`,
+              `His last spell with ${lastTeamLabel} saw him post a ${formatRating(finalStats.rating)} average across ${finalDuration} before stepping out of the active lineup.`,
+              `Over his final active ${finalDuration} with ${lastTeamLabel}, he maintained a ${formatRating(finalStats.rating)} average before being benched.`,
+              `His closing stint with ${lastTeamLabel} lasted ${finalDuration} in the active lineup, producing a ${formatRating(finalStats.rating)} average before he moved to the bench.`,
+              `During his final run with ${lastTeamLabel}, he recorded a ${formatRating(finalStats.rating)} rating across ${finalDuration} before being shifted to the sidelines.`,
+              `He averaged ${formatRating(finalStats.rating)} throughout ${finalDuration} with ${lastTeamLabel} before losing his place in the active lineup.`,
+              `His last active period with ${lastTeamLabel} spanned ${finalDuration}, during which he averaged ${formatRating(finalStats.rating)} before being benched.`,
+              `Across ${finalDuration} in ${lastTeamLabel}'s active roster, he posted a ${formatRating(finalStats.rating)} average before moving to the bench.`,
+              `His final stint in the ${lastTeamLabel} lineup saw him average ${formatRating(finalStats.rating)} over ${finalDuration} before his benching.`,
+              `He closed out his active time with ${lastTeamLabel} with a ${formatRating(finalStats.rating)} average across ${finalDuration} before being moved to the bench.`,
+              `His last ${finalDuration} in ${lastTeamLabel}'s starting lineup yielded a ${formatRating(finalStats.rating)} average before he stepped aside.`,
+              `Over the course of his final active stint with ${lastTeamLabel}, he averaged ${formatRating(finalStats.rating)} across ${finalDuration} before transitioning to the bench.`,
+              `He spent ${finalDuration} in ${lastTeamLabel}'s active lineup while maintaining a ${formatRating(finalStats.rating)} average before being benched.`,
+              `His final active chapter with ${lastTeamLabel} stretched across ${finalDuration} and saw him average ${formatRating(finalStats.rating)} before he moved to the sidelines.`,
+              `During the last ${finalDuration} of his active ${lastTeamLabel} tenure, he recorded a ${formatRating(finalStats.rating)} average before being removed from the lineup.`,
+              `He posted a ${formatRating(finalStats.rating)} rating over ${finalDuration} with ${lastTeamLabel} before his final spell on the bench.`,
+              `His last active spell in ${lastTeamLabel} colors lasted ${finalDuration}, with a ${formatRating(finalStats.rating)} average before he was moved to the bench.`,
+              `Across his final ${finalDuration} as a starter for ${lastTeamLabel}, he maintained a ${formatRating(finalStats.rating)} average before stepping onto the bench.`,
+              `His final run in ${lastTeamLabel}'s active roster saw him register a ${formatRating(finalStats.rating)} average over ${finalDuration} before being benched.`,
+              `He averaged ${formatRating(finalStats.rating)} during his last ${finalDuration} in ${lastTeamLabel}'s lineup before finishing his tenure on the bench.`,
+            ],
+            player.id + 53,
+          )
+        : pickVariant(
+            [
+              `During his final stint with ${lastTeamLabel}, he averaged a ${formatRating(finalStats.rating)} rating over the course of ${finalDuration}.`,
+              `His last spell with ${lastTeamLabel} saw him post a ${formatRating(finalStats.rating)} average across ${finalDuration}.`,
+              `Over his final ${finalDuration} with ${lastTeamLabel}, he maintained an average rating of ${formatRating(finalStats.rating)}.`,
+              `His closing stint with ${lastTeamLabel} lasted ${finalDuration} and produced a ${formatRating(finalStats.rating)} average.`,
+              `During his final run with ${lastTeamLabel}, he recorded a ${formatRating(finalStats.rating)} rating across ${finalDuration}.`,
+              `He averaged ${formatRating(finalStats.rating)} throughout his final ${finalDuration} under the ${lastTeamLabel} banner.`,
+              `His last period with ${lastTeamLabel} spanned ${finalDuration}, during which he averaged a ${formatRating(finalStats.rating)} rating.`,
+              `Across his final ${finalDuration} with ${lastTeamLabel}, he posted an average rating of ${formatRating(finalStats.rating)}.`,
+              `His final stint in the ${lastTeamLabel} lineup saw him average ${formatRating(finalStats.rating)} over ${finalDuration}.`,
+              `He closed out his ${lastTeamLabel} career with a ${formatRating(finalStats.rating)} average across ${finalDuration}.`,
+              `His final ${finalDuration} with ${lastTeamLabel} yielded an average rating of ${formatRating(finalStats.rating)}.`,
+              `Over the course of his last stint with ${lastTeamLabel}, he averaged ${formatRating(finalStats.rating)} across ${finalDuration}.`,
+              `He spent his final ${finalDuration} with ${lastTeamLabel} while maintaining a ${formatRating(finalStats.rating)} average.`,
+              `His final chapter with ${lastTeamLabel} stretched across ${finalDuration} and saw him average ${formatRating(finalStats.rating)}.`,
+              `During the last ${finalDuration} of his ${lastTeamLabel} tenure, he recorded a ${formatRating(finalStats.rating)} average.`,
+              `He posted a ${formatRating(finalStats.rating)} rating over ${finalDuration} in what proved to be his final stint with ${lastTeamLabel}.`,
+              `His final spell in ${lastTeamLabel} colors lasted ${finalDuration}, with a ${formatRating(finalStats.rating)} average across that period.`,
+              `Across his closing ${finalDuration} with ${lastTeamLabel}, he maintained an average rating of ${formatRating(finalStats.rating)}.`,
+              `His last active stint with ${lastTeamLabel} saw him register a ${formatRating(finalStats.rating)} average over ${finalDuration}.`,
+              `He ends his career after a final ${formatDurationAsCompound(finalDuration)} spell with ${lastTeamLabel} in which he averaged ${formatRating(finalStats.rating)}.`,
+            ],
+            player.id + 53,
+          )
+      : null;
+  const careerTitlesSentence = careerTitles.length
+    ? pickVariant(
+        [
+          `${playerLink(player)} has won ${careerTitles.length} tournament${careerTitles.length === 1 ? '' : 's'} over the course of his career.`,
+          `${playerLink(player)} finishes his career with ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'}.`,
+          `${playerLink(player)} collected ${careerTitles.length} tournament title${careerTitles.length === 1 ? '' : 's'} during his playing career.`,
+          `${playerLink(player)} leaves competition with ${careerTitles.length} tournament win${careerTitles.length === 1 ? '' : 's'} to his name.`,
+          `${playerLink(player)} secured ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'} throughout his career.`,
+          `${playerLink(player)} lifted ${careerTitles.length} ${careerTitles.length === 1 ? 'trophy' : 'trophies'} during his time in professional play.`,
+          `${playerLink(player)} ends his career having won ${careerTitles.length} tournament${careerTitles.length === 1 ? '' : 's'}.`,
+          `${playerLink(player)} claimed ${careerTitles.length} tournament title${careerTitles.length === 1 ? '' : 's'} across his career.`,
+          `${playerLink(player)} amassed ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'} during his playing days.`,
+          `${playerLink(player)} retires with ${careerTitles.length} tournament win${careerTitles.length === 1 ? '' : 's'} on his record.`,
+          `${playerLink(player)} captured ${careerTitles.length} title${careerTitles.length === 1 ? '' : 's'} over the span of his career.`,
+          `${playerLink(player)}'s career included ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'}.`,
+          `${playerLink(player)} walks away with ${careerTitles.length} tournament title${careerTitles.length === 1 ? '' : 's'} to his name.`,
+          `${playerLink(player)} earned ${careerTitles.length} tournament win${careerTitles.length === 1 ? '' : 's'} throughout his professional career.`,
+          `${playerLink(player)} recorded ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'} before calling time on his career.`,
+          `${playerLink(player)} accumulated ${careerTitles.length} title${careerTitles.length === 1 ? '' : 's'} during his years in competition.`,
+          `${playerLink(player)} closes out his career with ${careerTitles.length} tournament triumph${careerTitles.length === 1 ? '' : 's'}.`,
+          `${playerLink(player)} departs the scene having won ${careerTitles.length} tournament${careerTitles.length === 1 ? '' : 's'}.`,
+          `${playerLink(player)}'s career yielded ${careerTitles.length} tournament title${careerTitles.length === 1 ? '' : 's'}.`,
+          `${playerLink(player)} retires after collecting ${careerTitles.length} tournament ${careerTitles.length === 1 ? 'victory' : 'victories'}.`,
+        ],
+        player.id + 61,
+      )
+    : null;
+  const body = includeRetirementShortCopy
+    ? [
+        immediateContext,
+        [firstCareerSentence, firstStatsSentence].filter(Boolean).join(' '),
+        majorSentence,
+        finalStintSentence,
+        careerTitlesSentence,
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    : '';
   const [item] = await createDrafts([
     {
       type,
       topic: 'TRANSFERS',
-      headline: `${player.name} retires`,
-      summary: '',
-      body: '',
+      headline,
+      summary,
+      body,
       image: playerImage(player, relatedTeam || undefined),
       priority: type === 'ARTICLE' ? 10 : 0,
       eventKey: `${AUTO_EVENT_PREFIX}:retirement:${player.id}`,

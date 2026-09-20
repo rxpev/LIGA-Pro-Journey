@@ -198,6 +198,19 @@ export default {
       >,
     delete: (ids: Array<number>) =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_DELETE, ids) as Promise<unknown>,
+    replyFaceitOpening: (choice: 'accept' | 'decline') =>
+      ipcRenderer.invoke(Constants.IPCRoute.EMAILS_FACEIT_OPENING_REPLY, choice) as Promise<{
+        email: Prisma.EmailGetPayload<typeof Eagers.email>;
+        recommendation: {
+          id: number;
+          name: string;
+          elo: number;
+          role: string | null;
+          countryId: number;
+          teamId: number | null;
+          teamCountryId: number | null;
+        } | null;
+      }>,
     updateDialogue: <T = typeof Eagers.email>(query: Prisma.DialogueUpdateArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_UPDATE_DIALOGUE, query) as Promise<
         Prisma.EmailGetPayload<T>
