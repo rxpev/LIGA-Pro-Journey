@@ -10214,6 +10214,27 @@ export async function onMatchdayNPC(
           score: null as Simulator.MapScore | null,
         }
       : simulator.generateSeriesDetailed([home.team, away.team], match.games.length);
+  if (options.forcedSeriesScore) {
+    const requestedHomeWins = Math.max(0, Math.trunc(options.forcedSeriesScore.home));
+    const requestedAwayWins = Math.max(0, Math.trunc(options.forcedSeriesScore.away));
+    const requiredMaps = Math.min(
+      match.games.length,
+      Math.max(1, requestedHomeWins + requestedAwayWins),
+    );
+    const winners = [
+      ...Array.from({ length: requestedHomeWins }, () => home.team.id),
+      ...Array.from({ length: requestedAwayWins }, () => away.team.id),
+    ].slice(0, requiredMaps);
+    simulation.maps = winners.map((winnerId, index) => {
+      const loserId = winnerId === home.team.id ? away.team.id : home.team.id;
+      const loserScore = Math.max(4, 9 - index);
+      return { [winnerId]: 13, [loserId]: loserScore };
+    });
+    simulation.score = {
+      [home.team.id]: winners.filter((id) => id === home.team.id).length,
+      [away.team.id]: winners.filter((id) => id === away.team.id).length,
+    };
+  }
   const simulationResult =
     simulation.score ??
     ({

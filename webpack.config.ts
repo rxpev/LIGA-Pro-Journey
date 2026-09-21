@@ -12,6 +12,10 @@ import CopyPlugin from 'copy-webpack-plugin';
 import { EnvironmentPlugin } from 'webpack';
 
 const runtimeDatabaseWatchIgnore = /[\\/]src[\\/]backend[\\/]prisma[\\/]saves(?:[\\/]|$)/;
+const includeDevtools = process.env.LPJ_BUILD_FLAVOR === 'internal';
+const devtoolsRoot = includeDevtools
+  ? path.resolve(__dirname, process.env.LPJ_DEVTOOLS_PATH || '../LPJ-DEVTOOLS/src')
+  : path.resolve(__dirname, 'src/devtools-disabled');
 
 /**
  * Webpack shared configuration.
@@ -26,6 +30,19 @@ const WebpackSharedConfig = {
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
     alias: {
+      '@liga/devtools/backend$': path.join(devtoolsRoot, 'backend.ts'),
+      '@liga/devtools/preload$': path.join(devtoolsRoot, 'preload.ts'),
+      '@liga/devtools/frontend$': path.join(devtoolsRoot, 'frontend.tsx'),
+      // DevTools is developed in an adjacent private repository with its own
+      // preview dependencies. Force the embedded build to share LPJ's React
+      // singleton; two React instances break hooks at runtime.
+      'react$': path.resolve(__dirname, 'node_modules/react'),
+      'react-dom$': path.resolve(__dirname, 'node_modules/react-dom'),
+      'react/jsx-runtime$': path.resolve(__dirname, 'node_modules/react/jsx-runtime.js'),
+      'react/jsx-dev-runtime$': path.resolve(
+        __dirname,
+        'node_modules/react/jsx-dev-runtime.js',
+      ),
       '@liga': path.resolve(__dirname, 'src'),
       'package.json': path.resolve(__dirname, 'package.json'),
     },

@@ -9,6 +9,9 @@
     "noImplicitAny": true,
     "outDir": "dist",
     "paths": {
+      "@liga/devtools/backend": ["src/devtools-disabled/backend.ts"],
+      "@liga/devtools/preload": ["src/devtools-disabled/preload.ts"],
+      "@liga/devtools/frontend": ["src/devtools-disabled/frontend.tsx"],
       "@liga/*": ["src/*"],
       "package.json": ["package.json"]
     },

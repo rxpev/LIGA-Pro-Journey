@@ -8,4 +8,6 @@
  */
 import api from './api';
 import { contextBridge } from 'electron';
+import { exposeDevtoolsPreload } from '@liga/devtools/preload';
 contextBridge.exposeInMainWorld('api', api);
+exposeDevtoolsPreload();

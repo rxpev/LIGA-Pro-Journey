@@ -37,6 +37,7 @@ import {
 } from 'react-router-dom';
 import InAppModal from './in-app-modal';
 import '@liga/frontend/assets/styles.css';
+import { DevtoolsOverlay, devtoolsEnabled } from '@liga/devtools/frontend';
 
 /** @constant */
 const ROLE_LABELS: Record<string, string> = {
@@ -659,6 +660,7 @@ function Root() {
         </section>
       </header>
       <AnimatedOutlet />
+      {devtoolsEnabled && <DevtoolsOverlay />}
       <InAppModal />
       {calendarClosePromptVisible && (
         <section className="bg-base-300/80 fixed inset-0 z-[200] flex h-screen w-screen items-center justify-center p-6 backdrop-blur-sm">

@@ -37,6 +37,7 @@
     "postinstall": "npm run db:migrate && npm run cli:init",
     "publish": "electron-forge publish",
     "start": "electron-forge start",
+    "start:devtools": "cross-env LPJ_BUILD_FLAVOR=internal electron-forge start",
     "test:npc-transfers": "ts-node -r tsconfig-paths/register src/backend/lib/npc-transfer-identity.test.ts"
   },
   "prettier": {
@@ -65,6 +66,7 @@
     "@types/react-dom": "18.3.1",
     "@vercel/webpack-asset-relocator-loader": "1.7.3",
     "copy-webpack-plugin": "11.0.0",
+    "cross-env": "7.0.3",
     "css-loader": "6.7.1",
     "daisyui": "5.0.35",
     "dotenv": "16.5.0",

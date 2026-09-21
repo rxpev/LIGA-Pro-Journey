@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import * as IPCHandlers from '@liga/backend/handlers';
 import * as Protocols from '@liga/backend/protocols';
 import log from 'electron-log';
-import { app, protocol, BrowserWindow } from 'electron';
+import { app, protocol, BrowserWindow, ipcMain } from 'electron';
 import { Constants, Util, is } from '@liga/shared';
 import {
   DatabaseClient,
@@ -16,6 +16,7 @@ import {
   disconnectActiveDatabaseWithIntegrity,
   WindowManager,
 } from '@liga/backend/lib';
+import { registerDevtoolsBackend } from '@liga/devtools/backend';
 
 let isQuittingAfterSaveIntegrity = false;
 
@@ -43,6 +44,7 @@ async function handleOnReady() {
 
   // register all ipc handlers
   Object.values(IPCHandlers).forEach((handler) => handler());
+  registerDevtoolsBackend(ipcMain);
 
   // register all protocol handlers
   Object.values(Protocols).forEach((protocol) => protocol.handler());
