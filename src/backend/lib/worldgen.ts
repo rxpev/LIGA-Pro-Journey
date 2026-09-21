@@ -53,6 +53,11 @@ import {
 } from '@liga/shared';
 import { computeLifetimeStats } from './faceitstats';
 import { FACEIT_LEVEL_TEN_MIN_ELO } from './levels';
+import {
+  FaceitRecruitmentPlan,
+  getFaceitRecruitmentPlan,
+  isFaceitRecruitmentSpotFit,
+} from './faceit-recruitment';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { getNpcRetirementChance } from '@liga/backend/lib/retirement';
@@ -6648,51 +6653,131 @@ function rollContractYears(tier: TierSlug): number {
   return options[pickedIdx]?.years ?? 1;
 }
 
-function getFaceitOfferChanceByMatchCount(
-  matchCount: number,
-  minMatches: number,
-  maxMatches: number,
-) {
-  if (matchCount < minMatches) {
-    return 0;
-  }
-
-  const clamped = Math.max(minMatches, Math.min(matchCount, maxMatches));
-  const progress = (clamped - minMatches + 1) / (maxMatches - minMatches + 1);
-
-  // Keep growth gradual while still rewarding each additional match.
-  return Math.round(12 + progress * 48);
-}
-
 type FaceitRegionalFederationSlug =
-  keyof typeof UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION;
+  | Constants.FederationSlug.ESPORTS_EUROPA
+  | Constants.FederationSlug.ESPORTS_AMERICAS
+  | Constants.FederationSlug.ESPORTS_ASIA
+  | Constants.FederationSlug.ESPORTS_OCE;
 
 function isFaceitRegionalFederationSlug(
   slug: Constants.FederationSlug,
 ): slug is FaceitRegionalFederationSlug {
-  return Object.prototype.hasOwnProperty.call(
-    UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION,
-    slug,
+  return (
+    slug === Constants.FederationSlug.ESPORTS_EUROPA ||
+    slug === Constants.FederationSlug.ESPORTS_AMERICAS ||
+    slug === Constants.FederationSlug.ESPORTS_ASIA ||
+    slug === Constants.FederationSlug.ESPORTS_OCE
   );
 }
 
-function tierFromEloByFederation(elo: number, federationSlug: Constants.FederationSlug): TierSlug {
-  const openMax = UserOfferSettings.FACEIT_ELO_THRESHOLDS.OPEN_MAX;
-  const intermediateMax = UserOfferSettings.FACEIT_ELO_THRESHOLDS.INTERMEDIATE_MAX;
+type FaceitRecruitmentRosterPlayer = {
+  id: number;
+  starter?: boolean | null;
+  role?: string | null;
+  xp?: number | null;
+};
 
-  // Asia and Oceania do not run Intermediate/Main divisions.
-  if (
-    federationSlug === Constants.FederationSlug.ESPORTS_ASIA ||
-    federationSlug === Constants.FederationSlug.ESPORTS_OCE
-  ) {
-    return elo < intermediateMax ? TierSlug.LEAGUE_OPEN : TierSlug.LEAGUE_ADVANCED;
+type OfficialRecruitmentRating = { maps: number; rating: number };
+
+function getFaceitRecruitmentRoleCandidates(
+  team: { players?: FaceitRecruitmentRosterPlayer[] | null },
+  userRole: UserRole,
+) {
+  const starters = (team.players ?? []).filter((player) => player.starter !== false);
+  const normalizedUserRole = normalizeRole(userRole);
+  const roleCandidates = starters.filter((player) => {
+    const role = normalizeRole(player.role);
+    if (normalizedUserRole === 'SNIPER') return role === 'SNIPER';
+    if (normalizedUserRole === 'IGL') return role === 'IGL' || role === 'RIFLER';
+    return role === 'RIFLER' || role === 'IGL';
+  });
+  return roleCandidates.length ? roleCandidates : starters;
+}
+
+async function getRecentOfficialRecruitmentRatings(playerIds: number[]) {
+  if (!playerIds.length) return new Map<number, OfficialRecruitmentRating>();
+
+  const rows = await DatabaseClient.prisma.$queryRaw<
+    Array<{ playerId: number; kills: number; deaths: number; assists: number }>
+  >(Prisma.sql`
+    SELECT "RecentStats"."playerId", "RecentStats"."kills", "RecentStats"."deaths", "RecentStats"."assists"
+    FROM (
+      SELECT
+        "MatchPlayerGameStat"."playerId",
+        "MatchPlayerGameStat"."kills",
+        "MatchPlayerGameStat"."deaths",
+        "MatchPlayerGameStat"."assists",
+        ROW_NUMBER() OVER (
+          PARTITION BY "MatchPlayerGameStat"."playerId"
+          ORDER BY "Match"."date" DESC, "MatchPlayerGameStat"."matchId" DESC, "MatchPlayerGameStat"."gameKey" DESC
+        ) AS "rowNumber"
+      FROM "MatchPlayerGameStat"
+      INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+      WHERE "MatchPlayerGameStat"."playerId" IN (${Prisma.join(playerIds)})
+        AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+        AND "Match"."competitionId" IS NOT NULL
+        AND ("Match"."matchType" IS NULL OR "Match"."matchType" <> 'FACEIT_PUG')
+    ) AS "RecentStats"
+    WHERE "RecentStats"."rowNumber" <= 20
+  `);
+
+  const totals = new Map<number, { maps: number; ratingSum: number }>();
+  for (const row of rows) {
+    const playerId = Number(row.playerId);
+    const rating = Util.getPlayerRating(
+      Number(row.kills),
+      Number(row.deaths),
+      Number(row.assists),
+    );
+    if (!Number.isFinite(rating)) continue;
+    const current = totals.get(playerId) ?? { maps: 0, ratingSum: 0 };
+    current.maps += 1;
+    current.ratingSum += rating;
+    totals.set(playerId, current);
   }
 
-  // EU + Americas use Open/Intermediate/Main progression.
-  if (elo < openMax) return TierSlug.LEAGUE_OPEN;
-  if (elo < intermediateMax) return TierSlug.LEAGUE_INTERMEDIATE;
+  return new Map(
+    Array.from(totals.entries()).map(([playerId, total]) => [
+      playerId,
+      { maps: total.maps, rating: total.ratingSum / total.maps },
+    ]),
+  );
+}
 
-  return TierSlug.LEAGUE_MAIN;
+function isFaceitRecruitmentRosterFit(
+  team: { players?: FaceitRecruitmentRosterPlayer[] | null },
+  userRole: UserRole,
+  plan: FaceitRecruitmentPlan,
+  officialRatings: Map<number, OfficialRecruitmentRating>,
+) {
+  const candidates = getFaceitRecruitmentRoleCandidates(team, userRole);
+  return isFaceitRecruitmentSpotFit(
+    plan,
+    candidates.map((player) => {
+      const official = officialRatings.get(player.id);
+      return {
+        xp: Number(player.xp ?? 0),
+        officialMaps: official?.maps ?? 0,
+        officialRating: official?.rating ?? null,
+      };
+    }),
+  );
+}
+
+function getFaceitRecruitmentTeamNeed(
+  team: { players?: FaceitRecruitmentRosterPlayer[] | null },
+  userRole: UserRole,
+  officialRatings: Map<number, OfficialRecruitmentRating>,
+) {
+  const candidates = getFaceitRecruitmentRoleCandidates(team, userRole);
+  const sampledRatings = candidates
+    .map((player) => officialRatings.get(player.id))
+    .filter((sample): sample is OfficialRecruitmentRating => sample != null && sample.maps >= 5)
+    .map((sample) => sample.rating);
+  if (sampledRatings.length) return Math.min(...sampledRatings);
+
+  const xpValues = candidates.map((player) => Number(player.xp ?? 0));
+  return 2 + Math.min(...(xpValues.length ? xpValues : [999])) / 100;
 }
 
 export async function sendUserFaceitOffer() {
@@ -6760,18 +6845,6 @@ export async function sendUserFaceitOffer() {
     return Promise.resolve();
   }
 
-  const matchGateway = UserOfferSettings.FACEIT_MATCH_GATEWAY_BY_FEDERATION[userFederationSlug];
-
-  const minWindow = matchGateway.minMatches;
-  const maxWindow = matchGateway.maxMatches;
-
-  if (matchCount < minWindow) {
-    return Promise.resolve();
-  }
-
-  // Ramp in the regional first window. After that still allow offers but much rarer.
-  const pbxBase = getFaceitOfferChanceByMatchCount(matchCount, minWindow, maxWindow);
-
   const lifetimeKd = lifetime.kdRatio ?? 1;
   const recentKd = recent20.kdRatio ?? 1;
   const kd = blendFaceitMetric(recentKd, lifetimeKd);
@@ -6779,39 +6852,38 @@ export async function sendUserFaceitOffer() {
   const lifetimeWinratePct = lifetime.winRate ?? 50;
   const recentWinratePct = recent20.winRate ?? 50;
   const winratePct = blendFaceitMetric(recentWinratePct, lifetimeWinratePct);
-  const winrate = winratePct / 100;
-
-  const perfMult = Math.max(0.85, Math.min(1.3, 1 + (kd - 1) * 0.15 + (winrate - 0.5) * 0.2));
-
-  // post window pbx
-  let pbx = Math.round(pbxBase * perfMult);
-  if (matchCount > maxWindow) pbx = Math.round(pbx * 0.25);
-
-  pbx *= tuning.pbxMultFaceit;
-  pbx = clampPbx(pbx);
 
   const elo = profile.faceitElo ?? 0;
-  const targetTier = tierFromEloByFederation(elo, userFederationSlug);
+  const recruitmentPlan = getFaceitRecruitmentPlan({
+    federation: userFederationSlug,
+    matchCount,
+    elo,
+    xp: profile.player.xp ?? 0,
+    kd,
+    winRatePct: winratePct,
+  });
+  if (!recruitmentPlan?.eligible) return Promise.resolve();
 
-  const isHotProspect =
-    matchCount >= 20 && kd >= 1.8 && elo >= 1800 && targetTier === TierSlug.LEAGUE_INTERMEDIATE;
-
-  if (isHotProspect) {
-    pbx = Math.max(pbx, clampPbx(90 * tuning.pbxMultFaceit));
-  }
-
-  if (!Chance.rollD2(pbx)) {
-    return Promise.resolve();
-  }
+  // Role scarcity is handled by actual roster fit below instead of applying a
+  // blanket penalty to all IGL/AWPer prospects.
+  const pbx = recruitmentPlan.offerChance;
+  if (!recruitmentPlan.guaranteed && !Chance.rollD2(pbx)) return Promise.resolve();
 
   // Federation restriction (own federation)
   const userFedId = profile.player.country?.continent?.federationId ?? null;
-
-  const prestigeIdx = Constants.Prestige.findIndex((p) => p === targetTier);
+  const eligibleTierEntries = Object.entries(recruitmentPlan.tierWeights)
+    .map(([tier, weight]) => ({
+      tier: tier as TierSlug,
+      weight: Number(weight ?? 0),
+      index: Constants.Prestige.findIndex((item) => item === tier),
+    }))
+    .filter((entry) => entry.weight > 0 && entry.index >= 0);
+  const eligibleTierIndexes = eligibleTierEntries.map((entry) => entry.index);
+  if (!eligibleTierIndexes.length) return Promise.resolve();
 
   const teams = await prisma.team.findMany({
     where: {
-      tier: prestigeIdx,
+      tier: { in: eligibleTierIndexes },
       profile: null,
       ...(userFedId
         ? {
@@ -6840,17 +6912,59 @@ export async function sendUserFaceitOffer() {
 
   if (!teams.length) return Promise.resolve();
 
-  const lastOfferTeamId = await getLastOfferTeamId(profile.playerId!);
-  let pool = selectCountryAwareOfferPool(
-    teams,
-    profile.player.countryId,
-    profile.player.country?.code ?? null,
-    profile.player.country?.continent?.code ?? null,
-    userFedId,
-    lastOfferTeamId,
+  const officialRatings = await getRecentOfficialRecruitmentRatings(
+    teams.flatMap((team) => team.players.map((player) => player.id)),
   );
+  const rosterFitTeams = teams.filter((team) =>
+    isFaceitRecruitmentRosterFit(team, role, recruitmentPlan, officialRatings),
+  );
+  // At the regional ceiling, a credible prospect gets a final route into the
+  // weakest suitable part of the market even if they narrowly miss every
+  // ordinary starter comparison. Nationality/roster-identity rules still apply.
+  const recruitmentTeams = rosterFitTeams.length
+    ? rosterFitTeams
+    : recruitmentPlan.guaranteed
+      ? [...teams]
+          .sort((a, b) => {
+            return (
+              getFaceitRecruitmentTeamNeed(a, role, officialRatings) -
+              getFaceitRecruitmentTeamNeed(b, role, officialRatings)
+            );
+          })
+          .slice(0, Math.max(3, Math.ceil(teams.length * 0.2)))
+      : [];
+  if (!recruitmentTeams.length) return Promise.resolve();
 
-  if (isHotProspect) {
+  const lastOfferTeamId = await getLastOfferTeamId(profile.playerId!);
+  const poolsByTier = new Map<TierSlug, typeof recruitmentTeams>();
+  for (const entry of eligibleTierEntries) {
+    const tierTeams = recruitmentTeams.filter((team) => team.tier === entry.index);
+    const tierPool = selectCountryAwareOfferPool(
+      tierTeams,
+      profile.player.countryId,
+      profile.player.country?.code ?? null,
+      profile.player.country?.continent?.code ?? null,
+      userFedId,
+      lastOfferTeamId,
+    );
+    if (tierPool.length) poolsByTier.set(entry.tier, tierPool);
+  }
+
+  const availableTierEntries = eligibleTierEntries.filter((entry) =>
+    poolsByTier.has(entry.tier),
+  );
+  if (!availableTierEntries.length) return Promise.resolve();
+
+  const targetTier = String(
+    Chance.roll(
+      Object.fromEntries(
+        availableTierEntries.map((entry) => [entry.tier, entry.weight]),
+      ) as Record<string, number>,
+    ),
+  ) as TierSlug;
+  let pool = poolsByTier.get(targetTier) ?? [];
+
+  if (recruitmentPlan.band === 'absurd') {
     const sorted = [...pool].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
     const topCount = Math.max(3, Math.floor(sorted.length * 0.2)); // top 20%, min 3
     pool = sorted.slice(0, topCount);
@@ -6922,12 +7036,15 @@ export async function sendUserFaceitOffer() {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d)',
+    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d, band=%s, projectedXp=%d, guaranteed=%s)',
     from.name,
     target.name,
     targetTier,
     contractYears,
     pbx,
+    recruitmentPlan.band,
+    recruitmentPlan.projectedXp,
+    recruitmentPlan.guaranteed ? 'true' : 'false',
   );
 
   return Promise.resolve(transfer);
@@ -10159,7 +10276,11 @@ export async function onSeasonStart() {
 export async function onMatchdayNPC(
   entry: Calendar,
   report?: (phase: string, elapsedMs: number) => void,
-  options: { deferPersistence?: boolean; match?: NpcMatchdayRecord } = {},
+  options: {
+    deferPersistence?: boolean;
+    match?: NpcMatchdayRecord;
+    forcedSeriesScore?: { home: number; away: number };
+  } = {},
 ) {
   const phase = phaseClock(report);
   const match = options.match ?? await DatabaseClient.prisma.match.findFirst({

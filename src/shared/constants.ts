@@ -1753,25 +1753,6 @@ export const TransferSettings = {
  * @constant
  */
 export const UserOfferSettings = {
-  FACEIT_MATCH_GATEWAY_BY_FEDERATION: {
-    [FederationSlug.ESPORTS_EUROPA]: { minMatches: 7, maxMatches: 15 },
-    [FederationSlug.ESPORTS_AMERICAS]: { minMatches: 5, maxMatches: 12 },
-    [FederationSlug.ESPORTS_ASIA]: { minMatches: 5, maxMatches: 15 },
-    [FederationSlug.ESPORTS_OCE]: { minMatches: 5, maxMatches: 10 },
-  } as Record<
-    | FederationSlug.ESPORTS_EUROPA
-    | FederationSlug.ESPORTS_AMERICAS
-    | FederationSlug.ESPORTS_ASIA
-    | FederationSlug.ESPORTS_OCE,
-    { minMatches: number; maxMatches: number }
-  >,
-
-  FACEIT_ELO_THRESHOLDS: {
-    OPEN_MAX: 2000,
-    INTERMEDIATE_MAX: 2200,
-  },
-  FACEIT_ELIGIBLE_DIVISIONS: [TierSlug.LEAGUE_OPEN, TierSlug.LEAGUE_INTERMEDIATE],
-
   TEAMLESS_OFFER_COOLDOWN_DAYS: 10,
   TEAM_OFFER_COOLDOWN_DAYS: 50,
   TEAMLESS_MAX_PENDING_OFFERS: 3,
@@ -1817,19 +1798,16 @@ export const UserOfferSettings = {
   ROLE_OFFER_TUNING: {
     [UserRole.RIFLER]: {
       pbxMultLeague: 1.0,
-      pbxMultFaceit: 1.0,
       cooldownMultTeam: 1.0,
       cooldownMultTeamless: 1.0,
     },
     [UserRole.IGL]: {
       pbxMultLeague: 0.85,
-      pbxMultFaceit: 0.9,
       cooldownMultTeam: 1.3,
       cooldownMultTeamless: 1.3,
     },
     [UserRole.AWPER]: {
       pbxMultLeague: 0.55,
-      pbxMultFaceit: 0.7,
       cooldownMultTeam: 1.6,
       cooldownMultTeamless: 1.6,
     },
