@@ -1073,6 +1073,24 @@ meter::-webkit-meter-bar {
 .inbox-message button:disabled {
   @apply cursor-not-allowed opacity-40;
 }
+.inbox-message .trial-information-button {
+  @apply border-base-content/20 bg-base-200 text-base-content/75 hover:bg-base-300 mt-2 inline-flex items-center gap-2 rounded-lg;
+}
+.trial-attachment-symbol {
+  @apply relative inline-flex size-6 shrink-0 items-center justify-center;
+}
+.trial-cc-symbol {
+  @apply hidden;
+}
+.trial-attachment-symbol svg:first-child {
+  @apply size-5;
+}
+.trial-attachment-symbol svg:last-child {
+  @apply bg-base-200 absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full p-px;
+}
+.trial-information-button:hover .trial-attachment-symbol svg:last-child {
+  @apply bg-base-300;
+}
 .inbox-thread-status,
 .inbox-closed-note {
   @apply text-base-content/60 border-base-content/15 bg-base-200/55 my-3 flex items-center gap-3 rounded-lg border p-3 text-sm;
@@ -1178,7 +1196,8 @@ meter::-webkit-meter-bar {
   @apply text-2xl font-black;
 }
 .inbox-new-message {
-  @apply bg-primary text-primary-content hover:bg-primary/90 h-10 rounded-lg px-4 text-xs font-bold shadow-md transition-colors;
+  @apply border-primary bg-primary/10 text-primary hover:text-base-content h-10 rounded-lg border px-6 text-sm font-bold transition-colors;
+  box-shadow: inset 0 -2px 0 var(--color-primary);
 }
 .inbox-search-row {
   @apply flex items-center gap-2 px-3 pb-3;
@@ -1187,7 +1206,7 @@ meter::-webkit-meter-bar {
   @apply bg-base-100/40 h-10 min-w-0 flex-1 rounded-lg;
 }
 .inbox-filter-button {
-  @apply border-base-content/15 bg-base-100/40 text-base-content/65 hover:bg-base-content/10 flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors;
+  @apply border-base-content/15 bg-base-200/35 text-base-content/75 hover:text-base-content flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors;
 }
 .inbox-filter-button svg {
   @apply size-4;
@@ -1265,8 +1284,11 @@ button.inbox-chats-nav:hover {
 .inbox-dashboard .inbox-detail {
   @apply border-base-content/15 bg-base-200/20 col-span-3 my-4 mr-4 ml-3 overflow-hidden rounded-xl border;
 }
+.inbox-detail-layout {
+  @apply flex h-full min-h-0;
+}
 .inbox-chat {
-  @apply flex h-full min-h-0 flex-col;
+  @apply flex h-full min-h-0 min-w-0 flex-1 flex-col;
 }
 .inbox-chat-header {
   @apply border-base-content/10 bg-base-200/35 flex min-h-20 shrink-0 items-center gap-3 border-b px-5 py-3;
@@ -1282,6 +1304,36 @@ button.inbox-chats-nav:hover {
 }
 .inbox-archive-button svg {
   @apply size-4;
+}
+.inbox-coach-card {
+  @apply border-base-content/10 bg-base-200/35 flex w-60 shrink-0 flex-col border-l;
+}
+.inbox-coach-portrait {
+  @apply bg-base-300/60 relative min-h-60 overflow-hidden;
+}
+.inbox-coach-portrait-team {
+  @apply pointer-events-none absolute top-1/2 left-1/2 size-64 -translate-x-1/2 -translate-y-1/2 object-contain opacity-20;
+}
+.inbox-coach-portrait-person {
+  @apply absolute inset-0 z-10 size-full object-contain object-bottom;
+}
+.inbox-coach-copy {
+  @apply border-base-content/10 flex flex-col border-t px-5 py-4;
+}
+.inbox-coach-copy h3 {
+  @apply text-xl font-black;
+}
+.inbox-coach-meta {
+  @apply text-base-content/70 mt-1 flex min-w-0 items-center gap-1.5 text-sm font-bold;
+}
+.inbox-coach-meta img {
+  @apply mr-0.5 size-5 shrink-0 object-contain;
+}
+.inbox-coach-team-link {
+  @apply border-base-content/15 bg-base-200/35 text-base-content/85 hover:border-primary/50 hover:text-primary mt-5 flex h-10 items-center justify-between rounded-lg border px-3 text-sm font-bold transition-colors;
+}
+.inbox-coach-team-link svg {
+  @apply size-3;
 }
 .inbox-dashboard .inbox-thread {
   @apply flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto rounded-none border-0 bg-transparent p-6;
@@ -1325,6 +1377,31 @@ button.inbox-chats-nav:hover {
 }
 .inbox-chat-message-wrap > time {
   @apply text-base-content/45 mt-1 px-1 text-[0.65rem];
+}
+.inbox-typing {
+  @apply border-info/30 bg-info/10 flex items-center gap-1 rounded-2xl rounded-bl-md border px-5 py-4;
+}
+.inbox-typing i {
+  @apply bg-base-content/60 size-1.5 rounded-full;
+  animation: inbox-typing-pulse 1s infinite ease-in-out;
+}
+.inbox-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.inbox-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes inbox-typing-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 .inbox-reply-actions {
   @apply ml-auto flex items-center gap-2 pr-13;

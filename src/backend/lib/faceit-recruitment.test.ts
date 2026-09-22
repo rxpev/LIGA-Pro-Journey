@@ -5,7 +5,20 @@ import {
   getFaceitRecruitmentPerformance,
   getFaceitRecruitmentPlan,
   isFaceitRecruitmentSpotFit,
+  rollFaceitTrialGoal,
+  rollFaceitTrialSeries,
+  shouldOfferPermanentDeal,
 } from './faceit-recruitment';
+
+assert.equal(rollFaceitTrialSeries(0), 3);
+assert.equal(rollFaceitTrialSeries(0.999), 5);
+assert.deepEqual(rollFaceitTrialGoal('AWPER', 0), { type: 'RATING', value: 1.4 });
+assert.deepEqual(rollFaceitTrialGoal('RIFLER', 0.999), { type: 'RATING', value: 1.5 });
+assert.deepEqual(rollFaceitTrialGoal('IGL', 0.999), { type: 'WIN_RATE', value: 100 });
+assert.equal(shouldOfferPermanentDeal('excellent', 0.24), true);
+assert.equal(shouldOfferPermanentDeal('excellent', 0.25), false);
+assert.equal(shouldOfferPermanentDeal('absurd', 0.49), true);
+assert.equal(shouldOfferPermanentDeal('adequate', 0), false);
 
 assert.equal(getFaceitRecruitmentBand(getFaceitRecruitmentPerformance(1, 50)), 'poor');
 assert.equal(getFaceitRecruitmentBand(getFaceitRecruitmentPerformance(1.3, 70)), 'poor');

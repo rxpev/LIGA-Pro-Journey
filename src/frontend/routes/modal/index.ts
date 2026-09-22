@@ -15,6 +15,7 @@ import Pregame from './pregame';
 import Settings from './settings';
 import Team from './team';
 import Transfer from './transfer';
+import TrialContract from './trial-contract';
 import User from './user';
 
 /**
@@ -32,6 +33,7 @@ export default {
   Pregame,
   Settings,
   Transfer,
+  TrialContract,
   User,
 
   // composite routes

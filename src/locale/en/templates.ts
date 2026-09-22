@@ -73,7 +73,7 @@ export enum OfferAcceptedTeam {
 
 /** @enum */
 export enum OfferAcceptedUser {
-  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract Offer from {{it.transfer.from.name}}',
   CONTENT = "Accepted {{it.transfer.from.name}}'s offer.",
 }
 
@@ -85,7 +85,7 @@ export enum OfferGeneric {
 
 /** @enum */
 export enum OfferIncoming {
-  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract Offer from {{it.transfer.from.name}}',
   CONTENT = `Hello, {{it.profile.player.name}}.
 
   We at **{{it.transfer.from.name}}** would like to offer you a contract.
@@ -107,7 +107,12 @@ export enum OfferIncoming {
   <button className="btn btn-primary" data-ipc-route="/transfer/accept" data-payload="{{it.transfer.id}}">Accept Offer</button>
   <button className="btn btn-ghost" data-ipc-route="/transfer/reject" data-payload="{{it.transfer.id}}">Reject Offer</button>
   `,
-  }
+}
+
+export enum TrialIncoming {
+  SUBJECT = 'Trial Offer from {{it.transfer.from.name}}',
+  CONTENT = '',
+}
 
 /** @enum */
 export enum OfferRejectedEmailCost {
@@ -171,7 +176,7 @@ export enum OfferRejectedEmailWages {
 
 /** @enum */
 export enum OfferRejectedUser {
-  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract Offer from {{it.transfer.from.name}}',
   CONTENT = `Rejected {{it.transfer.from.name}}'s offer.`,
 }
 
@@ -188,7 +193,7 @@ export enum ContractExpiredPlayer {
 
 /** @enum */
 export enum PlayerBenched {
-  SUBJECT = "Squad update from {{it.team.name}}",
+  SUBJECT = 'Squad update from {{it.team.name}}',
   CONTENT = `Hello, {{it.profile.player.name}}.
 
 This is an update regarding your role at **{{it.team.name}}**.
@@ -201,12 +206,12 @@ Your statistics and KD of **{{it.kd}}** in the last 30 days has not been satisfa
 
 You can still receive offers while benched. We wish you the best of luck in finding a new team!
 
----`
+---`,
 }
 
 /** @enum */
 export enum PlayerKicked {
-  SUBJECT = "Contract terminated by {{it.team.name}}",
+  SUBJECT = 'Contract terminated by {{it.team.name}}',
   CONTENT = `Hello, {{it.profile.player.name}}.
 
 We are writing to inform you that we at **{{it.team.name}}** have terminated your contract early.
@@ -215,12 +220,12 @@ The team has decided to part ways due to your recent performance in the {{it.tie
 We understand that this news may come as a surprise, but we believe this decision is in the best interest of both parties.
 You may start looking for a new team immediately.
 
----`
+---`,
 }
 
 /** @enum */
 export enum ContractExtensionOffer {
-  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract extension offer from {{it.transfer.from.name}}',
   CONTENT = `Hello, {{it.profile.player.name}}.
 
 We at **{{it.transfer.from.name}}** would like to extend your contract.
@@ -237,28 +242,28 @@ Please note that this offer is only valid for the rest of your current contract 
 
 <button className="btn btn-primary" data-ipc-route="/transfer/accept" data-payload="{{it.transfer.id}}">Accept Extension</button>
 <button className="btn btn-ghost" data-ipc-route="/transfer/reject" data-payload="{{it.transfer.id}}">Reject</button>
-`
+`,
 }
 
 export enum ContractExtensionAccepted {
-  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract extension offer from {{it.transfer.from.name}}',
   CONTENT = "Accepted {{it.transfer.from.name}}'s extension offer.",
 }
 
 /** @enum */
 export enum ContractExtensionRejected {
-  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract extension offer from {{it.transfer.from.name}}',
   CONTENT = "Rejected {{it.transfer.from.name}}'s extension offer.",
 }
 /** @enum */
 export enum ContractExtensionExpired {
-  SUBJECT = "Contract extension offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract extension offer from {{it.transfer.from.name}}',
   CONTENT = "Expired {{it.transfer.from.name}}'s offer.",
 }
 
 /** @enum */
 export enum OfferExpiredUser {
-  SUBJECT = "Contract Offer from {{it.transfer.from.name}}",
+  SUBJECT = 'Contract Offer from {{it.transfer.from.name}}',
   CONTENT = "Expired {{it.transfer.from.name}}'s offer.",
 }
 

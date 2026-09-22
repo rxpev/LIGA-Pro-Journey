@@ -34,7 +34,11 @@ export const continent = {
 /** @constant */
 export const email = {
   include: {
-    from: true,
+    from: {
+      include: {
+        team: true,
+      },
+    },
     dialogues: true,
   },
 };
@@ -123,6 +127,13 @@ export const player = {
 /** @constant */
 export const profile = {
   include: {
+    trialTeam: {
+      include: {
+        competitionFederation: true,
+        personas: true,
+        players: player,
+      },
+    },
     team: {
       include: {
         competitionFederation: true,

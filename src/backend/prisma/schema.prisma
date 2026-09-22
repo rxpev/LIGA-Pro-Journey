@@ -453,14 +453,22 @@ model Profile {
   updatedAt             DateTime? @default(now())
   faceitElo             Int       @default(1200)
   simulateNpcMatchStats Boolean   @default(false)
+  trialTeamId           Int?
+  trialSeriesTarget     Int?
+  trialSeriesPlayed     Int       @default(0)
+  trialGoalType         String?
+  trialGoalValue        Float?
+  trialReplacedPlayerId Int?
+  trialStartedAt        DateTime?
 
   // has many
   bonuses Bonus[]
   matches Match[]
 
   // belongs to
-  team     Team?   @relation(fields: [teamId], references: [id])
+  team     Team?   @relation("ProfileTeam", fields: [teamId], references: [id])
   teamId   Int?    @unique
+  trialTeam Team?  @relation("ProfileTrialTeam", fields: [trialTeamId], references: [id])
   player   Player? @relation(fields: [playerId], references: [id])
   playerId Int?    @unique
 }
@@ -514,7 +522,8 @@ model Team {
   rankingSnapshots TeamRankingSnapshot[]
 
   // has one
-  profile Profile?
+  profile       Profile?  @relation("ProfileTeam")
+  trialProfiles Profile[] @relation("ProfileTrialTeam")
 
   // belongs to
   country                 Country     @relation(fields: [countryId], references: [id])
@@ -574,6 +583,12 @@ model Offer {
   contractYears Int?      @default(1)
   expiresAt     DateTime?
   createdAt     DateTime  @default(now())
+  offerType     String    @default("PERMANENT")
+  trialSeries   Int?
+  trialGoalType String?
+  trialGoalValue Float?
+  trialReplacedPlayerId Int?
+  trialBand     String?
 
   // belongs to
   transfer   Transfer @relation(fields: [transferId], references: [id])

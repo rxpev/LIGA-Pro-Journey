@@ -211,6 +211,13 @@ export default {
           teamCountryId: number | null;
         } | null;
       }>,
+    replyTrial: (emailId: number, transferId: number, choice: 'accept' | 'reject') =>
+      ipcRenderer.invoke(
+        Constants.IPCRoute.EMAILS_TRIAL_REPLY,
+        emailId,
+        transferId,
+        choice,
+      ) as Promise<Prisma.EmailGetPayload<typeof Eagers.email>>,
     updateDialogue: <T = typeof Eagers.email>(query: Prisma.DialogueUpdateArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_UPDATE_DIALOGUE, query) as Promise<
         Prisma.EmailGetPayload<T>

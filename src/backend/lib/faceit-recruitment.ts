@@ -15,6 +15,40 @@ export type FaceitRecruitmentPlan = {
   tierWeights: Partial<Record<TierSlug, number>>;
 };
 
+export type FaceitTrialGoal = {
+  type: 'RATING' | 'WIN_RATE';
+  value: number;
+};
+
+export function shouldOfferPermanentDeal(
+  band: FaceitRecruitmentBand,
+  roll: number = Math.random(),
+) {
+  if (band === 'absurd') return roll < 0.5;
+  if (band === 'excellent') return roll < 0.25;
+  return false;
+}
+
+export function rollFaceitTrialSeries(random: number = Math.random()) {
+  return 3 + Math.min(2, Math.floor(random * 3));
+}
+
+function steppedGoal(min: number, max: number, random: number) {
+  const steps = Math.round((max - min) / 0.05);
+  return Number((min + Math.min(steps, Math.floor(random * (steps + 1))) * 0.05).toFixed(2));
+}
+
+export function rollFaceitTrialGoal(role: unknown, random: number = Math.random()): FaceitTrialGoal {
+  const normalized = String(role ?? '').toUpperCase().replace(/[\s_-]+/g, '');
+  if (normalized === 'IGL' || normalized === 'INGAMELEADER') {
+    return { type: 'WIN_RATE', value: Math.round(steppedGoal(0.6, 1, random) * 100) };
+  }
+  if (['AWPER', 'AWP', 'SNIPER', 'SNIPERPLAYER'].includes(normalized)) {
+    return { type: 'RATING', value: steppedGoal(1.4, 1.7, random) };
+  }
+  return { type: 'RATING', value: steppedGoal(1.2, 1.5, random) };
+}
+
 type RecruitmentMarket = {
   minimumMatches: number;
   offerCeilingMatch: number;

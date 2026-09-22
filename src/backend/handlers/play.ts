@@ -740,6 +740,11 @@ export default function () {
 
     // check if user won any awards
     await Worldgen.sendUserAward(match.competition);
+    await Worldgen.progressActiveFaceitTrial(
+      match.competitors.flatMap((competitor) =>
+        competitor.teamId == null ? [] : [competitor.teamId],
+      ),
+    );
     await sealActiveSaveIntegrity();
 
     // restore window and open the play modal

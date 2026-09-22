@@ -535,14 +535,21 @@ function Root() {
                 '!bg-[#0f0f0f] !text-[#f2f2f2] hover:!bg-neutral-800/70 hover:!text-white',
             )}
           >
-            <Image
-              src={
-                state.profile?.team?.blazon
-                  ? state.profile.team.blazon
-                  : 'resources://blazonry/noteam.svg'
-              }
-              className="h-full w-auto"
-            />
+            <span className="relative flex h-full items-center">
+              <Image
+                src={
+                  state.profile?.trialTeam?.blazon || state.profile?.team?.blazon
+                    ? (state.profile.trialTeam?.blazon ?? state.profile.team.blazon)
+                    : 'resources://blazonry/noteam.svg'
+                }
+                className="h-full w-auto"
+              />
+              {state.profile?.trialTeamId && (
+                <span className="absolute -right-1 -bottom-2 rounded bg-[#ff7300] px-1 text-[8px] leading-3 font-black tracking-wide text-black">
+                  TRIAL
+                </span>
+              )}
+            </span>
             <FaCaretDown />
           </article>
 
