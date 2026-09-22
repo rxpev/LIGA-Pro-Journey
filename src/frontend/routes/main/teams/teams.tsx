@@ -258,6 +258,13 @@ function TeamRosterHero(props: {
   players: TeamPlayer[];
   team: Team;
 }) {
+  const playerAges = props.players
+    .map((player) => player.age)
+    .filter((age): age is number => age != null && Number.isFinite(age));
+  const averageStarterAge = playerAges.length
+    ? playerAges.reduce((total, age) => total + age, 0) / playerAges.length
+    : null;
+
   return (
     <section className="border-base-content/10 overflow-hidden border-b">
       <div
@@ -331,6 +338,14 @@ function TeamRosterHero(props: {
               </h3>
             </article>
           </section>
+          <article className="shrink-0 text-right">
+            <p className="text-muted text-[10px] font-semibold tracking-wide uppercase">
+              Avg. starter age
+            </p>
+            <p className="text-xl leading-tight font-bold">
+              {averageStarterAge == null ? '-' : averageStarterAge.toFixed(1)}
+            </p>
+          </article>
         </div>
         <TeamHonorStrip honors={props.honors} />
       </section>
