@@ -961,17 +961,28 @@ export default function () {
             teamLink={(team) => `/teams?teamId=${team.id}`}
             title={
               competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE
-                ? Constants.IdiomaticTier[competition.tier.slug]
+                ? `${Constants.IdiomaticTier[competition.tier.slug]}${
+                    Object.keys(groups).length > 1
+                      ? ` · ${t('shared.group')} ${Util.toAlpha(group)}`
+                      : ''
+                  }`
                 : `${t('shared.group')} ${Util.toAlpha(group)}`
             }
             zones={
               Util.shouldShowStandingsZones(competition.status) &&
-              Util.getTierZonesByGroup(
-                competition.tier.slug as Constants.TierSlug,
-                competition.federation.slug as Constants.FederationSlug,
-                Object.keys(groups).length,
-                competition.tier.groupSize,
-              )
+              (competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED &&
+              competition.federation.slug === Constants.FederationSlug.ESPORTS_OCE
+                ? [
+                    [0, 0],
+                    [1, 4],
+                    [groups[group].length, groups[group].length],
+                  ]
+                : Util.getTierZonesByGroup(
+                    competition.tier.slug as Constants.TierSlug,
+                    competition.federation.slug as Constants.FederationSlug,
+                    Object.keys(groups).length,
+                    competition.tier.groupSize,
+                  ))
             }
           />
         ))}

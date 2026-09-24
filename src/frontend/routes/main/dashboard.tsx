@@ -640,16 +640,25 @@ export default function () {
                         }
                         zones={
                           Util.shouldShowStandingsZones(standings.competition.status) &&
-                          Util.getTierZonesByGroup(
-                            standings.competition.tier.slug as Constants.TierSlug,
-                            standings.competition.federation.slug as Constants.FederationSlug,
-                            new Set(
-                              standings.competition.competitors.map(
-                                (competitor) => competitor.group,
-                              ),
-                            ).size,
-                            standings.competition.tier.groupSize,
-                          )
+                          (standings.competition.tier.slug ===
+                            Constants.TierSlug.LEAGUE_ADVANCED &&
+                          standings.competition.federation.slug ===
+                            Constants.FederationSlug.ESPORTS_OCE
+                            ? [
+                                [0, 0],
+                                [1, 4],
+                                [userGroupCompetitors.length, userGroupCompetitors.length],
+                              ]
+                            : Util.getTierZonesByGroup(
+                                standings.competition.tier.slug as Constants.TierSlug,
+                                standings.competition.federation.slug as Constants.FederationSlug,
+                                new Set(
+                                  standings.competition.competitors.map(
+                                    (competitor) => competitor.group,
+                                  ),
+                                ).size,
+                                standings.competition.tier.groupSize,
+                              ))
                         }
                       />
                     </article>

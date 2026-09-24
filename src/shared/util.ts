@@ -295,7 +295,7 @@ function parseBracketMatchId(payload?: string | null) {
   }
 
   try {
-    return JSON.parse(payload) as { s?: number; r?: number; m?: number };
+    return JSON.parse(payload) as { s?: number; r?: number; m?: number; type?: string };
   } catch {
     return null;
   }
@@ -309,6 +309,9 @@ export function getMatchRoundLabel(match: MatchRoundLabelContext, matchdayLabel 
   }
 
   const matchId = parseBracketMatchId(match.payload);
+  if (matchId?.type === Constants.ESEA_OCEANIA_RELEGATION_MATCH) {
+    return 'Relegation Match';
+  }
   const { isDoubleElim, isGroupSwiss, isIemGroup } = parseTournamentRoundFlags(
     match.competition?.tournament,
   );

@@ -419,7 +419,6 @@ export default function () {
   const [prizePoolLineupsByCompetitor, setPrizePoolLineupsByCompetitor] = React.useState<
     Record<string, HistoricalPrizePoolLineup>
   >({});
-  const [selectedStandingGroup, setSelectedStandingGroup] = React.useState<string | null>(null);
   const [eseaPlayoffCompetition, setEseaPlayoffCompetition] =
     React.useState<Awaited<ReturnType<typeof api.competitions.find<typeof Eagers.competition>>>>();
   const [eseaPlayoffMatches, setEseaPlayoffMatches] = React.useState<
@@ -443,6 +442,9 @@ export default function () {
   const [isCctDetailedStandingsOpen, setIsCctDetailedStandingsOpen] = React.useState(true);
   const [majorEventName, setMajorEventName] = React.useState('Major');
   const tierSlug = competition.tier.slug as Constants.TierSlug;
+  const isEseaOceaniaAdvanced =
+    tierSlug === Constants.TierSlug.LEAGUE_ADVANCED &&
+    competition.federation.slug === Constants.FederationSlug.ESPORTS_OCE;
   const hasTournamentStarted = [
     Constants.CompetitionStatus.STARTED,
     Constants.CompetitionStatus.COMPLETED,
@@ -1219,6 +1221,58 @@ export default function () {
     isEslProLeagueGroupStage,
   ]);
   const groupKeys = React.useMemo(() => Object.keys(groups), [groups]);
+  const relegationMatch = React.useMemo(
+    () =>
+      isEseaOceaniaAdvanced
+        ? standingMatches.find((match) => {
+            try {
+              return JSON.parse(match.payload)?.type === Constants.ESEA_OCEANIA_RELEGATION_MATCH;
+            } catch {
+              return false;
+            }
+          })
+        : undefined,
+    [isEseaOceaniaAdvanced, standingMatches],
+  );
+  const roundRobinStandingMatches = React.useMemo(
+    () =>
+      relegationMatch
+        ? standingMatches.filter((match) => match.id !== relegationMatch.id)
+        : standingMatches,
+    [relegationMatch, standingMatches],
+  );
+  const relegationSlots = React.useMemo(
+    () =>
+      ['1', '2'].map((groupKey, index) => {
+        const groupCompetitors = [...(groups[groupKey] || [])]
+          .filter((competitor) => Boolean(competitor.team))
+          .sort(
+            (a, b) =>
+              a.position - b.position || b.loss - a.loss || a.team.name.localeCompare(b.team.name),
+          );
+        const expectedPosition = index === 0 ? 7 : 8;
+        const liveBottom = groupCompetitors[groupCompetitors.length - 1];
+        const matchCompetitor = relegationMatch?.competitors.find(
+          (entry) =>
+            entry.teamId != null &&
+            competition.competitors.find((competitor) => competitor.teamId === entry.teamId)
+              ?.group === Number(groupKey),
+        );
+
+        return {
+          competitor:
+            matchCompetitor?.team || (hasTournamentStarted ? liveBottom?.team : undefined),
+          label: `Group ${Util.toAlpha(groupKey)} #${expectedPosition}`,
+          score: matchCompetitor?.score,
+        };
+      }),
+    [competition.competitors, groups, hasTournamentStarted, relegationMatch],
+  );
+  const relegatedTeamId = React.useMemo(() => {
+    if (relegationMatch?.status !== Constants.MatchStatus.COMPLETED) return undefined;
+    return [...relegationMatch.competitors].sort((a, b) => (a.score || 0) - (b.score || 0))[0]
+      ?.teamId;
+  }, [relegationMatch]);
   const isLeagueStandings = competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE;
   const isCashCupStyleStandings = isFixedBracketQualifier || isAsiaRmr;
   const isStandaloneStandings =
@@ -1233,23 +1287,7 @@ export default function () {
     isAmericasRmr ||
     isEuropeRmr ||
     isMajorSwissStage;
-  const visibleStandingGroupKeys = React.useMemo(() => {
-    if (!isLeagueStandings || groupKeys.length <= 1) {
-      return groupKeys;
-    }
-
-    const selectedGroup =
-      selectedStandingGroup && groupKeys.includes(selectedStandingGroup)
-        ? selectedStandingGroup
-        : groupKeys[0];
-    return [selectedGroup];
-  }, [groupKeys, isLeagueStandings, selectedStandingGroup]);
-
-  React.useEffect(() => {
-    setSelectedStandingGroup((current) =>
-      current && groupKeys.includes(current) ? current : groupKeys[0] || null,
-    );
-  }, [competition.id, groupKeys]);
+  const visibleStandingGroupKeys = groupKeys;
   const groupZones = React.useMemo(() => {
     if (
       !(
@@ -2072,7 +2110,7 @@ export default function () {
         new Set(competition.competitors.map((competitor) => competitor.group)).size <= 1;
       const leagueRoundDifferenceByTeamId = new Map<number, number>();
 
-      standingMatches.forEach((match) => {
+      roundRobinStandingMatches.forEach((match) => {
         if (match.status !== Constants.MatchStatus.COMPLETED) {
           return;
         }
@@ -2138,20 +2176,46 @@ export default function () {
             }),
           );
         } else {
-          const groupStandings = groupKeys.map((groupKey) => {
+          const groupCount = groupKeys.length;
+          // When the playoff field is not divisible by the number of groups
+          // (for example 8 qualifiers from 3 groups), use the actual playoff
+          // team IDs once available. Before then, project an exact 3/3/2 split
+          // instead of rounding every group up and accidentally reserving 9 slots.
+          const basePlayoffSlotsPerGroup = Math.floor(eseaBracketSize / groupCount);
+          const extraPlayoffSlots = eseaBracketSize % groupCount;
+          const relegationTeamIds = new Set(
+            relegationSlots.flatMap((slot) => (slot.competitor ? [slot.competitor.id] : [])),
+          );
+          const relegationCandidates: CompetitionCompetitor[] = [];
+          const groupStandingEntries = groupKeys.flatMap((groupKey, groupIndex) => {
             const standings = (groups[groupKey] || [])
               .filter((competitor) => Boolean(competitor.team))
               .sort(sortByLeagueStanding);
+            const projectedPlayoffSlots =
+              basePlayoffSlotsPerGroup + (groupIndex < extraPlayoffSlots ? 1 : 0);
 
-            return standings.filter((competitor) => !playoffTeamIds.has(competitor.teamId));
+            return standings.flatMap((competitor, index) => {
+              const isPlayoffTeam = playoffTeamIds.size
+                ? playoffTeamIds.has(competitor.teamId)
+                : index < projectedPlayoffSlots;
+              const isRelegationCandidate =
+                isEseaOceaniaAdvanced &&
+                (relegationTeamIds.size
+                  ? relegationTeamIds.has(competitor.teamId)
+                  : index === standings.length - 1);
+
+              if (isRelegationCandidate) {
+                relegationCandidates.push(competitor);
+              }
+
+              return isPlayoffTeam || isRelegationCandidate
+                ? []
+                : [{ competitor, groupPlacement: index + 1, groupIndex }];
+            });
           });
-          const groupCount = groupStandings.length;
-          const playoffSlotsPerGroup = Math.ceil(eseaBracketSize / groupCount);
-          const lastGroupPlacement = Math.max(
-            ...groupKeys.map(
-              (groupKey) =>
-                (groups[groupKey] || []).filter((competitor) => Boolean(competitor.team)).length,
-            ),
+          const entriesByGroupPlacement = groupBy(
+            groupStandingEntries,
+            ({ groupPlacement }) => groupPlacement,
           );
           const [, , groupRelegationZone] = Util.getTierZonesByGroup(
             tierSlug,
@@ -2159,29 +2223,46 @@ export default function () {
             groupCount,
             competition.tier.groupSize,
           );
+          let overallStart = eseaBracketSize + 1;
 
-          for (
-            let groupPlacement = playoffSlotsPerGroup + 1;
-            groupPlacement <= lastGroupPlacement;
-            groupPlacement += 1
-          ) {
-            const overallStart =
-              eseaBracketSize + (groupPlacement - playoffSlotsPerGroup - 1) * groupCount + 1;
-            const overallEnd = overallStart + groupCount - 1;
-            const isRelegated =
-              Boolean(groupRelegationZone?.[0]) &&
-              groupPlacement >= groupRelegationZone[0] &&
-              groupPlacement <= groupRelegationZone[1];
+          Object.keys(entriesByGroupPlacement)
+            .map(Number)
+            .sort((a, b) => a - b)
+            .forEach((groupPlacement) => {
+              const placementEntries = entriesByGroupPlacement[groupPlacement].sort(
+                (a, b) => a.groupIndex - b.groupIndex,
+              );
+              const overallEnd = overallStart + placementEntries.length - 1;
 
-            groupStandings.forEach((standing) => {
-              playoffCards.push({
-                competitor: hasEseaPlayoffsStarted
-                  ? standing[groupPlacement - playoffSlotsPerGroup - 1]
-                  : undefined,
-                detail: isRelegated ? 'Relegation' : '',
-                label: getPlacementLabel(overallStart, overallEnd),
+              placementEntries.forEach(({ competitor }) => {
+                const isRelegated = isEseaOceaniaAdvanced
+                  ? competitor.teamId === relegatedTeamId
+                  : Boolean(groupRelegationZone?.[0]) &&
+                    groupPlacement >= groupRelegationZone[0] &&
+                    groupPlacement <= groupRelegationZone[1];
+                playoffCards.push({
+                  competitor: hasEseaPlayoffsStarted ? competitor : undefined,
+                  detail: isRelegated ? 'Relegation' : '',
+                  label: getPlacementLabel(overallStart, overallEnd),
+                });
               });
+              overallStart = overallEnd + 1;
             });
+
+          if (isEseaOceaniaAdvanced) {
+            relegationCandidates
+              .sort(
+                (a, b) =>
+                  Number(a.teamId === relegatedTeamId) - Number(b.teamId === relegatedTeamId),
+              )
+              .forEach((competitor) => {
+                playoffCards.push({
+                  competitor: hasEseaPlayoffsStarted ? competitor : undefined,
+                  detail: competitor.teamId === relegatedTeamId ? 'Relegation' : '',
+                  label: getPlacementLabel(overallStart, overallStart),
+                });
+                overallStart += 1;
+              });
           }
         }
       }
@@ -2387,7 +2468,10 @@ export default function () {
     hasEseaPlayoffsStarted,
     prizePool,
     displayedPrizePoolCards,
-    standingMatches,
+    roundRobinStandingMatches,
+    relegatedTeamId,
+    relegationSlots,
+    isEseaOceaniaAdvanced,
     tierSlug,
     isEseaCashCup,
     isIemQualifier,
@@ -3451,24 +3535,6 @@ export default function () {
               Detailed view
             </button>
           )}
-          {isLeagueStandings && groupKeys.length > 1 && (
-            <nav className="absolute top-1.5 right-3 flex gap-1" aria-label="Standings group">
-              {groupKeys.map((groupKey) => (
-                <button
-                  key={groupKey}
-                  type="button"
-                  className={cx(
-                    'btn btn-ghost h-6 min-h-0 rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 text-[0.65rem] font-semibold shadow-none',
-                    visibleStandingGroupKeys[0] === groupKey &&
-                      'border-primary! text-primary! bg-transparent!',
-                  )}
-                  onClick={() => setSelectedStandingGroup(groupKey)}
-                >
-                  Group {Util.toAlpha(groupKey)}
-                </button>
-              ))}
-            </nav>
-          )}
         </header>
         {isSwissDetailedStandings && isCctDetailedStandingsOpen && (
           <>
@@ -3503,45 +3569,58 @@ export default function () {
         )}
         {(!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
           !!effectiveGroupSize &&
-          visibleStandingGroupKeys.map((groupKey) => (
-            <Standings
-              key={groupKey + '__overview_standings'}
-              highlight={state.profile.teamId}
-              hidePoints={isLeagueStandings || hideSmallGroupPoints}
-              dense={isStandaloneStandings}
-              competitors={groups[groupKey]}
-              placeholderCount={
-                (isCctOceaniaStyleGroupStage || isEslProLeagueGroupStage) &&
-                competition.status === Constants.CompetitionStatus.SCHEDULED
-                  ? 4
-                  : undefined
-              }
-              matches={standingMatches}
-              teamLink={(team) => `/teams?teamId=${team.id}`}
-              title={
-                isLeagueStandings ? undefined : `${t('shared.group')} ${Util.toAlpha(groupKey)}`
-              }
-              zones={groupZones}
-              separateZones={isLeagueStandings}
-              showRoundDifference={Boolean(state.profile?.simulateNpcMatchStats)}
-              sortByWorldRanking={isLeagueStandings}
-              zoneColors={
-                isLeagueStandings
-                  ? [
-                      'border-l-4 border-l-green-500',
-                      'border-l-4 border-l-green-500',
-                      'border-l-4 border-l-red-500 bg-red-800/10',
-                    ]
-                  : isCctOceaniaStyleGroupStage || isEslProLeagueGroupStage
+          visibleStandingGroupKeys.map((groupKey) => {
+            const competitors = groups[groupKey] || [];
+            const zones = isEseaOceaniaAdvanced
+              ? [
+                  groupZones?.[0] || [0, 0],
+                  groupZones?.[1] || [1, 4],
+                  [competitors.length, competitors.length],
+                ]
+              : groupZones;
+
+            return (
+              <Standings
+                key={groupKey + '__overview_standings'}
+                highlight={state.profile.teamId}
+                hidePoints={isLeagueStandings || hideSmallGroupPoints}
+                dense={isStandaloneStandings}
+                competitors={competitors}
+                placeholderCount={
+                  (isCctOceaniaStyleGroupStage || isEslProLeagueGroupStage) &&
+                  competition.status === Constants.CompetitionStatus.SCHEDULED
+                    ? 4
+                    : undefined
+                }
+                matches={roundRobinStandingMatches}
+                teamLink={(team) => `/teams?teamId=${team.id}`}
+                title={
+                  isLeagueStandings && groupKeys.length <= 1
+                    ? undefined
+                    : `${t('shared.group')} ${Util.toAlpha(groupKey)}`
+                }
+                zones={zones}
+                separateZones={isLeagueStandings}
+                showRoundDifference={Boolean(state.profile?.simulateNpcMatchStats)}
+                sortByWorldRanking={isLeagueStandings}
+                zoneColors={
+                  isLeagueStandings
                     ? [
                         'border-l-4 border-l-green-500',
-                        '',
+                        'border-l-4 border-l-green-500',
                         'border-l-4 border-l-red-500 bg-red-800/10',
                       ]
-                    : undefined
-              }
-            />
-          ))}
+                    : isCctOceaniaStyleGroupStage || isEslProLeagueGroupStage
+                      ? [
+                          'border-l-4 border-l-green-500',
+                          '',
+                          'border-l-4 border-l-red-500 bg-red-800/10',
+                        ]
+                      : undefined
+                }
+              />
+            );
+          })}
         {(!isSwissDetailedStandings || !isCctDetailedStandingsOpen) &&
         !effectiveGroupSize &&
         isCashCupStyleStandings &&
@@ -3730,11 +3809,72 @@ export default function () {
                 groupZones[2][1] >= groupZones[2][0] && (
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-1 rounded bg-red-500" />
-                    Relegated
+                    {isEseaOceaniaAdvanced ? 'Relegation Match' : 'Relegated'}
                   </span>
                 )}
             </footer>
           )}
+        {isEseaOceaniaAdvanced && (
+          <section className="border-base-content/10 border-t p-4">
+            <header className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black">Relegation</h3>
+                <p className="text-base-content/60 text-xs">Loser is relegated · Best of 3</p>
+              </div>
+              <span className="text-base-content/60 text-right text-[0.65rem] font-semibold uppercase">
+                {relegationMatch
+                  ? format(relegationMatch.date, 'MMM d, yyyy')
+                  : 'After group stage'}
+              </span>
+            </header>
+            <div className="mx-auto grid w-full max-w-lg grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2">
+              {relegationSlots.map((slot, index) => (
+                <React.Fragment key={slot.label}>
+                  {index === 1 && (
+                    <span className="flex items-center gap-2 px-1 text-xs font-black tabular-nums">
+                      {relegationSlots[0]?.score != null && (
+                        <strong>{relegationSlots[0].score}</strong>
+                      )}
+                      <span className="text-base-content/50">VS</span>
+                      {relegationSlots[1]?.score != null && (
+                        <strong>{relegationSlots[1].score}</strong>
+                      )}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!relegationMatch}
+                    className={cx(
+                      'border-base-content/10 bg-base-100/50 flex min-w-0 items-center justify-center gap-2 rounded border px-3 py-2 text-center',
+                      relegationMatch && 'hover:border-primary/50 cursor-pointer',
+                      slot.competitor?.id === relegatedTeamId && 'border-red-500/60 bg-red-900/10',
+                    )}
+                    onClick={(event) => {
+                      if (!relegationMatch) return;
+                      setPreviewMatchId(relegationMatch.id);
+                      setPreviewPosition({ x: event.clientX, y: event.clientY });
+                    }}
+                  >
+                    {slot.competitor ? (
+                      <TeamBlazon
+                        src={slot.competitor.blazon}
+                        title={slot.competitor.name}
+                        className="size-6 shrink-0"
+                      />
+                    ) : (
+                      <span className="border-base-content/20 bg-base-200 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-black">
+                        ?
+                      </span>
+                    )}
+                    <strong className="min-w-0 truncate text-xs">
+                      {slot.competitor?.name || slot.label}
+                    </strong>
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+          </section>
+        )}
         {(isMajorSwissStage || isAmericasRmr || isEuropeRmr) && !isCctDetailedStandingsOpen && (
           <footer className="border-base-content/10 flex flex-wrap gap-x-4 gap-y-1 border-t px-4 py-3 text-xs">
             <span className="inline-flex items-center gap-2">

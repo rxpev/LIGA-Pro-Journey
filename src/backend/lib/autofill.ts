@@ -749,14 +749,14 @@ export const Items: Array<Item> = [
         end: 8,
         season: -1,
       },
-      // OCE: 9th thru 13th advanced stay advanced
+      // OCE: retain every non-playoff team except the relegation-match loser.
       {
         action: Action.INCLUDE,
         from: Constants.LeagueSlug.ESPORTS_LEAGUE,
         target: Constants.TierSlug.LEAGUE_ADVANCED,
         federationSlug: Constants.FederationSlug.ESPORTS_OCE,
         start: 9,
-        end: 13,
+        end: 14,
         season: -1,
       },
       {
@@ -2307,12 +2307,36 @@ async function getRegionalLeaguePlacements(
   const playoffCompetitors: typeof regularSeasonCompetition.competitors =
     playoffsCompetition?.competitors ?? [];
   const playoffTeamIds = new Set(playoffCompetitors.map((competitor) => competitor.teamId));
+  let regularSeasonCompetitors = regularSeasonCompetition.competitors.filter(
+    (competitor) => !playoffTeamIds.has(competitor.teamId),
+  );
+
+  if (
+    tierSlug === Constants.TierSlug.LEAGUE_ADVANCED &&
+    federationSlug === Constants.FederationSlug.ESPORTS_OCE
+  ) {
+    const relegationMatch = await DatabaseClient.prisma.match.findFirst({
+      where: {
+        competitionId: regularSeasonCompetition.id,
+        payload: JSON.stringify({ type: Constants.ESEA_OCEANIA_RELEGATION_MATCH }),
+        status: Constants.MatchStatus.COMPLETED,
+      },
+      include: { competitors: true },
+    });
+    const relegatedTeamId = [...(relegationMatch?.competitors || [])].sort(
+      (a, b) => (a.score || 0) - (b.score || 0),
+    )[0]?.teamId;
+
+    if (relegatedTeamId != null) {
+      regularSeasonCompetitors = [...regularSeasonCompetitors].sort(
+        (a, b) => Number(a.teamId === relegatedTeamId) - Number(b.teamId === relegatedTeamId),
+      );
+    }
+  }
 
   return [
     ...playoffCompetitors.map((competitor) => competitor.team),
-    ...regularSeasonCompetition.competitors
-      .filter((competitor) => !playoffTeamIds.has(competitor.teamId))
-      .map((competitor) => competitor.team),
+    ...regularSeasonCompetitors.map((competitor) => competitor.team),
   ];
 }
 

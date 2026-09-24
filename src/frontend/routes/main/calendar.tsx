@@ -602,6 +602,10 @@ function getStageLabel(match: CalendarMatch, matchdayLabel: string) {
     return 'Match';
   }
 
+  if (match.payload?.includes(Constants.ESEA_OCEANIA_RELEGATION_MATCH)) {
+    return getTeamsRoundLabel(match);
+  }
+
   if (match.competition.tier.groupSize) {
     return `${matchdayLabel} ${match.round}`;
   }
@@ -750,7 +754,7 @@ function getScheduledMatchdays(
     }
 
     if (competition.tier.groupSize) {
-      return tournament.groups.rounds().map((matches, index) => {
+      const groupMatchdays = tournament.groups.rounds().map((matches, index) => {
         const round = index + 1;
         const date = THREE_MATCHES_PER_WEEK_TIER_SLUGS.has(tierSlug)
           ? addDays(dates.start, 1 + Math.floor(index / 3) * 7 + (index % 3) * 2)
@@ -767,6 +771,25 @@ function getScheduledMatchdays(
           round,
         };
       });
+      const isEseaOceaniaAdvanced =
+        tierSlug === Constants.TierSlug.LEAGUE_ADVANCED &&
+        competition.federation.slug === Constants.FederationSlug.ESPORTS_OCE;
+
+      if (!isEseaOceaniaAdvanced || !groupMatchdays.length) {
+        return groupMatchdays;
+      }
+
+      const lastGroupMatchday = groupMatchdays[groupMatchdays.length - 1];
+      return [
+        ...groupMatchdays,
+        {
+          competition,
+          date: addDays(lastGroupMatchday.date, 1),
+          fixtures: 1,
+          label: 'Relegation Match · Best of 3',
+          round: groupMatchdays.length + 1,
+        },
+      ];
     }
 
     if (isDoubleElimination) {
@@ -1822,7 +1845,9 @@ export default function () {
         ? [
             {
               competition: eseaSeasonCompetition,
-              end: isLeapYearSeason ? new Date(year, 4, 11) : new Date(year, 4, 12),
+              // Nine group matchdays, the trigger gap and a four-round playoff
+              // fit inside this shorter five-week ESEA season window.
+              end: isLeapYearSeason ? new Date(year, 3, 18) : new Date(year, 3, 19),
               start: isLeapYearSeason ? new Date(year, 2, 14) : new Date(year, 2, 15),
             },
           ]

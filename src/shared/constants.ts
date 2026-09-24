@@ -553,6 +553,9 @@ export enum TierSlug {
   MAJOR_CHAMPIONS_STAGE = 'major:champions-stage',
 }
 
+/** Synthetic match payload used for Oceania Advanced's relegation decider. */
+export const ESEA_OCEANIA_RELEGATION_MATCH = 'esea:oceania:advanced:relegation';
+
 export type CompetitionHostingLocation = {
   city: string;
   countryCode: string;
@@ -1567,7 +1570,7 @@ export const LeagueTierZonesByFederation: Record<
     [TierSlug.LEAGUE_ADVANCED]: [
       [0, 0],
       [1, 8],
-      [15, 16],
+      [15, 15],
     ],
     [TierSlug.LEAGUE_OPEN_PLAYOFFS]: [
       [1, 2],

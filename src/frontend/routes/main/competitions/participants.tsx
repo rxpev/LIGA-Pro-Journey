@@ -1688,8 +1688,21 @@ export default function () {
 
       return rank;
     };
+    const groupByTeamId = new Map(
+      competition.competitors.map((competitor) => [competitor.teamId, competitor.group]),
+    );
+    const groupCount = new Set(
+      competition.competitors.map((competitor) => competitor.group).filter(Boolean),
+    ).size;
 
     return [...baseParticipants].sort((a, b) => {
+      if (groupCount > 1) {
+        const groupDifference =
+          (groupByTeamId.get(a.id) || Number.POSITIVE_INFINITY) -
+          (groupByTeamId.get(b.id) || Number.POSITIVE_INFINITY);
+        if (groupDifference) return groupDifference;
+      }
+
       const aRank = getRankKey(a.id);
       const bRank = getRankKey(b.id);
 
@@ -1700,7 +1713,16 @@ export default function () {
       // Stable fallback ordering.
       return a.name.localeCompare(b.name);
     });
-  }, [baseParticipants, worldRankingByTeamId]);
+  }, [baseParticipants, competition.competitors, worldRankingByTeamId]);
+  const participantGroupByTeamId = React.useMemo(
+    () =>
+      new Map(competition.competitors.map((competitor) => [competitor.teamId, competitor.group])),
+    [competition.competitors],
+  );
+  const participantGroupCount = React.useMemo(
+    () => new Set([...participantGroupByTeamId.values()].filter(Boolean)).size,
+    [participantGroupByTeamId],
+  );
 
   if (isPreTournamentFinals && preTournamentFinalsPlaceholderSources) {
     return (
@@ -1893,7 +1915,14 @@ export default function () {
   return (
     <section className="border-base-content/10 bg-base-200/45 mt-4 rounded-lg border p-4 shadow-lg">
       <header className="mb-4 flex items-center justify-between gap-4">
-        <h2 className="text-xl font-black">Participants</h2>
+        <div>
+          <h2 className="text-xl font-black">Participants</h2>
+          {participantGroupCount > 1 && (
+            <p className="text-base-content/60 mt-1 text-xs">
+              {participantGroupCount} world-ranking seeded groups
+            </p>
+          )}
+        </div>
         <button
           type="button"
           className="btn btn-ghost btn-sm border-base-content/10 bg-base-100/60 rounded border text-xs font-semibold shadow-none"
@@ -1911,6 +1940,7 @@ export default function () {
 
           const ranking = worldRankingByTeamId[team.id];
           const rankingLoading = worldRankingLoadingByTeamId[team.id] === true;
+          const participantGroup = participantGroupByTeamId.get(team.id);
           const qualificationSource = getQualificationSourceLabel(
             competition,
             seasonCompetitions,
@@ -1948,6 +1978,11 @@ export default function () {
                   title="World ranking at event start"
                 >
                   {rankingLoading ? '…' : `#${ranking}`}
+                </span>
+              )}
+              {participantGroupCount > 1 && participantGroup > 0 && (
+                <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute top-3 right-3">
+                  Group {Util.toAlpha(String(participantGroup))}
                 </span>
               )}
 

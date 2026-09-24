@@ -34,7 +34,7 @@ export const data: Array<LeagueSeedData> = [
         name: startCase(Constants.TierSlug.LEAGUE_OPEN),
         slug: Constants.TierSlug.LEAGUE_OPEN,
         size: 40,
-        groupSize: 20,
+        groupSize: 10,
         triggerTierSlug: Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
       },
       {
@@ -47,7 +47,7 @@ export const data: Array<LeagueSeedData> = [
         name: startCase(Constants.TierSlug.LEAGUE_INTERMEDIATE),
         slug: Constants.TierSlug.LEAGUE_INTERMEDIATE,
         size: 30,
-        groupSize: 20,
+        groupSize: 10,
         triggerTierSlug: Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
       },
       {
@@ -60,7 +60,7 @@ export const data: Array<LeagueSeedData> = [
         name: startCase(Constants.TierSlug.LEAGUE_MAIN),
         slug: Constants.TierSlug.LEAGUE_MAIN,
         size: 20,
-        groupSize: 20,
+        groupSize: 10,
         triggerTierSlug: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
       },
       {
@@ -73,7 +73,7 @@ export const data: Array<LeagueSeedData> = [
         name: startCase(Constants.TierSlug.LEAGUE_ADVANCED),
         slug: Constants.TierSlug.LEAGUE_ADVANCED,
         size: 20,
-        groupSize: 20,
+        groupSize: 10,
         triggerTierSlug: Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
       },
       {

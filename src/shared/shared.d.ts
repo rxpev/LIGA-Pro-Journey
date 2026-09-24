@@ -108,6 +108,7 @@ declare namespace Clux {
   interface GroupStageOptions {
     groupSize: number;
     meetTwice?: boolean;
+    scoresBreak?: boolean;
   }
 
   interface MatchId {

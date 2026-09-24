@@ -1815,6 +1815,10 @@ const SEEDED_TOURNAMENT_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.IEM_KRAKOW_GROUP_A,
   Constants.TierSlug.IEM_KRAKOW_GROUP_B,
   Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
   Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
   Constants.TierSlug.LEAGUE_INTERMEDIATE_PLAYOFFS,
   Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
@@ -1847,6 +1851,36 @@ const ESEA_DIVISION_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS,
   Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
 ]);
+
+const ESEA_REGULAR_SEASON_TIERS = new Set<Constants.TierSlug>([
+  Constants.TierSlug.LEAGUE_OPEN,
+  Constants.TierSlug.LEAGUE_INTERMEDIATE,
+  Constants.TierSlug.LEAGUE_MAIN,
+  Constants.TierSlug.LEAGUE_ADVANCED,
+]);
+
+const ESEA_OCEANIA_RELEGATION_PAYLOAD = JSON.stringify({
+  type: Constants.ESEA_OCEANIA_RELEGATION_MATCH,
+});
+
+function isEseaOceaniaAdvancedCompetition(competition: {
+  federation: { slug: string };
+  tier: { slug: string };
+}) {
+  return (
+    competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED &&
+    competition.federation.slug === Constants.FederationSlug.ESPORTS_OCE
+  );
+}
+
+function isEseaOceaniaRelegationPayload(payload?: string | null) {
+  if (!payload) return false;
+  try {
+    return JSON.parse(payload)?.type === Constants.ESEA_OCEANIA_RELEGATION_MATCH;
+  } catch {
+    return false;
+  }
+}
 
 const LEAGUE_PLAYOFF_TIER_TO_DIVISION: Partial<Record<Constants.TierSlug, Constants.TierSlug>> = {
   [Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS]: Constants.TierSlug.LEAGUE_OPEN,
@@ -1885,7 +1919,21 @@ function seedGroupsByWorldRanking<T extends TournamentCompetitor>(
     groups[groupIndex].push(competitor);
   });
 
-  return flatten(groups);
+  // groupstage applies its own snake pattern to seed slots. Fill those actual
+  // slots from our ranking-balanced groups so the persisted groups retain the
+  // intended 1/4/5/8 vs 2/3/6/7 distribution instead of being snaked twice.
+  const layout = new Tournament(rankedCompetitors.length, {
+    groupSize: Math.min(groupSize, rankedCompetitors.length),
+    meetTwice: false,
+  });
+  const placeholderIds = rankedCompetitors.map((_, index) => index + 1);
+  layout.addCompetitors(placeholderIds);
+  layout.start();
+
+  return placeholderIds.map((id) => {
+    const groupIndex = layout.getGroupByCompetitorId(id) - 1;
+    return groups[groupIndex].shift();
+  });
 }
 
 function seedIemPlayoffCompetitors<T extends TournamentCompetitor>(competitors: T[]): T[] {
@@ -2007,7 +2055,8 @@ function seedTournamentCompetitors<T extends TournamentCompetitor>(
   if (
     tierSlug === Constants.TierSlug.ESL_CHALLENGER ||
     tierSlug === Constants.TierSlug.CCT_OCE_SERIES ||
-    tierSlug === Constants.TierSlug.LEAGUE_PRO
+    tierSlug === Constants.TierSlug.LEAGUE_PRO ||
+    ESEA_REGULAR_SEASON_TIERS.has(tierSlug)
   ) {
     return seedGroupsByWorldRanking(competitors, competition.tier.groupSize || competitors.length);
   }
@@ -2477,7 +2526,7 @@ async function createMatchdays(
   return results;
 }
 
-async function syncCompetitionEndDate(competitionId: number) {
+async function syncCompetitionEndDate(competitionId: number, keepPending = false) {
   const lastMatchDay = await DatabaseClient.prisma.match.findFirst({
     where: {
       competitionId,
@@ -2520,6 +2569,7 @@ async function syncCompetitionEndDate(competitionId: number) {
       },
       data: {
         date: lastMatchDay.date.toISOString(),
+        ...(keepPending ? { completed: false } : {}),
       },
     });
   }
@@ -2597,13 +2647,28 @@ export async function distributePrizePool(
 
   // loop through positions and assign their award
   const winners: Array<[number, number, number]> = [];
-  const standings = new Map(tournament.$base.results().map((result) => [result.seed, result]));
+  const results = tournament.$base.results();
+  const standings = new Map(results.map((result) => [result.seed, result]));
+  const placementCounts = results.reduce((counts, result) => {
+    counts.set(result.pos, (counts.get(result.pos) || 0) + 1);
+    return counts;
+  }, new Map<number, number>());
 
   for (const competitorId of tournament.competitors) {
     const competitor = standings.get(tournament.getSeedByCompetitorId(competitorId));
-    const pos = (competitor.gpos || competitor.pos) - 1;
-    const prizeMoney = prizePool.total * ((prizePool.distribution[pos] || 0) / 100);
-    winners.push([competitorId, prizeMoney, competitor.gpos || competitor.pos]);
+    const placement = competitor.pos;
+    const tiedCompetitors = placementCounts.get(placement) || 1;
+    // A tied placement occupies a range (for example, two semi-final losers
+    // share third/fourth). Pool that range before splitting it between teams.
+    const distribution = prizePool.distribution.slice(
+      placement - 1,
+      placement - 1 + tiedCompetitors,
+    );
+    const prizePercentage =
+      distribution.reduce((total, percentage) => total + percentage, 0) /
+      Math.max(1, tiedCompetitors);
+    const prizeMoney = prizePool.total * (prizePercentage / 100);
+    winners.push([competitorId, prizeMoney, placement]);
   }
 
   if (!winners.length) {
@@ -5393,6 +5458,89 @@ function phaseClock(report?: (phase: string, elapsedMs: number) => void) {
   };
 }
 
+async function scheduleEseaOceaniaRelegationMatch(params: {
+  competition: Prisma.CompetitionGetPayload<{
+    include: {
+      competitors: true;
+      federation: true;
+      tier: { include: { league: true } };
+    };
+  }>;
+  date: Date;
+  profile: Prisma.ProfileGetPayload<unknown>;
+  tournament: Tournament;
+}) {
+  const { competition, date, profile, tournament } = params;
+  const existing = await DatabaseClient.prisma.match.findFirst({
+    where: {
+      competitionId: competition.id,
+      payload: ESEA_OCEANIA_RELEGATION_PAYLOAD,
+    },
+  });
+  if (existing) return existing;
+
+  const bottomSeeds = tournament.standings
+    .filter(Array.isArray)
+    .map((group) => group[group.length - 1]?.seed)
+    .filter((seed): seed is number => seed != null);
+  const competitorIds = bottomSeeds.map((seed) => tournament.getCompetitorBySeed(seed));
+  const competitors = competitorIds.flatMap((id, index) => {
+    const competitor = competition.competitors.find((entry) => entry.id === id);
+    return competitor?.teamId != null
+      ? [{ seed: bottomSeeds[index], teamId: competitor.teamId }]
+      : [];
+  });
+
+  if (competitors.length !== 2) {
+    Engine.Runtime.Instance.log.warn(
+      'Could not create Oceania Advanced relegation match for competition %d.',
+      competition.id,
+    );
+    return undefined;
+  }
+
+  const mapPool = await DatabaseClient.prisma.mapPool.findMany({
+    where: {
+      gameVersion: {
+        slug: Util.loadSettings(profile.settings).general.game,
+      },
+      position: { not: null },
+    },
+    orderBy: { position: 'asc' },
+    include: Eagers.mapPool.include,
+  });
+  const mapNames = shuffle(mapPool.map((entry) => entry.gameMap.name));
+  const fallbackMap = mapNames[0] || 'de_dust2';
+  const maps = Array.from({ length: 3 }, (_, index) => mapNames[index] || fallbackMap);
+  const matchday = addDays(date, 1);
+  const userTeamId = profile.teamId;
+
+  await DatabaseClient.prisma.$transaction((tx) =>
+    insertScheduledMatches(tx, [
+      {
+        calendarType: competitors.some((competitor) => competitor.teamId === userTeamId)
+          ? Constants.CalendarEntry.MATCHDAY_USER
+          : Constants.CalendarEntry.MATCHDAY_NPC,
+        competitionId: competition.id,
+        competitors,
+        date: matchday,
+        maps,
+        payload: ESEA_OCEANIA_RELEGATION_PAYLOAD,
+        round: (tournament.groups?.rounds().length || 0) + 1,
+        status: Constants.MatchStatus.READY,
+        totalRounds: 1,
+      },
+    ]),
+  );
+
+  return DatabaseClient.prisma.match.findFirst({
+    where: {
+      competitionId: competition.id,
+      payload: ESEA_OCEANIA_RELEGATION_PAYLOAD,
+    },
+  });
+}
+
 export async function recordMatchResults(report?: (phase: string, elapsedMs: number) => void) {
   const readPhase = phaseClock(report);
   // get today's match results
@@ -5461,8 +5609,13 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       // available to a later retry.
       recordedTournamentCache.delete(numericCompetitionId);
 
-      // record match results with tourney
-      matches.forEach((match) => {
+      const standardMatches = matches.filter(
+        (match) => !isEseaOceaniaRelegationPayload(match.payload),
+      );
+
+      // Record regular tournament results. The relegation decider is an
+      // additional series and must not be scored into the round-robin object.
+      standardMatches.forEach((match) => {
         const cluxMatch = tournament.$base.findMatch(JSON.parse(match.payload));
 
         // skip if this match is a BYE
@@ -5536,13 +5689,38 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         }
       }
 
-      if (generatedNewMatches || tournament.$base.isDone()) {
-        await syncCompetitionEndDate(Number(competitionId));
+      const baseTournamentDone = tournament.$base.isDone();
+      const needsRelegationMatch = isEseaOceaniaAdvancedCompetition(competition);
+      let relegationMatch = needsRelegationMatch
+        ? await DatabaseClient.prisma.match.findFirst({
+            where: {
+              competitionId: numericCompetitionId,
+              payload: ESEA_OCEANIA_RELEGATION_PAYLOAD,
+            },
+          })
+        : undefined;
+
+      if (baseTournamentDone && needsRelegationMatch && !relegationMatch && profile) {
+        relegationMatch = await scheduleEseaOceaniaRelegationMatch({
+          competition,
+          date: today,
+          profile,
+          tournament,
+        });
+        generatedNewMatches = Boolean(relegationMatch) || generatedNewMatches;
+      }
+
+      const isCompetitionDone =
+        baseTournamentDone &&
+        (!needsRelegationMatch || relegationMatch?.status === Constants.MatchStatus.COMPLETED);
+
+      if (generatedNewMatches || isCompetitionDone) {
+        await syncCompetitionEndDate(Number(competitionId), !isCompetitionDone);
       }
 
       // check if competition is done and a start date must
       // be scheduled for a dependent competition
-      if (tournament.$base.isDone() && competition.tier.triggerTierSlug) {
+      if (isCompetitionDone && competition.tier.triggerTierSlug) {
         const majorStageTiers = [
           Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
           Constants.TierSlug.MAJOR_LEGENDS_STAGE,
@@ -5644,7 +5822,6 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       }
 
       phase('results-progression');
-      const isCompetitionDone = tournament.$base.isDone();
       const serializedTournament = JSON.stringify(tournament.save());
       const competitorsById = new Map(
         competition.competitors.map((competitor) => [competitor.id, competitor]),
@@ -5721,8 +5898,8 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       phase('results-persist');
       // awards and prize pool distribution
       await Promise.all([
-        sendUserAward(competition, tournament),
-        distributePrizePool(competition, tournament),
+        isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
+        isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
           ? DatabaseClient.prisma.profile
               .findFirst({ select: { simulateNpcMatchStats: true } })
@@ -10397,6 +10574,10 @@ export async function onCompetitionStart(entry: Calendar) {
         ? {
             groupSize: Math.min(competition.tier.groupSize, tournamentSize),
             meetTwice: false,
+            // ESEA teams level on points are separated by round difference.
+            scoresBreak: ESEA_REGULAR_SEASON_TIERS.has(
+              competition.tier.slug as Constants.TierSlug,
+            ),
           }
         : IEM_GROUP_TIERS.has(competition.tier.slug as Constants.TierSlug)
           ? {
