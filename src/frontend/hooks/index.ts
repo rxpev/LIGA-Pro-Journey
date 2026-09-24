@@ -14,7 +14,7 @@ import { AppStateContext } from '@liga/frontend/redux';
  */
 export * from './use-translation';
 export * from './use-audio';
-export * from './use-FormatAppDate'
+export * from './use-FormatAppDate';
 
 /**
  * Theme provider simply modifies the root container's `data-theme`
@@ -46,7 +46,7 @@ export function useTheme() {
   if (container && settings?.general?.theme) {
     switch (settings.general.theme) {
       case Constants.ThemeType.SYSTEM:
-        container.dataset.theme = null;
+        delete container.dataset.theme;
         break;
       default:
         container.dataset.theme = theme;

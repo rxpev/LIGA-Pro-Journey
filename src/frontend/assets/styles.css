@@ -179,6 +179,80 @@
     sunset --prefersdark;
 }
 
+/*
+ * LIGA's dark palette is deliberately deeper and bluer than DaisyUI's stock
+ * sunset theme. Keep the theme name so existing saves continue to work while
+ * giving the whole application the same midnight-navy treatment as the visual
+ * direction used by the statistics mockups.
+ */
+:root:has(input.theme-controller[value='sunset']:checked),
+[data-theme='sunset'] {
+  color-scheme: dark;
+  --color-base-100: #0a1a23;
+  --color-base-200: #081720;
+  --color-base-300: #06131b;
+  --color-base-content: #b9d8f2;
+  --color-primary: #ff7851;
+  --color-primary-content: #24110b;
+  --color-secondary: #7faed2;
+  --color-secondary-content: #07151d;
+  --color-accent: #69d9ca;
+  --color-accent-content: #061713;
+  --color-neutral: #102832;
+  --color-neutral-content: #c4def3;
+  --color-info: #69c9e6;
+  --color-info-content: #06171d;
+  --color-success: #6ee0a4;
+  --color-success-content: #06170f;
+  --color-warning: #f0c965;
+  --color-warning-content: #211805;
+  --color-error: #ff716c;
+  --color-error-content: #240a0a;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Match the same palette when the app follows a dark operating-system theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-base-100: #0a1a23;
+    --color-base-200: #081720;
+    --color-base-300: #06131b;
+    --color-base-content: #b9d8f2;
+    --color-primary: #ff7851;
+    --color-primary-content: #24110b;
+    --color-secondary: #7faed2;
+    --color-secondary-content: #07151d;
+    --color-accent: #69d9ca;
+    --color-accent-content: #061713;
+    --color-neutral: #102832;
+    --color-neutral-content: #c4def3;
+    --color-info: #69c9e6;
+    --color-info-content: #06171d;
+    --color-success: #6ee0a4;
+    --color-success-content: #06170f;
+    --color-warning: #f0c965;
+    --color-warning-content: #211805;
+    --color-error: #ff716c;
+    --color-error-content: #240a0a;
+    --radius-selector: 0.5rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 0;
+    --noise: 0;
+  }
+}
+
 @font-face {
   font-family: 'BEORNHEARD';
   font-style: italic;
