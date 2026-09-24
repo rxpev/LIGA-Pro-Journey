@@ -227,6 +227,7 @@ const NPC_REGEN_INTAKE_OFFSETS_DAYS = [45, 105, 165, 225, 285, 345];
 const NPC_REGEN_INTAKE_MAX_BATCH_SIZE = 12;
 let npcUrgentRegenInProgress = false;
 const REGEN_AVATAR_URL_PREFIX = 'resources://regens/';
+const REGEN_NAMES_FILENAME = 'names.txt';
 // Calendar simulation often handles several matchdays from the same
 // competition. Reusing its already-restored tournament avoids repeatedly
 // parsing and rebuilding the same large snapshot. The serialized value is
@@ -244,36 +245,42 @@ let recordedTournamentCacheMisses = 0;
 const REGEN_REGION_SETTINGS = {
   asia_east: {
     avatarDirectory: 'asia_east',
+    namePool: 'asia_east',
     countryCodes: ['CN', 'HK', 'JP', 'KR', 'MN', 'TW'],
     elo: [2200, 3150],
     xp: [20, 50],
   },
   asia_southeast: {
     avatarDirectory: 'asia_southeast',
+    namePool: 'asia_southeast',
     countryCodes: ['ID', 'MY', 'PH', 'SG'],
     elo: [2200, 3150],
     xp: [20, 50],
   },
   asia_south: {
     avatarDirectory: 'asia_south',
+    namePool: 'asia_south',
     countryCodes: ['BD', 'IN', 'PK'],
     elo: [2200, 3150],
     xp: [20, 50],
   },
   asia_mena: {
     avatarDirectory: 'asia_mena',
+    namePool: 'middle_east',
     countryCodes: ['IR', 'IQ', 'JO', 'LB', 'PS'],
     elo: [2200, 3150],
     xp: [20, 50],
   },
   oceania: {
     avatarDirectory: 'oceania',
+    namePool: 'oce',
     countryCodes: ['AU', 'NZ'],
     elo: [2200, 3000],
     xp: [20, 40],
   },
   south_america: {
     avatarDirectory: 'southamerica',
+    namePool: 'south_america',
     countryCodes: ['AR', 'BR', 'CL', 'CO', 'CU', 'HN', 'MX', 'PA', 'UY', 'VE'],
     elo: [2300, 3400],
     xp: [20, 60],
@@ -299,6 +306,7 @@ const REGEN_REGION_SETTINGS = {
   string,
   {
     avatarDirectory?: string;
+    namePool?: string;
     countryCodes: readonly string[];
     elo: readonly [number, number];
     xp: readonly [number, number];
@@ -334,6 +342,7 @@ type RegenAvatar = {
   url: string;
 };
 let regenAvatarPool: RegenAvatar[] | null = null;
+let regenNamePools: Map<string, string[]> | null = null;
 
 function getRegenRegionForCountry(country: { code: string; continent: { code: string } }) {
   const countryCode = country.code.toUpperCase();
@@ -9809,6 +9818,41 @@ async function getRegenAvatarPool() {
   return regenAvatarPool;
 }
 
+function parseRegenNamePools(contents: string) {
+  const pools = new Map<string, string[]>();
+  let currentPool: string | null = null;
+
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const heading = /^===\s*([a-z_]+)(?:\s+\(\d+\))?\s*===$/i.exec(line);
+    if (heading) {
+      currentPool = heading[1].toLowerCase();
+      if (!pools.has(currentPool)) pools.set(currentPool, []);
+    } else if (currentPool && line && !/^\d[\d,]*\s+TOTAL$/i.test(line)) {
+      pools.get(currentPool)!.push(line);
+    }
+  }
+
+  return pools;
+}
+
+async function getRegenNamePools() {
+  if (regenNamePools) return regenNamePools;
+
+  const namesPath = path.join(getRegenAssetsPath(), REGEN_NAMES_FILENAME);
+  try {
+    regenNamePools = parseRegenNamePools(await fs.promises.readFile(namesPath, 'utf8'));
+  } catch (error) {
+    Engine.Runtime.Instance.log.warn(
+      'Unable to load regen names from %s: %s',
+      namesPath,
+      (error as Error).message,
+    );
+    regenNamePools = new Map();
+  }
+  return regenNamePools;
+}
+
 async function scheduleNpcRegenIntakes() {
   const profile = await DatabaseClient.prisma.profile.findFirst({ select: { date: true } });
   if (!profile) return;
@@ -9910,10 +9954,7 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
         },
         select: { avatar: true },
       }),
-      prisma.player.findMany({
-        where: { name: { startsWith: 'Regen ' } },
-        select: { name: true },
-      }),
+      prisma.player.findMany({ select: { name: true } }),
     ]);
   const countryRegionById = new Map<number, RegenRegion>();
   for (const country of countries) {
@@ -10187,6 +10228,21 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
   if (!profile) return;
 
   let nextRegenNumber = getNextRegenNumber(existingNames.map((player) => player.name));
+  const usedNames = new Set(existingNames.map((player) => player.name.trim().toLocaleLowerCase()));
+  const namePools = await getRegenNamePools();
+  const availableNamesByRegion = new Map<RegenRegion, string[]>();
+  for (const region of Object.keys(REGEN_REGION_SETTINGS) as RegenRegion[]) {
+    const namePool = (REGEN_REGION_SETTINGS[region] as { namePool?: string }).namePool;
+    if (!namePool) continue;
+    availableNamesByRegion.set(
+      region,
+      shuffle(
+        (namePools.get(namePool) || []).filter(
+          (name) => !usedNames.has(name.trim().toLocaleLowerCase()),
+        ),
+      ),
+    );
+  }
   const createData: Prisma.PlayerUncheckedCreateInput[] = [];
   for (let index = 0; index < intakeSize; index += 1) {
     const request = requestsToCreate[index];
@@ -10194,6 +10250,12 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
     const country = countries.find((item) => item.id === countryId);
     const region = countryRegionById.get(countryId);
     if (!country || !region) continue;
+
+    const regionalNames = availableNamesByRegion.get(region);
+    // Regions backed by a curated pool cannot create placeholder identities.
+    // Europe, CIS and North America retain numbered names until lists are added.
+    const name = regionalNames ? regionalNames.pop() : `Regen ${nextRegenNumber++}`;
+    if (!name) continue;
 
     const regionalAvatarIndexes = availableAvatars
       .map((avatar, avatarIndex) => (avatar.region === region ? avatarIndex : -1))
@@ -10204,7 +10266,7 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
 
     const isSniper = request.role === 'SNIPER';
     createData.push({
-      name: `Regen ${nextRegenNumber++}`,
+      name,
       countryId: country.id,
       avatar: avatar?.url || null,
       age: random(16, 19),
@@ -10253,6 +10315,7 @@ export async function onNpcRegenIntake(_: Calendar) {
 // Kept private to normal game flows but exposed for deterministic integration
 // tests that exercise the real Prisma transaction and repair paths.
 export const __npcWorldgenTest = {
+  parseRegenNamePools,
   createMatchdays,
   loadNpcRosterHealth,
   moveNpcPlayerAtomic,

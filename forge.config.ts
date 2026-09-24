@@ -35,6 +35,7 @@ const config: ForgeConfig = {
       './src/resources/certs',
       './src/resources/competitions',
       './src/resources/avatars',
+      './src/resources/regens',
       './src/resources/audio',
       './src/resources/fonts',
     ],
