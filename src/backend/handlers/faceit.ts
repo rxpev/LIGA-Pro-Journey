@@ -419,9 +419,8 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
       eloDelta: Number(match.faceitEloDelta || 0),
       map: match.games?.[0]?.map || 'unknown',
     });
-    currentEloAfterMatch = match.faceitRating != null
-      ? 0
-      : currentEloAfterMatch - Number(match.faceitEloDelta || 0);
+    currentEloAfterMatch =
+      match.faceitRating != null ? 0 : currentEloAfterMatch - Number(match.faceitEloDelta || 0);
 
     const mapSlug = match.games?.[0]?.map || 'unknown';
     let matchKills = 0;
@@ -533,6 +532,99 @@ async function getDetailedFaceitStats(prisma: any, profile: any) {
 }
 
 export default function registerFaceitHandlers() {
+  const serializeFriend = (friend: {
+    id: number;
+    name: string;
+    elo: number;
+    role: string | null;
+    countryId: number;
+    teamId: number | null;
+    team: { countryId: number } | null;
+  }) => ({
+    id: friend.id,
+    name: friend.name,
+    elo: friend.elo,
+    level: levelFromElo(friend.elo),
+    role: friend.role,
+    countryId: friend.countryId,
+    teamId: friend.teamId,
+    teamCountryId: friend.team?.countryId ?? null,
+  });
+
+  const loadFriends = async () => {
+    const prisma = await DatabaseClient.connect();
+    const rows = await prisma.faceitFriend.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { player: { include: { team: { select: { countryId: true } } } } },
+    });
+    return rows.map((row) => serializeFriend(row.player));
+  };
+
+  ipcMain.handle('faceit:getFriends', loadFriends);
+
+  ipcMain.handle('faceit:addFriend', async (_, playerId: number) => {
+    const prisma = await DatabaseClient.connect();
+    const normalizedPlayerId = Number(playerId);
+    if (!Number.isInteger(normalizedPlayerId) || normalizedPlayerId <= 0) {
+      throw new Error('Invalid FACEIT friend player ID.');
+    }
+
+    const player = await prisma.player.findUnique({ where: { id: normalizedPlayerId } });
+    if (!player) throw new Error('FACEIT friend player not found.');
+
+    const existingFriend = await prisma.faceitFriend.findUnique({
+      where: { playerId: normalizedPlayerId },
+    });
+    if (existingFriend) return loadFriends();
+
+    const friendCount = await prisma.faceitFriend.count();
+    if (friendCount >= 30) throw new Error('FACEIT friend list is full.');
+
+    await prisma.faceitFriend.create({ data: { playerId: normalizedPlayerId } });
+    return loadFriends();
+  });
+
+  ipcMain.handle('faceit:removeFriend', async (_, playerId: number) => {
+    const prisma = await DatabaseClient.connect();
+    const normalizedPlayerId = Number(playerId);
+    if (!Number.isInteger(normalizedPlayerId) || normalizedPlayerId <= 0) {
+      throw new Error('Invalid FACEIT friend player ID.');
+    }
+
+    await prisma.faceitFriend.deleteMany({ where: { playerId: normalizedPlayerId } });
+    return loadFriends();
+  });
+
+  ipcMain.handle('faceit:importFriends', async (_, playerIds: number[]) => {
+    const prisma = await DatabaseClient.connect();
+    const existingCount = await prisma.faceitFriend.count();
+    if (existingCount > 0) return loadFriends();
+
+    const normalizedIds = Array.from(
+      new Set(
+        (Array.isArray(playerIds) ? playerIds : [])
+          .map(Number)
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    ).slice(0, 30);
+    if (!normalizedIds.length) return [];
+
+    const validPlayers = await prisma.player.findMany({
+      where: { id: { in: normalizedIds } },
+      select: { id: true },
+    });
+    await prisma.$transaction(
+      validPlayers.map(({ id }) =>
+        prisma.faceitFriend.upsert({
+          where: { playerId: id },
+          update: {},
+          create: { playerId: id },
+        }),
+      ),
+    );
+    return loadFriends();
+  });
+
   // ------------------------------------------------------
   // GET FACEIT PROFILE
   // ------------------------------------------------------

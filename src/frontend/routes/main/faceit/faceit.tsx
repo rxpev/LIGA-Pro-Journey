@@ -401,9 +401,12 @@ export default function Faceit(): JSX.Element {
   }, [dispatch]);
 
   useEffect(() => {
+    let cancelled = false;
+    setSaveIdResolved(false);
     api.database
       .current()
       .then((id) => {
+        if (cancelled) return;
         const normalizedId = Number(id);
         const normalized = Number.isFinite(normalizedId) && normalizedId > 0 ? normalizedId : null;
         setCurrentSaveId(normalized);
@@ -413,10 +416,15 @@ export default function Faceit(): JSX.Element {
         setSaveIdResolved(true);
       })
       .catch(() => {
-        // Keep the save ID supplied when the main window opened if the IPC
-        // lookup briefly fails during navigation.
+        if (cancelled) return;
+        // Do not hydrate save-scoped state against an unverified cached ID.
+        setCurrentSaveId(null);
         setSaveIdResolved(true);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [state.profile?.name, state.profile?.updatedAt]);
 
   useEffect(() => {
@@ -1021,7 +1029,7 @@ export default function Faceit(): JSX.Element {
               teamCountryId: player.team?.countryId ?? state.profile?.team?.countryId ?? null,
             }))}
             currentPlayerRole={state.profile?.player?.role ?? null}
-            currentSaveId={currentSaveId}
+            currentSaveId={saveIdResolved ? currentSaveId : null}
             currentTeamId={state.profile?.teamId ?? null}
             currentPlayerCountryId={state.profile?.player?.countryId ?? null}
             currentTeamCountryId={state.profile?.team?.countryId ?? null}
@@ -1180,24 +1188,49 @@ export function FaceitHeader({
   }, [storageKey]);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey('friends'));
-      if (!stored) return;
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        setFriends(parsed);
-      }
-    } catch {
-      setFriends([]);
-    } finally {
-      setFriendsHydrated(true);
-    }
-  }, [storageKey]);
+    let cancelled = false;
+    setFriends([]);
+    setFriendsHydrated(false);
+    if (!currentSaveId) return () => undefined;
 
-  useEffect(() => {
-    if (!friendsHydrated) return;
-    localStorage.setItem(storageKey('friends'), JSON.stringify(friends));
-  }, [friends, friendsHydrated, storageKey]);
+    const legacyKey = storageKey('friends');
+    (async () => {
+      try {
+        let persistedFriends = await api.faceit.friends();
+
+        // One-time migration for saves created before friends were stored in SQLite.
+        // The backend only imports into an empty friend table and validates every ID.
+        if (persistedFriends.length === 0) {
+          let legacyIds: number[] = [];
+          try {
+            const stored = localStorage.getItem(legacyKey);
+            const parsed = stored ? JSON.parse(stored) : [];
+            if (Array.isArray(parsed)) {
+              legacyIds = parsed.map((friend) => Number(friend?.id));
+            }
+          } catch {
+            legacyIds = [];
+          }
+
+          if (legacyIds.length > 0) {
+            persistedFriends = await api.faceit.importFriends(legacyIds);
+          }
+        }
+
+        if (!cancelled) setFriends(persistedFriends);
+        localStorage.removeItem(legacyKey);
+      } catch (error) {
+        console.error('Could not load FACEIT friends from this save.', error);
+        if (!cancelled) setFriends([]);
+      } finally {
+        if (!cancelled) setFriendsHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSaveId, storageKey]);
 
   useEffect(() => {
     try {
@@ -1862,16 +1895,21 @@ export function FaceitHeader({
     }
   };
 
-  const removeFriend = (friendId: number) => {
+  const removeFriend = async (friendId: number) => {
     if (partyLocked) return;
-    setFriends((prev) => prev.filter((friend) => friend.id !== friendId));
-    setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
-    setPartyLeaveCountdown((prev) => {
-      if (!prev[friendId]) return prev;
-      const next = { ...prev };
-      delete next[friendId];
-      return next;
-    });
+    try {
+      const persistedFriends = await api.faceit.removeFriend(friendId);
+      setFriends(persistedFriends);
+      setPartyMembers((prev) => prev.filter((member) => member.id !== friendId));
+      setPartyLeaveCountdown((prev) => {
+        if (!prev[friendId]) return prev;
+        const next = { ...prev };
+        delete next[friendId];
+        return next;
+      });
+    } catch {
+      toast.error('Could not remove friend.');
+    }
   };
 
   const inviteFriendToParty = async (friend: MatchPlayer) => {
@@ -1936,14 +1974,17 @@ export function FaceitHeader({
     });
   };
 
-  const acceptIncomingFriendRequest = () => {
+  const acceptIncomingFriendRequest = async () => {
     if (!incomingFriendRequest || friends.length >= 30 || partyLocked) return;
 
     const acceptedFriend = incomingFriendRequest;
 
-    setFriends((prev) =>
-      prev.some((friend) => friend.id === acceptedFriend.id) ? prev : [...prev, acceptedFriend],
-    );
+    try {
+      setFriends(await api.faceit.addFriend(acceptedFriend.id));
+    } catch {
+      toast.error('Could not save friend request.');
+      return;
+    }
     const guaranteedStatus = { online: true, accepts: true };
     setDailyFriendStatus((current) => ({
       ...current,
@@ -1975,7 +2016,7 @@ export function FaceitHeader({
     toast(`Sent friend request to ${teammate.name}`);
 
     window.setTimeout(
-      () => {
+      async () => {
         setPendingRequests((prev) => prev.filter((id) => id !== teammate.id));
 
         const isCurrentLeagueTeammate = Boolean(currentTeamId && teammate.teamId === currentTeamId);
@@ -1994,14 +2035,12 @@ export function FaceitHeader({
           return;
         }
 
-        let accepted = false;
-        setFriends((prev) => {
-          if (prev.some((friend) => friend.id === teammate.id) || prev.length >= 30) return prev;
-          accepted = true;
-          return [...prev, teammate];
-        });
-        if (accepted) {
+        if (friends.some((friend) => friend.id === teammate.id) || friends.length >= 30) return;
+        try {
+          setFriends(await api.faceit.addFriend(teammate.id));
           toast.success(`${teammate.name} accepted your request!`);
+        } catch {
+          toast.error(`Could not add ${teammate.name} as a friend.`);
         }
       },
       1500 + Math.round(Math.random() * 1500),

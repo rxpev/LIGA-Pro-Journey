@@ -429,6 +429,7 @@ model Player {
   deaths          MatchEvent[]     @relation("victim")
   careerStints    CareerStint[]
   competitionMvps CompetitionMvp[]
+  faceitFriend    FaceitFriend?
 
   // has one
   profile Profile?
@@ -440,6 +441,15 @@ model Player {
   teamId    Int?
 
   @@index([isRegen, generatedAt])
+}
+
+/// A FACEIT friendship belonging to this save. Each save has its own database,
+/// so playerId alone is sufficient to identify the relationship.
+model FaceitFriend {
+  playerId  Int      @id
+  createdAt DateTime @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }
 
 model Profile {

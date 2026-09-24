@@ -64,6 +64,9 @@ export default function Save() {
         setStatus(t('shared.connectingToDatabase'));
         await api.database.connect(String(newSaveId));
         localStorage.setItem('liga-active-save-id', String(newSaveId));
+        // Save numbers can be reused after deletion. Never let an unrelated
+        // legacy localStorage friend list migrate into the new database.
+        localStorage.removeItem(`faceit-save-${newSaveId}:friends`);
 
         // Create PLAYER profile instead of manager
         setStatus(t('landing.create.statusSaving'));

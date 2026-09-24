@@ -1,0 +1,5 @@
+CREATE TABLE "FaceitFriend" (
+    "playerId" INTEGER NOT NULL PRIMARY KEY,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "FaceitFriend_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);

@@ -29,6 +29,17 @@ type MatchVetoInput = {
 };
 type MatchVetoRecord = MatchVetoInput & { id: number };
 
+type FaceitFriendPlayer = {
+  id: number;
+  name: string;
+  elo: number;
+  level: number;
+  role: string | null;
+  countryId: number;
+  teamId: number | null;
+  teamCountryId: number | null;
+};
+
 /**
  * Exports this module.
  *
@@ -234,6 +245,13 @@ export default {
       >,
   },
   faceit: {
+    friends: () => ipcRenderer.invoke('faceit:getFriends') as Promise<FaceitFriendPlayer[]>,
+    addFriend: (playerId: number) =>
+      ipcRenderer.invoke('faceit:addFriend', playerId) as Promise<FaceitFriendPlayer[]>,
+    removeFriend: (playerId: number) =>
+      ipcRenderer.invoke('faceit:removeFriend', playerId) as Promise<FaceitFriendPlayer[]>,
+    importFriends: (playerIds: number[]) =>
+      ipcRenderer.invoke('faceit:importFriends', playerIds) as Promise<FaceitFriendPlayer[]>,
     profile: () =>
       ipcRenderer.invoke('faceit:getProfile') as Promise<{
         faceitElo: number;

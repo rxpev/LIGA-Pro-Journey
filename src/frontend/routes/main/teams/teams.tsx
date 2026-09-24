@@ -340,7 +340,7 @@ function TeamRosterHero(props: {
           </section>
           <article className="shrink-0 text-right">
             <p className="text-muted text-[10px] font-semibold tracking-wide uppercase">
-              Avg. starter age
+              Avg. Age
             </p>
             <p className="text-xl leading-tight font-bold">
               {averageStarterAge == null ? '-' : averageStarterAge.toFixed(1)}
