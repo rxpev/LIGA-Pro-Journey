@@ -13,6 +13,14 @@ export type TrialContractState = {
   goalType: 'RATING' | 'WIN_RATE';
   goalValue: number;
   replacedPlayer: string;
+  coachName?: string;
+  coachSignatureFont?: string | null;
+};
+
+const signatureFonts: Record<string, string> = {
+  ANTICALLY: "'SIGNATURE ANTICALLY', cursive",
+  CALVIN_FALLEN: "'SIGNATURE CALVIN FALLEN', cursive",
+  EASY_FREE: "'SIGNATURE EASY FREE', cursive",
 };
 
 export default function TrialContract() {
@@ -21,8 +29,8 @@ export default function TrialContract() {
 
   const goal =
     state.goalType === 'WIN_RATE'
-      ? `Win at least ${state.goalValue}% of the official series`
-      : `Average at least ${Number(state.goalValue).toFixed(2)} rating across the official series`;
+      ? `Win rate of ${state.goalValue}% across the trial period`
+      : `Average rating of ${Number(state.goalValue).toFixed(2)} across the trial period`;
 
   const confirmRead = () => {
     api.window.send<ModalRequest>(
@@ -38,82 +46,98 @@ export default function TrialContract() {
 
   return (
     <main className="bg-base-100 h-screen w-screen overflow-hidden">
-      <article className="flex h-full w-full flex-col overflow-hidden">
-        <header className="border-base-content/10 bg-base-200/25 flex shrink-0 items-center border-b px-8 py-5 pr-20">
-          <div className="flex min-w-0 items-center gap-4">
+      <article className="border-base-content/15 relative flex h-full w-full flex-col overflow-hidden border">
+        <header className="border-base-content/15 bg-base-200/35 flex min-h-26 shrink-0 items-center border-b px-9 py-6 pr-20 sm:min-h-32 sm:px-10">
+          <div className="flex min-w-0 items-center gap-5">
             <Image
               src={state.teamBlazon || 'resources://blazonry/noteam.svg'}
-              className="size-16 object-contain"
+              className="size-16 shrink-0 object-contain sm:size-20"
             />
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-black tracking-[0.12em] uppercase">
+              <h1 className="truncate text-base font-black tracking-[0.16em] uppercase sm:text-xl">
                 {state.teamName}
               </h1>
-              <span className="text-primary mt-1 block text-[0.65rem] font-black tracking-[0.18em] uppercase">
+              <span className="text-primary mt-1.5 block text-xs font-black tracking-[0.2em] uppercase sm:text-sm">
                 Trial agreement
               </span>
             </div>
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 p-5">
-          <section className="border-base-content/15 bg-base-200/15 flex h-full min-h-0 flex-col overflow-hidden rounded-xl border">
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              <div>
-                <h2 className="text-2xl font-black">Trial Agreement</h2>
-                <p className="text-base-content/55 mt-1 text-sm">
-                  A short-term opportunity to join {state.teamName} and demonstrate your
-                  performance.
-                </p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-9 sm:px-12 sm:py-11">
+          <div className="w-full max-w-6xl">
+            <p className="text-base-content/65 max-w-5xl text-base leading-relaxed sm:text-lg">
+              Invitation for a short term trial period for {state.teamName}. In order for a
+              permanent contract to come into consideration for the management board the following
+              performance goal has to be met.
+            </p>
+
+            <dl className="mt-8 flex w-full max-w-2xl flex-col">
+              <div className="border-base-content/10 flex items-center gap-5 border-b py-5">
+                <div className="bg-base-content/8 flex size-12 shrink-0 items-center justify-center rounded-full">
+                  <FaCalendarAlt className="text-base-content/70 size-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-base-content/60 text-sm font-black uppercase">
+                    Trial length
+                  </dt>
+                  <dd className="mt-1.5 text-xl leading-tight font-black">
+                    {state.series} Matches
+                  </dd>
+                </div>
               </div>
-
-              <dl className="grid gap-3 sm:grid-cols-2">
-                <div className="border-base-content/10 bg-base-200/55 flex items-center gap-4 rounded-xl border p-4">
-                  <FaCalendarAlt className="text-base-content/45 size-6 shrink-0" />
-                  <div>
-                    <dt className="text-base-content/50 text-xs font-bold uppercase">
-                      Trial length
-                    </dt>
-                    <dd className="mt-1 text-lg font-black">{state.series} official series</dd>
-                    <span className="text-base-content/45 mt-0.5 block text-xs">
-                      Starts immediately
-                    </span>
-                  </div>
+              <div className="border-base-content/10 flex items-center gap-5 border-b py-5">
+                <div className="bg-base-content/8 flex size-12 shrink-0 items-center justify-center rounded-full">
+                  <FaUsers className="text-base-content/70 size-5" aria-hidden="true" />
                 </div>
-                <div className="border-base-content/10 bg-base-200/55 flex items-center gap-4 rounded-xl border p-4">
-                  <FaUsers className="text-base-content/45 size-7 shrink-0" />
-                  <div>
-                    <dt className="text-base-content/50 text-xs font-bold uppercase">
-                      Roster position
-                    </dt>
-                    <dd className="mt-1 text-lg font-black">Replacing {state.replacedPlayer}</dd>
-                    <span className="text-base-content/45 mt-0.5 block text-xs">Main lineup</span>
-                  </div>
+                <div className="min-w-0">
+                  <dt className="text-base-content/60 text-sm font-black uppercase">
+                    Roster details
+                  </dt>
+                  <dd className="mt-1.5 truncate text-xl leading-tight font-black">
+                    Replacing {state.replacedPlayer}
+                  </dd>
                 </div>
-              </dl>
-
-              <div className="border-primary/35 bg-primary/10 flex items-center gap-4 rounded-xl border p-5">
-                <FaBullseye className="text-primary size-8 shrink-0" />
-                <div>
-                  <h3 className="text-primary text-xs font-black tracking-wide uppercase">
+              </div>
+              <div className="flex items-center gap-5 py-5">
+                <div className="bg-primary/10 flex size-12 shrink-0 items-center justify-center rounded-full">
+                  <FaBullseye className="text-primary size-6" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-primary text-sm font-black tracking-[0.16em] uppercase">
                     Performance goal
-                  </h3>
-                  <p className="mt-1 text-base font-bold">{goal}</p>
+                  </dt>
+                  <dd className="mt-1.5 text-lg leading-snug font-black">{goal}</dd>
                 </div>
               </div>
-            </div>
+            </dl>
+          </div>
 
-            <footer className="border-base-content/10 bg-base-200/35 flex shrink-0 justify-end border-t px-6 py-4">
-              <button
-                type="button"
-                className="btn btn-primary shrink-0 gap-2"
-                onClick={confirmRead}
+          <div className="mt-auto pt-10 sm:pt-12">
+            <div className="border-base-content/65 relative h-12 w-72 border-b">
+              <span
+                className="text-base-content absolute bottom-[-0.15rem] left-8 inline-block -rotate-6 -skew-x-6 text-4xl leading-none tracking-[-0.08em]"
+                style={{
+                  fontFamily:
+                    signatureFonts[state.coachSignatureFont ?? ''] ??
+                    "'SIGNATURE ANTICALLY', cursive",
+                }}
               >
-                <FaCheck /> I have read the trial information
-              </button>
-            </footer>
-          </section>
+                {state.coachName || 'Head Coach'}
+              </span>
+            </div>
+          </div>
         </div>
+
+        <footer className="border-base-content/10 bg-base-200/20 flex shrink-0 justify-end border-t px-8 py-6 sm:px-12 sm:py-8">
+          <button
+            type="button"
+            className="btn btn-primary h-10 min-h-10 gap-2 px-5 text-sm font-black shadow-md"
+            onClick={confirmRead}
+          >
+            <FaCheck className="size-4" aria-hidden="true" /> I have read the trial information
+          </button>
+        </footer>
       </article>
     </main>
   );

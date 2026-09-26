@@ -386,9 +386,10 @@ model NewsItem {
 }
 
 model Persona {
-  id   Int    @id @default(autoincrement())
-  name String @unique
-  role String
+  id            Int     @id @default(autoincrement())
+  name          String  @unique
+  role          String
+  signatureFont String?
 
   // has many
   emails    Email[]    @relation("from")

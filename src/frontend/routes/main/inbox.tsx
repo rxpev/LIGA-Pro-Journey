@@ -523,6 +523,8 @@ export default function Inbox() {
                                                   replacedPlayer: String(
                                                     node.properties.dataReplacedPlayer,
                                                   ),
+                                                  coachName: active.from.name,
+                                                  coachSignatureFont: active.from.signatureFont,
                                                 },
                                               },
                                               0,

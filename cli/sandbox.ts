@@ -92,6 +92,7 @@ async function sandboxWorldgen() {
           {
             name: 'Henrik Larsson',
             role: Constants.PersonaRole.ASSISTANT,
+            signatureFont: 'ANTICALLY',
           },
         ],
       },
@@ -306,8 +307,7 @@ async function sandboxTraining() {
   for (const player of profile.team.players) {
     const xp = new Bot.Exp(player);
     const totalSessions = 5;
-    for (let i = 0; i < totalSessions; i++) {
-    }
+    for (let i = 0; i < totalSessions; i++) {}
     break;
   }
 }

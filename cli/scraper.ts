@@ -211,6 +211,9 @@ async function buildPrismaPayload(data: Array<TeamAPIResponse | PlayerAPIRespons
                 {
                   name: `${faker.name.firstName()} ${faker.name.lastName()}`,
                   role: Constants.PersonaRole.MANAGER,
+                  signatureFont: ['ANTICALLY', 'CALVIN_FALLEN', 'EASY_FREE'][
+                    faker.datatype.number({ min: 0, max: 2 })
+                  ],
                 },
               ],
             },

@@ -303,6 +303,27 @@
 }
 
 @font-face {
+  font-family: 'SIGNATURE ANTICALLY';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../../resources/fonts/signatures/Antically-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'SIGNATURE CALVIN FALLEN';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../../resources/fonts/signatures/Calvin-Fallen.otf') format('opentype');
+}
+
+@font-face {
+  font-family: 'SIGNATURE EASY FREE';
+  font-style: normal;
+  font-weight: 400;
+  src: url('../../resources/fonts/signatures/Easy-Free.ttf') format('truetype');
+}
+
+@font-face {
   font-family: 'JARED';
   font-style: normal;
   font-weight: 900;
