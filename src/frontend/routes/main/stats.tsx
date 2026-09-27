@@ -1208,8 +1208,33 @@ export default function LeagueStatsConcept(): JSX.Element {
           id: state.profile.player.id,
         },
       })
-      .then((player: any) => setCareerStints((player?.careerStints || []) as CareerStintRecord[]));
-  }, [state.profile?.player?.id]);
+      .then((player: any) => {
+        const stints = [...(player?.careerStints || [])] as CareerStintRecord[];
+        const trialTeam = state.profile?.trialTeam;
+        if (
+          trialTeam &&
+          state.profile?.trialStartedAt &&
+          !stints.some(
+            (stint) =>
+              stint.teamId === trialTeam.id &&
+              isWithinStint(state.profile.date, stint.startedAt, stint.endedAt),
+          )
+        ) {
+          stints.push({
+            teamId: trialTeam.id,
+            startedAt: state.profile.trialStartedAt,
+            endedAt: null,
+            team: trialTeam,
+          });
+        }
+        setCareerStints(stints);
+      });
+  }, [
+    state.profile?.date,
+    state.profile?.player?.id,
+    state.profile?.trialStartedAt,
+    state.profile?.trialTeam,
+  ]);
 
   React.useEffect(() => {
     if (!canViewGlobalPlayerStats) {

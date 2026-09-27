@@ -638,17 +638,41 @@ function buildSimulatedMatchEvents({
   maps,
   matchDate,
   matchId,
+  requiredPlayer,
+  requiredTeamId,
+  forcedPlayerStats,
 }: {
   away: SimulatedCompetitor;
   home: SimulatedCompetitor;
   maps: Array<SimulatedMapInput>;
   matchDate: Date;
   matchId: number;
+  requiredPlayer?: SimulatedTeam['players'][number] | null;
+  requiredTeamId?: number | null;
+  forcedPlayerStats?: { playerId: number; kills: number; deaths: number; assists: number };
 }) {
   const lineups = {
     [home.team.id]: getSimulatedLineup(home.team, matchDate),
     [away.team.id]: getSimulatedLineup(away.team, matchDate),
   };
+  if (requiredPlayer && requiredTeamId != null) {
+    const requiredTeam = [home.team, away.team].find((team) => team.id === requiredTeamId);
+    const lineup = requiredTeam ? lineups[requiredTeam.id] : undefined;
+
+    if (lineup && !lineup.some((player) => player.id === requiredPlayer.id)) {
+      const roleBoost = requiredPlayer.role === Constants.PlayerRole.SNIPER ? 1.08 : 1;
+      const participant = {
+        ...requiredPlayer,
+        performanceWeight: Math.max(1, 25 + (requiredPlayer.xp ?? 0) * 1.8) * roleBoost,
+      };
+
+      if (lineup.length >= Constants.Application.SQUAD_MIN_LENGTH) {
+        lineup[lineup.length - 1] = participant;
+      } else {
+        lineup.push(participant);
+      }
+    }
+  }
   const events: Array<Prisma.MatchEventUncheckedCreateInput> = [];
 
   if (!lineups[home.team.id].length || !lineups[away.team.id].length) {
@@ -755,6 +779,67 @@ function buildSimulatedMatchEvents({
         }
       }
     });
+  }
+
+  if (forcedPlayerStats && requiredTeamId != null) {
+    const opponentTeamId = requiredTeamId === home.team.id ? away.team.id : home.team.id;
+    const opponentLineup = lineups[opponentTeamId];
+    const teammateLineup = lineups[requiredTeamId].filter(
+      (player) => player.id !== forcedPlayerStats.playerId,
+    );
+    const involvesForcedPlayer = (event: Prisma.MatchEventUncheckedCreateInput) =>
+      event.attackerId === forcedPlayerStats.playerId ||
+      event.assistId === forcedPlayerStats.playerId ||
+      event.victimId === forcedPlayerStats.playerId;
+    const retainedEvents = events.filter((event) => !involvesForcedPlayer(event));
+
+    maps.forEach((map, mapIndex) => {
+      const mapStart = new Date(matchDate.getTime() + (mapIndex + 1) * 2 * 60 * 60 * 1000);
+      for (let index = 0; index < forcedPlayerStats.kills; index += 1) {
+        retainedEvents.push({
+          attackerId: forcedPlayerStats.playerId,
+          gameId: map.game.id,
+          half: Math.floor(index / 12),
+          headshot: index % 3 === 0,
+          matchId,
+          payload: JSON.stringify({ type: 'playerkilled', simulated: true, forced: true }),
+          timestamp: new Date(mapStart.getTime() + (index + 1) * 1000),
+          victimId: opponentLineup[index % opponentLineup.length]?.id,
+          weapon: 'ak47',
+        });
+      }
+      for (let index = 0; index < forcedPlayerStats.deaths; index += 1) {
+        retainedEvents.push({
+          attackerId: opponentLineup[index % opponentLineup.length]?.id,
+          gameId: map.game.id,
+          half: Math.floor(index / 12),
+          headshot: index % 4 === 0,
+          matchId,
+          payload: JSON.stringify({ type: 'playerkilled', simulated: true, forced: true }),
+          timestamp: new Date(mapStart.getTime() + (forcedPlayerStats.kills + index + 1) * 1000),
+          victimId: forcedPlayerStats.playerId,
+          weapon: 'ak47',
+        });
+      }
+      for (let index = 0; index < forcedPlayerStats.assists; index += 1) {
+        retainedEvents.push({
+          assistId: forcedPlayerStats.playerId,
+          attackerId: teammateLineup[index % teammateLineup.length]?.id,
+          gameId: map.game.id,
+          half: Math.floor(index / 12),
+          matchId,
+          payload: JSON.stringify({ type: 'playerassisted', simulated: true, forced: true }),
+          timestamp: new Date(
+            mapStart.getTime() +
+              (forcedPlayerStats.kills + forcedPlayerStats.deaths + index + 1) * 1000,
+          ),
+          victimId: opponentLineup[(index + forcedPlayerStats.kills) % opponentLineup.length]?.id,
+        });
+      }
+    });
+
+    events.length = 0;
+    events.push(...retainedEvents);
   }
 
   return {
@@ -2824,6 +2909,28 @@ export async function progressActiveFaceitTrial(teamIds: number[]) {
       ? winRate >= (profile.trialGoalValue ?? 100)
       : rating >= (profile.trialGoalValue ?? Number.POSITIVE_INFINITY);
 
+  const trialStint = await DatabaseClient.prisma.careerStint.findFirst({
+    where: { playerId: profile.playerId, teamId, endedAt: null },
+    orderBy: { startedAt: 'desc' },
+  });
+  if (trialStint) {
+    await DatabaseClient.prisma.careerStint.update({
+      where: { id: trialStint.id },
+      data: { endedAt: profile.date },
+    });
+  } else {
+    await DatabaseClient.prisma.careerStint.create({
+      data: {
+        playerId: profile.playerId,
+        teamId,
+        tier: profile.trialTeam?.tier ?? null,
+        starter: true,
+        startedAt: profile.trialStartedAt ?? profile.date,
+        endedAt: profile.date,
+      },
+    });
+  }
+
   if (profile.trialReplacedPlayerId) {
     await DatabaseClient.prisma.player.update({
       where: { id: profile.trialReplacedPlayerId },
@@ -3311,6 +3418,18 @@ export async function acceptTransferOffer(transferId: number) {
         trialStartedAt: profile.date,
       },
     });
+    const existingTrialStint = await DatabaseClient.prisma.careerStint.findFirst({
+      where: { playerId: profile.playerId, teamId: fromTeamId, endedAt: null },
+    });
+    if (!existingTrialStint) {
+      await startCareerStint(DatabaseClient.prisma, {
+        playerId: profile.playerId,
+        teamId: fromTeamId,
+        tier: transfer.from.tier,
+        starter: true,
+        startedAt: profile.date,
+      });
+    }
 
     const futureMatches = await DatabaseClient.prisma.match.findMany({
       where: {
@@ -10786,6 +10905,8 @@ export async function onMatchdayNPC(
     deferPersistence?: boolean;
     match?: NpcMatchdayRecord;
     forcedSeriesScore?: { home: number; away: number };
+    simulateMatchStats?: boolean;
+    forcedPlayerStats?: { playerId: number; kills: number; deaths: number; assists: number };
   } = {},
 ) {
   const phase = phaseClock(report);
@@ -10822,8 +10943,9 @@ export async function onMatchdayNPC(
     include: { player: { include: { country: true, careerStints: true } } },
   });
   const simulateNpcMatchStats =
-    entry.type === Constants.CalendarEntry.MATCHDAY_NPC &&
-    Boolean(careerProfile?.simulateNpcMatchStats);
+    options.simulateMatchStats === true ||
+    (entry.type === Constants.CalendarEntry.MATCHDAY_NPC &&
+      Boolean(careerProfile?.simulateNpcMatchStats));
   let userMatchdayProfile: Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>;
 
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {
@@ -10831,11 +10953,11 @@ export async function onMatchdayNPC(
     const settings = Util.loadSettings(careerProfile.settings);
     simulator.mode = settings.general.simulationMode;
     simulator.userPlayerId = careerProfile.playerId;
-    simulator.userTeamId = careerProfile.teamId;
+    const trialCompetitor = careerProfile.trialTeamId
+      ? match.competitors.find((competitor) => competitor.teamId === careerProfile.trialTeamId)
+      : undefined;
+    simulator.userTeamId = trialCompetitor?.teamId ?? careerProfile.teamId;
     if (careerProfile.trialTeamId && careerProfile.player) {
-      const trialCompetitor = match.competitors.find(
-        (competitor) => competitor.teamId === careerProfile.trialTeamId,
-      );
       if (trialCompetitor) {
         trialCompetitor.team.players = [
           ...trialCompetitor.team.players.filter(
@@ -10920,6 +11042,15 @@ export async function onMatchdayNPC(
         maps: simulatedMaps,
         matchDate: match.date,
         matchId: match.id,
+        requiredPlayer:
+          entry.type === Constants.CalendarEntry.MATCHDAY_USER
+            ? careerProfile?.player
+            : undefined,
+        requiredTeamId:
+          entry.type === Constants.CalendarEntry.MATCHDAY_USER
+            ? simulator.userTeamId
+            : undefined,
+        forcedPlayerStats: options.forcedPlayerStats,
       })
     : { events: [], playerIds: [] };
 

@@ -62,6 +62,7 @@ interface ScoreboardProps {
   competitor: Matches<typeof Eagers.matchEvents>[number]['competitors'][number];
   match: Matches<typeof Eagers.matchEvents>[number];
   matchGame?: MatchGame;
+  additionalPlayerIds?: number[];
   vetoes: Array<MatchVetoEntry>;
 }
 
@@ -314,10 +315,16 @@ function isWithinStint(date: Date, startedAt: Date | string, endedAt: Date | str
   return start <= date && (!end || end >= date);
 }
 
-function getHistoricalCompetitorPlayers(match: PostgameMatch, competitor: PostgameCompetitor) {
+function getHistoricalCompetitorPlayers(
+  match: PostgameMatch,
+  competitor: PostgameCompetitor,
+  additionalPlayerIds: number[] = [],
+) {
   const matchDate = new Date(match.date);
+  const includedIds = new Set(additionalPlayerIds);
 
   return match.players.filter((player) =>
+    includedIds.has(player.id) ||
     player.careerStints?.some(
       (stint) =>
         stint.teamId === competitor.team.id &&
@@ -742,8 +749,12 @@ function VetoSummary(props: {
 function Scoreboard(props: ScoreboardProps) {
   const t = useTranslation('windows');
   const players = React.useMemo(() => {
-    return getHistoricalCompetitorPlayers(props.match, props.competitor);
-  }, [props.competitor, props.match]);
+    return getHistoricalCompetitorPlayers(
+      props.match,
+      props.competitor,
+      props.additionalPlayerIds,
+    );
+  }, [props.additionalPlayerIds, props.competitor, props.match]);
   const matchEvents = React.useMemo(
     () =>
       props.matchGame
@@ -1346,7 +1357,17 @@ export default function () {
         settings={settings}
         vetoes={vetoes}
       />
-      <Scoreboard competitor={home} match={match} matchGame={matchGame} vetoes={vetoes} />
+      <Scoreboard
+        competitor={home}
+        match={match}
+        matchGame={matchGame}
+        additionalPlayerIds={
+          home.teamId === (state.profile.trialTeamId ?? state.profile.teamId)
+            ? [state.profile.playerId]
+            : []
+        }
+        vetoes={vetoes}
+      />
       {(match.games.length === 1 || !!matchGame) && (
         <table className="table-xs table">
           <thead>
@@ -1392,7 +1413,17 @@ export default function () {
           </tbody>
         </table>
       )}
-      <Scoreboard competitor={away} match={match} matchGame={matchGame} vetoes={vetoes} />
+      <Scoreboard
+        competitor={away}
+        match={match}
+        matchGame={matchGame}
+        additionalPlayerIds={
+          away.teamId === (state.profile.trialTeamId ?? state.profile.teamId)
+            ? [state.profile.playerId]
+            : []
+        }
+        vetoes={vetoes}
+      />
       <section className="h-0 flex-grow" />
       {match.status !== Constants.MatchStatus.COMPLETED && (
         <button
