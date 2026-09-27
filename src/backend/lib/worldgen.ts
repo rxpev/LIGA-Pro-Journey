@@ -2877,21 +2877,29 @@ export async function progressActiveFaceitTrial(teamIds: number[]) {
     Array<{ kills: bigint; assists: bigint; deaths: bigint }>
   >`
     SELECT
-      COALESCE(SUM("MatchPlayerGameStat"."kills"), 0) AS "kills",
-      COALESCE(SUM("MatchPlayerGameStat"."assists"), 0) AS "assists",
-      COALESCE(SUM("MatchPlayerGameStat"."deaths"), 0) AS "deaths"
+      "MatchPlayerGameStat"."kills" AS "kills",
+      "MatchPlayerGameStat"."assists" AS "assists",
+      "MatchPlayerGameStat"."deaths" AS "deaths"
     FROM "MatchPlayerGameStat"
     INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
     WHERE "MatchPlayerGameStat"."playerId" = ${profile.playerId}
       AND "Match"."date" >= ${profile.trialStartedAt ?? profile.date}
+      AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+      AND "Match"."competitionId" IS NOT NULL
       AND "Match"."matchType" <> 'FACEIT_PUG'
+      AND EXISTS (
+        SELECT 1
+        FROM "MatchToTeam"
+        WHERE "MatchToTeam"."matchId" = "Match"."id"
+          AND "MatchToTeam"."teamId" = ${teamId}
+      )
   `;
-  const totals = rows[0];
-  const rating = Util.getPlayerRating(
-    Number(totals?.kills ?? 0),
-    Number(totals?.deaths ?? 0),
-    Number(totals?.assists ?? 0),
-  );
+  const ratings = rows
+    .map((row) => Util.getPlayerRating(Number(row.kills), Number(row.deaths), Number(row.assists)))
+    .filter(Number.isFinite);
+  const rating = ratings.length
+    ? ratings.reduce((sum, mapRating) => sum + mapRating, 0) / ratings.length
+    : 0;
   const wins = await DatabaseClient.prisma.matchToTeam.count({
     where: {
       teamId,
