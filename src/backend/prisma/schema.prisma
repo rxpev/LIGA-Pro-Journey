@@ -417,6 +417,7 @@ model Player {
   age                        Int?
   contractEnd                DateTime?
   postBenchTerminationClause Boolean   @default(false)
+  postBenchTerminationMonths Float?
   rosterStabilityClause      Boolean   @default(false)
   contractBenchStartedAt     DateTime?
   contractRosterBaseline     String?
@@ -596,6 +597,7 @@ model Offer {
   cost                       Int?      @default(0)
   wages                      Int?      @default(0)
   contractYears              Int?      @default(1)
+  contractMonths             Int?
   expiresAt                  DateTime?
   createdAt                  DateTime  @default(now())
   offerType                  String    @default("PERMANENT")
@@ -604,7 +606,9 @@ model Offer {
   trialGoalValue             Float?
   trialReplacedPlayerId      Int?
   trialBand                  String?
+  trialResponseTier          Int?
   postBenchTerminationClause Boolean   @default(false)
+  postBenchTerminationMonths Float?
   rosterStabilityClause      Boolean   @default(false)
 
   // belongs to

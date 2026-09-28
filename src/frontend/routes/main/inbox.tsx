@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import { format } from 'date-fns';
 import { Constants, Dedent } from '@liga/shared';
-import { cx } from '@liga/frontend/lib';
+import { cx, getTeamHue } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { emailsUpdate } from '@liga/frontend/redux/actions';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
@@ -31,6 +31,23 @@ function getSenderAvatar(name: string, role?: string | null, teamBlazon?: string
     return teamBlazon || 'resources://blazonry/noteam.svg';
   }
   return `resources://coaches/${name === 'T.c' ? 'tc' : name}.png`;
+}
+
+function getTeamLogoAvatarStyle(
+  role?: string | null,
+  teamName?: string | null,
+): React.CSSProperties | undefined {
+  if (role !== 'Management Board' || !teamName) return undefined;
+
+  const hue = getTeamHue(teamName);
+  const complementaryHue = (hue + 180) % 360;
+
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 55% 25%) 0%, hsl(${complementaryHue} 45% 12%) 100%)`,
+    boxShadow: `inset 0 0 0 1px hsl(${hue} 65% 58% / 0.35)`,
+    objectFit: 'contain',
+    padding: '0.35rem',
+  };
 }
 
 function getCoachTitle(role: string) {
@@ -77,6 +94,7 @@ export default function Inbox() {
   const [guideStorageKey, setGuideStorageKey] = React.useState<string | null>(null);
   const [guideDismissed, setGuideDismissed] = React.useState(false);
   const restoredRequestForEmail = React.useRef<number | null>(null);
+  const threadRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -208,6 +226,11 @@ export default function Inbox() {
       )
     : false;
   const playerAvatar = state.profile?.player?.avatar || emptyAvatar;
+
+  React.useLayoutEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [active?.fromId, dialogues.at(-1)?.id, trialReplyTyping, threadClosed]);
 
   const persistIncomingFaceitRequest = React.useCallback(async (recommendation: any | null) => {
     const saveId = await api.database.current();
@@ -383,6 +406,7 @@ export default function Inbox() {
                     src={getSenderAvatar(email.from.name, email.from.role, email.from.team?.blazon)}
                     alt=""
                     className="inbox-avatar"
+                    style={getTeamLogoAvatarStyle(email.from.role, email.from.team?.name)}
                     onError={useEmptyAvatar}
                   />
                   {!email.read && <span className="inbox-unread-dot" aria-label="Unread" />}
@@ -433,6 +457,7 @@ export default function Inbox() {
                       active.from.team?.blazon,
                     )}
                     alt=""
+                    style={getTeamLogoAvatarStyle(active.from.role, active.from.team?.name)}
                     onError={useEmptyAvatar}
                   />
                   <div>
@@ -449,7 +474,7 @@ export default function Inbox() {
                   </button>
                 </header>
 
-                <div className="inbox-thread">
+                <div ref={threadRef} className="inbox-thread">
                   {dialogues.map((dialogue, index) => {
                     const dialogueDate = new Date(dialogue.sentAt);
                     const previousDate = index > 0 ? new Date(dialogues[index - 1].sentAt) : null;
@@ -492,6 +517,10 @@ export default function Inbox() {
                               )}
                               alt=""
                               className="inbox-chat-avatar"
+                              style={getTeamLogoAvatarStyle(
+                                active.from.role,
+                                active.from.team?.name,
+                              )}
                               onError={useEmptyAvatar}
                             />
                           )}
@@ -578,14 +607,20 @@ export default function Inbox() {
                                                   coachSignatureFont: String(
                                                     node.properties.dataCoachSignatureFont,
                                                   ),
-                                                  contractYears: Number(
-                                                    node.properties.dataContractYears,
+                                                  contractMonths: Number(
+                                                    node.properties.dataContractMonths,
                                                   ),
                                                   playerRole: String(
                                                     node.properties.dataPlayerRole,
                                                   ),
+                                                  trialResponseTier: Number(
+                                                    node.properties.dataTrialResponseTier,
+                                                  ),
                                                   postBenchClause:
                                                     node.properties.dataPostBenchClause === 'true',
+                                                  postBenchMonths: Number(
+                                                    node.properties.dataPostBenchMonths,
+                                                  ),
                                                   rosterStabilityClause:
                                                     node.properties.dataRosterStabilityClause ===
                                                     'true',
@@ -658,6 +693,7 @@ export default function Inbox() {
                         }
                         alt=""
                         className="inbox-chat-avatar"
+                        style={getTeamLogoAvatarStyle(active?.from.role, active?.from.team?.name)}
                         onError={useEmptyAvatar}
                       />
                       <div className="inbox-chat-message-wrap">
@@ -767,6 +803,7 @@ export default function Inbox() {
                       )}
                       className="inbox-coach-portrait-person"
                       alt={active.from.name}
+                      style={getTeamLogoAvatarStyle(active.from.role, active.from.team?.name)}
                       onError={useEmptyAvatar}
                     />
                   </div>

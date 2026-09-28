@@ -155,16 +155,32 @@ export function getTrialSuccessResponse(
   completionPct: number,
   rating: number,
 ) {
+  const response = getTrialSuccessResponseTier(role, completionPct, rating);
   const normalizedRole = role?.toUpperCase();
   if (normalizedRole === 'IGL') {
-    if (rating < 1) return TRIAL_SUCCESS_RESPONSES.igl.lowRating;
-    if (rating <= 1.5) return TRIAL_SUCCESS_RESPONSES.igl.goodRating;
+    if (response === 1) return TRIAL_SUCCESS_RESPONSES.igl.lowRating;
+    if (response === 2) return TRIAL_SUCCESS_RESPONSES.igl.goodRating;
     return TRIAL_SUCCESS_RESPONSES.igl.highRating;
   }
 
   const responses =
     normalizedRole === 'AWPER' ? TRIAL_SUCCESS_RESPONSES.awper : TRIAL_SUCCESS_RESPONSES.rifler;
-  if (completionPct >= 150) return responses.excellent;
-  if (completionPct >= 125) return responses.strong;
+  if (response === 3) return responses.excellent;
+  if (response === 2) return responses.strong;
   return responses.met;
+}
+
+export function getTrialSuccessResponseTier(
+  role: string | null | undefined,
+  completionPct: number,
+  rating: number,
+): 1 | 2 | 3 {
+  if (role?.toUpperCase() === 'IGL') {
+    if (rating < 1) return 1;
+    if (rating <= 1.5) return 2;
+    return 3;
+  }
+  if (completionPct >= 150) return 3;
+  if (completionPct >= 125) return 2;
+  return 1;
 }

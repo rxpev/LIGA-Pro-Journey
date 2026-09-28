@@ -5,6 +5,8 @@ import { Constants } from '@liga/shared';
 import { Image } from '@liga/frontend/components';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useAudioControls } from '@liga/frontend/hooks';
+import { getTeamHueBackground } from '@liga/frontend/lib';
+import { getTrialContractOpening } from '@liga/backend/lib/trial-contract-offer';
 import type { Prisma } from '@prisma/client';
 
 type ContractOfferState = {
@@ -15,9 +17,11 @@ type ContractOfferState = {
   teamBlazon?: string | null;
   coachName: string;
   coachSignatureFont?: string | null;
-  contractYears: number;
+  contractMonths: number;
   playerRole: string;
+  trialResponseTier: 1 | 2 | 3;
   postBenchClause: boolean;
+  postBenchMonths: number;
   rosterStabilityClause: boolean;
   expiresAt: string;
 };
@@ -105,7 +109,10 @@ export default function ContractOffer() {
   return (
     <main className="bg-base-100 h-screen w-screen overflow-hidden">
       <article className="border-base-content/15 relative flex h-full w-full flex-col overflow-hidden border">
-        <header className="border-base-content/15 bg-base-200/35 flex min-h-24 shrink-0 items-center border-b px-9 py-4 pr-20 sm:px-10">
+        <header
+          className="border-base-content/15 bg-base-200/35 flex min-h-24 shrink-0 items-center border-b px-9 py-4 pr-20 sm:px-10"
+          style={{ backgroundImage: getTeamHueBackground(state.teamName) }}
+        >
           <div className="flex min-w-0 items-center gap-5">
             <Image
               src={state.teamBlazon || 'resources://blazonry/noteam.svg'}
@@ -130,22 +137,17 @@ export default function ContractOffer() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 py-6 sm:px-12 sm:py-7">
           <p className="text-base-content/65 max-w-4xl text-base leading-relaxed sm:text-lg">
-            The management board of{' '}
-            <span className="tooltip tooltip-bottom" data-tip="View Team">
-              <button
-                type="button"
-                className="text-base-content hover:text-primary font-bold underline decoration-transparent underline-offset-4 transition-colors hover:decoration-current"
-                onClick={openTeam}
-              >
-                {state.teamName}
-              </button>
-            </span>{' '}
-            is pleased to offer you a place on the team under the following terms.
+            {getTrialContractOpening(
+              state.trialResponseTier,
+              state.playerRole,
+              coach?.name ?? state.coachName,
+              state.teamName,
+            )}
           </p>
 
           <dl className="mt-5 flex w-full max-w-2xl flex-col">
             <ContractTerm icon={<FaCalendarAlt />} label="Contract length">
-              {state.contractYears} {state.contractYears === 1 ? 'year' : 'years'}
+              {state.contractMonths} {state.contractMonths === 1 ? 'month' : 'months'}
             </ContractTerm>
             <ContractTerm icon={<FaUserTag />} label="Role" last>
               {role}
@@ -160,8 +162,11 @@ export default function ContractOffer() {
               <ul className="text-base-content/70 mt-3 list-disc space-y-2 pl-6 text-sm leading-snug sm:text-base">
                 {state.postBenchClause && (
                   <li>
-                    Post-benching termination: If you remain benched for two consecutive months, you
-                    may terminate your contract.
+                    Post-benching termination: If you remain benched for{' '}
+                    {state.postBenchMonths === 0.5
+                      ? 'two consecutive weeks'
+                      : `${state.postBenchMonths} consecutive ${state.postBenchMonths === 1 ? 'month' : 'months'}`}
+                    , you may terminate your contract.
                   </li>
                 )}
                 {state.rosterStabilityClause && (

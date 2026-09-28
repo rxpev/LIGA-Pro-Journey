@@ -3,6 +3,7 @@ import { FaBullseye, FaCalendarAlt, FaCheck, FaUsers } from 'react-icons/fa';
 import { useLocation } from 'react-router-dom';
 import { Constants } from '@liga/shared';
 import { Image } from '@liga/frontend/components';
+import { getTeamHueBackground } from '@liga/frontend/lib';
 
 export type TrialContractState = {
   emailId: number;
@@ -47,7 +48,10 @@ export default function TrialContract() {
   return (
     <main className="bg-base-100 h-screen w-screen overflow-hidden">
       <article className="border-base-content/15 relative flex h-full w-full flex-col overflow-hidden border">
-        <header className="border-base-content/15 bg-base-200/35 flex min-h-26 shrink-0 items-center border-b px-9 py-6 pr-20 sm:min-h-32 sm:px-10">
+        <header
+          className="border-base-content/15 bg-base-200/35 flex min-h-26 shrink-0 items-center border-b px-9 py-6 pr-20 sm:min-h-32 sm:px-10"
+          style={{ backgroundImage: getTeamHueBackground(state.teamName) }}
+        >
           <div className="flex min-w-0 items-center gap-5">
             <Image
               src={state.teamBlazon || 'resources://blazonry/noteam.svg'}

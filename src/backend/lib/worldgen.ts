@@ -24,6 +24,7 @@ import {
 import getLocale from './locale';
 import {
   addDays,
+  addMonths,
   addWeeks,
   addYears,
   differenceInDays,
@@ -76,7 +77,14 @@ import {
   getTrialIncomingContent,
   getTrialReminderResponse,
   getTrialSuccessResponse,
+  getTrialSuccessResponseTier,
 } from '@liga/locale/en/trial';
+import {
+  getTrialContractChatMessage,
+  getTrialContractDecisionMessage,
+  rollTrialContractTerms,
+  TrialSuccessResponse,
+} from './trial-contract-offer';
 import { upsertCompetitionMvp } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 import {
@@ -2992,7 +3000,11 @@ export async function progressActiveFaceitTrial(teamIds: number[]) {
         data: {
           type: Constants.CalendarEntry.TRIAL_CONTRACT_OFFER,
           date: addDays(profile.date, 1).toISOString(),
-          payload: JSON.stringify({ teamId, playerId: profile.playerId }),
+          payload: JSON.stringify({
+            teamId,
+            playerId: profile.playerId,
+            response: getTrialSuccessResponseTier(profile.player?.role, goalCompletionPct, rating),
+          }),
         },
       });
     }
@@ -3027,11 +3039,17 @@ export async function progressActiveFaceitTrial(teamIds: number[]) {
 }
 
 export async function onTrialContractOffer(entry: Calendar) {
-  const { teamId, playerId } = JSON.parse(entry.payload ?? '{}') as {
+  const {
+    teamId,
+    playerId,
+    response: payloadResponse = 1,
+  } = JSON.parse(entry.payload ?? '{}') as {
     teamId?: number;
     playerId?: number;
+    response?: TrialSuccessResponse;
   };
   if (!teamId || !playerId) return;
+  const response: TrialSuccessResponse = [1, 2, 3].includes(payloadResponse) ? payloadResponse : 1;
 
   const [profile, team, player] = await Promise.all([
     DatabaseClient.prisma.profile.findFirst(),
@@ -3044,6 +3062,7 @@ export async function onTrialContractOffer(entry: Calendar) {
   if (!profile || !team || !player || profile.playerId !== playerId) return;
 
   const expiresAt = addDays(profile.date, 7);
+  const terms = rollTrialContractTerms(getTeamTierSlug(team.tier), response, player.role);
   const transfer = await DatabaseClient.prisma.transfer.create({
     data: {
       status: Constants.TransferStatus.PLAYER_PENDING,
@@ -3055,11 +3074,14 @@ export async function onTrialContractOffer(entry: Calendar) {
             status: Constants.TransferStatus.PLAYER_PENDING,
             wages: player.wages ?? 0,
             cost: player.cost ?? 0,
-            contractYears: getTierContractYears(team.tier),
+            contractYears: null,
+            contractMonths: terms.contractMonths,
             expiresAt,
             offerType: 'TRIAL_CONTRACT',
-            postBenchTerminationClause: true,
-            rosterStabilityClause: true,
+            trialResponseTier: response,
+            postBenchTerminationClause: terms.postBenchTerminationClause,
+            postBenchTerminationMonths: terms.postBenchTerminationMonths,
+            rosterStabilityClause: terms.rosterStabilityClause,
           },
         ],
       },
@@ -3081,7 +3103,7 @@ export async function onTrialContractOffer(entry: Calendar) {
     team.personas[0];
   await sendEmail(
     `Permanent contract offer from ${team.name}`,
-    `We’re pleased to formally offer you a permanent contract with **${team.name}**.\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-years="${getTierContractYears(team.tier)}" data-player-role="${player.role ?? 'RIFLER'}" data-post-bench-clause="true" data-roster-stability-clause="true" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
+    `${getTrialContractChatMessage(response, player.name, coach?.name ?? 'Head Coach', team.name)}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${terms.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${response}" data-post-bench-clause="${terms.postBenchTerminationClause}" data-post-bench-months="${terms.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${terms.rosterStabilityClause}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
     managementBoard,
     profile.date,
     true,
@@ -3551,6 +3573,8 @@ export async function acceptTransferOffer(transferId: number) {
   // NOTE: For extensions we extend from max(now, current contract end).
   // For new signings we use "now".
   const years = offer.contractYears ?? 1;
+  const contractEndFrom = (base: Date) =>
+    offer.contractMonths != null ? addMonths(base, offer.contractMonths) : addYears(base, years);
 
   if (isExtension) {
     // Extension path: do NOT bench anyone, do NOT move teams, do NOT write a new stint.
@@ -3584,13 +3608,14 @@ export async function acceptTransferOffer(transferId: number) {
         ? currentPlayer.contractEnd
         : profile.date;
 
-    const contractEnd = addYears(baseDate, years);
+    const contractEnd = contractEndFrom(baseDate);
 
     await DatabaseClient.prisma.player.update({
       where: { id: transfer.playerId },
       data: {
         contractEnd,
         postBenchTerminationClause: offer.postBenchTerminationClause,
+        postBenchTerminationMonths: offer.postBenchTerminationMonths,
         rosterStabilityClause: offer.rosterStabilityClause,
         // keep current starter/transferListed/teamId as-is for an extension
       },
@@ -3738,7 +3763,7 @@ export async function acceptTransferOffer(transferId: number) {
   }
 
   // Normal signing path
-  const contractEnd = addYears(profile.date, years);
+  const contractEnd = contractEndFrom(profile.date);
 
   await benchVictim({
     prisma: DatabaseClient.prisma,
@@ -3774,6 +3799,7 @@ export async function acceptTransferOffer(transferId: number) {
       team: { connect: { id: fromTeamId } },
       contractEnd,
       postBenchTerminationClause: offer.postBenchTerminationClause,
+      postBenchTerminationMonths: offer.postBenchTerminationMonths,
       rosterStabilityClause: offer.rosterStabilityClause,
       contractBenchStartedAt: null,
     },
@@ -3785,7 +3811,11 @@ export async function acceptTransferOffer(transferId: number) {
   });
   await DatabaseClient.prisma.player.update({
     where: { id: transfer.playerId },
-    data: { contractRosterBaseline: JSON.stringify(contractRoster.map((item) => item.id)) },
+    data: {
+      contractRosterBaseline: offer.rosterStabilityClause
+        ? JSON.stringify(contractRoster.map((item) => item.id))
+        : null,
+    },
   });
 
   // Update profile.teamId so the game knows you're now on a team.
@@ -3984,6 +4014,18 @@ export async function acceptTransferOffer(transferId: number) {
       profile.date,
       true,
     );
+  } else {
+    await sendEmail(
+      `Welcome to ${transfer.from.name}`,
+      getTrialContractDecisionMessage(
+        (offer.trialResponseTier as TrialSuccessResponse) ?? 1,
+        profile.player?.role,
+        true,
+      ),
+      persona,
+      profile.date,
+      true,
+    );
   }
 
   Engine.Runtime.Instance.log.info(
@@ -4089,6 +4131,20 @@ export async function rejectTransferOffer(transferId: number) {
     return Promise.resolve();
   }
   if (offer.offerType === 'TRIAL') {
+    return Promise.resolve();
+  }
+  if (offer.offerType === 'TRIAL_CONTRACT') {
+    await sendEmail(
+      `Contract offer decision from ${transfer.from.name}`,
+      getTrialContractDecisionMessage(
+        (offer.trialResponseTier as TrialSuccessResponse) ?? 1,
+        profile.player?.role,
+        false,
+      ),
+      persona,
+      profile.date,
+      true,
+    );
     return Promise.resolve();
   }
   await sendEmail(
@@ -10875,9 +10931,7 @@ export async function onCompetitionStart(entry: Calendar) {
             groupSize: Math.min(competition.tier.groupSize, tournamentSize),
             meetTwice: false,
             // ESEA teams level on points are separated by round difference.
-            scoresBreak: ESEA_REGULAR_SEASON_TIERS.has(
-              competition.tier.slug as Constants.TierSlug,
-            ),
+            scoresBreak: ESEA_REGULAR_SEASON_TIERS.has(competition.tier.slug as Constants.TierSlug),
           }
         : IEM_GROUP_TIERS.has(competition.tier.slug as Constants.TierSlug)
           ? {
@@ -11161,13 +11215,9 @@ export async function onMatchdayNPC(
         matchDate: match.date,
         matchId: match.id,
         requiredPlayer:
-          entry.type === Constants.CalendarEntry.MATCHDAY_USER
-            ? careerProfile?.player
-            : undefined,
+          entry.type === Constants.CalendarEntry.MATCHDAY_USER ? careerProfile?.player : undefined,
         requiredTeamId:
-          entry.type === Constants.CalendarEntry.MATCHDAY_USER
-            ? simulator.userTeamId
-            : undefined,
+          entry.type === Constants.CalendarEntry.MATCHDAY_USER ? simulator.userTeamId : undefined,
         forcedPlayerStats: options.forcedPlayerStats,
       })
     : { events: [], playerIds: [] };
