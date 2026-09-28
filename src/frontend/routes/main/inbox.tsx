@@ -26,7 +26,10 @@ import {
 
 const emptyAvatar = 'resources://avatars/empty.png';
 
-function getSenderAvatar(name: string) {
+function getSenderAvatar(name: string, role?: string | null, teamBlazon?: string | null) {
+  if (role === 'Management Board') {
+    return teamBlazon || 'resources://blazonry/noteam.svg';
+  }
   return `resources://coaches/${name === 'T.c' ? 'tc' : name}.png`;
 }
 
@@ -164,6 +167,11 @@ export default function Inbox() {
     const email = state.emails.find((item) => item.id === Number(read.emailId));
     if (email) setSelected(email.fromId);
   }, [location.state, state.emails]);
+
+  React.useEffect(() => {
+    if (!(location.state as any)?.refreshEmails) return;
+    api.emails.all().then((emails) => dispatch(emailsUpdate(emails)));
+  }, [location.state, dispatch]);
 
   React.useEffect(() => {
     if (!active || active.read) return;
@@ -372,7 +380,7 @@ export default function Inbox() {
               >
                 <span className="inbox-avatar-wrap">
                   <img
-                    src={getSenderAvatar(email.from.name)}
+                    src={getSenderAvatar(email.from.name, email.from.role, email.from.team?.blazon)}
                     alt=""
                     className="inbox-avatar"
                     onError={useEmptyAvatar}
@@ -418,7 +426,15 @@ export default function Inbox() {
             <div className="inbox-detail-layout">
               <div className="inbox-chat">
                 <header className="inbox-chat-header">
-                  <img src={getSenderAvatar(active.from.name)} alt="" onError={useEmptyAvatar} />
+                  <img
+                    src={getSenderAvatar(
+                      active.from.name,
+                      active.from.role,
+                      active.from.team?.blazon,
+                    )}
+                    alt=""
+                    onError={useEmptyAvatar}
+                  />
                   <div>
                     <h2>{active.from.name}</h2>
                   </div>
@@ -469,7 +485,11 @@ export default function Inbox() {
                         <div className={cx('inbox-chat-row', fromPlayer && 'is-player')}>
                           {!fromPlayer && (
                             <img
-                              src={getSenderAvatar(active.from.name)}
+                              src={getSenderAvatar(
+                                active.from.name,
+                                active.from.role,
+                                active.from.team?.blazon,
+                              )}
                               alt=""
                               className="inbox-chat-avatar"
                               onError={useEmptyAvatar}
@@ -491,6 +511,8 @@ export default function Inbox() {
                                     const { node, children, ...rest } = props;
                                     const isTrialInformation =
                                       node.properties.dataTrialInformation === 'true';
+                                    const isContractInformation =
+                                      node.properties.dataContractInformation === 'true';
                                     return (
                                       <button
                                         {...rest}
@@ -531,6 +553,49 @@ export default function Inbox() {
                                             );
                                             return;
                                           }
+                                          if (isContractInformation) {
+                                            const rawBlazon = node.properties.dataTeamBlazon;
+                                            api.window.send<ModalRequest>(
+                                              Constants.WindowIdentifier.Modal,
+                                              {
+                                                target: '/contract-offer',
+                                                payload: {
+                                                  transferId: Number(
+                                                    node.properties.dataTransferId,
+                                                  ),
+                                                  dialogueId: dialogue.id,
+                                                  teamId: Number(node.properties.dataTeamId),
+                                                  teamName: String(node.properties.dataTeamName),
+                                                  teamBlazon:
+                                                    rawBlazon && rawBlazon !== 'null'
+                                                      ? String(rawBlazon)
+                                                      : null,
+                                                  coachName:
+                                                    node.properties.dataCoachName &&
+                                                    node.properties.dataCoachName !== 'undefined'
+                                                      ? String(node.properties.dataCoachName)
+                                                      : 'Head Coach',
+                                                  coachSignatureFont: String(
+                                                    node.properties.dataCoachSignatureFont,
+                                                  ),
+                                                  contractYears: Number(
+                                                    node.properties.dataContractYears,
+                                                  ),
+                                                  playerRole: String(
+                                                    node.properties.dataPlayerRole,
+                                                  ),
+                                                  postBenchClause:
+                                                    node.properties.dataPostBenchClause === 'true',
+                                                  rosterStabilityClause:
+                                                    node.properties.dataRosterStabilityClause ===
+                                                    'true',
+                                                  expiresAt: String(node.properties.dataExpiresAt),
+                                                },
+                                              },
+                                              0,
+                                            );
+                                            return;
+                                          }
                                           setWorking(true);
                                           api.ipc
                                             .invoke(
@@ -547,7 +612,7 @@ export default function Inbox() {
                                             .finally(() => setWorking(false));
                                         }}
                                       >
-                                        {isTrialInformation && (
+                                        {(isTrialInformation || isContractInformation) && (
                                           <span
                                             className="trial-attachment-symbol"
                                             aria-hidden="true"
@@ -582,7 +647,15 @@ export default function Inbox() {
                   {trialReplyTyping && (
                     <div className="inbox-chat-row">
                       <img
-                        src={active?.from ? getSenderAvatar(active.from.name) : emptyAvatar}
+                        src={
+                          active?.from
+                            ? getSenderAvatar(
+                                active.from.name,
+                                active.from.role,
+                                active.from.team?.blazon,
+                              )
+                            : emptyAvatar
+                        }
                         alt=""
                         className="inbox-chat-avatar"
                         onError={useEmptyAvatar}
@@ -687,7 +760,11 @@ export default function Inbox() {
                       aria-hidden="true"
                     />
                     <img
-                      src={getSenderAvatar(active.from.name)}
+                      src={getSenderAvatar(
+                        active.from.name,
+                        active.from.role,
+                        active.from.team?.blazon,
+                      )}
                       className="inbox-coach-portrait-person"
                       alt={active.from.name}
                       onError={useEmptyAvatar}

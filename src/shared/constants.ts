@@ -162,6 +162,7 @@ export enum CalendarEntry {
   NPC_RETIREMENT_CHECK = '/npc/retirement-check',
   NPC_REGEN_INTAKE = '/npc/regen-intake',
   TRANSFER_OFFER_EXPIRY_CHECK = '/transfer/offer-expiry-check',
+  TRIAL_CONTRACT_OFFER = '/trial/contract-offer',
 }
 
 /**

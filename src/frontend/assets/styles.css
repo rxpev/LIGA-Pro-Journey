@@ -1168,7 +1168,8 @@ meter::-webkit-meter-bar {
 .inbox-message button:disabled {
   @apply cursor-not-allowed opacity-40;
 }
-.inbox-message .trial-information-button {
+.inbox-message .trial-information-button,
+.inbox-message .contract-information-button {
   @apply border-base-content/20 bg-base-200 text-base-content/75 hover:bg-base-300 mt-2 inline-flex items-center gap-2 rounded-lg;
 }
 .trial-attachment-symbol {
@@ -1183,7 +1184,8 @@ meter::-webkit-meter-bar {
 .trial-attachment-symbol svg:last-child {
   @apply bg-base-200 absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full p-px;
 }
-.trial-information-button:hover .trial-attachment-symbol svg:last-child {
+.trial-information-button:hover .trial-attachment-symbol svg:last-child,
+.contract-information-button:hover .trial-attachment-symbol svg:last-child {
   @apply bg-base-300;
 }
 .inbox-thread-status,

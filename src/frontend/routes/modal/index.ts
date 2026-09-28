@@ -5,6 +5,7 @@
  * @module
  */
 import Brackets from './brackets';
+import ContractOffer from './contract-offer';
 import Issues from './issues';
 import MapPool from './map-pool';
 import Markdown from './markdown';
@@ -26,6 +27,7 @@ import User from './user';
 export default {
   // standalone routes
   Brackets,
+  ContractOffer,
   MapPool,
   Mods,
   Play,

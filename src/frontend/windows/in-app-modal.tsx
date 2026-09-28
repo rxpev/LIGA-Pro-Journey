@@ -230,6 +230,7 @@ function ModalContent(props: {
           <MemoryRouter initialEntries={[{ pathname: props.request.target, state: routeState }]}>
             <RouterRoutes>
               <Route path="/brackets" element={<Routes.Modal.Brackets />} />
+              <Route path="/contract-offer" element={<Routes.Modal.ContractOffer />} />
               <Route path="/map-pool" element={<Routes.Modal.MapPool />} />
               <Route path="/mods" element={<Routes.Modal.Mods />} />
               <Route path="/play" element={<Routes.Modal.Play />} />

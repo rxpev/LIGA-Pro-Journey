@@ -144,6 +144,50 @@ export function useAudio(src: string | null) {
   return play;
 }
 
+export function useAudioControls(src: string | null) {
+  const audioRef = React.useRef<HTMLAudioElement>();
+  const { state } = React.useContext(AppStateContext);
+  const settings = React.useMemo(
+    () => (state.profile ? Util.loadSettings(state.profile.settings) : Constants.Settings),
+    [state.profile],
+  );
+
+  React.useEffect(() => {
+    if (!src) {
+      audioRef.current = undefined;
+      return;
+    }
+    const audio = new Audio('resources://audio/' + src);
+    audio.loop = false;
+    audio.volume = settings.general.volume;
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [src]);
+
+  React.useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = settings.general.volume;
+  }, [settings.general.volume]);
+
+  const play = React.useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    void audio.play().catch((): void => {});
+  }, []);
+
+  const stop = React.useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+  }, []);
+
+  return React.useMemo(() => ({ play, stop }), [play, stop]);
+}
+
 /**
  * Looping audio hook for longer music beds.
  *

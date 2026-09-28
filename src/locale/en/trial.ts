@@ -100,3 +100,71 @@ export function getTrialReminderResponse(band: string | null | undefined) {
 export function getTrialExpiredResponse(band: string | null | undefined) {
   return TRIAL_EXPIRED_RESPONSES[band ?? ''] ?? TRIAL_EXPIRED_RESPONSES.poor;
 }
+
+const TRIAL_FAILURE_RESPONSES = {
+  player: {
+    near: `You came very close to reaching the performance goal, and overall I was happy with a lot of what you showed during the trial. In the end, though, I don’t think the role and the way I want the team structured are quite the right fit. Since you also fell just short of the goal, I’ve decided not to move forward with a contract. Thanks for the effort, and best of luck going forward.`,
+    good: `There were some good moments during the trial, but I don’t think the fit was quite right overall. Your performance was a little below the level I was looking for, and there were also some issues with how your role fit into the way I want the team to play. Because of that, I won’t be moving forward with a contract. Thanks for the effort and best of luck going forward.`,
+    partial: `Thanks for the effort you put into the trial. Unfortunately, the performance level was below what I needed to see, and I also didn’t feel the role fit worked well enough within the team. There were a few things structurally that would have been difficult to make work long term, so I won’t be moving forward with a contract. Best of luck going forward.`,
+    low: `Thanks for taking part in the trial. Unfortunately, the performance was too far below the level I was looking for, and I didn’t feel the role or overall fit with the team was strong enough either. With both of those things in mind, I’ve decided not to move forward with a contract. I appreciate you giving it a try, and I wish you the best going forward.`,
+  },
+  igl: {
+    none: `Thanks for taking on the trial. Unfortunately, the way you wanted to lead and structure the team never really clicked with the lineup, and I also felt that our views on how the game should be played were too far apart. On top of that, I didn’t feel every player fully bought into your in-game leadership. Because of that, I won’t be moving forward with a contract. I appreciate the effort and wish you the best going forward.`,
+    low: `Thanks for the effort you put into the trial. There were some ideas I liked, but overall the style of CS you wanted to implement didn’t mesh well enough with the team, and I felt our vision of how the game should be played was still too different. Because of that, I don’t think the fit is right and I won’t be moving forward with a contract. Best of luck going forward.`,
+    half: `There were definitely parts of your in-game leading that worked, and I could see what you were trying to build. In the end, though, I felt the team was only partially comfortable with the style you wanted to play, and there were still some important differences between your vision of the game and mine. I don’t think the overall fit is strong enough to move forward with a contract. Thanks for the trial, and best of luck going forward.`,
+    close: `I was happy with a lot of what you showed during the trial, and your approach to leading the team worked well in several areas. Ultimately, though, I still felt there were some differences in how you wanted the team to play compared to the direction I want to take it. The fit was close, but not quite right enough for me to move forward with a contract. Thanks for the effort, and best of luck going forward.`,
+  },
+} as const;
+
+export function getTrialFailureResponse(role: string | null | undefined, completionPct: number) {
+  const completion = Number.isFinite(completionPct) ? completionPct : 0;
+
+  if (role?.toUpperCase() === 'IGL') {
+    if (completion <= 0) return TRIAL_FAILURE_RESPONSES.igl.none;
+    if (completion < 50) return TRIAL_FAILURE_RESPONSES.igl.low;
+    if (completion === 50) return TRIAL_FAILURE_RESPONSES.igl.half;
+    return TRIAL_FAILURE_RESPONSES.igl.close;
+  }
+
+  if (completion >= 90) return TRIAL_FAILURE_RESPONSES.player.near;
+  if (completion >= 75) return TRIAL_FAILURE_RESPONSES.player.good;
+  if (completion >= 50) return TRIAL_FAILURE_RESPONSES.player.partial;
+  return TRIAL_FAILURE_RESPONSES.player.low;
+}
+
+const TRIAL_SUCCESS_RESPONSES = {
+  igl: {
+    lowRating: `You met the goals I set for the trial, and I’m happy with the way you led and structured the team. Your individual performance wasn’t quite where I’d like it to be, but your impact as an IGL was enough to convince me that this can work. I want to bring you into the team, and I’m now in active talks with the management board to get a contract prepared for you. Expect a message from the team’s management tomorrow with the next steps.`,
+    goodRating: `You met the goals I set for the trial, and I liked what I saw from both your leadership and your individual game. The team responded well to the way you wanted to play, and I think we can build on that. I want you in the team, and I’m now in active talks with the management board to get your contract put together. Expect to hear from the team’s management tomorrow regarding the contract and next steps.`,
+    highRating: `You delivered everything I was looking for during the trial. The team responded well to your leadership, the style you implemented worked, and you backed it up with a very strong individual performance as well. I definitely want to move forward with you. I’m already in active talks with the management board to get a contract prepared and sent over to you. Expect a message from the team’s management tomorrow so we can get everything moving.`,
+  },
+  rifler: {
+    met: `You reached the performance goal I set for the trial, and you showed enough overall for me to feel comfortable moving forward. There are still a few areas I’d like to see improve, but I think you can fit into the team and develop further with us. I want to bring you in, and I’m now in active talks with the management board to get a contract prepared for you. Expect a message from the team’s management tomorrow with the next steps.`,
+    strong: `You had a strong trial and comfortably exceeded the performance goal I set for you. I liked what you brought individually, and I think your role fits well with what I want from the team. I’m happy to move forward with you, and I’m now in active talks with the management board to get your contract put together. Expect to hear from the team’s management tomorrow regarding the contract and next steps.`,
+    excellent: `You had an excellent trial and performed well above the level I was looking for. You made a very strong case for yourself individually, and I’m confident you can be an important part of this lineup. I definitely want to move forward with you. I’m already in active talks with the management board to get a contract prepared and sent over. Expect a message from the team’s management tomorrow so we can get everything moving.`,
+  },
+  awper: {
+    met: `You reached the performance goal I set for the trial, and you showed enough for me to feel comfortable moving forward. I think the team can benefit from having an AWPer with your profile, and there’s room to build on what you showed during the trial. I want to bring you in, and I’m now in active talks with the management board to get a contract prepared for you. Expect a message from the team’s management tomorrow with the next steps.`,
+    strong: `You had a strong trial and comfortably exceeded the performance goal I set for you. Your AWPing gives the team another level of threat and improves what we can do around the role. I think you fit what we need, and I’m happy to move forward with you. I’m now in active talks with the management board to get your contract put together. Expect to hear from the team’s management tomorrow regarding the contract and next steps.`,
+    excellent: `You had an excellent trial and performed well above the level I was looking for. You showed that you can give the team a real difference-maker on the AWP, and I think your presence significantly raises our ceiling in that role. I definitely want to move forward with you. I’m already in active talks with the management board to get a contract prepared and sent over. Expect a message from the team’s management tomorrow so we can get everything moving.`,
+  },
+} as const;
+
+export function getTrialSuccessResponse(
+  role: string | null | undefined,
+  completionPct: number,
+  rating: number,
+) {
+  const normalizedRole = role?.toUpperCase();
+  if (normalizedRole === 'IGL') {
+    if (rating < 1) return TRIAL_SUCCESS_RESPONSES.igl.lowRating;
+    if (rating <= 1.5) return TRIAL_SUCCESS_RESPONSES.igl.goodRating;
+    return TRIAL_SUCCESS_RESPONSES.igl.highRating;
+  }
+
+  const responses =
+    normalizedRole === 'AWPER' ? TRIAL_SUCCESS_RESPONSES.awper : TRIAL_SUCCESS_RESPONSES.rifler;
+  if (completionPct >= 150) return responses.excellent;
+  if (completionPct >= 125) return responses.strong;
+  return responses.met;
+}

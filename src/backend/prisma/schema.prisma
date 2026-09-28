@@ -401,25 +401,29 @@ model Persona {
 }
 
 model Player {
-  id             Int       @id @default(autoincrement())
-  name           String
-  personality    String?
-  role           String?
-  xp             Int       @default(0)
-  elo            Int       @default(0)
-  cost           Int?      @default(0)
-  wages          Int?      @default(0)
-  starter        Boolean   @default(false)
-  transferListed Boolean   @default(false)
-  avatar         String?
-  prestige       Int?
-  userControlled Boolean   @default(false)
-  age            Int?
-  contractEnd    DateTime?
-  lastOfferAt    DateTime?
-  retiredAt      DateTime?
-  isRegen        Boolean   @default(false)
-  generatedAt    DateTime?
+  id                         Int       @id @default(autoincrement())
+  name                       String
+  personality                String?
+  role                       String?
+  xp                         Int       @default(0)
+  elo                        Int       @default(0)
+  cost                       Int?      @default(0)
+  wages                      Int?      @default(0)
+  starter                    Boolean   @default(false)
+  transferListed             Boolean   @default(false)
+  avatar                     String?
+  prestige                   Int?
+  userControlled             Boolean   @default(false)
+  age                        Int?
+  contractEnd                DateTime?
+  postBenchTerminationClause Boolean   @default(false)
+  rosterStabilityClause      Boolean   @default(false)
+  contractBenchStartedAt     DateTime?
+  contractRosterBaseline     String?
+  lastOfferAt                DateTime?
+  retiredAt                  DateTime?
+  isRegen                    Boolean   @default(false)
+  generatedAt                DateTime?
 
   // has many
   matches         Match[]
@@ -477,11 +481,11 @@ model Profile {
   matches Match[]
 
   // belongs to
-  team     Team?   @relation("ProfileTeam", fields: [teamId], references: [id])
-  teamId   Int?    @unique
-  trialTeam Team?  @relation("ProfileTrialTeam", fields: [trialTeamId], references: [id])
-  player   Player? @relation(fields: [playerId], references: [id])
-  playerId Int?    @unique
+  team      Team?   @relation("ProfileTeam", fields: [teamId], references: [id])
+  teamId    Int?    @unique
+  trialTeam Team?   @relation("ProfileTrialTeam", fields: [trialTeamId], references: [id])
+  player    Player? @relation(fields: [playerId], references: [id])
+  playerId  Int?    @unique
 }
 
 model UserTeammateSeasonXp {
@@ -587,19 +591,21 @@ model Transfer {
 }
 
 model Offer {
-  id            Int       @id @default(autoincrement())
-  status        Int
-  cost          Int?      @default(0)
-  wages         Int?      @default(0)
-  contractYears Int?      @default(1)
-  expiresAt     DateTime?
-  createdAt     DateTime  @default(now())
-  offerType     String    @default("PERMANENT")
-  trialSeries   Int?
-  trialGoalType String?
-  trialGoalValue Float?
-  trialReplacedPlayerId Int?
-  trialBand     String?
+  id                         Int       @id @default(autoincrement())
+  status                     Int
+  cost                       Int?      @default(0)
+  wages                      Int?      @default(0)
+  contractYears              Int?      @default(1)
+  expiresAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  offerType                  String    @default("PERMANENT")
+  trialSeries                Int?
+  trialGoalType              String?
+  trialGoalValue             Float?
+  trialReplacedPlayerId      Int?
+  trialBand                  String?
+  postBenchTerminationClause Boolean   @default(false)
+  rosterStabilityClause      Boolean   @default(false)
 
   // belongs to
   transfer   Transfer @relation(fields: [transferId], references: [id])

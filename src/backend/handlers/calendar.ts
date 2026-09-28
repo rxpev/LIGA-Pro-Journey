@@ -614,6 +614,7 @@ export default function () {
     Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
     Worldgen.onTransferOfferExpiryCheck,
   );
+  registerEvent(Constants.CalendarEntry.TRIAL_CONTRACT_OFFER, Worldgen.onTrialContractOffer);
   registerEvent(
     Constants.CalendarEntry.TRANSFER_PARSE,
     Worldgen.onTransferParse,
