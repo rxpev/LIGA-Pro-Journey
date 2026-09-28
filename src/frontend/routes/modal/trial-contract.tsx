@@ -16,6 +16,7 @@ export type TrialContractState = {
   replacedPlayer: string;
   coachName?: string;
   coachSignatureFont?: string | null;
+  readOnly?: boolean;
 };
 
 const signatureFonts: Record<string, string> = {
@@ -133,15 +134,17 @@ export default function TrialContract() {
           </div>
         </div>
 
-        <footer className="border-base-content/10 bg-base-200/20 flex shrink-0 justify-end border-t px-8 py-6 sm:px-12 sm:py-8">
-          <button
-            type="button"
-            className="btn btn-primary h-10 min-h-10 gap-2 px-5 text-sm font-black shadow-md"
-            onClick={confirmRead}
-          >
-            <FaCheck className="size-4" aria-hidden="true" /> I have read the trial information
-          </button>
-        </footer>
+        {!state.readOnly && (
+          <footer className="border-base-content/10 bg-base-200/20 flex shrink-0 justify-end border-t px-8 py-6 sm:px-12 sm:py-8">
+            <button
+              type="button"
+              className="btn btn-primary h-10 min-h-10 gap-2 px-5 text-sm font-black shadow-md"
+              onClick={confirmRead}
+            >
+              <FaCheck className="size-4" aria-hidden="true" /> I have read the trial information
+            </button>
+          </footer>
+        )}
       </article>
     </main>
   );

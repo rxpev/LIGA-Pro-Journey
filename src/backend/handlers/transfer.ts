@@ -139,20 +139,22 @@ export default function () {
   ipcMain.handle(Constants.IPCRoute.TRANSFER_ACCEPT, async (_, id: string) => {
     // All safety checks (profile, transfer.target == user player, etc.)
     // are handled inside acceptUserPlayerTransfer.
-    await Worldgen.acceptTransferOffer(Number(id));
+    // The contract reveal owns the hand-off to the inbox. Store acceptance
+    // messages now, but do not notify the renderer until that reveal finishes.
+    const acceptanceEmail = await Worldgen.acceptTransferOffer(Number(id), false);
     await News.generateAutomaticItems();
 
     // Let all windows refresh their transfer UIs.
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
     WindowManager.sendAll(Constants.IPCRoute.NEWS_ITEMS_UPDATED);
-    return Promise.resolve();
+    return acceptanceEmail ? acceptanceEmail.id : null;
   });
 
   ipcMain.handle(Constants.IPCRoute.TRANSFER_REJECT, async (_, id: string) => {
-    await Worldgen.rejectTransferOffer(Number(id));
+    const responseEmail = await Worldgen.rejectTransferOffer(Number(id), false);
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
-    return Promise.resolve();
+    return responseEmail ? responseEmail.id : null;
   });
 
   ipcMain.handle(

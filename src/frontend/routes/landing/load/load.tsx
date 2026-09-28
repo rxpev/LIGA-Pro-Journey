@@ -46,6 +46,10 @@ type SaveListProfile = AppState['profiles'][number] & {
     name?: string | null;
     blazon?: string | null;
   } | null;
+  trialTeam?: {
+    name?: string | null;
+    blazon?: string | null;
+  } | null;
 };
 
 /**
@@ -98,65 +102,65 @@ export default function () {
             <col className="w-1/5" />
             <col className="w-1/5" />
           </colgroup>
-        <tbody>
-          {state.profiles.map((profile) => {
-            const save = profile as SaveListProfile;
-            const role = save.player?.role || 'RIFLER';
-            const roleIcon = ROLE_ICONS[role] || riflerIcon;
-            const roleBadgeStyle = ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.RIFLER;
-            const team = save.team || save.player?.team;
-            const teamBlazon = team?.blazon || NO_TEAM_ICON;
-            const teamName = team?.name || 'No Team';
-            return (
-              <tr
-                key={profile.id}
-                className="hover:bg-base-content/10 cursor-pointer"
-                onClick={() => navigate('/connect/' + profile.id)}
-                onMouseDown={audioClick}
-              >
-                <td className="pl-14">
-                  <p>{profile.name}</p>
-                  <p className="text-muted">
-                    <em>{Util.getSaveFileName(profile.id)}</em>
-                  </p>
-                </td>
-                <td className="text-center">
-                  <span
-                    title={role}
-                    className={`inline-grid size-9 place-items-center rounded-full ${roleBadgeStyle}`}
-                  >
-                    <img src={roleIcon} alt={role} className="size-8 object-contain opacity-95" />
-                  </span>
-                </td>
-                <td>
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={teamBlazon}
-                      alt={teamName}
-                      title={teamName}
-                      className="size-8 shrink-0 object-contain"
-                    />
-                    <span className="truncate">{team?.name || 'No Team'}</span>
-                  </div>
-                </td>
-                <td>{upperFirst(formatAppRelativeDate(profile.updatedAt, dateFormat))}</td>
-                <td className="text-center" onClick={(event) => event.stopPropagation()}>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => navigate('/load/delete/' + profile.id)}
-                    onMouseDown={(event) => {
-                      event.stopPropagation();
-                      audioNegativeAlert();
-                    }}
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          <tbody>
+            {state.profiles.map((profile) => {
+              const save = profile as SaveListProfile;
+              const role = save.player?.role || 'RIFLER';
+              const roleIcon = ROLE_ICONS[role] || riflerIcon;
+              const roleBadgeStyle = ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.RIFLER;
+              const team = save.trialTeam || save.team || save.player?.team;
+              const teamBlazon = team?.blazon || NO_TEAM_ICON;
+              const teamName = `${team?.name || 'No Team'}${save.trialTeam ? ' (Trial)' : ''}`;
+              return (
+                <tr
+                  key={profile.id}
+                  className="hover:bg-base-content/10 cursor-pointer"
+                  onClick={() => navigate('/connect/' + profile.id)}
+                  onMouseDown={audioClick}
+                >
+                  <td className="pl-14">
+                    <p>{profile.name}</p>
+                    <p className="text-muted">
+                      <em>{Util.getSaveFileName(profile.id)}</em>
+                    </p>
+                  </td>
+                  <td className="text-center">
+                    <span
+                      title={role}
+                      className={`inline-grid size-9 place-items-center rounded-full ${roleBadgeStyle}`}
+                    >
+                      <img src={roleIcon} alt={role} className="size-8 object-contain opacity-95" />
+                    </span>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={teamBlazon}
+                        alt={teamName}
+                        title={teamName}
+                        className="size-8 shrink-0 object-contain"
+                      />
+                      <span className="truncate">{teamName}</span>
+                    </div>
+                  </td>
+                  <td>{upperFirst(formatAppRelativeDate(profile.updatedAt, dateFormat))}</td>
+                  <td className="text-center" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => navigate('/load/delete/' + profile.id)}
+                      onMouseDown={(event) => {
+                        event.stopPropagation();
+                        audioNegativeAlert();
+                      }}
+                    >
+                      <FaTrash />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </section>
       <Outlet />
     </main>

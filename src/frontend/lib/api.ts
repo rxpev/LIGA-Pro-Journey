@@ -209,6 +209,8 @@ export default {
       >,
     delete: (ids: Array<number>) =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_DELETE, ids) as Promise<unknown>,
+    notify: (id: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.EMAILS_NOTIFY, id) as Promise<void>,
     replyFaceitOpening: (choice: 'accept' | 'decline') =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_FACEIT_OPENING_REPLY, choice) as Promise<{
         email: Prisma.EmailGetPayload<typeof Eagers.email>;
@@ -733,7 +735,8 @@ export default {
       >,
   },
   transfers: {
-    accept: (id: number) => ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_ACCEPT, id),
+    accept: (id: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_ACCEPT, id) as Promise<number | null>,
     all: <T = typeof Eagers.transfer>(query: Prisma.TransferFindManyArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_ALL, query) as Promise<
         Array<Prisma.TransferGetPayload<T>>
@@ -745,7 +748,8 @@ export default {
       ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_CREATE, transfer, offer) as Promise<
         Prisma.TransferGetPayload<typeof Eagers.transfer>
       >,
-    reject: (id: number) => ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_REJECT, id),
+    reject: (id: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.TRANSFER_REJECT, id) as Promise<number | null>,
   },
   updater: {
     install: () => ipcRenderer.send(Constants.IPCRoute.UPDATER_INSTALL),

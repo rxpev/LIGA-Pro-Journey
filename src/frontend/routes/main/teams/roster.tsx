@@ -133,7 +133,13 @@ function formatTimeOnTeam(player: RosterPlayer, teamId: number, now: Date) {
   return `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
-function statusLabel(player: RosterPlayer) {
+function statusLabel(
+  player: RosterPlayer,
+  trialPlayerId?: number | null,
+  trialTeamId?: number | null,
+  currentTeamId?: number | null,
+) {
+  if (player.id === trialPlayerId && currentTeamId === trialTeamId) return 'TRIAL';
   return player.starter ? 'STARTER' : 'BENCHED';
 }
 
@@ -792,6 +798,8 @@ export default function () {
     setRatingGamesByPlayer({});
     setRatings({});
 
+    const isActiveTrialTeam =
+      state.profile?.trialTeamId === team.id && state.profile?.playerId != null;
     api.players
       .all({
         include: {
@@ -803,9 +811,9 @@ export default function () {
           country: true,
           team: true,
         },
-        where: {
-          teamId: team.id,
-        },
+        where: isActiveTrialTeam
+          ? { OR: [{ teamId: team.id }, { id: state.profile?.playerId }] }
+          : { teamId: team.id },
       })
       .then((foundPlayers) => setPlayers(foundPlayers as RosterPlayer[]));
     api.players
@@ -828,7 +836,7 @@ export default function () {
         },
       })
       .then((foundPlayers) => setTimelinePlayers(foundPlayers as RosterPlayer[]));
-  }, [team.id]);
+  }, [state.profile?.playerId, state.profile?.trialTeamId, team.id]);
 
   React.useEffect(() => {
     if (!state.profile) {
@@ -916,7 +924,12 @@ export default function () {
           {sortedPlayers.map((player) => {
             const playerRating = ratings[player.id];
             const ratingValue = playerRating?.maps ? playerRating.rating.toFixed(2) : '-';
-            const status = statusLabel(player);
+            const status = statusLabel(
+              player,
+              state.profile?.playerId,
+              state.profile?.trialTeamId,
+              team.id,
+            );
 
             return (
               <tr
@@ -945,6 +958,7 @@ export default function () {
                       'inline-flex h-6 min-w-[76px] items-center justify-center rounded px-2 text-[10px] leading-none font-semibold tracking-wide uppercase',
                       status === 'STARTER' && 'bg-[#2f4660] text-[#9fc9f3]',
                       status === 'BENCHED' && 'bg-[#7a2430] text-[#ffdce3]',
+                      status === 'TRIAL' && 'bg-[#7a431f] text-[#ffd0a6]',
                     )}
                   >
                     {status}

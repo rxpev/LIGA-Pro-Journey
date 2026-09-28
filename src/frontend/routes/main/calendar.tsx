@@ -216,6 +216,8 @@ type CareerStint = {
   teamId: number | null;
   startedAt: Date | string;
   endedAt: Date | string | null;
+  isTrial: boolean;
+  trialSeriesTarget: number | null;
   team?: {
     id: number;
     name: string;
@@ -229,7 +231,7 @@ type CareerCalendarEntry = {
   id: string;
   label: string;
   team: NonNullable<CareerStint['team']>;
-  type: 'joined' | 'left' | 'signed';
+  type: 'joined' | 'left' | 'signed' | 'trial-start' | 'trial-end';
 };
 type YearlyCalendarAction = {
   competition?: YearlyCompetition;
@@ -297,7 +299,7 @@ function CareerCalendarEntry(props: {
   player?: { avatar?: string | null; name?: string | null } | null;
 }) {
   const graphic =
-    props.entry.type === 'left'
+    props.entry.type === 'left' || props.entry.type === 'trial-end'
       ? getThankYouGraphic(props.entry.team, props.player)
       : getWelcomeGraphic(props.entry.team, props.player);
 
@@ -884,6 +886,11 @@ function formatStintDuration(startedAt: Date | string, endedAt?: Date | string |
 function getCareerCalendarEntries(
   careerStints: CareerStint[],
   currentContractEndsAt?: Date | string | null,
+  activeTrial?: {
+    playerTeamId?: number | null;
+    seriesTarget?: number | null;
+    startedAt?: Date | string | null;
+  },
 ) {
   const orderedStints = [...careerStints].sort(
     (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
@@ -894,15 +901,27 @@ function getCareerCalendarEntries(
       return [];
     }
 
-    const tenure = formatStintDuration(stint.startedAt, stint.endedAt || currentContractEndsAt);
+    const isActiveTrialStint =
+      !stint.endedAt &&
+      stint.teamId === activeTrial?.playerTeamId &&
+      (!activeTrial?.startedAt ||
+        getCalendarDateKey(stint.startedAt) === getCalendarDateKey(activeTrial.startedAt));
+    const isTrial = stint.isTrial || isActiveTrialStint;
+    const trialSeriesTarget = stint.trialSeriesTarget ?? activeTrial?.seriesTarget;
+    const trialDuration = trialSeriesTarget ? `${trialSeriesTarget}-series trial` : 'Trial';
+    const tenure = isTrial
+      ? trialDuration
+      : formatStintDuration(stint.startedAt, stint.endedAt || currentContractEndsAt);
     const entries: CareerCalendarEntry[] = [
       {
         date: stint.startedAt,
         duration: tenure,
         id: `joined_${stint.teamId}_${new Date(stint.startedAt).getTime()}`,
-        label: `Signed with ${stint.team.name}`,
+        label: isTrial
+          ? `Started a trial with ${stint.team.name}`
+          : `Signed with ${stint.team.name}`,
         team: stint.team,
-        type: 'signed',
+        type: isTrial ? 'trial-start' : 'signed',
       },
     ];
 
@@ -911,9 +930,11 @@ function getCareerCalendarEntries(
         date: stint.endedAt,
         duration: tenure,
         id: `left_${stint.teamId}_${new Date(stint.endedAt).getTime()}`,
-        label: `Left ${stint.team.name}${tenure ? ` after ${tenure}` : ''}`,
+        label: isTrial
+          ? `Trial ended with ${stint.team.name}${tenure ? ` after ${tenure}` : ''}`
+          : `Left ${stint.team.name}${tenure ? ` after ${tenure}` : ''}`,
         team: stint.team,
-        type: 'left',
+        type: isTrial ? 'trial-end' : 'left',
       });
     }
 
@@ -1314,6 +1335,8 @@ export default function () {
               teamId: true;
               startedAt: true;
               endedAt: true;
+              isTrial: true;
+              trialSeriesTarget: true;
               team: {
                 select: {
                   id: true;
@@ -1332,6 +1355,8 @@ export default function () {
               teamId: true,
               startedAt: true,
               endedAt: true,
+              isTrial: true,
+              trialSeriesTarget: true,
               team: {
                 select: {
                   id: true,
@@ -2038,9 +2063,20 @@ export default function () {
   const careerEntries = React.useMemo(
     () =>
       mode === 'mine'
-        ? getCareerCalendarEntries(resolvedCareerStints, state.profile?.player?.contractEnd)
+        ? getCareerCalendarEntries(resolvedCareerStints, state.profile?.player?.contractEnd, {
+            playerTeamId: state.profile?.trialTeamId,
+            seriesTarget: state.profile?.trialSeriesTarget,
+            startedAt: state.profile?.trialStartedAt,
+          })
         : [],
-    [mode, resolvedCareerStints, state.profile?.player?.contractEnd],
+    [
+      mode,
+      resolvedCareerStints,
+      state.profile?.player?.contractEnd,
+      state.profile?.trialSeriesTarget,
+      state.profile?.trialStartedAt,
+      state.profile?.trialTeamId,
+    ],
   );
   const careerEntriesByDate = React.useMemo(
     () =>
@@ -3186,7 +3222,7 @@ export default function () {
                           const plannedMatchdays = scheduledMatchdaysByDate.get(dateKey) || [];
                           const dayCareerEntries = careerEntriesByDate.get(dateKey) || [];
                           const daySigningEntry = dayCareerEntries.find(
-                            (entry) => entry.type === 'signed',
+                            (entry) => entry.type === 'signed' || entry.type === 'trial-start',
                           );
 
                           if (!matchday.length && !plannedMatchdays.length && !daySigningEntry) {
@@ -3204,10 +3240,16 @@ export default function () {
                                   src={daySigningEntry.team.blazon}
                                 />
                                 <span className="calendar-career-signing-label">
-                                  Joined {daySigningEntry.team.name}
+                                  {daySigningEntry.type === 'trial-start' ? 'Trial with' : 'Joined'}{' '}
+                                  {daySigningEntry.team.name}
                                 </span>
                                 <span className="calendar-career-contract">
-                                  <span>{daySigningEntry.duration || 'Contract pending'}</span>
+                                  <span>
+                                    {daySigningEntry.duration ||
+                                      (daySigningEntry.type === 'trial-start'
+                                        ? 'Trial'
+                                        : 'Contract pending')}
+                                  </span>
                                   <FaFileContract />
                                 </span>
                               </div>

@@ -339,9 +339,7 @@ function TeamRosterHero(props: {
             </article>
           </section>
           <article className="shrink-0 text-right">
-            <p className="text-muted text-[10px] font-semibold tracking-wide uppercase">
-              Avg. Age
-            </p>
+            <p className="text-muted text-[10px] font-semibold tracking-wide uppercase">Avg. Age</p>
             <p className="text-xl leading-tight font-bold">
               {averageStarterAge == null ? '-' : averageStarterAge.toFixed(1)}
             </p>
@@ -739,10 +737,14 @@ export default function () {
   const activeLineup = React.useMemo(
     () =>
       [...squad]
-        .filter((player) => player.starter === true)
+        .filter(
+          (player) =>
+            player.starter === true ||
+            (player.id === state.profile?.playerId && team?.id === state.profile?.trialTeamId),
+        )
         .sort((a, b) => Number(b.starter) - Number(a.starter) || (b.xp ?? 0) - (a.xp ?? 0))
         .slice(0, Constants.GameSettings.SQUAD_STARTERS_NUM),
-    [squad],
+    [squad, state.profile?.playerId, state.profile?.trialTeamId, team?.id],
   );
   const userTeam = React.useMemo(
     () =>
@@ -913,6 +915,8 @@ export default function () {
         },
       })
       .then(setCompetition);
+    const isActiveTrialTeam =
+      state.profile?.trialTeamId === team.id && state.profile?.playerId != null;
     api.players
       .all({
         include: {
@@ -923,9 +927,9 @@ export default function () {
             },
           },
         },
-        where: {
-          teamId: team.id,
-        },
+        where: isActiveTrialTeam
+          ? { OR: [{ teamId: team.id }, { id: state.profile?.playerId }] }
+          : { teamId: team.id },
       })
       .then(setSquad);
     if (state.profile?.simulateNpcMatchStats) {
@@ -1001,7 +1005,12 @@ export default function () {
           })),
         ),
       );
-  }, [state.profile?.simulateNpcMatchStats, team]);
+  }, [
+    state.profile?.playerId,
+    state.profile?.simulateNpcMatchStats,
+    state.profile?.trialTeamId,
+    team,
+  ]);
 
   React.useEffect(() => {
     setStandingMatches([]);

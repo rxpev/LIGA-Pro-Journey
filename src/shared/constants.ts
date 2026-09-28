@@ -335,6 +335,7 @@ export enum IPCRoute {
   EMAILS_FACEIT_OPENING_REPLY = '/emails/faceit-opening/reply',
   EMAILS_TRIAL_REPLY = '/emails/trial/reply',
   EMAILS_NEW = '/emails/new',
+  EMAILS_NOTIFY = '/emails/notify',
   EMAILS_UPDATE_DIALOGUE = '/emails/update/dialogue',
   EMAILS_UPDATE_MANY = '/emails/update/many',
   FEDERATIONS_ALL = '/federarions/all',

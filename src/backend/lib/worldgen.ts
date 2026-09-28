@@ -3426,12 +3426,11 @@ async function promoteReplacement(params: {
 /**
  * Accepts a transfer offer that targets the user player.
  *
- * @param transferId The transfer offer to parse.
- * @param locale      The locale.
- * @param status      Force accepts or rejects the offer.
+ * @param transferId             The transfer offer to parse.
+ * @param notifyAcceptanceEmail  Notify the renderer immediately about the resulting message.
  * @function
  */
-export async function acceptTransferOffer(transferId: number) {
+export async function acceptTransferOffer(transferId: number, notifyAcceptanceEmail = true) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
   const oldTeamId = profile.teamId;
@@ -3529,12 +3528,21 @@ export async function acceptTransferOffer(transferId: number) {
       where: { playerId: profile.playerId, teamId: fromTeamId, endedAt: null },
     });
     if (!existingTrialStint) {
-      await startCareerStint(DatabaseClient.prisma, {
-        playerId: profile.playerId,
-        teamId: fromTeamId,
-        tier: transfer.from.tier,
-        starter: true,
-        startedAt: profile.date,
+      await DatabaseClient.prisma.careerStint.create({
+        data: {
+          playerId: profile.playerId,
+          teamId: fromTeamId,
+          tier: transfer.from.tier,
+          starter: true,
+          isTrial: true,
+          trialSeriesTarget: trialSeries,
+          startedAt: profile.date,
+        },
+      });
+    } else {
+      await DatabaseClient.prisma.careerStint.update({
+        where: { id: existingTrialStint.id },
+        data: { isTrial: true, trialSeriesTarget: trialSeries },
       });
     }
 
@@ -3729,7 +3737,7 @@ export async function acceptTransferOffer(transferId: number) {
     const team = transfer.from;
     const contractEndDate = format(contractEnd, Constants.Settings.calendar.calendarDateFormat);
 
-    await sendEmail(
+    const acceptanceEmail = await sendEmail(
       Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, {
         profile,
         team,
@@ -3744,7 +3752,7 @@ export async function acceptTransferOffer(transferId: number) {
       }),
       persona,
       profile.date,
-      true,
+      notifyAcceptanceEmail,
     );
 
     const refreshedProfile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
@@ -3759,7 +3767,7 @@ export async function acceptTransferOffer(transferId: number) {
       years,
     );
 
-    return Promise.resolve();
+    return acceptanceEmail;
   }
 
   // Normal signing path
@@ -3998,8 +4006,9 @@ export async function acceptTransferOffer(transferId: number) {
   const isTrialContract =
     offer.offerType === 'TRIAL_CONTRACT' ||
     (offer.postBenchTerminationClause && offer.rosterStabilityClause);
+  let acceptanceEmail;
   if (!isTrialContract) {
-    await sendEmail(
+    acceptanceEmail = await sendEmail(
       Sqrl.render(locale.templates.OfferAcceptedUser.SUBJECT, {
         transfer,
         profile,
@@ -4012,10 +4021,10 @@ export async function acceptTransferOffer(transferId: number) {
       }),
       persona,
       profile.date,
-      true,
+      notifyAcceptanceEmail,
     );
   } else {
-    await sendEmail(
+    acceptanceEmail = await sendEmail(
       `Welcome to ${transfer.from.name}`,
       getTrialContractDecisionMessage(
         (offer.trialResponseTier as TrialSuccessResponse) ?? 1,
@@ -4024,7 +4033,7 @@ export async function acceptTransferOffer(transferId: number) {
       ),
       persona,
       profile.date,
-      true,
+      notifyAcceptanceEmail,
     );
   }
 
@@ -4034,13 +4043,13 @@ export async function acceptTransferOffer(transferId: number) {
     transfer.from.name,
   );
 
-  return Promise.resolve();
+  return acceptanceEmail;
 }
 
 /**
  * Reject a transfer offer that targets the user player.
  */
-export async function rejectTransferOffer(transferId: number) {
+export async function rejectTransferOffer(transferId: number, notifyResponseEmail = true) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
 
@@ -4105,8 +4114,9 @@ export async function rejectTransferOffer(transferId: number) {
   const locale = getLocale(profile);
 
   if (isExtension) {
+    let responseEmail;
     if ((locale.templates as any).ContractExtensionRejected) {
-      await sendEmail(
+      responseEmail = await sendEmail(
         Sqrl.render((locale.templates as any).ContractExtensionRejected.SUBJECT, {
           transfer,
           profile,
@@ -4118,7 +4128,7 @@ export async function rejectTransferOffer(transferId: number) {
         }),
         persona,
         profile.date,
-        true,
+        notifyResponseEmail,
       );
     }
 
@@ -4128,13 +4138,13 @@ export async function rejectTransferOffer(transferId: number) {
       transfer.id,
     );
 
-    return Promise.resolve();
+    return responseEmail;
   }
   if (offer.offerType === 'TRIAL') {
     return Promise.resolve();
   }
   if (offer.offerType === 'TRIAL_CONTRACT') {
-    await sendEmail(
+    const responseEmail = await sendEmail(
       `Contract offer decision from ${transfer.from.name}`,
       getTrialContractDecisionMessage(
         (offer.trialResponseTier as TrialSuccessResponse) ?? 1,
@@ -4143,11 +4153,11 @@ export async function rejectTransferOffer(transferId: number) {
       ),
       persona,
       profile.date,
-      true,
+      notifyResponseEmail,
     );
-    return Promise.resolve();
+    return responseEmail;
   }
-  await sendEmail(
+  const responseEmail = await sendEmail(
     Sqrl.render(locale.templates.OfferRejectedUser.SUBJECT, {
       transfer,
       profile,
@@ -4160,7 +4170,7 @@ export async function rejectTransferOffer(transferId: number) {
     }),
     persona,
     profile.date,
-    true,
+    notifyResponseEmail,
   );
 
   Engine.Runtime.Instance.log.info(
@@ -4168,7 +4178,7 @@ export async function rejectTransferOffer(transferId: number) {
     transfer.from.name,
     transfer.id,
   );
-  return Promise.resolve();
+  return responseEmail;
 }
 
 /**

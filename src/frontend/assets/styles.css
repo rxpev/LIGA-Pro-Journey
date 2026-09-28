@@ -434,6 +434,136 @@
   background-color: transparent;
 }
 
+/* Permanent-contract reveal: expand the embedded modal into a cinematic loading screen. */
+.in-app-modal:has(.joined-team-interstitial) {
+  padding: 0;
+  background-color: #030714;
+  backdrop-filter: none;
+}
+
+.in-app-modal:has(.joined-team-interstitial) > .modal-box {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+}
+
+.in-app-modal:has(.joined-team-interstitial) .in-app-modal-close-button {
+  display: none;
+}
+
+@keyframes joined-team-background-in {
+  from {
+    opacity: 0;
+    filter: blur(18px) brightness(0.3);
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0) brightness(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes joined-team-reveal {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(22px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes joined-team-crest-in {
+  0% {
+    opacity: 0;
+    filter: blur(12px);
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes joined-team-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes joined-team-exit {
+  from {
+    opacity: 1;
+    filter: blur(0) brightness(1);
+  }
+  to {
+    opacity: 0;
+    filter: blur(8px) brightness(0.25);
+  }
+}
+
+.joined-team-interstitial-exiting {
+  pointer-events: none;
+  animation: joined-team-exit 700ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.joined-team-background {
+  animation: joined-team-background-in 1.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.joined-team-title,
+.joined-team-term,
+.joined-team-copy {
+  font-family: 'STAATLICHES', sans-serif;
+}
+
+.joined-team-kicker,
+.joined-team-title,
+.joined-team-term,
+.joined-team-copy,
+.joined-team-continue {
+  animation: joined-team-reveal 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.joined-team-kicker {
+  animation-delay: 0ms;
+}
+
+.joined-team-title {
+  animation-delay: 0ms;
+}
+
+.joined-team-crest {
+  animation: joined-team-crest-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.joined-team-term {
+  animation-delay: 0ms;
+}
+
+.joined-team-copy {
+  animation-delay: 0ms;
+}
+
+.joined-team-continue {
+  animation-delay: 0ms;
+}
+
+.joined-team-loader {
+  animation: joined-team-loader-spin 900ms linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .in-app-modal,
   .in-app-modal > .modal-box,
@@ -444,6 +574,22 @@
 
   .faceit-welcome-panel {
     animation-duration: 1ms;
+  }
+
+  .joined-team-background,
+  .joined-team-kicker,
+  .joined-team-title,
+  .joined-team-crest,
+  .joined-team-term,
+  .joined-team-copy,
+  .joined-team-continue,
+  .joined-team-loader {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+
+  .joined-team-interstitial-exiting {
+    animation-duration: 120ms;
   }
 }
 
@@ -2682,14 +2828,34 @@ button.inbox-chats-nav:hover {
   padding-right: 4.4rem;
 }
 
-.landing-continue__team-logo {
+.landing-continue__team {
   position: absolute;
   right: 1.2rem;
   z-index: 1;
   width: 2.25rem;
   height: 2.25rem;
+}
+
+.landing-continue__team-logo {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgb(0 0 0 / 36%));
+}
+
+.landing-continue__trial-badge {
+  position: absolute;
+  right: -0.55rem;
+  bottom: -0.45rem;
+  border-radius: 0.2rem;
+  padding: 0.08rem 0.24rem;
+  color: #111111;
+  background: #ff7300;
+  font-family: sans-serif;
+  font-size: 0.48rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
 }
 
 @keyframes landing-load-panel-in {

@@ -1,0 +1,2 @@
+ALTER TABLE "CareerStint" ADD COLUMN "isTrial" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "CareerStint" ADD COLUMN "trialSeriesTarget" INTEGER;

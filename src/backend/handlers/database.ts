@@ -10,6 +10,7 @@ import {
   CompetitionMvps,
   DatabaseClient,
   DiscordPresence,
+  WindowManager,
   disconnectActiveDatabaseWithIntegrity,
 } from '@liga/backend/lib';
 import { Util, Constants, Eagers } from '@liga/shared';
@@ -417,6 +418,23 @@ export default function registerDatabaseHandlers() {
   ipcMain.handle(Constants.IPCRoute.EMAILS_DELETE, async (_, ids) => {
     const prisma = await DatabaseClient.connect();
     return prisma.email.deleteMany({ where: { id: { in: ids } } });
+  });
+
+  ipcMain.handle(Constants.IPCRoute.EMAILS_NOTIFY, async (_, id: number) => {
+    const prisma = await DatabaseClient.connect();
+    const email = await prisma.email.findUnique({
+      where: { id },
+      include: Eagers.email.include,
+    });
+    if (!email) return;
+
+    // Let the fullscreen reveal close before the normal toast and sound begin.
+    setTimeout(() => {
+      WindowManager.get(Constants.WindowIdentifier.Main, false)?.webContents.send(
+        Constants.IPCRoute.EMAILS_NEW,
+        email,
+      );
+    }, 300);
   });
 
   ipcMain.handle(Constants.IPCRoute.EMAILS_UPDATE_DIALOGUE, async (_, query) => {

@@ -20,12 +20,12 @@ export function getTrialContractChatMessage(
   teamName: string,
 ) {
   if (response === 2) {
-    return `Hello, **${userName}**.\n\nFollowing your discussions with **Head Coach ${coachName}**, we’re pleased to formally offer you a contract with **${teamName}**.\n\nThe full terms of the offer are attached below.`;
+    return `Hello, **${userName}**.\n\nFollowing your discussions with Head Coach **${coachName}**, we’re pleased to formally offer you a contract with **${teamName}**.\n\nThe full terms of the offer are attached below.`;
   }
   if (response === 3) {
-    return `Hello, **${userName}**.\n\nFollowing the successful conclusion of your trial and your discussions with **Head Coach ${coachName}**, the **${teamName} Management Board** is pleased to formally offer you a place on the team.\n\nThe proposed contract and its full terms are attached below.`;
+    return `Hello, **${userName}**.\n\nFollowing the successful conclusion of your trial and your discussions with Head Coach **${coachName}**, the **${teamName} Management Board** is pleased to formally offer you a place on the team.\n\nThe proposed contract and its full terms are attached below.`;
   }
-  return `Hello, **${userName}**.\n\nAs previously discussed with **Head Coach ${coachName}**, we’re pleased to formally present you with a contract offer to join **${teamName}**.\n\nYou’ll find the full terms and details of the proposed agreement attached below.`;
+  return `Hello, **${userName}**.\n\nAs previously discussed with Head Coach **${coachName}**, we’re pleased to formally present you with a contract offer to join **${teamName}**.\n\nYou’ll find the full terms and details of the proposed agreement attached below.`;
 }
 
 export function getTrialContractOpening(

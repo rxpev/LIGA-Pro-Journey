@@ -626,8 +626,10 @@ model CareerStint {
   teamId   Int?
 
   // snapshot of team tier at the time (Open..Premier index)
-  tier    Int?
-  starter Boolean @default(true)
+  tier              Int?
+  starter           Boolean @default(true)
+  isTrial           Boolean @default(false)
+  trialSeriesTarget Int?
 
   startedAt DateTime
   endedAt   DateTime?

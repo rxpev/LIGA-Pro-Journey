@@ -8,6 +8,7 @@ import { useAudioControls } from '@liga/frontend/hooks';
 import { getTeamHueBackground } from '@liga/frontend/lib';
 import { getTrialContractOpening } from '@liga/backend/lib/trial-contract-offer';
 import type { Prisma } from '@prisma/client';
+import joinedTeamBackground from '@liga/frontend/assets/screens/joinedteam.png';
 
 type ContractOfferState = {
   transferId: number;
@@ -24,6 +25,7 @@ type ContractOfferState = {
   postBenchMonths: number;
   rosterStabilityClause: boolean;
   expiresAt: string;
+  readOnly?: boolean;
 };
 
 const signatureFonts: Record<string, string> = {
@@ -38,12 +40,61 @@ export default function ContractOffer() {
   const { state } = useLocation() as { state: ContractOfferState | null };
   const { state: appState } = React.useContext(AppStateContext);
   const [working, setWorking] = React.useState(false);
+  const [signed, setSigned] = React.useState(false);
+  const [offerResolved, setOfferResolved] = React.useState(Boolean(state?.readOnly));
+  const [revealExiting, setRevealExiting] = React.useState(false);
   const [acceptProgress, setAcceptProgress] = React.useState(0);
   const [coach, setCoach] = React.useState<{ name: string; signatureFont?: string | null } | null>(
     null,
   );
   const [resolvedTeamId, setResolvedTeamId] = React.useState<number | null>(null);
+  const revealFinished = React.useRef(false);
+  const revealExitTimeout = React.useRef<number>();
+  const deferredEmailId = React.useRef<number | null>(null);
   const signingAudio = useAudioControls('button-signature.wav');
+
+  const closeModal = React.useCallback(
+    () => api.window.close(Constants.WindowIdentifier.Modal),
+    [],
+  );
+
+  const completeReveal = React.useCallback(() => {
+    if (deferredEmailId.current == null) {
+      closeModal();
+      return;
+    }
+
+    void api.emails.notify(deferredEmailId.current).finally(closeModal);
+  }, [closeModal]);
+
+  const finishReveal = React.useCallback(() => {
+    if (revealFinished.current) return;
+    revealFinished.current = true;
+    setRevealExiting(true);
+    revealExitTimeout.current = window.setTimeout(completeReveal, 700);
+  }, [completeReveal]);
+
+  React.useEffect(
+    () => () => {
+      if (revealExitTimeout.current != null) window.clearTimeout(revealExitTimeout.current);
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    if (!signed) return;
+
+    const timeout = window.setTimeout(finishReveal, 6500);
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') finishReveal();
+    };
+    window.addEventListener('keydown', dismiss);
+
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('keydown', dismiss);
+    };
+  }, [finishReveal, signed]);
 
   React.useEffect(() => {
     if (!state) return;
@@ -64,6 +115,21 @@ export default function ContractOffer() {
           team.personas[0];
         if (persona) setCoach(persona);
       });
+
+    api.transfers
+      .all<{ include: { offers: true } }>({
+        where: { id: state.transferId },
+        include: { offers: true },
+        take: 1,
+      })
+      .then(([transfer]) => {
+        const pendingOffer = transfer?.offers.some(
+          (offer) => offer.status === Constants.TransferStatus.PLAYER_PENDING,
+        );
+        setOfferResolved(
+          transfer?.status !== Constants.TransferStatus.PLAYER_PENDING || !pendingOffer,
+        );
+      });
   }, [state?.teamId, state?.teamName]);
 
   if (!state) return null;
@@ -71,18 +137,22 @@ export default function ContractOffer() {
   const respond = async (accepted: boolean) => {
     setWorking(true);
     try {
-      if (accepted) await api.transfers.accept(state.transferId);
-      else await api.transfers.reject(state.transferId);
+      if (accepted) {
+        deferredEmailId.current = await api.transfers.accept(state.transferId);
+        if (deferredEmailId.current == null) {
+          setOfferResolved(true);
+          return;
+        }
+      } else {
+        const responseEmailId = await api.transfers.reject(state.transferId);
+        if (responseEmailId != null) await api.emails.notify(responseEmailId);
+      }
       await api.emails.updateDialogue({
         where: { id: state.dialogueId },
         data: { completed: true },
       });
-      api.window.send<ModalRequest>(
-        Constants.WindowIdentifier.Main,
-        { target: '/inbox', payload: { refreshEmails: true } },
-        0,
-      );
-      api.window.close(Constants.WindowIdentifier.Modal);
+      if (accepted) setSigned(true);
+      else closeModal();
     } finally {
       setWorking(false);
     }
@@ -95,6 +165,62 @@ export default function ContractOffer() {
   };
   const role = roleLabels[state.playerRole.toUpperCase()] ?? state.playerRole;
   const playerName = appState.profile?.player?.name ?? appState.profile?.name ?? '';
+  const signatureProgress = offerResolved ? 1 : acceptProgress;
+  const coachName =
+    coach?.name ??
+    (state.coachName && state.coachName !== 'undefined' ? state.coachName : 'Head Coach');
+
+  if (signed) {
+    return (
+      <main
+        className={`joined-team-interstitial relative h-screen w-screen cursor-default overflow-hidden bg-[#030714] text-white ${
+          revealExiting ? 'joined-team-interstitial-exiting' : ''
+        }`}
+        aria-live="polite"
+        aria-label={`Joined ${state.teamName}`}
+      >
+        <img
+          src={joinedTeamBackground}
+          alt=""
+          className="joined-team-background absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(1,4,14,0.12),rgba(1,4,14,0.08)_55%,rgba(1,4,14,0.62))]" />
+
+        <section className="relative z-10 flex h-full w-full flex-col items-center px-10 py-[7vh] text-center">
+          <p className="joined-team-kicker text-[clamp(0.7rem,1vw,0.95rem)] font-black tracking-[0.42em] text-white/55 uppercase">
+            Career update
+          </p>
+          <h1 className="joined-team-title mt-[2vh] text-[clamp(2.4rem,5.2vw,5.8rem)] leading-none font-black tracking-[-0.025em] uppercase drop-shadow-[0_5px_20px_rgba(0,0,0,0.65)]">
+            Joined {state.teamName}
+          </h1>
+
+          <div className="joined-team-crest my-auto flex size-[clamp(8rem,18vw,14rem)] items-center justify-center">
+            <div className="absolute size-[clamp(8rem,18vw,14rem)] rounded-full bg-blue-500/12 blur-2xl" />
+            <Image
+              src={state.teamBlazon || 'resources://blazonry/noteam.svg'}
+              className="relative max-h-full max-w-full object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.75)]"
+            />
+          </div>
+
+          <p className="joined-team-term text-[clamp(1.35rem,2.7vw,2.7rem)] leading-none font-black tracking-[0.04em] uppercase drop-shadow-lg">
+            For {state.contractMonths} {state.contractMonths === 1 ? 'month' : 'months'}
+          </p>
+          <p className="joined-team-copy mt-[clamp(2.5rem,8vh,6rem)] max-w-3xl text-[clamp(0.65rem,1vw,0.95rem)] leading-relaxed font-bold tracking-[0.06em] text-white/78 uppercase drop-shadow-md">
+            A new opportunity awaits. Show the world what you can do in {state.teamName} colors.
+          </p>
+
+          <button
+            type="button"
+            className="joined-team-continue mt-5 flex items-center gap-3 text-[0.65rem] font-black tracking-[0.22em] text-white/55 uppercase transition-colors hover:text-white"
+            onClick={finishReveal}
+          >
+            <span className="joined-team-loader size-5 rounded-full border-2 border-white/25 border-t-white" />
+            Continue
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   const openTeam = () => {
     const teamId = resolvedTeamId ?? state.teamId;
@@ -137,11 +263,14 @@ export default function ContractOffer() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 py-6 sm:px-12 sm:py-7">
           <p className="text-base-content/65 max-w-4xl text-base leading-relaxed sm:text-lg">
-            {getTrialContractOpening(
-              state.trialResponseTier,
-              state.playerRole,
-              coach?.name ?? state.coachName,
-              state.teamName,
+            {emphasizeContractParties(
+              getTrialContractOpening(
+                state.trialResponseTier,
+                state.playerRole,
+                coachName,
+                state.teamName,
+              ),
+              [coachName, state.teamName],
             )}
           </p>
 
@@ -193,10 +322,7 @@ export default function ContractOffer() {
                       "'SIGNATURE ANTICALLY', cursive",
                   }}
                 >
-                  {coach?.name ??
-                    (state.coachName && state.coachName !== 'undefined'
-                      ? state.coachName
-                      : 'Head Coach')}
+                  {coachName}
                 </span>
               </div>
               <div
@@ -206,13 +332,13 @@ export default function ContractOffer() {
                 <span
                   className="text-base-content absolute bottom-[-0.1rem] left-3 inline-block -rotate-5 -skew-x-6 text-3xl leading-none tracking-[-0.08em] whitespace-nowrap"
                   style={{
-                    fontFamily: "'SIGNATURE ANTICALLY', cursive",
+                    fontFamily: "'SIGNATURE EASY FREE', cursive",
                   }}
                 >
                   {[...playerName].map((character, index, characters) => {
                     const letterProgress = Math.max(
                       0,
-                      Math.min(1, acceptProgress * (characters.length + 1) - index),
+                      Math.min(1, signatureProgress * (characters.length + 1) - index),
                     );
                     return (
                       <span
@@ -234,29 +360,49 @@ export default function ContractOffer() {
           </div>
         </div>
 
-        <footer className="border-base-content/10 bg-base-200/20 flex shrink-0 justify-end gap-3 border-t px-8 py-4 sm:px-12 sm:py-5">
-          <HoldButton
-            className="btn-ghost"
-            disabled={working}
-            fillClassName="bg-error/20"
-            onComplete={() => respond(false)}
-          >
-            <FaTimes className="size-4" /> Reject offer
-          </HoldButton>
-          <HoldButton
-            className="btn-primary shadow-md"
-            disabled={working}
-            fillClassName="bg-base-content/25"
-            onProgress={setAcceptProgress}
-            onHoldStart={signingAudio.play}
-            onHoldEnd={signingAudio.stop}
-            onComplete={() => respond(true)}
-          >
-            <FaCheck className="size-4" /> Sign contract
-          </HoldButton>
-        </footer>
+        {!offerResolved && (
+          <footer className="border-base-content/10 bg-base-200/20 flex shrink-0 justify-end gap-3 border-t px-8 py-4 sm:px-12 sm:py-5">
+            <HoldButton
+              className="btn-ghost"
+              disabled={working}
+              fillClassName="bg-error/20"
+              onComplete={() => respond(false)}
+            >
+              <FaTimes className="size-4" /> Reject offer
+            </HoldButton>
+            <HoldButton
+              className="btn-primary shadow-md"
+              disabled={working}
+              fillClassName="bg-base-content/25"
+              onProgress={setAcceptProgress}
+              onHoldStart={signingAudio.play}
+              onHoldEnd={signingAudio.stop}
+              onComplete={() => respond(true)}
+            >
+              <FaCheck className="size-4" /> Sign contract
+            </HoldButton>
+          </footer>
+        )}
       </article>
     </main>
+  );
+}
+
+function emphasizeContractParties(text: string, parties: string[]) {
+  const names = parties.filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return text;
+
+  const escapedNames = names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const namePattern = new RegExp(`(${escapedNames.join('|')})`, 'g');
+
+  return text.split(namePattern).map((part, index) =>
+    names.includes(part) ? (
+      <strong key={`${part}-${index}`} className="text-base-content font-bold">
+        {part}
+      </strong>
+    ) : (
+      part
+    ),
   );
 }
 

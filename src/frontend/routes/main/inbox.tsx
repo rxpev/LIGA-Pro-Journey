@@ -78,6 +78,10 @@ function latestDialogueContent(dialogues: Array<{ id: number; content: string }>
   )?.content;
 }
 
+function normalizeCoachEmphasis(content: string) {
+  return content.replace(/\*\*Head Coach ([^*]+)\*\*/g, 'Head Coach **$1**');
+}
+
 export default function Inbox() {
   const location = useLocation();
   const fmtDate = useFormatAppDate();
@@ -542,14 +546,16 @@ export default function Inbox() {
                                       node.properties.dataTrialInformation === 'true';
                                     const isContractInformation =
                                       node.properties.dataContractInformation === 'true';
+                                    const isInformationAttachment =
+                                      isTrialInformation || isContractInformation;
                                     return (
                                       <button
                                         {...rest}
                                         disabled={
-                                          closedEmailIds.has(dialogue.emailId) ||
-                                          dialogue.completed ||
-                                          working ||
-                                          (isTrialInformation && isTrialExpired)
+                                          !isInformationAttachment &&
+                                          (closedEmailIds.has(dialogue.emailId) ||
+                                            dialogue.completed ||
+                                            working)
                                         }
                                         onClick={() => {
                                           if (isTrialInformation) {
@@ -576,6 +582,13 @@ export default function Inbox() {
                                                   ),
                                                   coachName: active.from.name,
                                                   coachSignatureFont: active.from.signatureFont,
+                                                  readOnly:
+                                                    dialogue.completed ||
+                                                    closedEmailIds.has(dialogue.emailId) ||
+                                                    readTrialTransfers.has(
+                                                      Number(node.properties.dataTransferId),
+                                                    ) ||
+                                                    isTrialExpired,
                                                 },
                                               },
                                               0,
@@ -625,6 +638,9 @@ export default function Inbox() {
                                                     node.properties.dataRosterStabilityClause ===
                                                     'true',
                                                   expiresAt: String(node.properties.dataExpiresAt),
+                                                  readOnly:
+                                                    dialogue.completed ||
+                                                    closedEmailIds.has(dialogue.emailId),
                                                 },
                                               },
                                               0,
@@ -662,7 +678,7 @@ export default function Inbox() {
                                   },
                                 }}
                               >
-                                {Dedent.dedent(dialogue.content)}
+                                {normalizeCoachEmphasis(Dedent.dedent(dialogue.content))}
                               </ReactMarkdown>
                             </article>
                             <time>{fmtDate(dialogue.sentAt)}</time>

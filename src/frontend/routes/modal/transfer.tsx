@@ -50,6 +50,8 @@ type Player =
         starter: boolean;
         startedAt: Date;
         endedAt: Date | null;
+        isTrial: boolean;
+        trialSeriesTarget: number | null;
         team?: {
           id: number;
           name: string;
@@ -335,6 +337,9 @@ export default function TransferModal() {
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
     );
   }, [player?.careerStints]);
+
+  const activeTrialTeamId =
+    player?.id === state.profile?.playerId ? state.profile?.trialTeamId : null;
 
   React.useEffect(() => {
     if (!player) return;
@@ -977,6 +982,10 @@ export default function TransferModal() {
                         <td>
                           {formatStintDate(stint.startedAt)} -{' '}
                           {stint.endedAt ? formatStintDate(stint.endedAt) : 'Present'}
+                          {(stint.isTrial ||
+                            (activeTrialTeamId === stint.teamId && !stint.endedAt)) && (
+                            <small className="ml-1 text-[#ff9a4d]">(Trial)</small>
+                          )}
                         </td>
                         <td>
                           {stint.team ? (
@@ -994,6 +1003,10 @@ export default function TransferModal() {
                               />
                               <span className="truncate">
                                 {stint.team.name}
+                                {(stint.isTrial ||
+                                  (activeTrialTeamId === stint.teamId && !stint.endedAt)) && (
+                                  <small className="ml-1 text-[#ff9a4d]">(Trial)</small>
+                                )}
                                 {!stint.starter && (
                                   <small className="ml-1 text-red-400">(BENCHED)</small>
                                 )}

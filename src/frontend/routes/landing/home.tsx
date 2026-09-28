@@ -45,6 +45,10 @@ type ContinueProfile = AppState['profiles'][number] & {
     name?: string | null;
     blazon?: string | null;
   } | null;
+  trialTeam?: {
+    name?: string | null;
+    blazon?: string | null;
+  } | null;
 };
 
 /**
@@ -68,9 +72,9 @@ export default function () {
     React.useState<ContinueProfile | null>(null);
   const [deletingProfile, setDeletingProfile] = React.useState(false);
   const [profile] = state.profiles as Array<ContinueProfile>;
-  const team = profile?.team || profile?.player?.team;
+  const team = profile?.trialTeam || profile?.team || profile?.player?.team;
   const teamBlazon = team?.blazon || NO_TEAM_ICON;
-  const teamName = team?.name || 'No Team';
+  const teamName = `${team?.name || 'No Team'}${profile?.trialTeam ? ' (Trial)' : ''}`;
   const dateFormat = getCalendarDateFormat(state.profile?.settings);
 
   // load audio files
@@ -195,12 +199,15 @@ export default function () {
               }}
             >
               <span className="landing-menu-button__label">{t('landing.home.continue')}</span>
-              <img
-                src={teamBlazon}
-                alt={teamName}
-                title={teamName}
-                className="landing-continue__team-logo"
-              />
+              <span className="landing-continue__team">
+                <img
+                  src={teamBlazon}
+                  alt={teamName}
+                  title={teamName}
+                  className="landing-continue__team-logo"
+                />
+                {profile.trialTeam && <span className="landing-continue__trial-badge">TRIAL</span>}
+              </span>
             </section>
           )}
           {actions.map((item, idx) => {
@@ -251,9 +258,10 @@ export default function () {
           <section className="landing-load-panel__list">
             {state.profiles.map((savedProfile) => {
               const savedCareer = savedProfile as ContinueProfile;
-              const savedTeam = savedCareer.team || savedCareer.player?.team;
+              const savedTeam =
+                savedCareer.trialTeam || savedCareer.team || savedCareer.player?.team;
               const savedTeamBlazon = savedTeam?.blazon || NO_TEAM_ICON;
-              const savedTeamName = savedTeam?.name || 'No Team';
+              const savedTeamName = `${savedTeam?.name || 'No Team'}${savedCareer.trialTeam ? ' (Trial)' : ''}`;
               const role = savedCareer.player?.role || 'RIFLER';
               const roleIcon = ROLE_ICONS[role] || riflerIcon;
 
@@ -266,11 +274,18 @@ export default function () {
                     onPointerEnter={audioHover}
                     onPointerDown={audioClick}
                   >
-                    <img
-                      src={savedTeamBlazon}
-                      alt={savedTeamName}
-                      className="landing-save-card__crest"
-                    />
+                    <span className="relative shrink-0">
+                      <img
+                        src={savedTeamBlazon}
+                        alt={savedTeamName}
+                        className="landing-save-card__crest"
+                      />
+                      {savedCareer.trialTeam && (
+                        <span className="absolute -right-2 -bottom-1 rounded bg-[#ff7300] px-1 text-[7px] font-black tracking-wide text-black">
+                          TRIAL
+                        </span>
+                      )}
+                    </span>
                     <span className="landing-save-card__details">
                       <strong>{savedCareer.name}</strong>
                       <span>{savedTeamName}</span>

@@ -434,6 +434,12 @@ export default function registerProfileHandlers() {
                   blazon: true,
                 },
               },
+              trialTeam: {
+                select: {
+                  name: true,
+                  blazon: true,
+                },
+              },
             },
           })
           .finally(() => prisma.$disconnect());
