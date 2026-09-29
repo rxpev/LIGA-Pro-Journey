@@ -21,7 +21,7 @@ import {
   startOfYear,
 } from 'date-fns';
 
-type RosterPlayer = Awaited<
+export type RosterPlayer = Awaited<
   ReturnType<
     typeof api.players.all<{
       include: {
@@ -46,18 +46,20 @@ type RatingGamesByPlayer = Record<number, PlayerRatingGame[]>;
 
 type TimelineMode = 'all' | 'year';
 
-type TransferListItem = {
+export type TransferListItem = {
   date: Date;
   from: TransferTeam | null;
   fromBenched: boolean;
+  fromTrial?: boolean;
   id: string;
   player: RosterPlayer;
   text: React.ReactNode;
   to: TransferTeam | null;
   toBenched: boolean;
+  toTrial?: boolean;
 };
 
-type TransferTeam = {
+export type TransferTeam = {
   blazon: string | null;
   id: number;
   name: string;
@@ -267,9 +269,9 @@ function isNoTeam(team: TransferTeam | null | undefined) {
   );
 }
 
-function getCareerTransferEvents(
+export function getCareerTransferEvents(
   players: RosterPlayer[],
-  team: RouteContextTeams['team'],
+  team: TransferTeam,
 ): TransferListItem[] {
   const currentTeam = toTransferTeam(team);
 
@@ -282,6 +284,83 @@ function getCareerTransferEvents(
       const previous = stints[index - 1];
       const next = stints[index + 1];
       const date = new Date(stint.startedAt);
+      const isInitializationStint =
+        !previous &&
+        !stint.isTrial &&
+        date.toISOString().slice(0, 10) === Constants.NewSaveSeasonStartDate.slice(0, 10);
+
+      if (stint.teamId === team.id && previous?.teamId !== team.id && !isInitializationStint) {
+        const source = toTransferTeam(previous?.team);
+        const items: TransferListItem[] = [
+          {
+            date,
+            from: source,
+            fromBenched: false,
+            id: `join_${player.id}_${stint.id}`,
+            player,
+            text: stint.isTrial ? (
+              <>
+                <b>{player.name}</b> joins <b>{team.name}</b> on trial
+              </>
+            ) : isNoTeam(source) ? (
+              <>
+                <b>{player.name}</b> joins <b>{team.name}</b>
+              </>
+            ) : (
+              <>
+                <b>{player.name}</b> transfers from <b>{source.name}</b> to <b>{team.name}</b>
+              </>
+            ),
+            to: currentTeam,
+            toBenched: !stint.starter,
+            toTrial: stint.isTrial,
+          },
+        ];
+
+        if (stint.endedAt && !next) {
+          items.push({
+            date: new Date(stint.endedAt),
+            from: currentTeam,
+            fromBenched: !stint.starter,
+            id: `release_${player.id}_${stint.id}`,
+            player,
+            text: (
+              <>
+                <b>{player.name}</b> parts ways with <b>{team.name}</b>
+              </>
+            ),
+            to: getNoTeamTeam(),
+            toBenched: false,
+          });
+        }
+
+        return items;
+      }
+
+      if (
+        previous?.teamId === team.id &&
+        stint.teamId === team.id &&
+        previous.isTrial &&
+        !stint.isTrial
+      ) {
+        return [
+          {
+            date,
+            from: currentTeam,
+            fromBenched: false,
+            fromTrial: true,
+            id: `trial_signing_${player.id}_${stint.id}`,
+            player,
+            text: (
+              <>
+                <b>{player.name}</b> joins <b>{team.name}</b> after trial
+              </>
+            ),
+            to: currentTeam,
+            toBenched: !stint.starter,
+          },
+        ];
+      }
 
       // A player can leave a team at the end of their final recorded stint
       // without a separate No Team stint being stored afterward.
@@ -300,56 +379,6 @@ function getCareerTransferEvents(
             ),
             to: getNoTeamTeam(),
             toBenched: false,
-          },
-        ];
-      }
-
-      if (stint.teamId === team.id && previous?.teamId !== team.id) {
-        if (!previous) {
-          if (!stint.endedAt || next) {
-            return [];
-          }
-
-          const endedAt = new Date(stint.endedAt);
-
-          return [
-            {
-              date: endedAt,
-              from: currentTeam,
-              fromBenched: !stint.starter,
-              id: `release_${player.id}_${stint.id}`,
-              player,
-              text: (
-                <>
-                  <b>{player.name}</b> parts ways with <b>{team.name}</b>
-                </>
-              ),
-              to: getNoTeamTeam(),
-              toBenched: false,
-            },
-          ];
-        }
-
-        const source = toTransferTeam(previous?.team);
-
-        return [
-          {
-            date,
-            from: source,
-            fromBenched: false,
-            id: `join_${player.id}_${stint.id}`,
-            player,
-            text: isNoTeam(source) ? (
-              <>
-                <b>{player.name}</b> joins <b>{team.name}</b>
-              </>
-            ) : (
-              <>
-                <b>{player.name}</b> transfers from <b>{source.name}</b> to <b>{team.name}</b>
-              </>
-            ),
-            to: currentTeam,
-            toBenched: !stint.starter,
           },
         ];
       }
@@ -432,7 +461,7 @@ function getCareerTransferEvents(
   });
 }
 
-function formatTransferDate(date: Date) {
+export function formatTransferDate(date: Date) {
   return date.toLocaleDateString('en-US', {
     day: 'numeric',
     month: 'short',
@@ -452,7 +481,11 @@ function filterTransferItems(items: TransferListItem[], mode: TimelineMode, now:
   );
 }
 
-function TeamBadge(props: { benched?: boolean; team: TransferTeam | null }) {
+export function TeamBadge(props: {
+  benched?: boolean;
+  team: TransferTeam | null;
+  trial?: boolean;
+}) {
   if (!props.team) {
     return null;
   }
@@ -467,6 +500,11 @@ function TeamBadge(props: { benched?: boolean; team: TransferTeam | null }) {
       {props.benched && (
         <span className="absolute right-0 bottom-0 bg-[#1d2630] px-0.5 text-[7px] leading-3 font-black text-[#b6c1ca] uppercase">
           Bench
+        </span>
+      )}
+      {props.trial && (
+        <span className="absolute right-0 bottom-0 rounded bg-[#ff7300] px-0.5 text-[7px] leading-3 font-black text-black uppercase">
+          Trial
         </span>
       )}
     </span>
@@ -743,20 +781,20 @@ function TeamTransfers(props: {
               <span className="grid place-items-center">
                 {item.from?.id && !isNoTeam(item.from) ? (
                   <Link to={`/teams?teamId=${item.from.id}`}>
-                    <TeamBadge team={item.from} benched={item.fromBenched} />
+                    <TeamBadge team={item.from} benched={item.fromBenched} trial={item.fromTrial} />
                   </Link>
                 ) : (
-                  <TeamBadge team={item.from} benched={item.fromBenched} />
+                  <TeamBadge team={item.from} benched={item.fromBenched} trial={item.fromTrial} />
                 )}
               </span>
               <span className="text-center text-[#9aa8b5]">&rarr;</span>
               <span className="grid place-items-center">
                 {item.to?.id && !isNoTeam(item.to) ? (
                   <Link to={`/teams?teamId=${item.to.id}`} className="shrink-0">
-                    <TeamBadge team={item.to} benched={item.toBenched} />
+                    <TeamBadge team={item.to} benched={item.toBenched} trial={item.toTrial} />
                   </Link>
                 ) : (
-                  <TeamBadge team={item.to} benched={item.toBenched} />
+                  <TeamBadge team={item.to} benched={item.toBenched} trial={item.toTrial} />
                 )}
               </span>
               <span className="min-w-0 truncate pl-3 text-sm text-[#aeb9c3]">{item.text}</span>

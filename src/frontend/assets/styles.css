@@ -1086,6 +1086,379 @@ meter::-webkit-meter-bar {
   }
 }
 
+/* Squad Hub */
+.squad-hub {
+  @apply bg-base-100 text-base-content grid h-full min-h-0 grid-cols-[24rem_minmax(0,1fr)] overflow-hidden;
+}
+.squad-rosters {
+  @apply border-base-content/10 flex min-h-0 flex-col gap-6 overflow-y-auto border-r p-6;
+}
+.squad-team-card {
+  @apply border-base-content/15 bg-base-200/40 shrink-0 overflow-hidden rounded-xl border;
+}
+.squad-team-identity {
+  @apply flex items-center gap-4 px-5 py-5;
+}
+.squad-team-blazon {
+  @apply size-14;
+}
+.squad-team-identity > div {
+  @apply min-w-0 flex-1;
+}
+.squad-team-name-row {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+.squad-team-name-row h2 {
+  @apply truncate text-base font-black uppercase;
+}
+.squad-team-link {
+  @apply text-base-content/45 hover:bg-base-content/10 hover:text-base-content grid size-6 shrink-0 place-items-center rounded-md transition-colors;
+}
+.squad-team-link svg {
+  @apply size-2.5;
+}
+.squad-team-identity p {
+  @apply mt-1 flex min-w-0 items-center gap-2 text-xs;
+}
+.squad-team-identity p span:last-child {
+  @apply text-base-content/65 truncate;
+}
+.squad-team-card > footer {
+  @apply border-base-content/10 flex items-center justify-between border-t px-5 py-4;
+}
+.squad-team-card > footer span {
+  @apply text-base-content/55 text-xs font-semibold;
+}
+.squad-team-card > footer strong {
+  @apply text-base-content text-2xl font-black;
+}
+.squad-roster-panel {
+  @apply border-base-content/15 bg-base-200/40 overflow-hidden rounded-xl border;
+}
+.squad-roster-panel > header {
+  @apply border-base-content/10 flex h-16 items-center gap-3 border-b px-5;
+}
+.squad-roster-panel > header h2 {
+  @apply text-lg font-black;
+}
+.squad-roster-icon {
+  @apply text-base-content/75 grid size-6 place-items-center text-lg;
+}
+.squad-roster-count {
+  @apply text-base-content/60 ml-auto text-sm font-semibold;
+}
+.squad-roster-labels {
+  @apply text-base-content/55 grid grid-cols-[1fr_auto] px-5 pt-4 pb-3 text-xs font-bold tracking-wide uppercase;
+}
+.squad-roster-list {
+  @apply px-2 pb-2;
+}
+.squad-roster-row {
+  @apply border-base-content/10 bg-base-100/35 hover:bg-base-content/5 grid min-h-14 w-full grid-cols-[1.5rem_minmax(0,1fr)_0.5rem_auto_0.75rem] items-center gap-3 border-t px-4 text-left transition-colors;
+}
+.squad-roster-row strong {
+  @apply truncate text-sm;
+}
+.squad-roster-row time {
+  @apply text-base-content/75 text-xs tabular-nums;
+}
+.squad-roster-row > svg {
+  @apply text-base-content/55 size-2.5;
+}
+.squad-status-active,
+.squad-status-listed {
+  @apply size-2 rounded-full;
+}
+.squad-status-active {
+  @apply bg-success;
+}
+.squad-status-listed {
+  @apply bg-info;
+}
+.squad-roster-empty {
+  @apply text-base-content/50 grid min-h-24 place-items-center px-4 text-center text-sm;
+}
+.squad-overview {
+  @apply min-h-0 overflow-y-auto p-6;
+}
+.squad-overview-header {
+  @apply mb-6 flex min-h-18 items-center justify-between gap-6;
+}
+.squad-overview-header h1 {
+  @apply text-3xl font-black tracking-tight;
+}
+.squad-overview-header p {
+  @apply text-base-content/60 mt-1 text-base;
+}
+.squad-overview-summary {
+  @apply border-base-content/15 bg-base-200/35 flex min-w-44 items-center gap-3 rounded-xl border px-4 py-3;
+}
+.squad-overview-summary > svg {
+  @apply text-base-content/75 size-7;
+}
+.squad-overview-summary span {
+  @apply flex flex-col;
+}
+.squad-overview-summary small,
+.squad-player-card small {
+  @apply text-base-content/55 text-xs font-semibold;
+}
+.squad-overview-summary strong {
+  @apply text-base;
+}
+.squad-player-grid {
+  @apply grid grid-cols-5 items-start gap-4;
+}
+.squad-player-card {
+  @apply border-base-content/15 bg-base-200/45 hover:border-base-content/35 relative cursor-pointer overflow-hidden rounded-xl border transition-colors;
+}
+.squad-player-history-link {
+  @apply border-base-content/20 bg-base-100/75 text-base-content/65 hover:border-base-content/50 hover:text-base-content absolute top-3 right-3 z-30 grid size-8 place-items-center rounded-lg border shadow-lg transition-colors;
+}
+.squad-player-history-link svg {
+  @apply size-3;
+}
+.squad-player-card > header {
+  @apply block px-0 pt-0;
+}
+.squad-player-card figure {
+  @apply bg-base-300/55 relative flex h-40 w-full items-end justify-center overflow-hidden;
+}
+.squad-player-card figure img {
+  @apply h-full w-full object-contain object-bottom;
+}
+.squad-player-identity {
+  @apply min-w-0 px-4 py-3;
+}
+.squad-player-name-row {
+  @apply flex min-w-0 items-center gap-2;
+}
+.squad-player-name-row h2 {
+  @apply truncate text-xl font-black;
+}
+.squad-player-trial-badge {
+  @apply absolute top-3 left-3 z-20 rounded bg-[#ff7300] px-2 py-1 text-[0.65rem] leading-none font-black tracking-wider text-black uppercase shadow-lg;
+}
+.squad-player-identity p {
+  @apply text-base-content/70 mt-1 flex items-center gap-2 text-sm;
+}
+.squad-player-role {
+  @apply border-base-content/10 mx-4 flex items-center justify-between border-t py-3;
+}
+.squad-player-role > span {
+  @apply flex flex-col gap-0.5;
+}
+.squad-player-role strong {
+  @apply text-info text-base;
+}
+.squad-player-role strong.is-sniper {
+  @apply text-secondary;
+}
+.squad-player-role strong.is-igl {
+  @apply text-success;
+}
+.squad-player-role img {
+  @apply h-5 w-auto opacity-45;
+}
+.squad-player-card > footer {
+  @apply grid grid-cols-2 px-4 py-3;
+}
+.squad-player-card > footer > div {
+  @apply flex flex-col gap-0.5;
+}
+.squad-player-card > footer > div + div {
+  @apply border-base-content/10 border-l pl-5;
+}
+.squad-player-card > footer strong {
+  @apply text-2xl font-black;
+}
+.squad-player-card > footer > div + div strong {
+  @apply text-base font-semibold;
+}
+.squad-player-contract {
+  @apply border-base-content/10 mx-4 flex flex-col gap-1 border-t py-3;
+}
+.squad-player-contract strong {
+  @apply flex items-center gap-2 text-sm font-semibold;
+}
+.squad-player-contract strong svg {
+  @apply text-info size-3 shrink-0;
+}
+.squad-lower-grid {
+  @apply mt-5 grid grid-cols-[minmax(0,1.65fr)_minmax(22rem,1fr)] items-start gap-4;
+}
+.squad-performance-column {
+  @apply flex min-w-0 flex-col gap-4;
+}
+.squad-data-panel {
+  @apply border-base-content/15 bg-base-200/35 overflow-hidden rounded-xl border;
+}
+.squad-panel-header {
+  @apply border-base-content/10 flex min-h-12 items-center justify-between border-b px-4;
+}
+.squad-panel-header h2 {
+  @apply flex items-center gap-3 text-base font-black;
+}
+.squad-panel-header h2 svg {
+  @apply text-base-content/75 size-4;
+}
+.squad-panel-header > span,
+.squad-panel-header > a {
+  @apply text-base-content/65 flex items-center gap-2 text-xs font-semibold;
+}
+.squad-panel-header > a:hover {
+  @apply text-base-content;
+}
+.squad-panel-header > a svg {
+  @apply size-2.5;
+}
+.squad-performance-metrics {
+  @apply grid grid-cols-4 gap-2 p-2;
+}
+.squad-performance-metrics > article {
+  @apply border-base-content/10 bg-base-100/40 flex min-h-24 items-start gap-3 rounded-lg border p-3;
+}
+.squad-performance-metrics > article > svg {
+  @apply text-base-content/75 mt-0.5 size-4 shrink-0;
+}
+.squad-performance-metrics > article > span {
+  @apply flex min-w-0 flex-col;
+}
+.squad-performance-metrics small {
+  @apply text-base-content/65 text-xs font-semibold;
+}
+.squad-performance-metrics strong {
+  @apply mt-1 text-2xl leading-none font-black;
+}
+.squad-performance-metrics em {
+  @apply text-base-content/55 mt-1 text-[0.65rem] not-italic;
+}
+.squad-form-row {
+  @apply mt-2 flex flex-wrap gap-1.5;
+}
+.squad-form-row b {
+  @apply grid size-6 place-items-center rounded text-[0.65rem] font-black text-white;
+}
+.squad-form-row .is-win {
+  @apply bg-success;
+}
+.squad-form-row .is-loss {
+  @apply bg-error;
+}
+.squad-form-row .is-draw {
+  @apply bg-warning text-black;
+}
+.squad-match-labels,
+.squad-match-row {
+  @apply grid grid-cols-[4.5rem_minmax(16rem,1fr)_minmax(8rem,0.7fr)_4.5rem] items-center gap-3 px-4;
+}
+.squad-match-labels {
+  @apply text-base-content/50 border-base-content/10 min-h-8 border-b text-[0.65rem] font-bold tracking-wide uppercase;
+}
+.squad-match-row {
+  @apply border-base-content/10 hover:bg-base-content/5 min-h-12 cursor-pointer border-b text-xs transition-colors last:border-b-0;
+}
+.squad-match-row time,
+.squad-match-event > span {
+  @apply text-base-content/65 truncate;
+}
+.squad-match-versus {
+  @apply grid min-w-0 grid-cols-[max-content_1.5rem_3.5rem_1.5rem_minmax(0,1fr)] items-center gap-2;
+}
+.squad-match-versus > a:first-child {
+  @apply max-w-24 truncate text-left;
+}
+.squad-match-versus > a:last-child {
+  @apply truncate;
+}
+.squad-match-versus > a:hover,
+.squad-match-event:hover {
+  @apply text-base-content;
+}
+.squad-match-versus img {
+  @apply size-6;
+}
+.squad-match-versus strong {
+  @apply text-center text-sm font-black whitespace-nowrap;
+}
+.squad-match-event {
+  @apply flex min-w-0 items-center gap-2;
+}
+.squad-match-event img {
+  @apply size-6 shrink-0 object-contain;
+}
+.squad-match-row button {
+  @apply btn btn-xs bg-[#4d6783] text-[#d8e5f1] disabled:cursor-default disabled:opacity-35;
+}
+.squad-transfers > ul > li {
+  @apply border-base-content/10 hover:bg-base-content/5 grid min-h-18 cursor-pointer grid-cols-[2.75rem_3rem_1.25rem_3rem_minmax(0,1fr)_6.5rem] items-center gap-2 border-b px-4 transition-colors last:border-b-0;
+}
+.squad-transfer-player {
+  @apply grid size-10 place-items-center overflow-hidden rounded-full;
+}
+.squad-transfer-player img {
+  @apply bg-base-content/10 size-10 rounded-full object-cover object-top;
+}
+.squad-transfer-arrow {
+  @apply text-base-content/50 text-center;
+}
+.squad-transfers li p {
+  @apply text-base-content/75 min-w-0 text-xs leading-snug;
+}
+.squad-transfers li p strong {
+  @apply text-base-content;
+}
+.squad-transfers li time {
+  @apply text-base-content/55 text-right text-[0.65rem];
+}
+.squad-panel-empty {
+  @apply text-base-content/50 col-span-full grid min-h-18 place-items-center px-4 text-sm;
+}
+.squad-coach-card {
+  @apply border-base-content/15 bg-base-200/45 flex w-full shrink-0 flex-col overflow-hidden rounded-xl border;
+}
+.squad-coach-portrait {
+  @apply bg-base-300/55 relative h-64 w-full shrink-0 overflow-hidden;
+}
+.squad-coach-crest {
+  @apply pointer-events-none absolute top-1/2 left-1/2 size-40 -translate-x-1/2 -translate-y-1/2 object-contain opacity-10;
+}
+.squad-coach-person {
+  @apply absolute inset-0 z-10 size-full object-contain object-bottom;
+}
+.squad-coach-details {
+  @apply border-base-content/10 flex min-w-0 flex-col border-t p-5;
+}
+.squad-coach-label {
+  @apply text-base-content/75 flex items-center gap-2 text-xs font-black tracking-wider uppercase;
+}
+.squad-coach-label svg {
+  @apply size-3;
+}
+.squad-coach-details h2 {
+  @apply mt-2 text-xl font-black;
+}
+.squad-coach-details p {
+  @apply text-base-content/60 mt-0.5 text-xs font-semibold;
+}
+.squad-coach-empty {
+  @apply text-base-content/45 min-h-32 items-center justify-center gap-4 p-5 text-center;
+}
+.squad-coach-empty > svg {
+  @apply size-10;
+}
+@media (max-width: 1200px) {
+  .squad-hub {
+    @apply grid-cols-[20rem_minmax(0,1fr)];
+  }
+  .squad-player-grid {
+    @apply grid-cols-3;
+  }
+  .squad-lower-grid {
+    @apply grid-cols-1;
+  }
+}
+
 /* Inbox follows the compact dark cards used throughout the modernized main tabs. */
 .inbox-dashboard {
   @apply bg-base-100 text-base-content flex h-full min-w-0 flex-col overflow-hidden;

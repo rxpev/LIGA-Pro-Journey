@@ -491,7 +491,12 @@ export default function registerProfileHandlers() {
           include: {
             players: {
               include: {
-                country: true, // needed for flags / names in PlayerCard
+                country: {
+                  include: {
+                    continent: true,
+                  },
+                }, // needed for flags, names, and team-region identity
+                team: true,
               },
             },
           },
@@ -502,6 +507,28 @@ export default function registerProfileHandlers() {
     if (!profile || !profile.team) {
       // teamless: Squad Hub will fall back to the "You are teamless" view
       return [];
+    }
+
+    if (
+      profile.trialTeamId === profile.team.id &&
+      profile.playerId &&
+      !profile.team.players.some((player) => player.id === profile.playerId)
+    ) {
+      const trialPlayer = await DatabaseClient.prisma.player.findUnique({
+        where: { id: profile.playerId },
+        include: {
+          country: {
+            include: {
+              continent: true,
+            },
+          },
+          team: true,
+        },
+      });
+
+      if (trialPlayer) {
+        return [trialPlayer, ...profile.team.players];
+      }
     }
 
     return profile.team.players;
