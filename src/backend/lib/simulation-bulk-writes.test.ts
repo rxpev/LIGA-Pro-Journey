@@ -127,6 +127,15 @@ async function main() {
 
     // Exercise the real match handler with statistics both enabled and off.
     const worldgen = require('./worldgen') as typeof import('./worldgen');
+    assert.equal(
+      worldgen.__npcWorldgenTest.getActiveUserTeamId({ teamId: 297, player: { starter: true } }),
+      297,
+    );
+    assert.equal(
+      worldgen.__npcWorldgenTest.getActiveUserTeamId({ teamId: 297, player: { starter: false } }),
+      null,
+      'a benched player must not turn newly scheduled team fixtures into user matchdays',
+    );
     const roundTeams = await prisma.team.findMany({ take: 4, orderBy: { id: 'asc' } });
     const roundCompetition = await prisma.competition.create({ data: {
       federationId: federation.id, tierId: tier.id,
@@ -195,6 +204,7 @@ async function main() {
     assert.equal(await prisma.match.count({ where: { payload: 'rollback-parent' } }), 0);
     let nextTestMatchId = Math.ceil(((await prisma.match.aggregate({ _max: { id: true } }))._max.id ?? 0) / 100 + 1) * 100;
     const phases = new Map<string, number>();
+    let disabledStatsMatchId: number | null = null;
     for (const enabled of [true, false, ...Array<boolean>(20).fill(true)]) {
       await prisma.profile.update({ where: { id: profile.id }, data: { simulateNpcMatchStats: enabled } });
       const match = await prisma.match.create({ data: {
@@ -205,6 +215,7 @@ async function main() {
           teams: { create: teams.map((team, index) => ({ teamId: team.id, seed: index + 1 })) },
         }] },
       } });
+      if (!enabled) disabledStatsMatchId = match.id;
       await worldgen.onMatchdayNPC({ payload: String(match.id), date, type: Constants.CalendarEntry.MATCHDAY_NPC } as any,
         (name, ms) => phases.set(name, (phases.get(name) ?? 0) + ms));
       const result = await prisma.match.findUniqueOrThrow({ where: { id: match.id }, include: {
@@ -240,6 +251,45 @@ async function main() {
         assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }), 0);
       }
     }
+
+    assert.ok(disabledStatsMatchId != null);
+    const repairResult = await worldgen.repairMissingLegacyBackfillNpcMatchStats();
+    assert.ok(repairResult.repaired > 0);
+    assert.ok(await prisma.matchPlayerGameStat.count({
+      where: { matchId: disabledStatsMatchId! },
+    }) > 0, 'a completed match missing statistics must be repaired on a later calendar tick');
+
+    // Benching converts the user's remaining team fixtures to NPC matchdays.
+    // They must retain player statistics even when global NPC stats are off.
+    const originalProfileTeamId = profile.teamId;
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: { teamId: teams[0].id, simulateNpcMatchStats: false },
+    });
+    const benchedTeamMatch = await prisma.match.create({ data: {
+      id: nextTestMatchId++, date, payload: '{}', status: Constants.MatchStatus.READY,
+      competitionId: fixtureCompetition.id,
+      competitors: { create: teams.map((team, index) => ({ teamId: team.id, seed: index + 1 })) },
+      games: { create: [{ map: 'de_dust2', num: 1, status: Constants.MatchStatus.READY,
+        teams: { create: teams.map((team, index) => ({ teamId: team.id, seed: index + 1 })) },
+      }] },
+    } });
+    await worldgen.onMatchdayNPC({
+      payload: String(benchedTeamMatch.id), date, type: Constants.CalendarEntry.MATCHDAY_NPC,
+    } as any);
+    const simulatedBenchedTeamMatch = await prisma.match.findUniqueOrThrow({
+      where: { id: benchedTeamMatch.id },
+      include: { games: true, players: true },
+    });
+    assert.equal(simulatedBenchedTeamMatch.games[0].status, Constants.MatchStatus.COMPLETED);
+    assert.ok(simulatedBenchedTeamMatch.players.length > 0);
+    assert.ok(await prisma.matchPlayerGameStat.count({
+      where: { matchId: benchedTeamMatch.id },
+    }) > 0);
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: { teamId: originalProfileTeamId, simulateNpcMatchStats: true },
+    });
     console.log('22-match internal timings (ms):', Object.fromEntries(phases));
 
     // A contiguous NPC run writes independent matches together, but a team

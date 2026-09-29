@@ -2263,6 +2263,15 @@ async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants
  * @param vetoMapName Placeholder map for user matches that should always use veto.
  * @function
  */
+function getActiveUserTeamId(
+  profile:
+    | { teamId?: number | null; player?: { starter?: boolean | null } | null }
+    | null
+    | undefined,
+) {
+  return profile?.teamId != null && profile.player?.starter === true ? profile.teamId : null;
+}
+
 async function createMatchdays(
   matches: Clux.Match[],
   tournament: Tournament,
@@ -2310,9 +2319,10 @@ async function createMatchdays(
   const today = profile?.date || new Date();
 
   // grab user seed (teamless players will not match any competitor)
+  const activeUserTeamId = getActiveUserTeamId(profile);
   const userCompetitorId =
-    profile?.teamId != null
-      ? competition.competitors.find((competitor) => competitor.teamId === profile.teamId)
+    activeUserTeamId != null
+      ? competition.competitors.find((competitor) => competitor.teamId === activeUserTeamId)
       : undefined;
   const userSeed = tournament.getSeedByCompetitorId(userCompetitorId?.id);
   // create the matchdays
@@ -5825,7 +5835,13 @@ async function scheduleEseaOceaniaRelegationMatch(params: {
   const fallbackMap = mapNames[0] || 'de_dust2';
   const maps = Array.from({ length: 3 }, (_, index) => mapNames[index] || fallbackMap);
   const matchday = addDays(date, 1);
-  const userTeamId = profile.teamId;
+  const userPlayer = profile.playerId
+    ? await DatabaseClient.prisma.player.findUnique({
+        where: { id: profile.playerId },
+        select: { starter: true },
+      })
+    : null;
+  const userTeamId = getActiveUserTeamId({ ...profile, player: userPlayer });
 
   await DatabaseClient.prisma.$transaction((tx) =>
     insertScheduledMatches(tx, [
@@ -10620,6 +10636,7 @@ export async function onNpcRegenIntake(_: Calendar) {
 export const __npcWorldgenTest = {
   parseRegenNamePools,
   createMatchdays,
+  getActiveUserTeamId,
   loadNpcRosterHealth,
   moveNpcPlayerAtomic,
   processNPCContractExtensions,
@@ -11124,10 +11141,17 @@ export async function onMatchdayNPC(
   const careerProfile = await DatabaseClient.prisma.profile.findFirst({
     include: { player: { include: { country: true, careerStints: true } } },
   });
+  // A benched user remains contracted to their team, but their future fixtures
+  // are deliberately converted to NPC matchdays. Those matches still need the
+  // full simulation pipeline for the active roster; otherwise only the series
+  // score is persisted and the team match page has no player statistics.
+  const involvesCareerTeam =
+    careerProfile?.teamId != null &&
+    match.competitors.some((competitor) => competitor.teamId === careerProfile.teamId);
   const simulateNpcMatchStats =
     options.simulateMatchStats === true ||
-    (entry.type === Constants.CalendarEntry.MATCHDAY_NPC &&
-      Boolean(careerProfile?.simulateNpcMatchStats));
+    Boolean(careerProfile?.simulateNpcMatchStats) ||
+    (entry.type === Constants.CalendarEntry.MATCHDAY_NPC && involvesCareerTeam);
   let userMatchdayProfile: Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>;
 
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {

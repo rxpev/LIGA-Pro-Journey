@@ -244,6 +244,14 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
     Worldgen.recordMatchResults(recordCalendarPhase),
   );
 
+  // Recover any completed simulated match that was previously misclassified
+  // as a user matchday while the player was benched. This also repairs saves
+  // created before the runtime demotion above by rebuilding their missing
+  // player links, events, map results and aggregate statistics.
+  await measureCalendarPhase('repair-missing-match-stats', () =>
+    Worldgen.repairMissingLegacyBackfillNpcMatchStats(),
+  );
+
   // npc transfers
   await measureCalendarPhase('npc-transfers', () =>
     Worldgen.sendNPCTransferOffer(measureCalendarPhase),
@@ -565,11 +573,16 @@ export default function () {
   Engine.Runtime.Instance.register(
     Constants.CalendarEntry.MATCHDAY_USER,
     async (entry: Calendar) => {
-      const profile = await DatabaseClient.prisma.profile.findFirst();
+      const profile = await DatabaseClient.prisma.profile.findFirst({
+        include: { player: { select: { starter: true } } },
+      });
 
-      // Fail-safe: if teamless but we encounter a MATCHDAY_USER,
-      // demote it and simulate as NPC so matches never get stuck
-      if (!profile?.teamId) {
+      // A benched player remains contracted to the team. Existing saves can
+      // therefore still contain user matchdays created before the benching,
+      // and later tournament rounds may be scheduled after it. Demote both
+      // teamless and benched-user fixtures so the NPC simulation (including
+      // player statistics) runs instead of stopping at the user match screen.
+      if (!profile?.teamId || profile.player?.starter !== true) {
         await DatabaseClient.prisma.calendar.update({
           where: { id: entry.id },
           data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
@@ -747,7 +760,14 @@ export default function () {
     );
 
     // Simulate NPC behavior for user match.
-    await Worldgen.onMatchdayNPC(entry);
+    const effectiveEntry =
+      profile.player?.starter === true
+        ? entry
+        : await DatabaseClient.prisma.calendar.update({
+            where: { id: entry.id },
+            data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
+          });
+    await Worldgen.onMatchdayNPC(effectiveEntry);
 
     // Reward XP if the user's team won.
     const match = await DatabaseClient.prisma.match.findFirst({
