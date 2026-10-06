@@ -27,6 +27,8 @@ import {
 const emptyAvatar = 'resources://avatars/empty.png';
 
 function getSenderAvatar(name: string, role?: string | null, teamBlazon?: string | null) {
+  const teammateAvatar = role?.match(/\[avatar:([^\]]+)\]/)?.[1];
+  if (teammateAvatar) return decodeURIComponent(teammateAvatar);
   if (role === 'Management Board') {
     return teamBlazon || 'resources://blazonry/noteam.svg';
   }

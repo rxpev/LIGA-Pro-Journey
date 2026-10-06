@@ -13,6 +13,7 @@ import {
   WindowManager,
   disconnectActiveDatabaseWithIntegrity,
 } from '@liga/backend/lib';
+import { getCurrentTeamMoodSummaries, replyToTeammateMood } from '@liga/backend/lib/teammate-moods';
 import { Util, Constants, Eagers } from '@liga/shared';
 import { verifyFaceitEloIntegrity } from '@liga/backend/lib/faceit-elo-integrity';
 import {
@@ -457,6 +458,11 @@ export default function registerDatabaseHandlers() {
       include: Eagers.email.include,
     });
   });
+
+  ipcMain.handle(Constants.IPCRoute.TEAMMATE_MORALE_ALL, () => getCurrentTeamMoodSummaries());
+  ipcMain.handle(Constants.IPCRoute.TEAMMATE_MORALE_REPLY, (_, payload: string) =>
+    replyToTeammateMood(payload),
+  );
 
   ipcMain.handle(Constants.IPCRoute.FEDERATIONS_ALL, async () => {
     const prisma = await DatabaseClient.connect();

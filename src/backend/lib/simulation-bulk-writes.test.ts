@@ -132,6 +132,15 @@ async function main() {
       297,
     );
     assert.equal(
+      worldgen.__npcWorldgenTest.getActiveUserTeamId({
+        teamId: 297,
+        trialTeamId: 812,
+        player: { starter: false },
+      }),
+      812,
+      'active trials must remain user-controlled even though the player is not a permanent starter',
+    );
+    assert.equal(
       worldgen.__npcWorldgenTest.getActiveUserTeamId({ teamId: 297, player: { starter: false } }),
       null,
       'a benched player must not turn newly scheduled team fixtures into user matchdays',

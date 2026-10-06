@@ -436,6 +436,7 @@ model Player {
   careerStints    CareerStint[]
   competitionMvps CompetitionMvp[]
   faceitFriend    FaceitFriend?
+  teammateMoods   TeammateMood[]
 
   // has one
   profile Profile?
@@ -480,6 +481,7 @@ model Profile {
   // has many
   bonuses Bonus[]
   matches Match[]
+  teammateMoods TeammateMood[]
 
   // belongs to
   team      Team?   @relation("ProfileTeam", fields: [teamId], references: [id])
@@ -487,6 +489,31 @@ model Profile {
   trialTeam Team?   @relation("ProfileTrialTeam", fields: [trialTeamId], references: [id])
   player    Player? @relation(fields: [playerId], references: [id])
   playerId  Int?    @unique
+}
+
+/// Short-lived social state for NPCs on the user's current permanent team.
+/// Rows are removed when a player leaves the roster and are never created during trials.
+model TeammateMood {
+  id               Int      @id @default(autoincrement())
+  profileId        Int
+  playerId         Int
+  teamId           Int
+  confidence       Int      @default(50)
+  roleSatisfaction Int      @default(50)
+  trust            Int      @default(50)
+  lastStarter      Boolean
+  winStreak        Int      @default(0)
+  lossStreak       Int      @default(0)
+  lastMessageKey   String?
+  lastMessageAt    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, playerId])
+  @@index([profileId, teamId])
 }
 
 model UserTeammateSeasonXp {

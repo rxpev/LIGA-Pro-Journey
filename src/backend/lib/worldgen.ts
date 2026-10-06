@@ -87,6 +87,7 @@ import {
 } from './trial-contract-offer';
 import { upsertCompetitionMvp } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
+import { getTeamTrustModifier, processCompletedMatch } from './teammate-moods';
 import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
@@ -2265,10 +2266,15 @@ async function resolveUserMatchdayConflict(matchday: Date, targetTier: Constants
  */
 function getActiveUserTeamId(
   profile:
-    | { teamId?: number | null; player?: { starter?: boolean | null } | null }
+    | {
+        teamId?: number | null;
+        trialTeamId?: number | null;
+        player?: { starter?: boolean | null } | null;
+      }
     | null
     | undefined,
 ) {
+  if (profile?.trialTeamId != null) return profile.trialTeamId;
   return profile?.teamId != null && profile.player?.starter === true ? profile.teamId : null;
 }
 
@@ -5626,6 +5632,9 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
       'onPlayerContractExtensionEval: major winner with current team, forcing min extension pbx=85.',
     );
   }
+
+  // Lineup trust nudges retention in either direction, capped to ten points.
+  pbx += await getTeamTrustModifier();
 
   // Additional small decline chance even when conditions are good
   const declinePbx = S.EXTENSION_DECLINE_PBX_EVEN_IF_GOOD ?? 10;
@@ -11443,6 +11452,9 @@ export async function onMatchdayNPC(
     : await DatabaseClient.prisma.$transaction(writes!.transaction);
   if (samplePersistence) report?.('sample-persist-total', performance.now() - persistenceStarted);
   phase('match-persist');
+  if (involvesCareerTeam) {
+    await processCompletedMatch(match.id);
+  }
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {
     await progressActiveFaceitTrial(
       match.competitors.flatMap((competitor) =>

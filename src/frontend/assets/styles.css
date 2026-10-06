@@ -1218,6 +1218,31 @@ meter::-webkit-meter-bar {
 .squad-player-history-link svg {
   @apply size-3;
 }
+.squad-player-morale {
+  @apply bg-base-100/75 absolute top-3 left-3 z-30 grid size-8 place-items-center rounded-full;
+  color: var(--morale-color);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 10%),
+    0 0 9px color-mix(in srgb, var(--morale-color), transparent 60%);
+}
+.squad-player-morale svg {
+  @apply size-7;
+}
+.squad-player-morale.is-very-happy {
+  --morale-color: #39f56a;
+}
+.squad-player-morale.is-happy {
+  --morale-color: #9be84b;
+}
+.squad-player-morale.is-content {
+  --morale-color: #f0d14a;
+}
+.squad-player-morale.is-unhappy {
+  --morale-color: #f49335;
+}
+.squad-player-morale.is-very-unhappy {
+  --morale-color: #f05259;
+}
 .squad-player-card > header {
   @apply block px-0 pt-0;
 }

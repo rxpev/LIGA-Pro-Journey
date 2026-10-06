@@ -411,6 +411,8 @@ export enum IPCRoute {
   TEAM_RANKING_HISTORY = '/team/ranking/history',
   TEAM_COMPETITION_RANKINGS = '/team/competition-rankings',
   TEAM_TRANSFERS = '/team/transfers',
+  TEAMMATE_MORALE_ALL = '/teammate-morale/all',
+  TEAMMATE_MORALE_REPLY = '/teammate-morale/reply',
   TEAMS_ALL = '/teams/all',
   TEAMS_CREATE = '/teams/create',
   TEAMS_UPDATE = '/teams/update',

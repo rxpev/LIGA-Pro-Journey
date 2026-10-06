@@ -40,6 +40,16 @@ type FaceitFriendPlayer = {
   teamCountryId: number | null;
 };
 
+export type TeammateMoraleSummary = {
+  playerId: number;
+  confidence: number;
+  roleSatisfaction: number;
+  trust: number;
+  morale: 'Very Happy' | 'Happy' | 'Content' | 'Unhappy' | 'Very Unhappy';
+  moraleScore: number;
+  performanceModifier: number;
+};
+
 /**
  * Exports this module.
  *
@@ -238,6 +248,12 @@ export default {
     updateMany: <T = typeof Eagers.email>(query: Prisma.EmailUpdateManyArgs) =>
       ipcRenderer.invoke(Constants.IPCRoute.EMAILS_UPDATE_MANY, query) as Promise<
         Array<Prisma.EmailGetPayload<T>>
+      >,
+  },
+  teammateMorale: {
+    all: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.TEAMMATE_MORALE_ALL) as Promise<
+        TeammateMoraleSummary[]
       >,
   },
   federations: {

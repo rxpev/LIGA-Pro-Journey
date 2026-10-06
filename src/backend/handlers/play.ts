@@ -12,6 +12,7 @@ import { flatten, merge, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { saveFaceitResult } from '@liga/backend/lib/save-result';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
+import { processCompletedMatch } from '@liga/backend/lib/teammate-moods';
 import {
   DatabaseClient,
   ArenaMode,
@@ -680,6 +681,7 @@ export default function () {
         matchId: match.id,
         profile: { id: profile.id, teamId: profile.teamId, playerId: profile.playerId },
       });
+      await processCompletedMatch(match.id);
     }
 
     // bail early if match isn't completed yet and send a profile

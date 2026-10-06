@@ -36,7 +36,6 @@ function disableClose(event: Electron.Event) {
   const mainWindow = WindowManager.get(Constants.WindowIdentifier.Main);
   mainWindow.webContents.send(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE);
 }
-
 const calendarPhaseTimings = new Map<string, { count: number; totalMs: number }>();
 let tickStartedAt = 0;
 let tickDate: Date | undefined;
@@ -47,7 +46,6 @@ function recordCalendarPhase(phase: string, elapsedMs: number) {
   timing.totalMs += elapsedMs;
   calendarPhaseTimings.set(phase, timing);
 }
-
 async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>) {
   const startedAt = performance.now();
   try {
@@ -57,7 +55,6 @@ async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>
     recordCalendarPhase(phase, elapsedMs);
   }
 }
-
 async function resetDatabaseForMainMenu() {
   await disconnectActiveDatabaseWithIntegrity();
   await DatabaseClient.connect(0);
@@ -182,6 +179,38 @@ async function reconcileOverdueMatchdays(
   }
 }
 
+/** Keep enough upcoming fixtures user-controlled to finish an active trial. */
+async function reconcileActiveTrialMatchdays(
+  profile: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>>,
+) {
+  if (!profile.trialTeamId || !profile.playerId) return;
+
+  const remaining = Math.max(0, (profile.trialSeriesTarget ?? 3) - profile.trialSeriesPlayed);
+  if (!remaining) return;
+
+  const matches = await DatabaseClient.prisma.match.findMany({
+    where: {
+      date: { gte: profile.date },
+      status: Constants.MatchStatus.READY,
+      matchType: { not: 'FACEIT_PUG' },
+      competitors: { some: { teamId: profile.trialTeamId } },
+    },
+    orderBy: { date: 'asc' },
+    take: remaining,
+    select: { id: true },
+  });
+  if (!matches.length) return;
+
+  await DatabaseClient.prisma.calendar.updateMany({
+    where: {
+      payload: { in: matches.map((match) => String(match.id)) },
+      type: Constants.CalendarEntry.MATCHDAY_NPC,
+      completed: false,
+    },
+    data: { type: Constants.CalendarEntry.MATCHDAY_USER },
+  });
+}
+
 /**
  * Engine middleware: start of each tick.
  */
@@ -198,6 +227,9 @@ async function onTickStart() {
 
   await measureCalendarPhase('reconcile-competition-starts', () => reconcileDueCompetitionStarts(profile));
   await measureCalendarPhase('reconcile-matchdays', () => reconcileOverdueMatchdays(profile));
+  await measureCalendarPhase('reconcile-trial-matchdays', () =>
+    reconcileActiveTrialMatchdays(profile),
+  );
 
   // Fetch global calendar events for today (calendar-day window, not exact timestamp).
   // This avoids missing entries due to timezone/DST/millisecond drift.
@@ -582,7 +614,8 @@ export default function () {
       // and later tournament rounds may be scheduled after it. Demote both
       // teamless and benched-user fixtures so the NPC simulation (including
       // player statistics) runs instead of stopping at the user match screen.
-      if (!profile?.teamId || profile.player?.starter !== true) {
+      const activeTrial = profile?.trialTeamId != null;
+      if (!activeTrial && (!profile?.teamId || profile.player?.starter !== true)) {
         await DatabaseClient.prisma.calendar.update({
           where: { id: entry.id },
           data: { type: Constants.CalendarEntry.MATCHDAY_NPC },
@@ -761,7 +794,7 @@ export default function () {
 
     // Simulate NPC behavior for user match.
     const effectiveEntry =
-      profile.player?.starter === true
+      profile.trialTeamId != null || profile.player?.starter === true
         ? entry
         : await DatabaseClient.prisma.calendar.update({
             where: { id: entry.id },
