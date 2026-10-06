@@ -13,7 +13,7 @@ import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
 import { useAudio, useLoopingAudio, useTheme, useTranslation } from '@liga/frontend/hooks';
-import { AnimatedOutlet, Confetti, Image } from '@liga/frontend/components';
+import { AnimatedOutlet, Confetti, Image, JoinedTeamReveal } from '@liga/frontend/components';
 import awperIcon from '@liga/frontend/assets/awper.png';
 import riflerIcon from '@liga/frontend/assets/rifler.png';
 import iglIcon from '@liga/frontend/assets/igl.png';
@@ -229,6 +229,39 @@ function Root() {
   const audioNegativeAlert = useAudio('negative-alert.wav');
   const audioNotification = useAudio('notification.wav');
   const [hasUnreadNews, setHasUnreadNews] = React.useState(false);
+  const [trialReveal, setTrialReveal] = React.useState<{
+    email: (typeof state.emails)[number];
+    teamName: string;
+    teamBlazon?: string | null;
+    series: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const showTrialReveal = (event: Event) => {
+      setTrialReveal((event as CustomEvent<NonNullable<typeof trialReveal>>).detail);
+    };
+    window.addEventListener('liga:trial-reveal', showTrialReveal);
+    return () => window.removeEventListener('liga:trial-reveal', showTrialReveal);
+  }, []);
+
+  const completeTrialReveal = React.useCallback(async () => {
+    if (!trialReveal) return;
+    const { email } = trialReveal;
+    setTrialReveal(null);
+    window.dispatchEvent(new CustomEvent('liga:trial-coach-typing', { detail: true }));
+    const coachDialogueId = Math.max(...email.dialogues.map((dialogue) => dialogue.id));
+    dispatch(
+      emailsUpdate([
+        {
+          ...email,
+          dialogues: email.dialogues.filter((dialogue) => dialogue.id !== coachDialogueId),
+        },
+      ]),
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    dispatch(emailsUpdate([email]));
+    window.dispatchEvent(new CustomEvent('liga:trial-coach-typing', { detail: false }));
+  }, [dispatch, trialReveal]);
 
   React.useEffect(() => {
     const removeClosePromptListener = api.ipc.on(Constants.IPCRoute.CALENDAR_CONFIRM_CLOSE, () => {
@@ -450,6 +483,22 @@ function Root() {
 
   return (
     <React.StrictMode>
+      {trialReveal && (
+        <JoinedTeamReveal
+          className="fixed inset-0 z-[300]"
+          teamName={trialReveal.teamName}
+          teamBlazon={trialReveal.teamBlazon}
+          kicker="Career update"
+          title={`Joined ${trialReveal.teamName} on Trial`}
+          term={
+            trialReveal.series > 0
+              ? `For ${trialReveal.series} ${trialReveal.series === 1 ? 'match' : 'matches'}`
+              : 'Trial period started'
+          }
+          copy="The chance is yours. Show the world why you belong here."
+          onComplete={completeTrialReveal}
+        />
+      )}
       <header
         className={cx(
           'navbar fixed top-0 z-50 h-16 border-b p-0',

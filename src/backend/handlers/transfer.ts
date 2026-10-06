@@ -29,15 +29,32 @@ export default function () {
       const transfer = await DatabaseClient.prisma.transfer.findFirst({
         where: { id: Number(transferId), playerId: profile?.playerId ?? -1 },
         include: {
-          offers: { orderBy: { id: 'desc' }, take: 1 },
+          offers: { orderBy: { id: 'desc' } },
           from: { include: { personas: true } },
         },
       });
+      const trialOffer = transfer?.offers.find((offer) => offer.offerType === 'TRIAL');
+
+      // Treat a repeated acceptance as idempotent. A fast double-click could previously
+      // accept the trial in the first IPC call and make the second call fail before the
+      // renderer had a chance to start its reveal.
+      if (
+        choice === 'accept' &&
+        profile &&
+        transfer?.status === Constants.TransferStatus.PLAYER_ACCEPTED &&
+        trialOffer?.status === Constants.TransferStatus.PLAYER_ACCEPTED &&
+        profile.trialTeamId === transfer.teamIdFrom
+      ) {
+        const acceptedEmail = await DatabaseClient.prisma.email.findUnique({
+          where: { id: emailId },
+          include: Eagers.email.include,
+        });
+        if (acceptedEmail) return acceptedEmail;
+      }
       if (
         !profile ||
         transfer?.status !== Constants.TransferStatus.PLAYER_PENDING ||
-        transfer?.offers[0]?.status !== Constants.TransferStatus.PLAYER_PENDING ||
-        transfer?.offers[0]?.offerType !== 'TRIAL'
+        trialOffer?.status !== Constants.TransferStatus.PLAYER_PENDING
       ) {
         throw new Error('Trial offer not found.');
       }
@@ -88,7 +105,7 @@ export default function () {
             persona.role === Constants.PersonaRole.ASSISTANT,
         ) ?? transfer.from.personas[0];
       if (!coachPersona) throw new Error('Trial coach not found.');
-      const offer = transfer.offers[0];
+      const offer = trialOffer;
       const offerStartedAt = offer.expiresAt ? addDays(offer.expiresAt, -7) : profile.date;
       const isLateReply = differenceInDays(profile.date, offerStartedAt) >= 3;
       const accepted = choice === 'accept';

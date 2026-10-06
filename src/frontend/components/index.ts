@@ -12,3 +12,4 @@ export { default as MatchAbandonedPrompt } from './match-abandoned-prompt';
 export { default as TeamBlazon } from './team-blazon';
 export { default as Historial } from './historial';
 export { default as Pagination } from './pagination';
+export { default as JoinedTeamReveal } from './joined-team-reveal';

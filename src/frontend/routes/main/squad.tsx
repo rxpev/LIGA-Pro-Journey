@@ -23,7 +23,6 @@ import {
   FaMap,
   FaMeh,
   FaSadTear,
-  FaShieldAlt,
   FaSmileBeam,
   FaStar,
   FaTrophy,
@@ -583,17 +582,7 @@ export default function () {
 
       <main className="squad-overview">
         <header className="squad-overview-header">
-          <div>
-            <h1>Squad Overview</h1>
-            <p>Your active squad, player form and key info at a glance.</p>
-          </div>
-          <div className="squad-overview-summary">
-            <FaShieldAlt aria-hidden="true" />
-            <span>
-              <small>Active roster</small>
-              <strong>{startingFive.length} players</strong>
-            </span>
-          </div>
+          <h1>Active Lineup</h1>
         </header>
 
         <div className="squad-player-grid">
@@ -634,6 +623,9 @@ export default function () {
                   <div className="squad-player-identity">
                     <div className="squad-player-name-row">
                       <h2>{player.name}</h2>
+                      {player.age != null && (
+                        <span className="squad-player-age">{player.age} years</span>
+                      )}
                     </div>
                     <p>
                       <span className={`fp ${player.country.code.toLowerCase()}`} />

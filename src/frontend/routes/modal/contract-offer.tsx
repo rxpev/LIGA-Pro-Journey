@@ -2,13 +2,12 @@ import React from 'react';
 import { FaCalendarAlt, FaCheck, FaFileContract, FaTimes, FaUserTag } from 'react-icons/fa';
 import { useLocation } from 'react-router-dom';
 import { Constants } from '@liga/shared';
-import { Image } from '@liga/frontend/components';
+import { Image, JoinedTeamReveal } from '@liga/frontend/components';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useAudioControls } from '@liga/frontend/hooks';
 import { getTeamHueBackground } from '@liga/frontend/lib';
 import { getTrialContractOpening } from '@liga/backend/lib/trial-contract-offer';
 import type { Prisma } from '@prisma/client';
-import joinedTeamBackground from '@liga/frontend/assets/screens/joinedteam.png';
 
 type ContractOfferState = {
   transferId: number;
@@ -42,14 +41,11 @@ export default function ContractOffer() {
   const [working, setWorking] = React.useState(false);
   const [signed, setSigned] = React.useState(false);
   const [offerResolved, setOfferResolved] = React.useState(Boolean(state?.readOnly));
-  const [revealExiting, setRevealExiting] = React.useState(false);
   const [acceptProgress, setAcceptProgress] = React.useState(0);
   const [coach, setCoach] = React.useState<{ name: string; signatureFont?: string | null } | null>(
     null,
   );
   const [resolvedTeamId, setResolvedTeamId] = React.useState<number | null>(null);
-  const revealFinished = React.useRef(false);
-  const revealExitTimeout = React.useRef<number>();
   const deferredEmailId = React.useRef<number | null>(null);
   const signingAudio = useAudioControls('button-signature.wav');
 
@@ -66,35 +62,6 @@ export default function ContractOffer() {
 
     void api.emails.notify(deferredEmailId.current).finally(closeModal);
   }, [closeModal]);
-
-  const finishReveal = React.useCallback(() => {
-    if (revealFinished.current) return;
-    revealFinished.current = true;
-    setRevealExiting(true);
-    revealExitTimeout.current = window.setTimeout(completeReveal, 700);
-  }, [completeReveal]);
-
-  React.useEffect(
-    () => () => {
-      if (revealExitTimeout.current != null) window.clearTimeout(revealExitTimeout.current);
-    },
-    [],
-  );
-
-  React.useEffect(() => {
-    if (!signed) return;
-
-    const timeout = window.setTimeout(finishReveal, 6500);
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') finishReveal();
-    };
-    window.addEventListener('keydown', dismiss);
-
-    return () => {
-      window.clearTimeout(timeout);
-      window.removeEventListener('keydown', dismiss);
-    };
-  }, [finishReveal, signed]);
 
   React.useEffect(() => {
     if (!state) return;
@@ -172,53 +139,15 @@ export default function ContractOffer() {
 
   if (signed) {
     return (
-      <main
-        className={`joined-team-interstitial relative h-screen w-screen cursor-default overflow-hidden bg-[#030714] text-white ${
-          revealExiting ? 'joined-team-interstitial-exiting' : ''
-        }`}
-        aria-live="polite"
-        aria-label={`Joined ${state.teamName}`}
-      >
-        <img
-          src={joinedTeamBackground}
-          alt=""
-          className="joined-team-background absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(1,4,14,0.12),rgba(1,4,14,0.08)_55%,rgba(1,4,14,0.62))]" />
-
-        <section className="relative z-10 flex h-full w-full flex-col items-center px-10 py-[7vh] text-center">
-          <p className="joined-team-kicker text-[clamp(0.7rem,1vw,0.95rem)] font-black tracking-[0.42em] text-white/55 uppercase">
-            Career update
-          </p>
-          <h1 className="joined-team-title mt-[2vh] text-[clamp(2.4rem,5.2vw,5.8rem)] leading-none font-black tracking-[-0.025em] uppercase drop-shadow-[0_5px_20px_rgba(0,0,0,0.65)]">
-            Joined {state.teamName}
-          </h1>
-
-          <div className="joined-team-crest my-auto flex size-[clamp(8rem,18vw,14rem)] items-center justify-center">
-            <div className="absolute size-[clamp(8rem,18vw,14rem)] rounded-full bg-blue-500/12 blur-2xl" />
-            <Image
-              src={state.teamBlazon || 'resources://blazonry/noteam.svg'}
-              className="relative max-h-full max-w-full object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.75)]"
-            />
-          </div>
-
-          <p className="joined-team-term text-[clamp(1.35rem,2.7vw,2.7rem)] leading-none font-black tracking-[0.04em] uppercase drop-shadow-lg">
-            For {state.contractMonths} {state.contractMonths === 1 ? 'month' : 'months'}
-          </p>
-          <p className="joined-team-copy mt-[clamp(2.5rem,8vh,6rem)] max-w-3xl text-[clamp(0.65rem,1vw,0.95rem)] leading-relaxed font-bold tracking-[0.06em] text-white/78 uppercase drop-shadow-md">
-            A new opportunity awaits. Show the world what you can do in {state.teamName} colors.
-          </p>
-
-          <button
-            type="button"
-            className="joined-team-continue mt-5 flex items-center gap-3 text-[0.65rem] font-black tracking-[0.22em] text-white/55 uppercase transition-colors hover:text-white"
-            onClick={finishReveal}
-          >
-            <span className="joined-team-loader size-5 rounded-full border-2 border-white/25 border-t-white" />
-            Continue
-          </button>
-        </section>
-      </main>
+      <JoinedTeamReveal
+        teamName={state.teamName}
+        teamBlazon={state.teamBlazon}
+        kicker="Career update"
+        title={`Joined ${state.teamName}`}
+        term={`For ${state.contractMonths} ${state.contractMonths === 1 ? 'month' : 'months'}`}
+        copy={`A new opportunity awaits. Show the world what you can do in ${state.teamName} colors.`}
+        onComplete={completeReveal}
+      />
     );
   }
 

@@ -100,6 +100,7 @@ export default function Inbox() {
   const [guideStorageKey, setGuideStorageKey] = React.useState<string | null>(null);
   const [guideDismissed, setGuideDismissed] = React.useState(false);
   const restoredRequestForEmail = React.useRef<number | null>(null);
+  const trialReplyInFlight = React.useRef(false);
   const threadRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
@@ -120,6 +121,14 @@ export default function Inbox() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  React.useEffect(() => {
+    const updateTrialTyping = (event: Event) => {
+      setTrialReplyTyping((event as CustomEvent<boolean>).detail);
+    };
+    window.addEventListener('liga:trial-coach-typing', updateTrialTyping);
+    return () => window.removeEventListener('liga:trial-coach-typing', updateTrialTyping);
   }, []);
 
   React.useEffect(() => {
@@ -220,6 +229,18 @@ export default function Inbox() {
       .map((dialogue) => dialogue.content.match(/data-transfer-id="(\d+)"/)?.[1])
       .find(Boolean) ?? 0,
   );
+  const trialSeries = Number(
+    dialogues.map((dialogue) => dialogue.content.match(/data-series="(\d+)"/)?.[1]).find(Boolean) ??
+      0,
+  );
+  const trialTeamName =
+    dialogues
+      .map((dialogue) => dialogue.content.match(/data-team-name="([^"]+)"/)?.[1])
+      .find(Boolean) ?? active?.from.team?.name;
+  const trialTeamBlazon =
+    dialogues
+      .map((dialogue) => dialogue.content.match(/data-team-blazon="([^"]*)"/)?.[1])
+      .find((value) => value != null) ?? active?.from.team?.blazon;
   const isTrialExpired =
     active?.emails.some((email) => email.subject.startsWith('Trial Offer Expired')) ?? false;
   const hasPlayerReply = active
@@ -294,12 +315,27 @@ export default function Inbox() {
   };
 
   const respondToTrial = (choice: 'accept' | 'reject') => {
-    if (!active || !trialTransferId) return;
+    if (!active || !trialTransferId || trialReplyInFlight.current) return;
+    trialReplyInFlight.current = true;
     setWorking(true);
     setTrialReplyTyping(true);
     api.emails
       .replyTrial(active.id, trialTransferId, choice)
       .then(async (email) => {
+        if (choice === 'accept') {
+          setTrialReplyTyping(false);
+          window.dispatchEvent(
+            new CustomEvent('liga:trial-reveal', {
+              detail: {
+                email,
+                teamName: trialTeamName || 'your new team',
+                teamBlazon: trialTeamBlazon || null,
+                series: trialSeries,
+              },
+            }),
+          );
+          return;
+        }
         const coachDialogueId = Math.max(...email.dialogues.map((dialogue) => dialogue.id));
         const playerResponseEmail = {
           ...email,
@@ -310,6 +346,7 @@ export default function Inbox() {
         dispatch(emailsUpdate([email]));
       })
       .finally(() => {
+        trialReplyInFlight.current = false;
         setWorking(false);
         setTrialReplyTyping(false);
       });

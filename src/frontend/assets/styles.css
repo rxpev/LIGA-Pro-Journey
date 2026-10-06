@@ -1185,26 +1185,10 @@ meter::-webkit-meter-bar {
   @apply mb-6 flex min-h-18 items-center justify-between gap-6;
 }
 .squad-overview-header h1 {
-  @apply text-3xl font-black tracking-tight;
+  @apply text-4xl font-black tracking-tight;
 }
-.squad-overview-header p {
-  @apply text-base-content/60 mt-1 text-base;
-}
-.squad-overview-summary {
-  @apply border-base-content/15 bg-base-200/35 flex min-w-44 items-center gap-3 rounded-xl border px-4 py-3;
-}
-.squad-overview-summary > svg {
-  @apply text-base-content/75 size-7;
-}
-.squad-overview-summary span {
-  @apply flex flex-col;
-}
-.squad-overview-summary small,
 .squad-player-card small {
   @apply text-base-content/55 text-xs font-semibold;
-}
-.squad-overview-summary strong {
-  @apply text-base;
 }
 .squad-player-grid {
   @apply grid grid-cols-5 items-start gap-4;
@@ -1260,6 +1244,9 @@ meter::-webkit-meter-bar {
 }
 .squad-player-name-row h2 {
   @apply truncate text-xl font-black;
+}
+.squad-player-age {
+  @apply text-base-content/60 ml-auto shrink-0 text-sm font-semibold;
 }
 .squad-player-trial-badge {
   @apply absolute top-3 left-3 z-20 rounded bg-[#ff7300] px-2 py-1 text-[0.65rem] leading-none font-black tracking-wider text-black uppercase shadow-lg;
