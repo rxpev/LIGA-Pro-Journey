@@ -170,6 +170,15 @@ async function sendMoodMessage(
   );
 }
 
+function canSendMoodMessage(
+  mood: { lastMessageKey: string | null; lastMessageAt: Date | null },
+  key: MoodMessageKey,
+  date: Date,
+) {
+  if (mood.lastMessageKey === key) return false;
+  return !mood.lastMessageAt || differenceInDays(date, mood.lastMessageAt) >= 5;
+}
+
 export async function syncCurrentTeamMoods(options: { announceChanges?: boolean } = {}) {
   const profile = await DatabaseClient.prisma.profile.findFirst({
     include: { team: { include: { players: true } }, player: true },
@@ -243,6 +252,11 @@ export async function processCompletedMatch(matchId: number) {
   if (!won && !lost) return;
 
   const moods = await syncCurrentTeamMoods();
+  const messageCandidates: Array<{
+    mood: (typeof moods)[number];
+    player: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.player.findUnique>>>;
+    key: MoodMessageKey;
+  }> = [];
   for (const mood of moods) {
     const nextWinStreak = won ? mood.winStreak + 1 : 0;
     const nextLossStreak = lost ? mood.lossStreak + 1 : 0;
@@ -268,13 +282,27 @@ export async function processCompletedMatch(matchId: number) {
     else if (updated.trust >= 80) key = 'high-trust';
     else if ((won && nextWinStreak === 1) || (lost && nextLossStreak === 1))
       key = won ? 'win' : 'loss';
-    if (key) await sendMoodMessage(updated, player, key, profile.date);
-    if (!player.transferListed && updated.roleSatisfaction <= 15 && updated.trust <= 25) {
+    const willBeBenched =
+      !player.transferListed && updated.roleSatisfaction <= 15 && updated.trust <= 25;
+    if (willBeBenched) {
       await DatabaseClient.prisma.player.update({
         where: { id: player.id },
         data: { transferListed: true, starter: false },
       });
     }
+    if (
+      key &&
+      player.starter &&
+      !willBeBenched &&
+      canSendMoodMessage(updated, key, profile.date)
+    ) {
+      messageCandidates.push({ mood: updated, player, key });
+    }
+  }
+
+  if (messageCandidates.length) {
+    const selected = messageCandidates[Math.floor(Math.random() * messageCandidates.length)];
+    await sendMoodMessage(selected.mood, selected.player, selected.key, profile.date);
   }
 }
 
