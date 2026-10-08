@@ -2,6 +2,7 @@ import { DatabaseClient, sealActiveSaveIntegrity } from "@liga/backend/lib";
 import { Constants, Util } from "@liga/shared";
 import * as XpEconomy from "@liga/backend/lib/xp-economy";
 import { calculatePlacement, getCompletedPlacementMatches, FACEIT_PLACEMENT_MATCHES } from "@liga/backend/lib/faceit-placement";
+import { scheduleFaceitPlacementMessage } from "@liga/backend/lib/faceit-placement-message";
 
 type MatchPlayerLite = {
   id: number;
@@ -277,6 +278,10 @@ export async function saveFaceitResult(
 
   await XpEconomy.seedUserXp({ profileId: profile.id, teamlessOnly: true });
   await sealActiveSaveIntegrity();
+
+  if (placementElo != null) {
+    scheduleFaceitPlacementMessage(profile.id, placementElo);
+  }
 
   return true;
 }
