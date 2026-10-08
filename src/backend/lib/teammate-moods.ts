@@ -27,6 +27,18 @@ type MoodMessageKey =
   | 'low-trust'
   | 'role-unhappy';
 
+const pendingWelcomeEmails = new Map<number, { profileId: number; teamId: number }>();
+
+export function queueTeammateWelcome(emailId: number, profileId: number, teamId: number) {
+  pendingWelcomeEmails.set(emailId, { profileId, teamId });
+}
+
+export function takeQueuedTeammateWelcome(emailId: number) {
+  const pending = pendingWelcomeEmails.get(emailId) ?? null;
+  pendingWelcomeEmails.delete(emailId);
+  return pending;
+}
+
 const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
 function getMorale(confidence: number, roleSatisfaction: number, trust: number) {
@@ -225,9 +237,8 @@ export async function syncCurrentTeamMoods(options: { announceChanges?: boolean 
         });
     results.push(mood);
     if (options.announceChanges) {
-      const key = !existing
-        ? 'joined'
-        : existing.lastStarter !== player.starter
+      const key =
+        existing && existing.lastStarter !== player.starter
           ? player.starter
             ? 'promoted'
             : 'benched'
@@ -236,6 +247,36 @@ export async function syncCurrentTeamMoods(options: { announceChanges?: boolean 
     }
   }
   return results;
+}
+
+export async function sendRandomTeammateWelcome(expectedProfileId: number, expectedTeamId: number) {
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    include: { team: { include: { players: true } } },
+  });
+  if (
+    !profile?.playerId ||
+    profile.id !== expectedProfileId ||
+    profile.teamId !== expectedTeamId ||
+    profile.trialTeamId ||
+    !profile.team
+  ) {
+    return;
+  }
+
+  const moods = await syncCurrentTeamMoods();
+  if (moods.some((mood) => mood.lastMessageKey === 'joined')) return;
+
+  const moodByPlayerId = new Map(moods.map((mood) => [mood.playerId, mood]));
+  const candidates = profile.team.players.flatMap((player) => {
+    const mood = moodByPlayerId.get(player.id);
+    return player.id !== profile.playerId && !player.userControlled && player.starter && mood
+      ? [{ mood, player }]
+      : [];
+  });
+  if (!candidates.length) return;
+
+  const selected = candidates[Math.floor(Math.random() * candidates.length)];
+  await sendMoodMessage(selected.mood, selected.player, 'joined', profile.date);
 }
 
 export async function processCompletedMatch(matchId: number) {
@@ -290,12 +331,7 @@ export async function processCompletedMatch(matchId: number) {
         data: { transferListed: true, starter: false },
       });
     }
-    if (
-      key &&
-      player.starter &&
-      !willBeBenched &&
-      canSendMoodMessage(updated, key, profile.date)
-    ) {
+    if (key && player.starter && !willBeBenched && canSendMoodMessage(updated, key, profile.date)) {
       messageCandidates.push({ mood: updated, player, key });
     }
   }

@@ -58,6 +58,17 @@ function getCoachTitle(role: string) {
   return role;
 }
 
+function getPersonaPlayerId(role?: string | null) {
+  const playerId = Number(role?.match(/\[player:(\d+)\]/i)?.[1]);
+  return Number.isInteger(playerId) && playerId > 0 ? playerId : null;
+}
+
+function getPlayerRoleLabel(role?: string | null) {
+  if (!role) return 'Player';
+  if (role.toUpperCase() === 'SNIPER') return 'AWPer';
+  return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+}
+
 function useEmptyAvatar(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.onerror = null;
   event.currentTarget.src = emptyAvatar;
@@ -99,6 +110,13 @@ export default function Inbox() {
   const [readTrialTransfers, setReadTrialTransfers] = React.useState<Set<number>>(new Set());
   const [guideStorageKey, setGuideStorageKey] = React.useState<string | null>(null);
   const [guideDismissed, setGuideDismissed] = React.useState(false);
+  const [contactPlayer, setContactPlayer] = React.useState<{
+    id: number;
+    name: string;
+    avatar: string | null;
+    role: string | null;
+    team: { id: number; name: string; blazon: string | null } | null;
+  } | null>(null);
   const restoredRequestForEmail = React.useRef<number | null>(null);
   const trialReplyInFlight = React.useRef(false);
   const threadRef = React.useRef<HTMLDivElement | null>(null);
@@ -192,6 +210,27 @@ export default function Inbox() {
   }, [visible, selected]);
 
   const active = visible.find((conversation) => conversation.fromId === selected) ?? null;
+  const contactPlayerId = getPersonaPlayerId(active?.from.role);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setContactPlayer(null);
+    if (!contactPlayerId) return;
+
+    api.players
+      .all<{ include: { team: true } }>({
+        where: { id: contactPlayerId },
+        include: { team: true },
+        take: 1,
+      })
+      .then(([player]) => {
+        if (!cancelled) setContactPlayer(player ?? null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contactPlayerId]);
 
   React.useEffect(() => {
     const read = (location.state as any)?.trialInformationRead;
@@ -838,7 +877,52 @@ export default function Inbox() {
                     )}
                 </div>
               </div>
-              {!isFaceitOpeningChat && active.from.team && (
+              {contactPlayer ? (
+                <aside
+                  className="inbox-coach-card"
+                  aria-label={`${contactPlayer.name} player profile`}
+                >
+                  <div className="inbox-coach-portrait">
+                    <img
+                      src={contactPlayer.team?.blazon || 'resources://blazonry/noteam.svg'}
+                      className="inbox-coach-portrait-team"
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <img
+                      src={contactPlayer.avatar || emptyAvatar}
+                      className="inbox-coach-portrait-person"
+                      alt={contactPlayer.name}
+                      onError={useEmptyAvatar}
+                    />
+                  </div>
+                  <div className="inbox-coach-copy">
+                    <h3>{contactPlayer.name}</h3>
+                    <div className="inbox-coach-meta">
+                      <img
+                        src={contactPlayer.team?.blazon || 'resources://blazonry/noteam.svg'}
+                        alt=""
+                      />
+                      <span>{contactPlayer.team?.name || 'Free Agent'}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{getPlayerRoleLabel(contactPlayer.role)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="inbox-coach-team-link"
+                      onClick={() =>
+                        api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                          target: '/transfer',
+                          payload: contactPlayer.id,
+                        })
+                      }
+                    >
+                      <span>View Player</span>
+                      <FaChevronRight aria-hidden="true" />
+                    </button>
+                  </div>
+                </aside>
+              ) : !contactPlayerId && !isFaceitOpeningChat && active.from.team ? (
                 <aside
                   className="inbox-coach-card"
                   aria-label={`${active.from.name} coach profile`}
@@ -882,7 +966,7 @@ export default function Inbox() {
                     </Link>
                   </div>
                 </aside>
-              )}
+              ) : null}
             </div>
           )}
         </section>

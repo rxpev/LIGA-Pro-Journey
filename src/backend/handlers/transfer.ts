@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { addDays, differenceInDays } from 'date-fns';
 import { Constants, Eagers } from '@liga/shared';
 import { DatabaseClient, News, WindowManager, Worldgen } from '@liga/backend/lib';
+import { queueTeammateWelcome } from '@liga/backend/lib/teammate-moods';
 import {
   getTrialCoachLateResponse,
   getTrialCoachResponse,
@@ -158,7 +159,24 @@ export default function () {
     // are handled inside acceptUserPlayerTransfer.
     // The contract reveal owns the hand-off to the inbox. Store acceptance
     // messages now, but do not notify the renderer until that reveal finishes.
+    const profileBeforeAcceptance = await DatabaseClient.prisma.profile.findFirst({
+      select: { teamId: true },
+    });
     const acceptanceEmail = await Worldgen.acceptTransferOffer(Number(id), false);
+    const profileAfterAcceptance = await DatabaseClient.prisma.profile.findFirst({
+      select: { id: true, teamId: true },
+    });
+    if (
+      acceptanceEmail &&
+      profileAfterAcceptance?.teamId &&
+      profileAfterAcceptance.teamId !== profileBeforeAcceptance?.teamId
+    ) {
+      queueTeammateWelcome(
+        acceptanceEmail.id,
+        profileAfterAcceptance.id,
+        profileAfterAcceptance.teamId,
+      );
+    }
     await News.generateAutomaticItems();
 
     // Let all windows refresh their transfer UIs.

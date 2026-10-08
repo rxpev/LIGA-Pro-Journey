@@ -13,7 +13,12 @@ import {
   WindowManager,
   disconnectActiveDatabaseWithIntegrity,
 } from '@liga/backend/lib';
-import { getCurrentTeamMoodSummaries, replyToTeammateMood } from '@liga/backend/lib/teammate-moods';
+import {
+  getCurrentTeamMoodSummaries,
+  replyToTeammateMood,
+  sendRandomTeammateWelcome,
+  takeQueuedTeammateWelcome,
+} from '@liga/backend/lib/teammate-moods';
 import { Util, Constants, Eagers } from '@liga/shared';
 import { verifyFaceitEloIntegrity } from '@liga/backend/lib/faceit-elo-integrity';
 import {
@@ -436,6 +441,15 @@ export default function registerDatabaseHandlers() {
         email,
       );
     }, 300);
+
+    const pendingWelcome = takeQueuedTeammateWelcome(id);
+    if (pendingWelcome) {
+      setTimeout(() => {
+        void sendRandomTeammateWelcome(pendingWelcome.profileId, pendingWelcome.teamId).catch(
+          (error) => log.error('Could not send delayed teammate welcome message.', error),
+        );
+      }, 10_300);
+    }
   });
 
   ipcMain.handle(Constants.IPCRoute.EMAILS_UPDATE_DIALOGUE, async (_, query) => {
