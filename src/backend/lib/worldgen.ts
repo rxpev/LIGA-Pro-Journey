@@ -96,8 +96,9 @@ import {
   getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
-  isNpcTransferCisCountry,
+  isNpcTransferAffinityCountry,
   isNpcTransferCompatible,
+  isNpcTransferNationalAffinityCandidate,
   sortNpcTransferCandidatesByFit,
   inferNpcTransferRecruitmentPolicy,
   serializeNpcTransferRecruitmentPolicy,
@@ -6556,8 +6557,11 @@ function getTeamNationalityCohesion(team: {
     if (identity.type === 'national-lock' || identity.type === 'national-core') {
       return player.countryId === identity.countryId;
     }
-    if (identity.type === 'cis-core') {
-      return isNpcTransferCisCountry(player);
+    if (identity.type === 'cis-core' || identity.type === 'affinity-core') {
+      return isNpcTransferAffinityCountry(
+        player,
+        identity.type === 'cis-core' ? 'cis' : identity.affinityGroup,
+      );
     }
 
     return matchesTeamCountryPreference(team, player);
@@ -6806,18 +6810,28 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 
   const identity = getNpcTransferTeamIdentity(team);
   const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
-    if (identity.type === 'cis-core') return candidate.countryId === identity.dominantCountryId;
+    if (identity.type === 'cis-core' || identity.type === 'affinity-core') {
+      return candidate.countryId === identity.dominantCountryId;
+    }
+    if (identity.type === 'national-lock') return candidate.countryId === identity.countryId;
     if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
     return matchesTeamCountryPreference(team, candidate);
   });
-  const crossCisCandidates =
-    identity.type === 'cis-core'
+  const crossAffinityCandidates =
+    identity.type === 'cis-core' || identity.type === 'affinity-core'
       ? compatibleCandidates.filter(
           (candidate) =>
             candidate.countryId !== identity.dominantCountryId &&
-            isNpcTransferCisCountry(candidate),
+            isNpcTransferAffinityCountry(
+              candidate,
+              identity.type === 'cis-core' ? 'cis' : identity.affinityGroup,
+            ),
         )
-      : [];
+      : identity.type === 'national-lock'
+        ? compatibleCandidates.filter((candidate) =>
+            isNpcTransferNationalAffinityCandidate(team, candidate),
+          )
+        : [];
   const cohesion = getTeamNationalityCohesion(team as any);
   const sameCountryChance = Math.min(
     100,
@@ -6827,8 +6841,9 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     return sameCountryCandidates;
   }
 
-  if (crossCisCandidates.length && Chance.rollD2(35)) {
-    return crossCisCandidates;
+  const crossAffinityChance = identity.type === 'national-lock' ? 8 : 35;
+  if (crossAffinityCandidates.length && Chance.rollD2(crossAffinityChance)) {
+    return crossAffinityCandidates;
   }
 
   const teamFederationId = team.competitionFederationId ?? null;
@@ -6856,8 +6871,8 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
 
   return sameCountryCandidates.length
     ? sameCountryCandidates
-    : crossCisCandidates.length
-      ? crossCisCandidates
+    : crossAffinityCandidates.length
+      ? crossAffinityCandidates
       : sameFederationCandidates.length
         ? sameFederationCandidates
         : compatibleCandidates;
@@ -6893,7 +6908,9 @@ function selectNPCTargetCandidatesByCountryPreference<
   const identity = getNpcTransferTeamIdentity(team);
 
   const sameCountryCandidates = compatibleCandidates.filter((candidate) => {
-    if (identity.type === 'cis-core') return candidate.countryId === identity.dominantCountryId;
+    if (identity.type === 'cis-core' || identity.type === 'affinity-core') {
+      return candidate.countryId === identity.dominantCountryId;
+    }
     if (identity.type === 'national-core') return candidate.countryId === identity.countryId;
     return candidate.countryId === team.countryId;
   });
@@ -10405,9 +10422,10 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
     let countryId: number | null = null;
     if (identity.type === 'national-lock' || identity.type === 'national-core') {
       countryId = identity.countryId;
-    } else if (identity.type === 'cis-core') {
+    } else if (identity.type === 'cis-core' || identity.type === 'affinity-core') {
+      const affinityGroup = identity.type === 'cis-core' ? 'cis' : identity.affinityGroup;
       const dominant = starters
-        .filter((player) => isNpcTransferCisCountry(player as any))
+        .filter((player) => isNpcTransferAffinityCountry(player as any, affinityGroup))
         .reduce<Map<number, number>>((counts, player) => {
           counts.set(player.countryId, (counts.get(player.countryId) || 0) + 1);
           return counts;

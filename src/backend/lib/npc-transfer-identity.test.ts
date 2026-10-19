@@ -9,10 +9,34 @@ import {
   getUserOfferFitScore,
   isNpcTransferCompatible,
   inferNpcTransferRecruitmentPolicy,
+  NPC_TRANSFER_AFFINITY_COUNTRY_CODES,
   serializeNpcTransferRecruitmentPolicy,
   sortNpcTransferCandidatesByFit,
   USER_OFFER_FIT_BUCKET_WEIGHTS,
 } from './npc-transfer-identity';
+
+assert.deepEqual(
+  Object.fromEntries(
+    Object.entries(NPC_TRANSFER_AFFINITY_COUNTRY_CODES)
+      .filter(([group]) => group !== 'cis')
+      .map(([group, codes]) => [group, [...codes]]),
+  ),
+  {
+    francophone: ['fr', 'be'],
+    dach: ['de', 'at', 'ch'],
+    'czech-slovak': ['cz', 'sk'],
+    'north-american': ['us', 'ca'],
+    anz: ['au', 'nz'],
+    baltic: ['ee', 'lv', 'lt'],
+    benelux: ['nl', 'be', 'lu'],
+    'southern-cone': ['ar', 'uy'],
+    'greater-chinese': ['cn', 'tw', 'hk'],
+    'british-irish': ['gb', 'ie'],
+    'albanian-speaking': ['al', 'xk'],
+    'south-slavic': ['rs', 'hr', 'ba', 'me'],
+  },
+  'all requested transfer affinity memberships are configured',
+);
 
 const continents = {
   europe: { code: 'EU', federationId: 1 },
@@ -35,6 +59,30 @@ const countries = {
   brazil: { id: 30, country: { code: 'br', continent: continents.southAmerica } },
   usa: { id: 40, country: { code: 'us', continent: continents.northAmerica } },
   australia: { id: 50, country: { code: 'au', continent: continents.oceania } },
+  france: { id: 70, country: { code: 'fr', continent: continents.europe } },
+  belgium: { id: 71, country: { code: 'be', continent: continents.europe } },
+  austria: { id: 72, country: { code: 'at', continent: continents.europe } },
+  switzerland: { id: 73, country: { code: 'ch', continent: continents.europe } },
+  czechia: { id: 74, country: { code: 'cz', continent: continents.europe } },
+  slovakia: { id: 75, country: { code: 'sk', continent: continents.europe } },
+  canada: { id: 76, country: { code: 'ca', continent: continents.northAmerica } },
+  newZealand: { id: 77, country: { code: 'nz', continent: continents.oceania } },
+  estonia: { id: 78, country: { code: 'ee', continent: continents.europe } },
+  latvia: { id: 79, country: { code: 'lv', continent: continents.europe } },
+  lithuania: { id: 80, country: { code: 'lt', continent: continents.europe } },
+  netherlands: { id: 81, country: { code: 'nl', continent: continents.europe } },
+  argentina: { id: 82, country: { code: 'ar', continent: continents.southAmerica } },
+  uruguay: { id: 83, country: { code: 'uy', continent: continents.southAmerica } },
+  taiwan: { id: 84, country: { code: 'tw', continent: continents.asia } },
+  hongKong: { id: 85, country: { code: 'hk', continent: continents.asia } },
+  unitedKingdom: { id: 86, country: { code: 'gb', continent: continents.europe } },
+  ireland: { id: 87, country: { code: 'ie', continent: continents.europe } },
+  albania: { id: 88, country: { code: 'al', continent: continents.europe } },
+  kosovo: { id: 89, country: { code: 'xk', continent: continents.europe } },
+  serbia: { id: 90, country: { code: 'rs', continent: continents.europe } },
+  croatia: { id: 91, country: { code: 'hr', continent: continents.europe } },
+  bosnia: { id: 92, country: { code: 'ba', continent: continents.europe } },
+  montenegro: { id: 93, country: { code: 'me', continent: continents.europe } },
   europe: { id: 60, country: { code: 'eu', continent: continents.europe } },
   asia: { id: 61, country: { code: 'as', continent: continents.asia } },
   northAmerica: { id: 62, country: { code: 'na', continent: continents.northAmerica } },
@@ -204,13 +252,62 @@ const oneGermanMixedTeam = team(countries.europe, [
   player(5, countries.brazil),
 ]);
 
+const affinityCases = [
+  ['francophone', countries.france, countries.belgium],
+  ['dach', countries.germany, countries.austria],
+  ['czech-slovak', countries.czechia, countries.slovakia],
+  ['north-american', countries.usa, countries.canada],
+  ['anz', countries.australia, countries.newZealand],
+  ['baltic', countries.estonia, countries.latvia],
+  ['benelux', countries.netherlands, countries.belgium],
+  ['southern-cone', countries.argentina, countries.uruguay],
+  ['greater-chinese', countries.china, countries.taiwan],
+  ['british-irish', countries.unitedKingdom, countries.ireland],
+  ['albanian-speaking', countries.albania, countries.kosovo],
+  ['south-slavic', countries.serbia, countries.croatia],
+] as const;
+
+for (const [affinityGroup, firstCountry, secondCountry] of affinityCases) {
+  const affinityTeam = team(countries.europe, [
+    player(1, firstCountry),
+    player(2, firstCountry),
+    player(3, secondCountry),
+    player(4, secondCountry),
+    player(5, countries.denmark),
+  ]);
+  const identity = getNpcTransferTeamIdentity(affinityTeam);
+  assert.equal(identity.type, 'affinity-core', `${affinityGroup} rosters become affinity cores`);
+  assert.equal(
+    identity.type === 'affinity-core' ? identity.affinityGroup : null,
+    affinityGroup,
+    `${affinityGroup} identity retains its group`,
+  );
+  assert.equal(
+    isNpcTransferCompatible(affinityTeam, player(101, secondCountry)),
+    true,
+    `${affinityGroup} teams accept another nationality from the group`,
+  );
+  assert.equal(
+    isNpcTransferCompatible(affinityTeam, player(102, countries.denmark)),
+    false,
+    `${affinityGroup} teams reject nationalities outside the group`,
+  );
+}
+
 assert.deepEqual(
   filterNpcTransferCompatibleCandidates(fiveChineseTeam, [
     player(101, countries.china),
+    player(103, countries.taiwan),
     player(102, countries.denmark),
   ]).map((candidate) => candidate.countryId),
-  [countries.china.id],
-  '5-player national locks only allow that nationality',
+  [countries.china.id, countries.taiwan.id],
+  '5-player national locks allow their nationality plus rare affinity recruitment',
+);
+
+assert.ok(
+  getNpcTransferCompatibilityScore(fiveChineseTeam, player(101, countries.china)) >
+    getNpcTransferCompatibilityScore(fiveChineseTeam, player(102, countries.taiwan)),
+  '5-player national locks strongly prefer their exact nationality over affinity candidates',
 );
 
 assert.deepEqual(
@@ -220,6 +317,22 @@ assert.deepEqual(
   ]).map((candidate) => candidate.countryId),
   [countries.denmark.id],
   '4-player national locks only allow that nationality',
+);
+
+assert.equal(
+  isNpcTransferCompatible(fourGermanTeam, player(101, countries.austria)),
+  true,
+  '4-player national locks can recruit from their affinity group',
+);
+assert.equal(
+  getUserOfferFitBucket(fourGermanTeam, player(101, countries.austria)),
+  'regional',
+  'affinity offers from national locks remain rarer than exact-national offers',
+);
+assert.equal(
+  isNpcTransferCompatible(fourGermanTeam, player(101, countries.france)),
+  false,
+  '4-player national locks still reject players outside their affinity group',
 );
 
 assert.equal(
