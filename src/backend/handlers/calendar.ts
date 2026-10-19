@@ -276,14 +276,6 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
     Worldgen.recordMatchResults(recordCalendarPhase),
   );
 
-  // Recover any completed simulated match that was previously misclassified
-  // as a user matchday while the player was benched. This also repairs saves
-  // created before the runtime demotion above by rebuilding their missing
-  // player links, events, map results and aggregate statistics.
-  await measureCalendarPhase('repair-missing-match-stats', () =>
-    Worldgen.repairMissingLegacyBackfillNpcMatchStats(),
-  );
-
   // npc transfers
   await measureCalendarPhase('npc-transfers', () =>
     Worldgen.sendNPCTransferOffer(measureCalendarPhase),

@@ -18,12 +18,7 @@ import {
   FaClock,
   FaExchangeAlt,
   FaExternalLinkAlt,
-  FaFrownOpen,
-  FaGrinBeam,
   FaMap,
-  FaMeh,
-  FaSadTear,
-  FaSmileBeam,
   FaStar,
   FaTrophy,
   FaUserTie,
@@ -54,24 +49,29 @@ function MoraleIcon({
   morale: 'Very Happy' | 'Happy' | 'Content' | 'Unhappy' | 'Very Unhappy';
   playerName: string;
 }) {
-  const Icon =
-    morale === 'Very Happy'
-      ? FaGrinBeam
-      : morale === 'Happy'
-        ? FaSmileBeam
-        : morale === 'Content'
-          ? FaMeh
-          : morale === 'Unhappy'
-            ? FaFrownOpen
-            : FaSadTear;
   const className = `is-${morale.toLowerCase().replace(/ /g, '-')}`;
+  const mouthPath =
+    morale === 'Very Happy'
+      ? 'M8.5 16c1.2 1.4 2.7 2.1 4.5 2.1s3.3-.7 4.5-2.1'
+      : morale === 'Happy'
+        ? 'M8.5 16c1.2 1.4 2.7 2.1 4.5 2.1s3.3-.7 4.5-2.1'
+        : morale === 'Content'
+          ? 'M8 17h10'
+          : morale === 'Unhappy'
+            ? 'M8 18.25c1.4-2.3 3.1-3.4 5-3.4s3.6 1.1 5 3.4'
+            : 'M8 19.25c1.4-2.3 3.1-3.4 5-3.4s3.6 1.1 5 3.4';
   return (
     <span
       className={`squad-player-morale ${className}`}
       title={`Morale: ${morale}`}
       aria-label={`${playerName} morale: ${morale}`}
     >
-      <Icon aria-hidden="true" />
+      <svg aria-hidden="true" viewBox="0 0 26 26">
+        <circle className="morale-face" cx="13" cy="13" r="12" />
+        <circle className="morale-feature" cx="9" cy="9.75" r="1.25" />
+        <circle className="morale-feature" cx="17" cy="9.75" r="1.25" />
+        <path className="morale-mouth" d={mouthPath} />
+      </svg>
     </span>
   );
 }

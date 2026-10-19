@@ -43,7 +43,6 @@ type FaceitFriendPlayer = {
 export type TeammateMoraleSummary = {
   playerId: number;
   confidence: number;
-  roleSatisfaction: number;
   trust: number;
   morale: 'Very Happy' | 'Happy' | 'Content' | 'Unhappy' | 'Very Unhappy';
   moraleScore: number;

@@ -499,7 +499,6 @@ model TeammateMood {
   playerId         Int
   teamId           Int
   confidence       Int      @default(50)
-  roleSatisfaction Int      @default(50)
   trust            Int      @default(50)
   lastStarter      Boolean
   winStreak        Int      @default(0)

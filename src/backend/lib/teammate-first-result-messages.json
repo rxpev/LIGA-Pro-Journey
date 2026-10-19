@@ -1,0 +1,266 @@
+{
+  "lossToWin": {
+    "igl": {
+      "easy-easy": [
+        "From that brutal debut to a clean first W. Your calls were on point today!",
+        "Remember how lost we looked in our opener? Complete opposite today lol.",
+        "First win and they barely stood a chance. That's the calling I like to see!",
+        "Our debut was ugly, but today you read them perfectly. GG!",
+        "Finally got that first W, and we made it look easy. Nice calling!"
+      ],
+      "easy-tough": [
+        "After how badly our debut went, winning a close one like this feels amazing!",
+        "First W secured! Those late-round calls really saved us today.",
+        "Didn't think our first win would be this stressful lol. Great job keeping us together.",
+        "We've come a long way from that opening disaster. Huge calls today!",
+        "That's how you earn your first win as IGL. Great adjustments under pressure!"
+      ],
+      "easy-normal": [
+        "Finally got that first W! Calls looked much cleaner than in our opener.",
+        "That's more like it. Good calling today, felt like we had a proper game plan.",
+        "Nice to see us playing with some structure after that rough debut.",
+        "First win on the board! Your mid-round calls were pretty solid today.",
+        "Glad we finally got a result. That felt way more controlled than our opener."
+      ],
+      "tough-easy": [
+        "We barely lost our debut and now our first W is a stomp? I'll take it lol.",
+        "Knew you had good calls in you from that first match. Today proved it!",
+        "No close finish this time haha. They had no answers for your strats.",
+        "Our debut could've gone either way, but there was no doubt about this one!",
+        "First win secured, and we didn't even have to sweat. Great calling!"
+      ],
+      "tough-tough": [
+        "Remember how we couldn't close out our debut? Not this time! Huge calls!",
+        "Finally won one of these nail-biters. Nice job keeping everyone calm!",
+        "First W and another heart attack of a match lol. Great calling!",
+        "That first close loss hurt, so getting a close win feels extra good.",
+        "We couldn't finish the job in our opener, but you got us over the line today!"
+      ],
+      "tough-normal": [
+        "That's the result we were so close to getting in our debut. GG!",
+        "First W, finally! Really liked how you controlled the pace today.",
+        "Nice to get a win without another crazy finish. Good calling!",
+        "Our debut showed we could compete, and now we've finally got a W to show for it.",
+        "Solid calls today. Feels good to turn that early potential into a win!"
+      ],
+      "normal-easy": [
+        "Where was this calling in our debut? We absolutely destroyed them lol.",
+        "First W and you made it look effortless. Great strats today!",
+        "Now that's how you lead a team. They couldn't deal with anything we threw at them.",
+        "Our opener was nothing special, but that was a statement win!",
+        "Finally got the first win and it was a complete stomp. Love those calls!"
+      ],
+      "normal-tough": [
+        "First W wasn't easy, but you made the right calls when it mattered!",
+        "Huge job keeping everyone focused in those last few rounds. GG!",
+        "We couldn't get the result in our debut, but you got us through this one!",
+        "My heart was racing in those final rounds lol. Great calls to finish it!",
+        "First win secured! Really liked how you adapted when things got messy."
+      ],
+      "normal-normal": [
+        "There we go, first W! Your calling felt pretty comfortable today.",
+        "Nice to finally get a win on the board. Good stuff, IGL!",
+        "Solid team effort today. Think your calls are starting to click with us.",
+        "Our debut didn't go our way, but it's nice to finally get that first win!",
+        "GG! Good calls, good teamwork, and our first W. Let's keep it going!"
+      ]
+    },
+    "player": {
+      "good-good": [
+        "You were huge in our debut, and huge again today. Finally got that W!",
+        "Knew performances like that would eventually get us our first win!",
+        "You deserved a win after how well you played in the opener. GG!",
+        "Another crazy game from you, and this time we actually got the result lol.",
+        "Played great in our first loss, played great in our first win. Love to see it!"
+      ],
+      "good-bad": [
+        "You carried your weight in our debut, so it's only fair we got you this W haha.",
+        "Funny how you played way better in our first loss than in our first win lol.",
+        "Not your best game, but we finally got the W! We'll take it.",
+        "You deserved a win for that debut performance anyway. Consider this payback!",
+        "Guess you don't need to pop off every time for us to win. GG!"
+      ],
+      "good-normal": [
+        "You were great in our opener, and solid today. Glad we finally got that W!",
+        "See? You don't have to carry as hard as you did in our debut for us to win.",
+        "Nice game man, finally got a result to go with your performances!",
+        "First win secured! You did your part, and the rest of us showed up too.",
+        "That debut performance deserved a win, but I'll happily take this one instead lol."
+      ],
+      "bad-good": [
+        "From that rough debut to carrying our first W. What a turnaround!",
+        "Now THAT'S the version of you we need! Absolutely insane today.",
+        "Remember your first game? Yeah, you've definitely made up for that lol.",
+        "First W and you played a massive part in it. Great comeback!",
+        "What a difference from your debut. You were hitting everything today!"
+      ],
+      "bad-bad": [
+        "First W secured! Rough one for you again, but we got it done.",
+        "Didn't have your best game today, but at least we've finally got a win!",
+        "The stats haven't been kind to you in either game, but a W is a W haha.",
+        "You struggled in our opener and today wasn't much better. Still, first win!",
+        "Glad we got that first W. Just need you to find your form now!"
+      ],
+      "bad-normal": [
+        "Much better showing than your debut, and we got our first W too!",
+        "Nice to see you looking more comfortable. Solid game today!",
+        "That rough opener is starting to feel like a distant memory. GG!",
+        "First win on the board! Good improvement from that first performance.",
+        "You looked way more settled today. Keep that up, man!"
+      ],
+      "normal-good": [
+        "Bro, where was this aim in our debut? You went crazy today!",
+        "What a game to pop off in! First W and you're carrying us already.",
+        "Solid in the opener, absolute beast today. Love to see it!",
+        "You really stepped it up for our first win. Huge performance!",
+        "First W feels even better when someone's fragging like that. GG!"
+      ],
+      "normal-bad": [
+        "Not quite as clean as your debut, but hey, first W secured!",
+        "You struggled today, but at least we finally got the win lol.",
+        "Funny how your opener was better individually, but this one got us the W.",
+        "Rough game for you, but don't worry. We've got that first win now!",
+        "We had you covered today. Just find that rhythm again next match!"
+      ],
+      "normal-normal": [
+        "First W finally! Another solid showing from you, man.",
+        "You did your job in our debut too. Nice to get the result this time!",
+        "Nothing crazy needed today, just good teamplay. GG!",
+        "Glad we finally got a win together. Solid stuff from you again!",
+        "First win secured! Feels good to see our teamwork paying off."
+      ]
+    }
+  },
+  "winToLoss": {
+    "igl": {
+      "easy-easy": [
+        "Well, that's a reality check after how easily we won our debut lol.",
+        "They read every single call today. Definitely need some new ideas.",
+        "From stomping in our opener to getting stomped ourselves. That hurts.",
+        "First L and it wasn't even close. Gotta rethink some of our setups.",
+        "Our debut made calling look easy, but today nothing was working. Rough one."
+      ],
+      "easy-tough": [
+        "Damn, our first L had to be that close? Unlucky, man.",
+        "Definitely a tougher challenge than our debut. Good calls though!",
+        "Almost kept the perfect record alive! Those last rounds were painful.",
+        "Not every match is gonna be as easy as our opener. We'll learn from this.",
+        "First L hurts, but you made some really good calls under pressure today."
+      ],
+      "easy-normal": [
+        "Guess that easy debut set the bar pretty high haha. Unlucky!",
+        "First L on the board. Think we need a bit more variety in our calls.",
+        "Couldn't control the game like we did in our opener. Gotta adapt.",
+        "Not our best game, but one loss doesn't change what we can do.",
+        "That first win was a breeze compared to this. Plenty to work on now!"
+      ],
+      "tough-easy": [
+        "We managed to clutch our debut, but there was no saving this one. Ouch.",
+        "First L and we got absolutely destroyed. Need a serious reset.",
+        "Your calls got us through that tough opener, but nothing clicked today.",
+        "Well, that was ugly lol. They had an answer for everything we tried.",
+        "Tough debut win, brutal first loss. Guess we've got some things to figure out."
+      ],
+      "tough-tough": [
+        "We closed out the close one in our debut, but couldn't do it today. Unlucky!",
+        "First L and another nail-biter. My heart can't take these games lol.",
+        "Good calling in the late rounds, just couldn't get over the line this time.",
+        "Remember how we clutched our opener? Wish we could've done that here.",
+        "That one stings. Your calls gave us a chance, but we couldn't finish it."
+      ],
+      "tough-normal": [
+        "First L, unfortunately. Didn't quite have the same fight as in our debut.",
+        "We showed we could handle pressure in our opener. Just needed better execution today.",
+        "Not our strongest showing, but I still trust your calls. GG!",
+        "Think we had some decent strats, just couldn't make them work consistently.",
+        "That first win showed what we're capable of. Let's learn from this one."
+      ],
+      "normal-easy": [
+        "Oof, our first L was a complete stomp. What happened to our setups?",
+        "Not gonna lie, that was rough. They read us like a book today.",
+        "Our debut looked pretty promising, but this game exposed some serious problems.",
+        "Nothing seemed to work today. We definitely need to review those calls.",
+        "First loss and we barely put up a fight. Time to go back to the drawing board."
+      ],
+      "normal-tough": [
+        "Damn, so close to keeping our record clean! Good calling though.",
+        "First L and it's a heartbreaker. Those last few rounds really hurt.",
+        "Think you made some solid decisions today. Just couldn't close it out.",
+        "We had our chances, man. Next time we'll convert those rounds!",
+        "Tough way to take our first loss. Still liked how you adapted throughout the game."
+      ],
+      "normal-normal": [
+        "First L, happens to every team eventually. Keep your head up!",
+        "Not quite as clean as our debut, but nothing we can't fix.",
+        "Some good calls today, just didn't execute them well enough.",
+        "GG, unfortunate result. Still think we've got a solid team here.",
+        "First loss on the board. Let's review what went wrong and move on."
+      ]
+    },
+    "player": {
+      "good-good": [
+        "You played great in our debut and again today. Shame we finally took an L!",
+        "Another huge game from you, just couldn't get the result this time.",
+        "Can't blame you for this one. You were hitting everything today.",
+        "First L sucks, especially when you're playing this well. Unlucky!",
+        "You did your part again. We just couldn't get it done as a team."
+      ],
+      "good-bad": [
+        "Rough game today, especially compared to how crazy your debut was.",
+        "We really could've used the version of you from our first win lol.",
+        "First L and you couldn't find your aim. Unlucky, man.",
+        "Not your best showing, but we know what you're capable of from that opener.",
+        "You absolutely popped off in our debut. Just need to find that form again!"
+      ],
+      "good-normal": [
+        "Not quite the crazy game you had in our debut, but still solid!",
+        "First L, unfortunately. Think we just needed a bit more from everyone.",
+        "You played fine today, man. Can't expect you to carry every match.",
+        "Our debut was a standout performance from you. Today was decent, just no W.",
+        "Nothing wrong with your game today. Shame we couldn't keep winning!"
+      ],
+      "bad-good": [
+        "You struggled in our debut but we won, now you pop off and we lose? How lol.",
+        "Huge game from you today! Shame it ended with our first L.",
+        "Funny how you played so much better individually and we still couldn't win.",
+        "That was a massive improvement from your opener. Don't let the result bother you!",
+        "You really deserved a W for that performance. We'll back you up better next time."
+      ],
+      "bad-bad": [
+        "We got away with a rough game from you in our debut, but not today.",
+        "First L hurts. Really need you to start finding your form, man.",
+        "You struggled in our opener too. Let's figure out what's going wrong.",
+        "Not your best showing again. Gotta step it up if we wanna keep winning.",
+        "We managed to win that first game, but today we needed more from you."
+      ],
+      "bad-normal": [
+        "You actually played better than in our debut. Shame about the first L!",
+        "Much cleaner performance from you today, even if the result wasn't there.",
+        "First loss, but at least you looked a lot more comfortable individually.",
+        "We won our opener with you struggling, and lost this one with you playing fine. Weird lol.",
+        "Definitely an improvement from your first game. Keep that part going!"
+      ],
+      "normal-good": [
+        "You were solid in our debut, but today you were insane. Shame we lost!",
+        "First L and you were actually carrying us. That's rough, man.",
+        "What a performance from you! Really deserved a better result.",
+        "You gave us every chance to win today. Can't ask for much more.",
+        "Even better than your opener, just couldn't turn it into a W. Unlucky!"
+      ],
+      "normal-bad": [
+        "Bit of a rough game compared to your debut. Everything alright?",
+        "First L, unfortunately. We really needed a bit more from you today.",
+        "You looked way more comfortable in our opening win. Just an off day?",
+        "Not your cleanest performance, but we all have games like that.",
+        "That debut was pretty solid from you. Gotta get back to that level, man!"
+      ],
+      "normal-normal": [
+        "Pretty similar performance to your debut, just a different result this time.",
+        "First L, gg. You played fine, we just couldn't get it done together.",
+        "Solid game from you again. Think our teamplay let us down today.",
+        "Not much to complain about individually. Just needed a bit more coordination.",
+        "You did your job, man. Shame we couldn't keep the wins coming!"
+      ]
+    }
+  }
+}

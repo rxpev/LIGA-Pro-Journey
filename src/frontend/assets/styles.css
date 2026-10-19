@@ -1203,14 +1203,23 @@ meter::-webkit-meter-bar {
   @apply size-3;
 }
 .squad-player-morale {
-  @apply bg-base-100/75 absolute top-3 left-3 z-30 grid size-8 place-items-center rounded-full;
+  @apply absolute top-3 left-3 z-30 grid size-8 place-items-center;
   color: var(--morale-color);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 10%),
-    0 0 9px color-mix(in srgb, var(--morale-color), transparent 60%);
 }
 .squad-player-morale svg {
-  @apply size-7;
+  @apply size-6;
+}
+.squad-player-morale .morale-face {
+  fill: currentColor;
+}
+.squad-player-morale .morale-feature {
+  fill: rgb(7 22 29);
+}
+.squad-player-morale .morale-mouth {
+  fill: none;
+  stroke: rgb(7 22 29);
+  stroke-linecap: round;
+  stroke-width: 1.75;
 }
 .squad-player-morale.is-very-happy {
   --morale-color: #39f56a;

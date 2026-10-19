@@ -24,8 +24,23 @@ import {
   Worldgen,
 } from '@liga/backend/lib';
 
+let exhibitionRootSavePromise: Promise<string> | null = null;
+
+async function getExhibitionRootSavePath() {
+  exhibitionRootSavePromise ??= (async () => {
+    const rootSave = await DatabaseClient.initSave(0);
+    await DatabaseClient.migrate(0);
+    return rootSave.path;
+  })().catch((error) => {
+    exhibitionRootSavePromise = null;
+    throw error;
+  });
+
+  return exhibitionRootSavePromise;
+}
+
 async function withExhibitionRootPrisma<T>(callback: (prisma: PrismaClient) => Promise<T>) {
-  const rootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
+  const rootSavePath = await getExhibitionRootSavePath();
   const prisma = new PrismaClient({
     datasources: {
       db: {
@@ -83,7 +98,7 @@ export default function () {
       const previousPathMatch = previousPath?.match(/save_(\d+)\.db$/);
       const previousSaveId = Number(previousPathMatch?.[1] ?? 0);
       const exhibitionSaveId = Number(`9${Date.now()}`);
-      const rootSavePath = path.join(DatabaseClient.localBasePath, Util.getSaveFileName(0));
+      const rootSavePath = await getExhibitionRootSavePath();
       const exhibitionSavePath = path.join(
         DatabaseClient.basePath,
         Util.getSaveFileName(exhibitionSaveId),

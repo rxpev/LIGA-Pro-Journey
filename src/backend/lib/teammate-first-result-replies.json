@@ -1,0 +1,501 @@
+{
+  "first-win": {
+    "igl": {
+      "easy": [
+        {
+          "label": "Credit Team",
+          "content": "You guys made those calls easy.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Show Confidence",
+          "content": "Keep trusting my calls and we'll be fine.",
+          "trust": 1,
+          "confidence": 5
+        },
+        {
+          "label": "Stay Focused",
+          "content": "Good start, but let's not get complacent.",
+          "trust": 3,
+          "confidence": 3
+        }
+      ],
+      "tough": [
+        {
+          "label": "Praise Team",
+          "content": "Huge effort from everyone, well played!",
+          "trust": 5,
+          "confidence": 3
+        },
+        {
+          "label": "Own the Calls",
+          "content": "Glad those adjustments worked out.",
+          "trust": 3,
+          "confidence": 5
+        },
+        {
+          "label": "Demand More",
+          "content": "Good win, but we need cleaner rounds.",
+          "trust": -2,
+          "confidence": 3
+        }
+      ],
+      "normal": [
+        {
+          "label": "Thank Team",
+          "content": "Good stuff guys, appreciate it!",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Stay Confident",
+          "content": "We'll get even better from here.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Keep Improving",
+          "content": "Still plenty of things to work on.",
+          "trust": 3,
+          "confidence": 3
+        }
+      ]
+    },
+    "player": {
+      "good": [
+        {
+          "label": "Stay Humble",
+          "content": "Thanks man, couldn't do it without you guys!",
+          "trust": 5,
+          "confidence": 1
+        },
+        {
+          "label": "Show Confidence",
+          "content": "Yeah, I was feeling it today haha.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Focus Ahead",
+          "content": "Let's keep this momentum going!",
+          "trust": 3,
+          "confidence": 4
+        }
+      ],
+      "bad": [
+        {
+          "label": "Apologize",
+          "content": "Sorry guys, wasn't my best game.",
+          "trust": 4,
+          "confidence": -2
+        },
+        {
+          "label": "Thank Team",
+          "content": "Appreciate you guys carrying me haha.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Promise Better",
+          "content": "I'll step it up next game, trust.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ],
+      "normal": [
+        { "label": "Celebrate", "content": "Let's gooo, first W!", "trust": 3, "confidence": 5 },
+        {
+          "label": "Praise Team",
+          "content": "Nice work from everyone, gg!",
+          "trust": 5,
+          "confidence": 3
+        },
+        {
+          "label": "Stay Focused",
+          "content": "Good start, let's keep it going!",
+          "trust": 3,
+          "confidence": 4
+        }
+      ]
+    }
+  },
+  "first-loss": {
+    "igl": {
+      "easy": [
+        {
+          "label": "Take Responsibility",
+          "content": "My calls weren't good enough today, sorry.",
+          "trust": 5,
+          "confidence": -3
+        },
+        {
+          "label": "Stay Positive",
+          "content": "Rough start, but we'll figure it out.",
+          "trust": 4,
+          "confidence": 3
+        },
+        {
+          "label": "Demand Improvement",
+          "content": "We can't play like that again.",
+          "trust": -3,
+          "confidence": 2
+        }
+      ],
+      "tough": [
+        {
+          "label": "Take Responsibility",
+          "content": "Should've closed that out, my bad.",
+          "trust": 5,
+          "confidence": -2
+        },
+        {
+          "label": "Praise Team",
+          "content": "Good fight guys, just unlucky.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Stay Determined",
+          "content": "We'll win those rounds next time.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ],
+      "normal": [
+        {
+          "label": "Reflect",
+          "content": "Think I could've called that better.",
+          "trust": 4,
+          "confidence": -1
+        },
+        {
+          "label": "Stay Positive",
+          "content": "One game doesn't define us.",
+          "trust": 4,
+          "confidence": 3
+        },
+        {
+          "label": "Focus on Teamwork",
+          "content": "Need to work on our coordination.",
+          "trust": 5,
+          "confidence": 2
+        }
+      ]
+    },
+    "player": {
+      "good": [
+        {
+          "label": "Appreciate Support",
+          "content": "Thanks, just wish we got the win.",
+          "trust": 5,
+          "confidence": -1
+        },
+        {
+          "label": "Stay Confident",
+          "content": "I'll keep playing like this.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Support Team",
+          "content": "We'll get there together, don't worry.",
+          "trust": 5,
+          "confidence": 3
+        }
+      ],
+      "bad": [
+        {
+          "label": "Apologize",
+          "content": "My bad guys, played like shit today.",
+          "trust": 4,
+          "confidence": -4
+        },
+        {
+          "label": "Stay Positive",
+          "content": "Just an off day, I'll bounce back.",
+          "trust": 3,
+          "confidence": 4
+        },
+        {
+          "label": "Ask for Feedback",
+          "content": "Anything you think I should change?",
+          "trust": 5,
+          "confidence": 1
+        }
+      ],
+      "normal": [
+        {
+          "label": "Accept Loss",
+          "content": "GG, can't win them all.",
+          "trust": 3,
+          "confidence": 1
+        },
+        {
+          "label": "Stay Positive",
+          "content": "We'll get the next one!",
+          "trust": 4,
+          "confidence": 4
+        },
+        {
+          "label": "Focus on Improvement",
+          "content": "Definitely some things we need to fix.",
+          "trust": 4,
+          "confidence": 2
+        }
+      ]
+    }
+  },
+  "loss-to-win": {
+    "igl": {
+      "easy": [
+        {
+          "label": "Praise Team",
+          "content": "Finally! You guys played that perfectly.",
+          "trust": 5,
+          "confidence": 4
+        },
+        {
+          "label": "Show Confidence",
+          "content": "That's what happens when our calls click.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Stay Ambitious",
+          "content": "First W, let's make it a habit.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ],
+      "tough": [
+        {
+          "label": "Praise Team",
+          "content": "Huge composure from everyone, well played!",
+          "trust": 5,
+          "confidence": 4
+        },
+        {
+          "label": "Show Confidence",
+          "content": "Knew we'd get over the line eventually.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Demand Improvement",
+          "content": "Great win, but way too stressful haha.",
+          "trust": -1,
+          "confidence": 3
+        }
+      ],
+      "normal": [
+        {
+          "label": "Celebrate",
+          "content": "Finally got that first W, let's go!",
+          "trust": 4,
+          "confidence": 5
+        },
+        {
+          "label": "Credit Team",
+          "content": "Good execution from everyone today.",
+          "trust": 5,
+          "confidence": 3
+        },
+        {
+          "label": "Look Ahead",
+          "content": "First one done, many more to come.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ]
+    },
+    "player": {
+      "good": [
+        {
+          "label": "Celebrate",
+          "content": "Finally got that W, feels so good!",
+          "trust": 4,
+          "confidence": 5
+        },
+        {
+          "label": "Show Confidence",
+          "content": "Knew my performances would pay off eventually.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Credit Team",
+          "content": "Couldn't have done it without you guys!",
+          "trust": 5,
+          "confidence": 3
+        }
+      ],
+      "bad": [
+        {
+          "label": "Thank Team",
+          "content": "You guys really bailed me out today haha.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Be Honest",
+          "content": "Happy we won, but I need to do better.",
+          "trust": 4,
+          "confidence": -1
+        },
+        {
+          "label": "Joke Around",
+          "content": "Guess I'm getting carried to my first W lol.",
+          "trust": 3,
+          "confidence": 3
+        }
+      ],
+      "normal": [
+        {
+          "label": "Celebrate",
+          "content": "Finally, our first W together!",
+          "trust": 4,
+          "confidence": 5
+        },
+        {
+          "label": "Praise Team",
+          "content": "Good stuff boys, deserved that one!",
+          "trust": 5,
+          "confidence": 3
+        },
+        {
+          "label": "Look Ahead",
+          "content": "About time! Let's get some more.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ]
+    }
+  },
+  "win-to-loss": {
+    "igl": {
+      "easy": [
+        {
+          "label": "Take Responsibility",
+          "content": "My calling was awful today, my bad.",
+          "trust": 5,
+          "confidence": -4
+        },
+        {
+          "label": "Reassure Team",
+          "content": "One bad game doesn't erase our progress.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Demand Improvement",
+          "content": "We seriously need to fix our setups.",
+          "trust": -3,
+          "confidence": 2
+        }
+      ],
+      "tough": [
+        {
+          "label": "Take Responsibility",
+          "content": "Should've handled those final rounds better.",
+          "trust": 5,
+          "confidence": -2
+        },
+        {
+          "label": "Praise Team",
+          "content": "We fought hard, nothing to be ashamed of.",
+          "trust": 5,
+          "confidence": 2
+        },
+        {
+          "label": "Stay Determined",
+          "content": "Not letting another close one slip away.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ],
+      "normal": [
+        {
+          "label": "Reflect",
+          "content": "Need to make some adjustments to our game plan.",
+          "trust": 4,
+          "confidence": -1
+        },
+        {
+          "label": "Stay Positive",
+          "content": "First loss was bound to happen eventually.",
+          "trust": 4,
+          "confidence": 3
+        },
+        {
+          "label": "Show Determination",
+          "content": "We'll come back stronger, trust me.",
+          "trust": 3,
+          "confidence": 5
+        }
+      ]
+    },
+    "player": {
+      "good": [
+        {
+          "label": "Accept Loss",
+          "content": "Unlucky, can't win every game.",
+          "trust": 3,
+          "confidence": 1
+        },
+        {
+          "label": "Show Confidence",
+          "content": "I'll keep putting up these numbers.",
+          "trust": 2,
+          "confidence": 5
+        },
+        {
+          "label": "Support Team",
+          "content": "We win together, we lose together.",
+          "trust": 5,
+          "confidence": 3
+        }
+      ],
+      "bad": [
+        {
+          "label": "Apologize",
+          "content": "My bad guys, really let you down today.",
+          "trust": 4,
+          "confidence": -4
+        },
+        {
+          "label": "Promise Better",
+          "content": "Won't happen again, I'll step it up.",
+          "trust": 3,
+          "confidence": 5
+        },
+        {
+          "label": "Stay Positive",
+          "content": "Rough game, but I'll bounce back.",
+          "trust": 3,
+          "confidence": 4
+        }
+      ],
+      "normal": [
+        {
+          "label": "Accept Loss",
+          "content": "GG, had to happen eventually.",
+          "trust": 3,
+          "confidence": 1
+        },
+        {
+          "label": "Stay Positive",
+          "content": "We'll get back to winning, no worries.",
+          "trust": 4,
+          "confidence": 4
+        },
+        {
+          "label": "Focus Ahead",
+          "content": "Let's learn from this and move on.",
+          "trust": 4,
+          "confidence": 2
+        }
+      ]
+    }
+  }
+}
