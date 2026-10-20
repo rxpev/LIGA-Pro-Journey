@@ -460,27 +460,31 @@ model FaceitFriend {
 }
 
 model Profile {
-  id                    Int       @id @default(autoincrement())
-  name                  String    @unique
-  date                  DateTime
-  issues                String?
-  season                Int?      @default(0)
-  settings              String?
-  trainedAt             DateTime?
-  updatedAt             DateTime? @default(now())
-  faceitElo             Int       @default(1200)
-  simulateNpcMatchStats Boolean   @default(false)
-  trialTeamId           Int?
-  trialSeriesTarget     Int?
-  trialSeriesPlayed     Int       @default(0)
-  trialGoalType         String?
-  trialGoalValue        Float?
-  trialReplacedPlayerId Int?
-  trialStartedAt        DateTime?
+  id                              Int       @id @default(autoincrement())
+  name                            String    @unique
+  date                            DateTime
+  issues                          String?
+  season                          Int?      @default(0)
+  settings                        String?
+  trainedAt                       DateTime?
+  updatedAt                       DateTime? @default(now())
+  faceitElo                       Int       @default(1200)
+  simulateNpcMatchStats           Boolean   @default(false)
+  trialTeamId                     Int?
+  trialSeriesTarget               Int?
+  trialSeriesPlayed               Int       @default(0)
+  trialGoalType                   String?
+  trialGoalValue                  Float?
+  trialReplacedPlayerId           Int?
+  trialStartedAt                  DateTime?
+  faceitRecruitmentOutcome        String?
+  faceitRecruitmentMatches        Int       @default(0)
+  faceitRecruitmentMinimumMatches Int       @default(0)
+  faceitRecruitmentOutcomeBoost   Int       @default(0)
 
   // has many
-  bonuses Bonus[]
-  matches Match[]
+  bonuses       Bonus[]
+  matches       Match[]
   teammateMoods TeammateMood[]
 
   // belongs to
@@ -494,19 +498,19 @@ model Profile {
 /// Short-lived social state for NPCs on the user's current permanent team.
 /// Rows are removed when a player leaves the roster and are never created during trials.
 model TeammateMood {
-  id               Int      @id @default(autoincrement())
-  profileId        Int
-  playerId         Int
-  teamId           Int
-  confidence       Int      @default(50)
-  trust            Int      @default(50)
-  lastStarter      Boolean
-  winStreak        Int      @default(0)
-  lossStreak       Int      @default(0)
-  lastMessageKey   String?
-  lastMessageAt    DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             Int       @id @default(autoincrement())
+  profileId      Int
+  playerId       Int
+  teamId         Int
+  confidence     Int       @default(50)
+  trust          Int       @default(50)
+  lastStarter    Boolean
+  winStreak      Int       @default(0)
+  lossStreak     Int       @default(0)
+  lastMessageKey String?
+  lastMessageAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)

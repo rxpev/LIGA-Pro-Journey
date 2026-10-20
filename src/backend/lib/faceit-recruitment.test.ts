@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Constants, TierSlug } from '@liga/shared';
 import {
+  applyCareerPeakTierFloor,
   getFaceitRecruitmentBand,
   getFaceitRecruitmentPerformance,
   getFaceitRecruitmentPlan,
@@ -8,6 +9,8 @@ import {
   rollFaceitTrialGoal,
   rollFaceitTrialSeries,
   shouldOfferPermanentDeal,
+  getFollowUpPermanentOfferChance,
+  shouldOfferFollowUpPermanentDeal,
 } from './faceit-recruitment';
 
 assert.equal(rollFaceitTrialSeries(0), 3);
@@ -19,6 +22,92 @@ assert.equal(shouldOfferPermanentDeal('excellent', 0.24), true);
 assert.equal(shouldOfferPermanentDeal('excellent', 0.25), false);
 assert.equal(shouldOfferPermanentDeal('absurd', 0.49), true);
 assert.equal(shouldOfferPermanentDeal('adequate', 0), false);
+assert.equal(
+  getFollowUpPermanentOfferChance({
+    band: 'good',
+    teamTier: TierSlug.LEAGUE_OPEN,
+    permanentStints: 0,
+  }),
+  15,
+);
+assert.equal(
+  getFollowUpPermanentOfferChance({
+    band: 'excellent',
+    teamTier: TierSlug.LEAGUE_ADVANCED,
+    permanentStints: 2,
+    outcomeBoost: 5,
+  }),
+  35,
+);
+assert.equal(
+  getFollowUpPermanentOfferChance({
+    band: 'absurd',
+    teamTier: TierSlug.LEAGUE_OPEN,
+    permanentStints: 10,
+    outcomeBoost: 10,
+  }),
+  75,
+);
+assert.equal(
+  getFollowUpPermanentOfferChance({
+    band: 'poor',
+    teamTier: TierSlug.LEAGUE_OPEN,
+    permanentStints: 10,
+    outcomeBoost: 10,
+  }),
+  0,
+);
+assert.equal(
+  shouldOfferFollowUpPermanentDeal(
+    { band: 'good', teamTier: TierSlug.LEAGUE_MAIN, permanentStints: 0 },
+    0.049,
+  ),
+  true,
+);
+assert.deepEqual(
+  applyCareerPeakTierFloor(
+    {
+      [TierSlug.LEAGUE_MAIN]: 55,
+      [TierSlug.LEAGUE_ADVANCED]: 40,
+      [TierSlug.LEAGUE_PRO]: 5,
+    },
+    Constants.Prestige.indexOf(TierSlug.LEAGUE_PRO),
+    'excellent',
+  ),
+  { [TierSlug.LEAGUE_ADVANCED]: 40, [TierSlug.LEAGUE_PRO]: 5 },
+);
+assert.deepEqual(
+  applyCareerPeakTierFloor(
+    {
+      [TierSlug.LEAGUE_MAIN]: 55,
+      [TierSlug.LEAGUE_ADVANCED]: 40,
+      [TierSlug.LEAGUE_PRO]: 5,
+    },
+    Constants.Prestige.indexOf(TierSlug.LEAGUE_PRO),
+    'adequate',
+  ),
+  {
+    [TierSlug.LEAGUE_MAIN]: 55,
+    [TierSlug.LEAGUE_ADVANCED]: 40,
+    [TierSlug.LEAGUE_PRO]: 5,
+  },
+);
+assert.deepEqual(
+  applyCareerPeakTierFloor(
+    { [TierSlug.LEAGUE_OPEN]: 100 },
+    Constants.Prestige.indexOf(TierSlug.LEAGUE_PRO),
+    'good',
+  ),
+  {},
+);
+assert.deepEqual(
+  applyCareerPeakTierFloor(
+    { [TierSlug.LEAGUE_OPEN]: 75, [TierSlug.LEAGUE_INTERMEDIATE]: 25 },
+    Constants.Prestige.indexOf(TierSlug.LEAGUE_PRO),
+    'poor',
+  ),
+  { [TierSlug.LEAGUE_OPEN]: 75, [TierSlug.LEAGUE_INTERMEDIATE]: 25 },
+);
 
 assert.equal(getFaceitRecruitmentBand(getFaceitRecruitmentPerformance(1, 50)), 'poor');
 assert.equal(getFaceitRecruitmentBand(getFaceitRecruitmentPerformance(1.3, 70)), 'poor');

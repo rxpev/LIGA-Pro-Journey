@@ -29,6 +29,83 @@ export function shouldOfferPermanentDeal(
   return false;
 }
 
+const FOLLOW_UP_PERMANENT_CHANCE: Record<FaceitRecruitmentBand, number> = {
+  poor: 0,
+  adequate: 0,
+  good: 10,
+  excellent: 30,
+  absurd: 55,
+};
+
+const TEAM_TIER_PERMANENT_MODIFIER: Partial<Record<TierSlug, number>> = {
+  [TierSlug.LEAGUE_OPEN]: 5,
+  [TierSlug.LEAGUE_INTERMEDIATE]: 0,
+  [TierSlug.LEAGUE_MAIN]: -5,
+  [TierSlug.LEAGUE_ADVANCED]: -10,
+  [TierSlug.LEAGUE_PRO]: -15,
+};
+
+/**
+ * Follow-up opportunities use fresh performance, the offering team's level,
+ * prior contracted experience, and the preceding outcome. The cap deliberately
+ * leaves every permanent offer uncertain.
+ */
+export function getFollowUpPermanentOfferChance(input: {
+  band: FaceitRecruitmentBand;
+  teamTier: TierSlug;
+  permanentStints: number;
+  outcomeBoost?: number;
+}) {
+  if (input.band === 'poor') return 0;
+  const experienceBonus = Math.min(15, Math.max(0, input.permanentStints) * 5);
+  const tierModifier = TEAM_TIER_PERMANENT_MODIFIER[input.teamTier] ?? -10;
+  return Math.max(
+    0,
+    Math.min(
+      75,
+      FOLLOW_UP_PERMANENT_CHANCE[input.band] +
+        experienceBonus +
+        tierModifier +
+        (input.outcomeBoost ?? 0),
+    ),
+  );
+}
+
+export function shouldOfferFollowUpPermanentDeal(
+  input: Parameters<typeof getFollowUpPermanentOfferChance>[0],
+  roll: number = Math.random(),
+) {
+  return roll * 100 < getFollowUpPermanentOfferChance(input);
+}
+
+const CAREER_PEAK_DROP_BY_BAND: Record<FaceitRecruitmentBand, number> = {
+  absurd: 1,
+  excellent: 1,
+  good: 1,
+  adequate: 2,
+  poor: 4,
+};
+
+/**
+ * Experienced users retain a soft market floor based on their highest
+ * permanent-team tier. Strong current form permits at most a one-tier drop;
+ * weaker form gradually opens lower recovery levels.
+ */
+export function applyCareerPeakTierFloor(
+  tierWeights: Partial<Record<TierSlug, number>>,
+  peakTierIndex: number | null,
+  band: FaceitRecruitmentBand,
+) {
+  const entries = Object.entries(tierWeights).filter(([, weight]) => Number(weight ?? 0) > 0);
+  if (peakTierIndex == null || peakTierIndex < 0 || !entries.length) return tierWeights;
+
+  const minimumTierIndex = Math.max(0, peakTierIndex - CAREER_PEAK_DROP_BY_BAND[band]);
+  const retained = entries.filter(
+    ([tier]) => Constants.Prestige.findIndex((candidate) => candidate === tier) >= minimumTierIndex,
+  );
+  return Object.fromEntries(retained) as Partial<Record<TierSlug, number>>;
+}
+
 export function rollFaceitTrialSeries(random: number = Math.random()) {
   return 3 + Math.min(2, Math.floor(random * 3));
 }
@@ -38,8 +115,13 @@ function steppedGoal(min: number, max: number, random: number) {
   return Number((min + Math.min(steps, Math.floor(random * (steps + 1))) * 0.05).toFixed(2));
 }
 
-export function rollFaceitTrialGoal(role: unknown, random: number = Math.random()): FaceitTrialGoal {
-  const normalized = String(role ?? '').toUpperCase().replace(/[\s_-]+/g, '');
+export function rollFaceitTrialGoal(
+  role: unknown,
+  random: number = Math.random(),
+): FaceitTrialGoal {
+  const normalized = String(role ?? '')
+    .toUpperCase()
+    .replace(/[\s_-]+/g, '');
   if (normalized === 'IGL' || normalized === 'INGAMELEADER') {
     return { type: 'WIN_RATE', value: Math.round(steppedGoal(0.6, 1, random) * 100) };
   }

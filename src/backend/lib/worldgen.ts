@@ -60,12 +60,15 @@ import {
 import { computeLifetimeStats } from './faceitstats';
 import { FACEIT_LEVEL_TEN_MIN_ELO } from './levels';
 import {
+  applyCareerPeakTierFloor,
   FaceitRecruitmentPlan,
+  getFollowUpPermanentOfferChance,
   getFaceitRecruitmentPlan,
   isFaceitRecruitmentSpotFit,
   rollFaceitTrialGoal,
   rollFaceitTrialSeries,
   shouldOfferPermanentDeal,
+  shouldOfferFollowUpPermanentDeal,
 } from './faceit-recruitment';
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
@@ -2989,6 +2992,20 @@ export async function progressActiveFaceitTrial(teamIds: number[]) {
       trialGoalValue: null,
       trialReplacedPlayerId: null,
       trialStartedAt: null,
+      ...(!goalMet
+        ? {
+            faceitRecruitmentOutcome:
+              goalCompletionPct < 50
+                ? 'TRIAL_FAILED_BADLY'
+                : goalCompletionPct < 75
+                  ? 'TRIAL_FAILED'
+                  : 'TRIAL_FAILED_NARROWLY',
+            faceitRecruitmentMatches: 0,
+            faceitRecruitmentMinimumMatches:
+              goalCompletionPct < 50 ? 5 : goalCompletionPct < 75 ? 4 : 3,
+            faceitRecruitmentOutcomeBoost: goalCompletionPct >= 75 ? 5 : 0,
+          }
+        : {}),
     },
   });
 
@@ -3517,6 +3534,16 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
           },
         },
       },
+    },
+  });
+
+  await DatabaseClient.prisma.profile.update({
+    where: { id: profile.id },
+    data: {
+      faceitRecruitmentOutcome: null,
+      faceitRecruitmentMatches: 0,
+      faceitRecruitmentMinimumMatches: 0,
+      faceitRecruitmentOutcomeBoost: 0,
     },
   });
 
@@ -4122,6 +4149,24 @@ export async function rejectTransferOffer(transferId: number, notifyResponseEmai
     },
   });
 
+  if (!isExtension) {
+    const recovery =
+      offer.offerType === 'TRIAL'
+        ? { outcome: 'TRIAL_DECLINED', boost: 0 }
+        : offer.offerType === 'TRIAL_CONTRACT'
+          ? { outcome: 'TRIAL_CONTRACT_DECLINED', boost: 10 }
+          : { outcome: 'PERMANENT_DECLINED', boost: 5 };
+    await DatabaseClient.prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        faceitRecruitmentOutcome: recovery.outcome,
+        faceitRecruitmentMatches: 0,
+        faceitRecruitmentMinimumMatches: 3,
+        faceitRecruitmentOutcomeBoost: recovery.boost,
+      },
+    });
+  }
+
   const persona =
     transfer.from.personas.find(
       (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
@@ -4402,7 +4447,13 @@ export async function kickUserPlayer(params: {
   // Update profile teamId
   const updatedProfile = await prisma.profile.update({
     where: { id: profile.id },
-    data: { teamId: null },
+    data: {
+      teamId: null,
+      faceitRecruitmentOutcome: 'TEAM_EXIT',
+      faceitRecruitmentMatches: 0,
+      faceitRecruitmentMinimumMatches: 3,
+      faceitRecruitmentOutcomeBoost: 5,
+    },
     include: { player: true, team: true },
   });
 
@@ -7567,8 +7618,6 @@ export async function sendUserFaceitOffer() {
   if (profile.teamId != null) return Promise.resolve();
 
   const role = resolveUserRole(profile, profile.player);
-  const tuning = getRoleOfferTuning(role);
-
   // Pending offers cap
   const pendingCount = await prisma.transfer.count({
     where: {
@@ -7580,15 +7629,15 @@ export async function sendUserFaceitOffer() {
   if (pendingCount >= UserOfferSettings.TEAMLESS_MAX_PENDING_OFFERS) {
     return Promise.resolve();
   }
+  // FACEIT scouting presents one decision at a time. The next recovery cycle
+  // begins only after the current opportunity is declined or expires.
+  if (pendingCount > 0) return Promise.resolve();
 
-  const last = profile.player.lastOfferAt;
-  const cooldownDays = Math.max(
-    1,
-    Math.round(UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS * tuning.cooldownMultTeamless),
-  );
-
-  if (last) {
-    if (differenceInDays(profile.date, last) < cooldownDays) {
+  const isFollowUpOpportunity = profile.faceitRecruitmentOutcome != null;
+  if (isFollowUpOpportunity) {
+    // A resolved opportunity must be followed by fresh FACEIT evidence. While a
+    // replacement offer is pending, do not stack additional recovery offers.
+    if (profile.faceitRecruitmentMatches < profile.faceitRecruitmentMinimumMatches) {
       return Promise.resolve();
     }
   }
@@ -7634,7 +7683,16 @@ export async function sendUserFaceitOffer() {
 
   // Federation restriction (own federation)
   const userFedId = profile.player.country?.continent?.federationId ?? null;
-  const eligibleTierEntries = Object.entries(recruitmentPlan.tierWeights)
+  const careerPeak = await prisma.careerStint.aggregate({
+    where: { playerId: profile.playerId, teamId: { not: null }, isTrial: false },
+    _max: { tier: true },
+  });
+  const careerAdjustedTierWeights = applyCareerPeakTierFloor(
+    recruitmentPlan.tierWeights,
+    careerPeak._max.tier,
+    recruitmentPlan.band,
+  );
+  const eligibleTierEntries = Object.entries(careerAdjustedTierWeights)
     .map(([tier, weight]) => ({
       tier: tier as TierSlug,
       weight: Number(weight ?? 0),
@@ -7742,11 +7800,26 @@ export async function sendUserFaceitOffer() {
   const wages = target.wages ?? 0;
   const cost = target.cost ?? 0;
   const offerExpiresAt = addDays(profile.date, 7);
-  const hasPermanentTeamStint = await prisma.careerStint.count({
-    where: { playerId: target.id, teamId: { not: null } },
+  const permanentTeamStints = await prisma.careerStint.count({
+    where: { playerId: target.id, teamId: { not: null }, isTrial: false },
   });
-  const permanentImmediately = shouldOfferPermanentDeal(recruitmentPlan.band);
-  const isTrial = hasPermanentTeamStint === 0 && !permanentImmediately;
+  const followUpPermanentChance = isFollowUpOpportunity
+    ? getFollowUpPermanentOfferChance({
+        band: recruitmentPlan.band,
+        teamTier: targetTier,
+        permanentStints: permanentTeamStints,
+        outcomeBoost: profile.faceitRecruitmentOutcomeBoost,
+      })
+    : null;
+  const permanentImmediately = isFollowUpOpportunity
+    ? shouldOfferFollowUpPermanentDeal({
+        band: recruitmentPlan.band,
+        teamTier: targetTier,
+        permanentStints: permanentTeamStints,
+        outcomeBoost: profile.faceitRecruitmentOutcomeBoost,
+      })
+    : shouldOfferPermanentDeal(recruitmentPlan.band);
+  const isTrial = !permanentImmediately;
   const trialSeries = isTrial ? rollFaceitTrialSeries() : null;
   const trialGoal = isTrial ? rollFaceitTrialGoal(role) : null;
   const replacementCandidates = from.players
@@ -7829,7 +7902,7 @@ export async function sendUserFaceitOffer() {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d, band=%s, projectedXp=%d, guaranteed=%s)',
+    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d, band=%s, projectedXp=%d, guaranteed=%s, followUp=%s, permanentChance=%s)',
     from.name,
     target.name,
     targetTier,
@@ -7838,6 +7911,8 @@ export async function sendUserFaceitOffer() {
     recruitmentPlan.band,
     recruitmentPlan.projectedXp,
     recruitmentPlan.guaranteed ? 'true' : 'false',
+    isFollowUpOpportunity ? 'true' : 'false',
+    followUpPermanentChance == null ? 'initial' : `${followUpPermanentChance}%`,
   );
 
   return Promise.resolve(transfer);
@@ -11601,7 +11676,13 @@ export async function onPlayerContractExpire(entry: Calendar) {
 
   const updatedProfile = await DatabaseClient.prisma.profile.update({
     where: { id: profile.id },
-    data: { teamId: null },
+    data: {
+      teamId: null,
+      faceitRecruitmentOutcome: 'TEAM_EXIT',
+      faceitRecruitmentMatches: 0,
+      faceitRecruitmentMinimumMatches: 3,
+      faceitRecruitmentOutcomeBoost: 5,
+    },
     include: { player: true, team: true },
   });
 
@@ -11780,6 +11861,24 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
       data: { status: Constants.TransferStatus.EXPIRED },
     });
   });
+
+  if (!isExtension) {
+    const recovery =
+      pendingOffer.offerType === 'TRIAL'
+        ? { outcome: 'TRIAL_EXPIRED', boost: 0 }
+        : pendingOffer.offerType === 'TRIAL_CONTRACT'
+          ? { outcome: 'TRIAL_CONTRACT_EXPIRED', boost: 10 }
+          : { outcome: 'PERMANENT_EXPIRED', boost: 5 };
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        faceitRecruitmentOutcome: recovery.outcome,
+        faceitRecruitmentMatches: 0,
+        faceitRecruitmentMinimumMatches: 3,
+        faceitRecruitmentOutcomeBoost: recovery.boost,
+      },
+    });
+  }
 
   const locale = getLocale(profile);
 

@@ -253,6 +253,10 @@ async function buildProtectedSaveSnapshot(prisma: PrismaClientType) {
         id: true,
         date: true,
         faceitElo: true,
+        faceitRecruitmentMatches: true,
+        faceitRecruitmentMinimumMatches: true,
+        faceitRecruitmentOutcome: true,
+        faceitRecruitmentOutcomeBoost: true,
         name: true,
         player: {
           select: {
@@ -454,6 +458,10 @@ async function restoreProtectedSaveSnapshot(
             data: {
               date: new Date(profile.date),
               faceitElo: profile.faceitElo,
+              faceitRecruitmentMatches: profile.faceitRecruitmentMatches ?? 0,
+              faceitRecruitmentMinimumMatches: profile.faceitRecruitmentMinimumMatches ?? 0,
+              faceitRecruitmentOutcome: profile.faceitRecruitmentOutcome ?? null,
+              faceitRecruitmentOutcomeBoost: profile.faceitRecruitmentOutcomeBoost ?? 0,
               name: profile.name,
               playerId: profile.playerId,
               season: profile.season,
