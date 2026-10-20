@@ -5,6 +5,10 @@ import {
   getTrialContractChatMessage,
   getTrialContractDecisionMessage,
   getTrialContractOpening,
+  getDirectContractChatMessage,
+  getDirectContractOpening,
+  rollContractClauses,
+  rollDirectContractMonths,
   rollTrialContractTerms,
 } from './trial-contract-offer';
 
@@ -58,5 +62,86 @@ assert.match(getTrialContractDecisionMessage(2, 'RIFLER', true), /strong trial/)
 assert.match(getTrialContractDecisionMessage(2, 'IGL', true), /your leadership/);
 assert.match(getTrialContractDecisionMessage(1, 'RIFLER', false), /decided not to accept/);
 assert.match(getTrialContractDecisionMessage(1, 'IGL', false), /through your leadership/);
+
+assert.match(
+  getDirectContractOpening({
+    response: 2,
+    source: 'FACEIT',
+    teamName: 'ALGO',
+    variant: 0,
+  }),
+  /FACEIT performances.*first permanent team contract/,
+);
+assert.notEqual(
+  getDirectContractOpening({
+    response: 3,
+    source: 'LEAGUE',
+    teamName: 'ALGO',
+    previousTierName: 'Main',
+    variant: 0,
+  }),
+  getDirectContractOpening({
+    response: 3,
+    source: 'LEAGUE',
+    teamName: 'ALGO',
+    previousTierName: 'Main',
+    variant: 1,
+  }),
+);
+assert.match(
+  getDirectContractOpening({
+    response: 3,
+    source: 'LEAGUE',
+    teamName: 'ALGO',
+    previousTierName: 'Main',
+    variant: 1,
+  }),
+  /Main/,
+);
+assert.match(
+  getDirectContractChatMessage('USER X', 'COACH X', 'ALGO'),
+  /recruitment staff and Head Coach \*\*COACH X\*\*/,
+);
+assert.deepEqual(rollContractClauses(1, 'RIFLER', sequence(0, 0, 0)), {
+  postBenchTerminationClause: true,
+  postBenchTerminationMonths: 0.5,
+  rosterStabilityClause: true,
+});
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_OPEN, 1, () => 0),
+  6,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_OPEN, 3, () => 0.999),
+  12,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_MAIN, 2, () => 0),
+  10,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_MAIN, 3, () => 0.999),
+  18,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_ADVANCED, 1, () => 0),
+  6,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_PRO, 2, () => 0),
+  12,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_PRO, 2, () => 0.999),
+  24,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_PRO, 3, () => 0),
+  24,
+);
+assert.equal(
+  rollDirectContractMonths(TierSlug.LEAGUE_PRO, 3, () => 0.999),
+  36,
+);
 
 console.log('trial contract offer tests passed');

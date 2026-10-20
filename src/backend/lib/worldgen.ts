@@ -83,8 +83,11 @@ import {
   getTrialSuccessResponseTier,
 } from '@liga/locale/en/trial';
 import {
+  getDirectContractChatMessage,
   getTrialContractChatMessage,
   getTrialContractDecisionMessage,
+  rollContractClauses,
+  rollDirectContractMonths,
   rollTrialContractTerms,
   TrialSuccessResponse,
 } from './trial-contract-offer';
@@ -3152,6 +3155,59 @@ export async function onTrialContractOffer(entry: Calendar) {
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 }
 
+function directOfferResponse(performance: number | string): TrialSuccessResponse {
+  if (typeof performance === 'string') {
+    if (performance === 'absurd' || performance === 'excellent') return 3;
+    if (performance === 'good') return 2;
+    return 1;
+  }
+  if (performance >= 0.75) return 3;
+  if (performance >= 0.5) return 2;
+  return 1;
+}
+
+async function sendDirectContractOffer(params: {
+  transfer: Prisma.TransferGetPayload<typeof Eagers.transfer>;
+  team: {
+    id: number;
+    name: string;
+    blazon?: string | null;
+    personas: Array<{ name: string; role: string; signatureFont?: string | null }>;
+  };
+  player: { name: string; role?: string | null };
+  profileDate: Date;
+  expiresAt: Date;
+  contractMonths: number;
+  response: TrialSuccessResponse;
+  source: 'FACEIT' | 'LEAGUE';
+  previousTierName?: string | null;
+  copyVariant: number;
+  clauses: ReturnType<typeof rollContractClauses>;
+}) {
+  const { transfer, team, player, expiresAt, clauses } = params;
+  const managementBoard = await DatabaseClient.prisma.persona.upsert({
+    where: { name: `${team.name} Management Board` },
+    update: { role: 'Management Board', team: { connect: { id: team.id } } },
+    create: {
+      name: `${team.name} Management Board`,
+      role: 'Management Board',
+      team: { connect: { id: team.id } },
+    },
+  });
+  const coach =
+    team.personas.find((item) => item.role === Constants.PersonaRole.MANAGER) ??
+    team.personas.find((item) => item.role === Constants.PersonaRole.ASSISTANT) ??
+    team.personas[0];
+
+  await sendEmail(
+    `Permanent contract offer from ${team.name}`,
+    `${getDirectContractChatMessage(player.name, coach?.name ?? 'Head Coach', team.name)}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${params.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${params.response}" data-offer-source="${params.source}" data-previous-tier-name="${params.previousTierName ?? ''}" data-copy-variant="${params.copyVariant}" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
+    managementBoard,
+    params.profileDate,
+    true,
+  );
+}
+
 async function recordPlayerTeamMove(
   prisma: typeof DatabaseClient.prisma,
   params: {
@@ -4047,9 +4103,7 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
     ) ?? transfer.from?.personas?.[0];
   if (!persona) return Promise.resolve();
 
-  const isTrialContract =
-    offer.offerType === 'TRIAL_CONTRACT' ||
-    (offer.postBenchTerminationClause && offer.rosterStabilityClause);
+  const isTrialContract = offer.offerType === 'TRIAL_CONTRACT';
   let acceptanceEmail;
   if (!isTrialContract) {
     acceptanceEmail = await sendEmail(
@@ -5136,10 +5190,7 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     if (!from) return Promise.resolve();
 
     // Create transfer + offer
-    let contractYears = rollContractYears(pickedTierSlug);
     const offerExpiresAt = addDays(profile.date, 7);
-    if (!player.starter && contractYears > 1) contractYears -= 1;
-    if (player.transferListed && contractYears > 1) contractYears -= 1;
 
     const baseWages = player.wages ?? 0;
     const baseCost = player.cost ?? 0;
@@ -5150,6 +5201,16 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     const wages = Math.max(0, Math.round(baseWages * wageMult));
     const cost = Math.max(0, Math.round(baseCost * (0.95 + leagueSignal * 0.15)));
+    const permanentTeamStints = await prisma.careerStint.count({
+      where: { playerId: player.id, teamId: { not: null }, isTrial: false },
+    });
+    const offerSource = permanentTeamStints === 0 ? 'FACEIT' : 'LEAGUE';
+    const response = directOfferResponse(leagueSignal);
+    const contractMonths = rollDirectContractMonths(pickedTierSlug, response);
+    const clauses = rollContractClauses(response, player.role);
+    const copyVariant = random(0, 1);
+    const previousTierName =
+      offerSource === 'LEAGUE' ? getTeamTierName(profile.team?.tier ?? baselineTierIdx) : null;
 
     const transfer = await prisma.transfer.create({
       data: {
@@ -5162,8 +5223,14 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
               status: Constants.TransferStatus.PLAYER_PENDING,
               wages,
               cost,
-              contractYears,
+              contractYears: null,
+              contractMonths,
               expiresAt: offerExpiresAt,
+              offerType: 'PERMANENT',
+              trialResponseTier: response,
+              postBenchTerminationClause: clauses.postBenchTerminationClause,
+              postBenchTerminationMonths: clauses.postBenchTerminationMonths,
+              rosterStabilityClause: clauses.rosterStabilityClause,
             },
           ],
         },
@@ -5184,21 +5251,19 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       data: { lastOfferAt: profile.date },
     });
 
-    const locale = getLocale(profile);
-    const persona =
-      from.personas.find(
-        (p) =>
-          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
-      ) ?? from.personas[0];
-    const fromTierName = getTeamTierName(transfer.from?.tier);
-
-    await sendEmail(
-      Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { transfer, profile }),
-      Sqrl.render(locale.templates.OfferIncoming.CONTENT, { transfer, profile, fromTierName }),
-      persona,
-      profile.date,
-      true,
-    );
+    await sendDirectContractOffer({
+      transfer,
+      team: from,
+      player: { ...player, name: profile.player?.name ?? profile.name },
+      profileDate: profile.date,
+      expiresAt: offerExpiresAt,
+      contractMonths,
+      response,
+      source: offerSource,
+      previousTierName,
+      copyVariant,
+      clauses,
+    });
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
@@ -5206,11 +5271,11 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     Engine.Runtime.Instance.stop();
 
     Engine.Runtime.Instance.log.info(
-      'League-based offer: %s -> %s (tier=%s years=%d wages=%d cost=%d pbx=%d)',
+      'League-based offer: %s -> %s (tier=%s months=%d wages=%d cost=%d pbx=%d)',
       from.name,
       (profile as any)?.player?.name ?? 'USER',
       pickedTierSlug,
-      contractYears,
+      contractMonths,
       wages,
       cost,
       pbx,
@@ -7793,8 +7858,6 @@ export async function sendUserFaceitOffer() {
   const from = sample(pool);
   if (!from) return Promise.resolve();
 
-  const contractYears = rollContractYears(targetTier);
-
   // Create transfer + offer
   const target = profile.player;
   const wages = target.wages ?? 0;
@@ -7803,6 +7866,14 @@ export async function sendUserFaceitOffer() {
   const permanentTeamStints = await prisma.careerStint.count({
     where: { playerId: target.id, teamId: { not: null }, isTrial: false },
   });
+  const previousPermanentStint =
+    permanentTeamStints > 0
+      ? await prisma.careerStint.findFirst({
+          where: { playerId: target.id, teamId: { not: null }, isTrial: false },
+          orderBy: [{ endedAt: 'desc' }, { startedAt: 'desc' }],
+          select: { tier: true },
+        })
+      : null;
   const followUpPermanentChance = isFollowUpOpportunity
     ? getFollowUpPermanentOfferChance({
         band: recruitmentPlan.band,
@@ -7820,6 +7891,18 @@ export async function sendUserFaceitOffer() {
       })
     : shouldOfferPermanentDeal(recruitmentPlan.band);
   const isTrial = !permanentImmediately;
+  const directResponse = directOfferResponse(recruitmentPlan.band);
+  const directContractMonths = isTrial
+    ? null
+    : rollDirectContractMonths(targetTier, directResponse);
+  const directClauses = isTrial
+    ? {
+        postBenchTerminationClause: false,
+        postBenchTerminationMonths: null,
+        rosterStabilityClause: false,
+      }
+    : rollContractClauses(directResponse, target.role);
+  const directCopyVariant = random(0, 1);
   const trialSeries = isTrial ? rollFaceitTrialSeries() : null;
   const trialGoal = isTrial ? rollFaceitTrialGoal(role) : null;
   const replacementCandidates = from.players
@@ -7841,7 +7924,8 @@ export async function sendUserFaceitOffer() {
             status: Constants.TransferStatus.PLAYER_PENDING,
             wages,
             cost,
-            contractYears,
+            contractYears: isTrial ? rollContractYears(targetTier) : null,
+            contractMonths: isTrial ? null : directContractMonths,
             expiresAt: offerExpiresAt,
             offerType: isTrial ? 'TRIAL' : 'PERMANENT',
             trialSeries,
@@ -7849,6 +7933,10 @@ export async function sendUserFaceitOffer() {
             trialGoalValue: trialGoal?.value,
             trialReplacedPlayerId: isTrial ? replacedPlayer?.id : null,
             trialBand: isTrial ? recruitmentPlan.band : null,
+            trialResponseTier: isTrial ? null : directResponse,
+            postBenchTerminationClause: !isTrial && directClauses.postBenchTerminationClause,
+            postBenchTerminationMonths: isTrial ? null : directClauses.postBenchTerminationMonths,
+            rosterStabilityClause: !isTrial && directClauses.rosterStabilityClause,
           },
         ],
       },
@@ -7877,24 +7965,37 @@ export async function sendUserFaceitOffer() {
     ) ?? from.personas[0];
   const fromTierName = getTeamTierName(transfer.from?.tier);
 
-  const offerTemplate = isTrial ? locale.templates.TrialIncoming : locale.templates.OfferIncoming;
-  const offerContent = isTrial
-    ? getTrialIncomingContent(recruitmentPlan.band)
-    : offerTemplate.CONTENT;
-  await sendEmail(
-    Sqrl.render(offerTemplate.SUBJECT, { transfer, profile }),
-    Sqrl.render(offerContent, {
+  if (isTrial) {
+    await sendEmail(
+      Sqrl.render(locale.templates.TrialIncoming.SUBJECT, { transfer, profile }),
+      Sqrl.render(getTrialIncomingContent(recruitmentPlan.band), {
+        transfer,
+        profile,
+        fromTierName,
+        trialSeries,
+        trialGoal,
+        replacedPlayer,
+      }),
+      persona,
+      profile.date,
+      true,
+    );
+  } else {
+    await sendDirectContractOffer({
       transfer,
-      profile,
-      fromTierName,
-      trialSeries,
-      trialGoal,
-      replacedPlayer,
-    }),
-    persona,
-    profile.date,
-    true,
-  );
+      team: from,
+      player: target,
+      profileDate: profile.date,
+      expiresAt: offerExpiresAt,
+      contractMonths: directContractMonths ?? 12,
+      response: directResponse,
+      source: permanentTeamStints === 0 ? 'FACEIT' : 'LEAGUE',
+      previousTierName:
+        permanentTeamStints === 0 ? null : getTeamTierName(previousPermanentStint?.tier),
+      copyVariant: directCopyVariant,
+      clauses: directClauses,
+    });
+  }
 
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
@@ -7902,11 +8003,11 @@ export async function sendUserFaceitOffer() {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    '%s sent FACEIT-based offer to %s (tier=%s, years=%d, pbx=%d, band=%s, projectedXp=%d, guaranteed=%s, followUp=%s, permanentChance=%s)',
+    '%s sent FACEIT-based offer to %s (tier=%s, months=%d, pbx=%d, band=%s, projectedXp=%d, guaranteed=%s, followUp=%s, permanentChance=%s)',
     from.name,
     target.name,
     targetTier,
-    contractYears,
+    isTrial ? (transfer.offers[0]?.contractYears ?? 1) * 12 : (directContractMonths ?? 12),
     pbx,
     recruitmentPlan.band,
     recruitmentPlan.projectedXp,

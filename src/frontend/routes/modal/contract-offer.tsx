@@ -6,7 +6,11 @@ import { Image, JoinedTeamReveal } from '@liga/frontend/components';
 import { AppStateContext } from '@liga/frontend/redux';
 import { useAudioControls } from '@liga/frontend/hooks';
 import { getTeamHueBackground } from '@liga/frontend/lib';
-import { getTrialContractOpening } from '@liga/backend/lib/trial-contract-offer';
+import {
+  getDirectContractOpening,
+  getTrialContractOpening,
+  type DirectOfferSource,
+} from '@liga/backend/lib/trial-contract-offer';
 import type { Prisma } from '@prisma/client';
 
 type ContractOfferState = {
@@ -20,6 +24,9 @@ type ContractOfferState = {
   contractMonths: number;
   playerRole: string;
   trialResponseTier: 1 | 2 | 3;
+  offerSource?: 'TRIAL' | DirectOfferSource;
+  previousTierName?: string | null;
+  copyVariant?: number;
   postBenchClause: boolean;
   postBenchMonths: number;
   rosterStabilityClause: boolean;
@@ -136,6 +143,21 @@ export default function ContractOffer() {
   const coachName =
     coach?.name ??
     (state.coachName && state.coachName !== 'undefined' ? state.coachName : 'Head Coach');
+  const opening =
+    state.offerSource && state.offerSource !== 'TRIAL'
+      ? getDirectContractOpening({
+          response: state.trialResponseTier,
+          source: state.offerSource,
+          teamName: state.teamName,
+          previousTierName: state.previousTierName,
+          variant: state.copyVariant,
+        })
+      : getTrialContractOpening(
+          state.trialResponseTier,
+          state.playerRole,
+          coachName,
+          state.teamName,
+        );
 
   if (signed) {
     return (
@@ -192,15 +214,7 @@ export default function ContractOffer() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-8 py-6 sm:px-12 sm:py-7">
           <p className="text-base-content/65 max-w-4xl text-base leading-relaxed sm:text-lg">
-            {emphasizeContractParties(
-              getTrialContractOpening(
-                state.trialResponseTier,
-                state.playerRole,
-                coachName,
-                state.teamName,
-              ),
-              [coachName, state.teamName],
-            )}
+            {emphasizeContractParties(opening, [coachName, state.teamName])}
           </p>
 
           <dl className="mt-5 flex w-full max-w-2xl flex-col">

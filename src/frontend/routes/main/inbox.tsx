@@ -749,6 +749,18 @@ export default function Inbox() {
                                                   trialResponseTier: Number(
                                                     node.properties.dataTrialResponseTier,
                                                   ),
+                                                  offerSource:
+                                                    node.properties.dataOfferSource === 'FACEIT' ||
+                                                    node.properties.dataOfferSource === 'LEAGUE'
+                                                      ? node.properties.dataOfferSource
+                                                      : 'TRIAL',
+                                                  previousTierName: node.properties
+                                                    .dataPreviousTierName
+                                                    ? String(node.properties.dataPreviousTierName)
+                                                    : null,
+                                                  copyVariant: Number(
+                                                    node.properties.dataCopyVariant ?? 0,
+                                                  ),
                                                   postBenchClause:
                                                     node.properties.dataPostBenchClause === 'true',
                                                   postBenchMonths: Number(
