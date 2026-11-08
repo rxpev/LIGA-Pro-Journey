@@ -29,13 +29,6 @@ type RelatedPlayer = {
   avatar?: string | null;
   flagCode?: string | null;
 };
-type NewsComment = {
-  id: number;
-  author: string;
-  flagCode?: string | null;
-  message: string;
-  score: number;
-};
 type MapUsageDatum = {
   color?: string | null;
   map?: string | null;
@@ -104,7 +97,6 @@ type MvpGraphic = {
   tournamentLogo?: string | null;
 };
 type NewsPayload = Record<string, unknown> & {
-  comments?: NewsComment[];
   competitionId?: number | null;
   flagCode?: string | null;
   hideArticleImage?: boolean;
@@ -226,21 +218,6 @@ function asRelatedPlayers(value: unknown): RelatedPlayer[] {
           flagCode: typeof item.flagCode === 'string' ? item.flagCode : null,
         }))
         .filter((item) => Number.isFinite(item.id))
-    : [];
-}
-
-function asComments(value: unknown): NewsComment[] {
-  return Array.isArray(value)
-    ? value
-        .filter(isRecord)
-        .map((item, index) => ({
-          id: Number.isFinite(Number(item.id)) ? Number(item.id) : index + 1,
-          author: typeof item.author === 'string' ? item.author : `user${index + 1}`,
-          flagCode: typeof item.flagCode === 'string' ? item.flagCode : null,
-          message: typeof item.message === 'string' ? item.message : '',
-          score: Number.isFinite(Number(item.score)) ? Number(item.score) : 0,
-        }))
-        .filter((item) => item.message.trim())
     : [];
 }
 
@@ -1569,58 +1546,6 @@ function RelatedLinks(props: { item: NewsItem }) {
   );
 }
 
-function NewsComments(props: { fmtDate: (date: Date | string) => string; item: NewsItem }) {
-  const payload = parsePayload(props.item);
-  const comments = asComments(payload.comments);
-
-  if (!comments.length) {
-    return null;
-  }
-
-  return (
-    <section className="mt-6">
-      <header className="border-base-content/10 bg-base-300/70 flex items-center justify-between border px-3 py-2">
-        <p className="text-sm font-black">Comments</p>
-        <p className="text-base-content/60 text-xs font-bold uppercase">{comments.length} posts</p>
-      </header>
-      <div className="border-base-content/10 divide-base-content/10 border-x border-b">
-        {comments.map((comment) => (
-          <article
-            key={`${props.item.id}_${comment.id}`}
-            className="divide-base-content/10 divide-y"
-          >
-            <header className="bg-base-200/70 flex items-center justify-between gap-3 px-3 py-1.5 text-xs">
-              <span className="text-base-content/60 font-bold">#{comment.id}</span>
-              <span className="flex min-w-0 items-center gap-1.5">
-                <Flag code={comment.flagCode} />
-                <span className="truncate font-bold">{comment.author}</span>
-              </span>
-            </header>
-            <p className="bg-base-200/40 px-3 py-2 text-sm leading-5 opacity-80">
-              {comment.message}
-            </p>
-            <footer className="bg-base-200/70 flex items-center justify-between px-3 py-1.5 text-xs">
-              <span className="text-base-content/50">
-                {props.fmtDate(toDate(props.item.publishedAt))}
-              </span>
-              <span
-                className={cx(
-                  'rounded px-2 py-0.5 font-black',
-                  comment.score > 20
-                    ? 'bg-warning/70 text-warning-content'
-                    : 'bg-base-content/10 text-base-content/70',
-                )}
-              >
-                {comment.score >= 0 ? `+ ${comment.score}` : comment.score}
-              </span>
-            </footer>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /**
  * Exports this module.
  *
@@ -1942,7 +1867,6 @@ export default function () {
               <section className="px-7 pb-6">
                 <div className="mx-auto max-w-3xl">
                   <RelatedLinks item={selected} />
-                  <NewsComments item={selected} fmtDate={fmtDate} />
                 </div>
               </section>
             </article>

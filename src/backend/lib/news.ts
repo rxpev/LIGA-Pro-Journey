@@ -1344,108 +1344,6 @@ async function getPlayerMajorWinCount(
   return wonMajorCompetitionIds.size;
 }
 
-function buildTransferComments(args: {
-  benchedPlayer?: { name?: string | null } | null;
-  destination?: { name?: string | null } | null;
-  isArticle: boolean;
-  seed: number;
-  seller?: { name?: string | null } | null;
-  target: { name?: string | null };
-}) {
-  const flags = [
-    'us',
-    'br',
-    'dk',
-    'se',
-    'de',
-    'fr',
-    'pl',
-    'ca',
-    'gb',
-    'au',
-    'fi',
-    'no',
-    'ee',
-    'nl',
-    'es',
-    'pt',
-    'ru',
-    'ua',
-    'tr',
-    'cn',
-  ];
-  const names = [
-    'atomic_',
-    'midnightCaller',
-    'sjuushEnjoyer',
-    'ecoCobra',
-    'BAnchor',
-    'nukeEnjoyer',
-    'defaultPlant',
-    'noKitNoProblem',
-    'BrollanFan',
-    'adminHeSawIt',
-    'infernoBan',
-    'tradeFrag',
-    'lurkAccount',
-    'warmupHero',
-    'halfBuy',
-    'saveMerchant',
-    'hltvProfessor',
-    'siteAnchor',
-    'swingOrBeSwung',
-    'lowTabLarry',
-  ];
-  const targetName = playerName(args.target);
-  const destinationName = teamName(args.destination);
-  const sellerName = teamName(args.seller);
-  const benchedName = args.benchedPlayer ? playerName(args.benchedPlayer) : null;
-  const templates = [
-    `Nah this ain't it man`,
-    `Good luck ${targetName}`,
-    `idk if ${targetName} will work on ${destinationName}`,
-    benchedName
-      ? `No way they benched ${benchedName} for this`
-      : `${destinationName} needed this tbh`,
-    `LOL`,
-    `lmao`,
-    `Is this a good move tho?`,
-    `Let's go ${destinationName}!`,
-    `${sellerName} fans are going through it`,
-    `${targetName} masterclass incoming`,
-    `actually a smart pickup`,
-    `mid move unless the roles are perfect`,
-    `${destinationName} cooking?`,
-    `give him two events before judging`,
-    `people are underrating this`,
-    `this roster makes no sense and I love it`,
-    `finally some ambition`,
-    `I need to see the first match`,
-    `${targetName} clears half these comments`,
-    `classic ${destinationName} gamble`,
-  ].filter(Boolean);
-  const count = args.isArticle ? seededInt(args.seed, 1, 10, 25) : seededInt(args.seed, 1, 3, 5);
-  const usedNames = new Set<string>();
-
-  return Array.from({ length: count }, (_, index) => {
-    let name = pickVariant(names, args.seed + index * 7);
-
-    if (usedNames.has(name)) {
-      name = `${name}${seededInt(args.seed, index + 2, 1, 99)}`;
-    }
-
-    usedNames.add(name);
-
-    return {
-      id: index + 1,
-      author: name,
-      flagCode: pickVariant(flags, args.seed + index * 11),
-      message: pickVariant(templates, args.seed + index * 13),
-      score: seededInt(args.seed, index + 3, -4, 112),
-    };
-  });
-}
-
 async function getTopTeamIds(limit = TOP_TRANSFER_TEAM_COUNT) {
   const teams = await DatabaseClient.prisma.team.findMany({
     orderBy: [{ elo: 'desc' }, { id: 'asc' }],
@@ -4492,13 +4390,6 @@ async function buildContractExpiryDraft(
       teamIds: [previousTeam.id],
       flagCode: toFlagCode(target.country?.code),
       welcomeGraphic: getThankYouGraphic(previousTeam, target),
-      comments: buildTransferComments({
-        destination: null,
-        isArticle: type === 'ARTICLE',
-        seed: transfer.id,
-        seller: previousTeam,
-        target,
-      }),
       relatedPlayers: [toRelatedPlayer(target)].filter(Boolean),
       relatedTeams: [toRelatedTeam(previousTeam)].filter(Boolean),
     },
@@ -5808,14 +5699,6 @@ async function buildTransferDraft(
       teamIds: [destination?.id, isFreeAgentSigning ? null : seller?.id].filter(Boolean),
       flagCode: toFlagCode(target.country?.code),
       welcomeGraphic: getWelcomeGraphic(destination, target),
-      comments: buildTransferComments({
-        benchedPlayer,
-        destination,
-        isArticle: type === 'ARTICLE',
-        seed: transfer.id,
-        seller: isFreeAgentSigning ? null : seller,
-        target,
-      }),
       relatedPlayers: [toRelatedPlayer(target), toRelatedPlayer(benchedPlayer)].filter(Boolean),
       relatedTeams: [
         toRelatedTeam(destination),
