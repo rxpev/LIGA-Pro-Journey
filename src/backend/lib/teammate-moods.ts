@@ -558,13 +558,18 @@ export async function sendRandomTeammateWelcome(expectedProfileId: number, expec
 }
 
 export async function processCompletedMatch(matchId: number) {
-  const profile = await DatabaseClient.prisma.profile.findFirst({
-    include: { player: { include: { careerStints: true } } },
-  });
+  const profile = await DatabaseClient.prisma.profile.findFirst({ include: { player: true } });
   if (!profile?.teamId || !profile.playerId || profile.trialTeamId) return;
-  const currentStintStartedAt = profile.player?.careerStints
-    .filter((stint) => stint.teamId === profile.teamId && !stint.isTrial)
-    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0]?.startedAt;
+  const currentStint = await DatabaseClient.prisma.careerStint.findFirst({
+    where: {
+      playerId: profile.playerId,
+      teamId: profile.teamId,
+      isTrial: false,
+    },
+    orderBy: { startedAt: 'desc' },
+    select: { startedAt: true },
+  });
+  const currentStintStartedAt = currentStint?.startedAt;
   const match = await DatabaseClient.prisma.match.findUnique({
     where: { id: matchId },
     include: { competitors: true, games: { include: { teams: true } } },

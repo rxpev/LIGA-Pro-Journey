@@ -1095,12 +1095,6 @@ export default function registerFaceitHandlers() {
       await saveFaceitResult(game, realMatchId, profile);
 
       if (profile.teamId == null) {
-        if (profile.faceitRecruitmentOutcome != null) {
-          await prisma.profile.update({
-            where: { id: profile.id },
-            data: { faceitRecruitmentMatches: { increment: 1 } },
-          });
-        }
         await Worldgen.sendUserFaceitOffer();
       }
 

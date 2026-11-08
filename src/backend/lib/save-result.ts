@@ -242,7 +242,12 @@ export async function saveFaceitResult(
 
   await prisma.profile.update({
     where: { id: profile.id },
-    data: { faceitElo: placementElo ?? (profile.faceitElo + (delta ?? 0)) },
+    data: {
+      faceitElo: placementElo ?? (profile.faceitElo + (delta ?? 0)),
+      ...(profile.teamId == null && profile.faceitRecruitmentOutcome != null
+        ? { faceitRecruitmentMatches: { increment: 1 } }
+        : {}),
+    },
   });
 
   await Promise.all(
