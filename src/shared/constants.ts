@@ -1761,8 +1761,6 @@ export const TransferSettings = {
  * @constant
  */
 export const UserOfferSettings = {
-  TEAMLESS_OFFER_COOLDOWN_DAYS: 10,
-  TEAM_OFFER_COOLDOWN_DAYS: 50,
   TEAMLESS_MAX_PENDING_OFFERS: 3,
   SAME_COUNTRY_OFFER_CHANCE: 60,
   SAME_CORE_OFFER_CHANCE: 30,
@@ -1801,24 +1799,6 @@ export const UserOfferSettings = {
     [TierSlug.LEAGUE_MAIN]: { faceit: 0.2, league: 0.8 },
     [TierSlug.LEAGUE_ADVANCED]: { faceit: 0.1, league: 0.9 },
     [TierSlug.LEAGUE_PRO]: { faceit: 0.05, league: 0.95 },
-  },
-
-  ROLE_OFFER_TUNING: {
-    [UserRole.RIFLER]: {
-      pbxMultLeague: 1.0,
-      cooldownMultTeam: 1.0,
-      cooldownMultTeamless: 1.0,
-    },
-    [UserRole.IGL]: {
-      pbxMultLeague: 0.85,
-      cooldownMultTeam: 1.3,
-      cooldownMultTeamless: 1.3,
-    },
-    [UserRole.AWPER]: {
-      pbxMultLeague: 0.55,
-      cooldownMultTeam: 1.6,
-      cooldownMultTeamless: 1.6,
-    },
   },
 };
 

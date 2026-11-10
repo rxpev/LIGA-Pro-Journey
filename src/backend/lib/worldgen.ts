@@ -111,6 +111,15 @@ import {
   USER_OFFER_FIT_BUCKET_WEIGHTS,
   UserOfferFitBucket,
 } from './npc-transfer-identity';
+import {
+  getPassiveCareerLevel,
+  getPassivePermanentOfferChance,
+  getPassiveTierWeights,
+  getOfficialScoutingPlan,
+  getOfficialScoutingQuality,
+  hasOfficialScoutingCapacity,
+  OfficialScoutingEvidence,
+} from './passive-scouting';
 
 type SimulatedTeam = {
   id: number;
@@ -3292,17 +3301,6 @@ function resolveUserRole(profile: any, player: any): UserRole {
   return UserRole.RIFLER;
 }
 
-function getRoleOfferTuning(role: UserRole) {
-  return (
-    UserOfferSettings.ROLE_OFFER_TUNING?.[role] ??
-    UserOfferSettings.ROLE_OFFER_TUNING?.[UserRole.RIFLER]
-  );
-}
-
-function clampPbx(x: number) {
-  return Math.max(1, Math.min(95, Math.round(x)));
-}
-
 function daysLeftOrHuge(contractEnd: Date | null | undefined, now: Date): number {
   if (!contractEnd) return 999999;
   return Math.max(0, differenceInDays(contractEnd, now));
@@ -4623,13 +4621,6 @@ function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
 }
 
-function kdToScore(kd: number) {
-  const lo = 0.8;
-  const hi = 1.8;
-  const clamped = Math.max(lo, Math.min(hi, kd));
-  return clamp01((clamped - lo) / (hi - lo));
-}
-
 async function computeTeamStandingScore(profile: any) {
   const prisma = DatabaseClient.prisma;
 
@@ -4700,6 +4691,87 @@ async function computeTeamFormScore(profile: any, take = 5) {
   return clamp01(sum / matches.length);
 }
 
+type OfficialScoutingMapRow = {
+  matchId: number;
+  date: Date | string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  tierSlug: string;
+  lan: boolean | number | null;
+  tournament: string | null;
+};
+
+function getOfficialEventPrestige(row: OfficialScoutingMapRow) {
+  const tierIndex = Constants.Prestige.indexOf(row.tierSlug as TierSlug);
+  const tierMultiplier = tierIndex >= 0 ? ([0.65, 0.8, 1, 1.2, 1.4][tierIndex] ?? 1) : 1;
+  const eventMultiplier = extensionCompetitionPrestige(row.tierSlug, row.tournament ?? '');
+  const lanMultiplier = row.lan ? 1.2 : 1;
+  return tierMultiplier * eventMultiplier * lanMultiplier;
+}
+
+async function computeOfficialScoutingEvidence(
+  playerId: number,
+  now: Date,
+): Promise<OfficialScoutingEvidence> {
+  await backfillMissingMatchPlayerGameStats();
+  const rows = await DatabaseClient.prisma.$queryRaw<OfficialScoutingMapRow[]>(Prisma.sql`
+    SELECT
+      "MatchPlayerGameStat"."matchId" AS "matchId",
+      "Match"."date" AS "date",
+      "MatchPlayerGameStat"."kills" AS "kills",
+      "MatchPlayerGameStat"."deaths" AS "deaths",
+      "MatchPlayerGameStat"."assists" AS "assists",
+      "Tier"."slug" AS "tierSlug",
+      "Tier"."lan" AS "lan",
+      "Competition"."tournament" AS "tournament"
+    FROM "MatchPlayerGameStat"
+    INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+    INNER JOIN "Competition" ON "Competition"."id" = "Match"."competitionId"
+    INNER JOIN "Tier" ON "Tier"."id" = "Competition"."tierId"
+    WHERE "MatchPlayerGameStat"."playerId" = ${playerId}
+      AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+      AND "Match"."competitionId" IS NOT NULL
+      AND ("Match"."matchType" IS NULL OR "Match"."matchType" <> 'FACEIT_PUG')
+    ORDER BY "Match"."date" DESC, "MatchPlayerGameStat"."matchId" DESC,
+      "MatchPlayerGameStat"."gameKey" DESC
+    LIMIT 40
+  `);
+
+  if (!rows.length) {
+    return {
+      maps: 0,
+      matches: 0,
+      rating: null,
+      daysSinceLastMatch: null,
+      lanMapShare: 0,
+      eventPrestige: 0,
+    };
+  }
+
+  let weightedRating = 0;
+  let weightedPrestige = 0;
+  let totalWeight = 0;
+  let lanMaps = 0;
+  rows.forEach((row, index) => {
+    // The newest map receives twice the weight of the oldest map in the sample.
+    const weight = 2 - index / Math.max(1, rows.length - 1);
+    weightedRating += Util.getPlayerRating(row.kills, row.deaths, row.assists) * weight;
+    weightedPrestige += getOfficialEventPrestige(row) * weight;
+    totalWeight += weight;
+    if (row.lan) lanMaps += 1;
+  });
+
+  return {
+    maps: rows.length,
+    matches: new Set(rows.map((row) => row.matchId)).size,
+    rating: weightedRating / totalWeight,
+    daysSinceLastMatch: Math.max(0, differenceInDays(now, new Date(rows[0].date))),
+    lanMapShare: lanMaps / rows.length,
+    eventPrestige: weightedPrestige / totalWeight,
+  };
+}
+
 /**
  * Attempts to scout the user player periodically.
  */
@@ -4740,10 +4812,21 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       contractEnd: true,
       countryId: true,
       lastOfferAt: true,
+      passiveOfferSeason: true,
+      passiveOffersThisSeason: true,
       role: true,
+      xp: true,
     },
   });
   if (!player) return Promise.resolve();
+  if (profile.trialTeamId != null) {
+    Engine.Runtime.Instance.log.debug(
+      'PlayerScoutingCheck: active trial at teamId=%d; passive scouting paused.',
+      profile.trialTeamId,
+    );
+    await schedulePlayerScoutingCheck(prisma, addDays(profile.date, 7), playerId);
+    return Promise.resolve();
+  }
   const { hasWonMajorAnyTeam } = await getUserMajorWinFlags({
     prisma,
     playerId: profile.playerId,
@@ -4763,12 +4846,8 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     select: { teamId: true, tier: true },
   });
 
-  const effectiveTeamId = profile.teamId ?? lastStintWithTeam?.teamId ?? null;
-
   // Resolve tier index boundaries from your Prestige ordering
   const idxOpen = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_OPEN);
-  const idxInter = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_INTERMEDIATE);
-  const idxMain = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_MAIN);
   const idxAdv = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_ADVANCED);
   const idxPro = Constants.Prestige.findIndex((t) => t === TierSlug.LEAGUE_PRO);
 
@@ -4781,122 +4860,106 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
         ? lastStintWithTeam.tier
         : idxOpen;
 
-  // Recent peak tier from CareerStints (last 180 days, includes ongoing stints)
-  const stints = await prisma.careerStint.findMany({
+  // Career reputation is persistent. Being teamless for six months no longer
+  // erases the level at which the player has already proved themselves.
+  const careerStints = await prisma.careerStint.findMany({
     where: {
       playerId: profile.playerId,
-      OR: [{ endedAt: null }, { endedAt: { gte: cutoff } }],
+      teamId: { not: null },
+      isTrial: false,
       tier: { not: null },
     },
-    select: { tier: true, startedAt: true, endedAt: true },
-    orderBy: { startedAt: 'desc' },
+    select: { tier: true, teamId: true, startedAt: true, endedAt: true },
+    orderBy: { startedAt: 'asc' },
   });
 
-  let recentPeakTierIdx = currentTierIdx;
-  for (const s of stints) {
+  let careerPeakTierIdx = profile.teamId == null ? -1 : currentTierIdx;
+  let promotionCount = 0;
+  let highestSeenTier = -1;
+  for (const s of careerStints) {
     if (typeof s.tier === 'number') {
-      recentPeakTierIdx = Math.max(recentPeakTierIdx, s.tier);
+      if (highestSeenTier >= 0 && s.tier > highestSeenTier) promotionCount += 1;
+      highestSeenTier = Math.max(highestSeenTier, s.tier);
+      careerPeakTierIdx = Math.max(careerPeakTierIdx, s.tier);
     }
   }
 
-  const baselineTierIdx = Math.max(currentTierIdx, recentPeakTierIdx);
+  const careerTeamIds = [
+    ...new Set(
+      careerStints
+        .map((stint) => stint.teamId)
+        .concat(profile.teamId ?? [])
+        .filter((teamId): teamId is number => typeof teamId === 'number'),
+    ),
+  ];
+  const leagueHistory = careerTeamIds.length
+    ? await prisma.competition.findMany({
+        where: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          tier: { slug: { in: Constants.Prestige } },
+          competitors: { some: { teamId: { in: careerTeamIds } } },
+          matches: { some: { players: { some: { id: profile.playerId } } } },
+        },
+        include: { tier: true },
+        orderBy: [{ season: 'asc' }, { id: 'asc' }],
+      })
+    : [];
+  let competitionPeakTier = -1;
+  let competitionPromotions = 0;
+  for (const competition of leagueHistory) {
+    const tierIndex = Constants.Prestige.indexOf(competition.tier.slug as TierSlug);
+    if (competitionPeakTier >= 0 && tierIndex > competitionPeakTier) competitionPromotions += 1;
+    competitionPeakTier = Math.max(competitionPeakTier, tierIndex);
+    careerPeakTierIdx = Math.max(careerPeakTierIdx, tierIndex);
+  }
+  promotionCount = Math.max(promotionCount, competitionPromotions);
+  if (profile.teamId && currentTierIdx > competitionPeakTier && competitionPeakTier >= 0) {
+    promotionCount += 1;
+  }
 
-  // If teamless, only allow scouting if the player recently played ADVANCED/PRO.
-  // (Open/Intermediate/Main free agents should primarily be handled by FACEIT/offers.)
   const isTeamless = profile.teamId == null;
-  if (isTeamless && baselineTierIdx < idxAdv && !hasWonMajorAnyTeam) {
-    // Schedule next weekly check (recurring)
-    const nextDate = addDays(profile.date, 7);
-    await prisma.calendar.create({
-      data: {
-        type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
-        date: nextDate.toISOString(),
-        payload: String(playerId),
-      },
-    });
-    return Promise.resolve();
-  }
+  const careerLevel = getPassiveCareerLevel({
+    permanentStints: Math.max(
+      careerStints.length,
+      leagueHistory.length ? 1 : 0,
+      profile.teamId ? 1 : 0,
+    ),
+    peakTier: careerPeakTierIdx >= 0 ? careerPeakTierIdx : null,
+    majorWinner: hasWonMajorAnyTeam,
+    prestige: Constants.Prestige as TierSlug[],
+  });
+  const baselineTierIdx =
+    careerLevel === 'BEGINNER' ? idxOpen : Constants.Prestige.indexOf(careerLevel);
 
-  // Need an effective team to compute league stats + context.
-  if (!effectiveTeamId && !hasWonMajorAnyTeam) {
-    const nextDate = addDays(profile.date, 7);
-    await prisma.calendar.create({
-      data: {
-        type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
-        date: nextDate.toISOString(),
-        payload: String(playerId),
-      },
-    });
-    return Promise.resolve();
-  }
-
-  // League performance inputs (per-player + team context)
-  let kd = 1;
-  let standingScore = 0.5;
-  let formScore = 0.5;
-  let leagueSignal = 0.5;
-  if (effectiveTeamId) {
-    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(
-      effectiveTeamId,
-      profile.playerId,
-      30,
-    );
-
-    kd = leagueRecent.kdRatio ?? 1;
-    const playerScore = kdToScore(kd);
-
-    // Team context score (standing + form)
-    standingScore = await computeTeamStandingScore({ ...profile, teamId: effectiveTeamId });
-    formScore = await computeTeamFormScore({ ...profile, teamId: effectiveTeamId }, 5);
-
-    // Weighting: KD matters most
-    const teamContextScore = clamp01(0.6 * standingScore + 0.4 * formScore);
-    leagueSignal = clamp01(0.8 * playerScore + 0.2 * teamContextScore);
-  } else if (hasWonMajorAnyTeam) {
-    // Teamless fallback: major champions remain highly marketable even without recent league sample.
-    leagueSignal = 0.82;
-  }
-
-  Engine.Runtime.Instance.log.debug(
-    'PlayerScoutingCheck: kd=%s standing=%s form=%s leagueSignal=%s majorWinner=%s',
-    kd.toFixed(2),
-    standingScore.toFixed(2),
-    formScore.toFixed(2),
-    leagueSignal.toFixed(2),
-    hasWonMajorAnyTeam ? 'true' : 'false',
+  const recentTitles = careerTeamIds.length
+    ? await prisma.competition.findMany({
+        where: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          season: { gte: Math.max(1, Number(profile.season ?? 1) - 2) },
+          competitors: { some: { teamId: { in: careerTeamIds }, position: 1 } },
+          matches: { some: { players: { some: { id: profile.playerId } } } },
+        },
+        include: { tier: true },
+      })
+    : [];
+  const titleReputation = recentTitles.reduce(
+    (sum, competition) =>
+      sum + extensionCompetitionPrestige(competition.tier.slug, competition.tournament ?? ''),
+    0,
   );
+  const officialEvidence = await computeOfficialScoutingEvidence(profile.playerId, profile.date);
+  const scoutingQuality = getOfficialScoutingQuality({
+    evidence: officialEvidence,
+    promotionCount,
+    titleReputation,
+    majorWinner: hasWonMajorAnyTeam,
+  });
 
-  // Helper: add tier idx safely
-  const eligible = new Set<number>();
-  const addTier = (idx: number) => {
-    if (typeof idx !== 'number') return;
-    if (idx < 0) return;
-    if (idx >= Constants.Prestige.length) return;
-    eligible.add(idx);
-  };
-
-  // Always: lateral at baseline
-  addTier(baselineTierIdx);
-
-  // Pro: always pro offers
-  if (currentTierIdx >= idxPro) addTier(idxPro);
-  if (hasWonMajorAnyTeam) {
-    addTier(idxAdv);
-    addTier(idxPro);
-  }
-
-  // Upward movement rules
-  // - If baseline/current >= MAIN: allow MAIN lateral + occasional ADVANCED
-  // - If baseline/current >= ADVANCED: allow ADVANCED lateral + rare low-ranked PRO
-  // - If current tier OPEN/INTERMEDIATE: allow MAIN only on exceptional performance
-  let proLowRankOnly = false;
-
-  // User federation (prefer the profile include; fallback to country lookup)
+  // User federation (prefer the profile include; fallback to country lookup).
   let userFedId: number | null =
     (profile as any)?.team?.competitionFederationId ??
     (profile as any)?.player?.country?.continent?.federationId ??
     null;
-
   const userFederation = await prisma.federation.findFirst({
     where: { id: userFedId },
     select: { slug: true },
@@ -4905,75 +4968,83 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
   const disabledTiers = userFedSlug
     ? (Constants.LeagueTierDisabledByFederation[userFedSlug] ?? [])
     : [];
-  const midTiersDisabled =
-    disabledTiers.includes(TierSlug.LEAGUE_INTERMEDIATE) &&
-    disabledTiers.includes(TierSlug.LEAGUE_MAIN);
-
-  const isLowTier = currentTierIdx <= idxInter;
-  if (isLowTier) {
-    const exceptional = leagueSignal >= 0.9;
-    if (exceptional) {
-      if (midTiersDisabled) {
-        const rareJump = leagueSignal >= 0.93 && Chance.rollD2(15);
-        if (rareJump) addTier(idxAdv);
-      } else {
-        addTier(idxMain);
-      }
-    }
-  } else {
-    if (baselineTierIdx >= idxMain && baselineTierIdx < idxAdv) {
-      if (leagueSignal >= 0.75) addTier(idxAdv);
-    }
-    if (baselineTierIdx >= idxAdv && baselineTierIdx < idxPro) {
-      if (leagueSignal >= 0.85) {
-        addTier(idxPro);
-        proLowRankOnly = true;
-      }
-    }
+  const passiveTierWeights = getPassiveTierWeights({
+    level: careerLevel,
+    attention: scoutingQuality,
+  });
+  let tierWeights = Object.fromEntries(
+    Object.entries(passiveTierWeights)
+      .filter(([slug]) => !disabledTiers.includes(slug as TierSlug))
+      .map(([slug, weight]) => [String(Constants.Prestige.indexOf(slug as TierSlug)), weight]),
+  ) as Record<string, number>;
+  tierWeights = Object.fromEntries(
+    Object.entries(tierWeights).filter(([tier, weight]) => Number(tier) >= 0 && weight > 0),
+  );
+  if (!Object.keys(tierWeights).length) {
+    const fallbackTier = disabledTiers.includes(TierSlug.LEAGUE_MAIN) ? idxAdv : baselineTierIdx;
+    tierWeights = { [String(Math.max(idxOpen, fallbackTier))]: 100 };
   }
-
-  // Downward offers if performance isn't good
-  if (leagueSignal <= 0.45) addTier(baselineTierIdx - 1);
-  if (leagueSignal <= 0.3) addTier(baselineTierIdx - 2);
-
-  const eligibleTierIdxs = Array.from(eligible).sort((a, b) => a - b);
-  const eligibleTierSlugs = eligibleTierIdxs.map((i) => Constants.Prestige[i]);
+  const eligibleTierIdxs = Object.keys(tierWeights)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const eligibleTierSlugs = eligibleTierIdxs.map((index) => Constants.Prestige[index]);
+  const proLowRankOnly = careerPeakTierIdx < idxPro && !hasWonMajorAnyTeam;
 
   Engine.Runtime.Instance.log.debug(
-    'PlayerScoutingCheck: currentTier=%s recentPeak=%s baseline=%s eligible=%s proLowRankOnly=%s',
-    Constants.Prestige[currentTierIdx],
-    Constants.Prestige[recentPeakTierIdx],
-    Constants.Prestige[baselineTierIdx],
+    'PlayerScoutingCheck: level=%s officialMatches=%d maps=%d rating=%s recencyDays=%s lanShare=%s eventPrestige=%s quality=%s promotions=%d titles=%d majorWinner=%s eligible=%s',
+    careerLevel,
+    officialEvidence.matches,
+    officialEvidence.maps,
+    officialEvidence.rating?.toFixed(2) ?? 'n/a',
+    officialEvidence.daysSinceLastMatch ?? 'n/a',
+    officialEvidence.lanMapShare.toFixed(2),
+    officialEvidence.eventPrestige.toFixed(2),
+    scoutingQuality.toFixed(2),
+    promotionCount,
+    recentTitles.length,
+    hasWonMajorAnyTeam ? 'true' : 'false',
     eligibleTierSlugs.join(','),
-    proLowRankOnly ? 'true' : 'false',
   );
 
   try {
     const role = resolveUserRole(profile, player);
-    const tuning = getRoleOfferTuning(role);
+    const currentSeason = Number(profile.season ?? 0);
+    const seasonOfferCount =
+      player.passiveOfferSeason === currentSeason ? player.passiveOffersThisSeason : 0;
+    if (player.passiveOfferSeason !== currentSeason) {
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { passiveOfferSeason: currentSeason, passiveOffersThisSeason: 0 },
+      });
+    }
+    const scoutingPlan = getOfficialScoutingPlan({
+      evidence: officialEvidence,
+      quality: scoutingQuality,
+      transferListed: player.transferListed,
+    });
 
-    const baseCooldownDays = isTeamless
-      ? UserOfferSettings.TEAMLESS_OFFER_COOLDOWN_DAYS
-      : UserOfferSettings.TEAM_OFFER_COOLDOWN_DAYS;
-
-    const cooldownDays = Math.max(
-      1,
-      Math.round(
-        baseCooldownDays * (isTeamless ? tuning.cooldownMultTeamless : tuning.cooldownMultTeam),
-      ),
+    Engine.Runtime.Instance.log.debug(
+      'PlayerScoutingCheck: band=%s weeklyChance=%s target=%d-%d seasonOffers=%d seasonCap=%d',
+      scoutingPlan.band,
+      scoutingPlan.weeklyChance.toFixed(1),
+      scoutingPlan.seasonMin,
+      scoutingPlan.seasonMax,
+      seasonOfferCount,
+      scoutingPlan.seasonMax,
     );
-
-    if (player.lastOfferAt) {
-      const daysSinceLast = differenceInDays(profile.date, player.lastOfferAt);
-      if (daysSinceLast < cooldownDays) {
-        Engine.Runtime.Instance.log.debug(
-          'PlayerScoutingCheck: cooldown active (daysSinceLast=%d < cooldown=%d) role=%s',
-          daysSinceLast,
-          cooldownDays,
-          role,
-        );
-        return Promise.resolve();
-      }
+    if (scoutingPlan.band === 'inactive') {
+      Engine.Runtime.Instance.log.debug(
+        'PlayerScoutingCheck: no completed official matches; passive scouting inactive.',
+      );
+      return Promise.resolve();
+    }
+    if (!hasOfficialScoutingCapacity(scoutingPlan, seasonOfferCount)) {
+      Engine.Runtime.Instance.log.debug(
+        'PlayerScoutingCheck: seasonal passive-offer cap reached (%d/%d).',
+        seasonOfferCount,
+        scoutingPlan.seasonMax,
+      );
+      return Promise.resolve();
     }
 
     // Eligibility checks: pending cap
@@ -4992,106 +5063,17 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       return Promise.resolve();
     }
 
-    // Contract gating
-    const CONTRACT_SOFT_GATE_DAYS = (UserOfferSettings as any).CONTRACT_SOFT_GATE_DAYS ?? 180;
-    const CONTRACT_HOT_WINDOW_DAYS = (UserOfferSettings as any).CONTRACT_HOT_WINDOW_DAYS ?? 120;
-
-    let contractMult = 1.0;
-    if (player.contractEnd) {
-      const daysLeft = differenceInDays(player.contractEnd as any, profile.date);
-      if (daysLeft > CONTRACT_SOFT_GATE_DAYS) contractMult = 0.25;
-      else if (daysLeft <= CONTRACT_HOT_WINDOW_DAYS) contractMult = 1.25;
-    }
-
-    // Starter / transferListed modifiers
-    const starterMult = player.starter ? 1.0 : 0.85;
-    const listedMult = player.transferListed ? 0.9 : 1.0;
-
-    // Pick a target tier (weighted among eligible tiers)
-    const tierWeights: Record<string, number> = {};
-    for (const tIdx of eligibleTierIdxs) {
-      const delta = tIdx - baselineTierIdx;
-      let w = 0;
-
-      if (delta === 0) w = 70;
-      else if (delta === -1) w = 20;
-      else if (delta <= -2) w = 10;
-      else if (delta === 1) w = 10;
-      else if (delta >= 2) w = 4;
-
-      // Performance shaping
-      if (delta > 0) w = Math.round(w * Math.max(0.15, leagueSignal));
-      if (delta < 0) w = Math.round(w * Math.max(0.15, 1 - leagueSignal + 0.1));
-
-      // Non-starter: rarely move up; more likely "rescue" down
-      if (!player.starter && delta > 0) w = Math.round(w * 0.35);
-      if (!player.starter && delta < 0) w = Math.round(w * 1.25);
-
-      // Transfer-listed: reduce upward, slightly increase downward
-      if (player.transferListed && delta > 0) w = Math.round(w * 0.6);
-      if (player.transferListed && delta < 0) w = Math.round(w * 1.15);
-
-      if (w < 1) w = 1;
-      tierWeights[String(tIdx)] = w;
-    }
-
-    if (Object.keys(tierWeights).length === 0) {
-      Engine.Runtime.Instance.log.debug('PlayerScoutingCheck: no eligible tiers; skipping offer.');
+    if (!Chance.rollD2(scoutingPlan.weeklyChance)) {
+      Engine.Runtime.Instance.log.debug(
+        'PlayerScoutingCheck: official scouting roll failed (band=%s chance=%s).',
+        scoutingPlan.band,
+        scoutingPlan.weeklyChance.toFixed(1),
+      );
       return Promise.resolve();
     }
 
-    const pickedTierIdx = Number(Chance.roll(tierWeights));
-    const pickedTierSlug = Constants.Prestige[pickedTierIdx] as TierSlug;
-
-    // Probability model (weekly)
-    const basePbxByTier: Partial<Record<TierSlug, number>> = {
-      [TierSlug.LEAGUE_OPEN]: 35,
-      [TierSlug.LEAGUE_INTERMEDIATE]: 28,
-      [TierSlug.LEAGUE_MAIN]: 18,
-      [TierSlug.LEAGUE_ADVANCED]: 12,
-      [TierSlug.LEAGUE_PRO]: 8,
-    };
-
-    const base = basePbxByTier[pickedTierSlug] ?? 12;
-
-    let pbx = base * (0.75 + leagueSignal * 0.75);
-    pbx *= contractMult;
-    pbx *= starterMult;
-    pbx *= listedMult;
-
-    // Teamless Advanced/Pro League scouting should be a bit rarer than contracted scouting
-    if (isTeamless) pbx *= 0.85;
-    if (
-      hasWonMajorAnyTeam &&
-      (pickedTierSlug === TierSlug.LEAGUE_ADVANCED || pickedTierSlug === TierSlug.LEAGUE_PRO)
-    ) {
-      pbx *= 1.5;
-    }
-
-    pbx *= tuning.pbxMultLeague;
-    pbx = clampPbx(pbx);
-
-    Engine.Runtime.Instance.log.debug(
-      'PlayerScoutingCheck: role=%s pbxAfterRole=%d (roleMult=%s)',
-      role,
-      pbx,
-      tuning.pbxMultLeague.toFixed(2),
-    );
-
-    Engine.Runtime.Instance.log.debug(
-      'PlayerScoutingCheck: pickedTier=%s base=%d pbx=%d contractMult=%s starter=%s listed=%s',
-      pickedTierSlug,
-      base,
-      pbx,
-      contractMult.toFixed(2),
-      player.starter ? 'true' : 'false',
-      player.transferListed ? 'true' : 'false',
-    );
-
-    if (!Chance.rollD2(pbx)) {
-      Engine.Runtime.Instance.log.debug('PlayerScoutingCheck: roll failed (pbx=%d).', pbx);
-      return Promise.resolve();
-    }
+    let pickedTierIdx = Number(Chance.roll(tierWeights));
+    let pickedTierSlug = Constants.Prestige[pickedTierIdx] as TierSlug;
 
     const playerCountryContext = player.countryId
       ? await prisma.country.findFirst({
@@ -5134,27 +5116,27 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     const federationFilter = wantCrossFederation ? { not: userFedId } : userFedId;
     teamWhere.competitionFederationId = federationFilter;
 
-    const teams = await prisma.team.findMany({
-      where: teamWhere,
-      include: {
-        personas: true,
-        country: {
-          include: {
-            continent: true,
-          },
+    const offerTeamInclude = {
+      personas: true,
+      country: {
+        include: {
+          continent: true,
         },
-        players: {
-          include: {
-            country: {
-              include: {
-                continent: true,
-              },
+      },
+      players: {
+        include: {
+          country: {
+            include: {
+              continent: true,
             },
           },
         },
       },
+    } as const;
+    const teams = await prisma.team.findMany({
+      where: teamWhere,
+      include: offerTeamInclude,
     });
-
     if (!teams.length) {
       Engine.Runtime.Instance.log.debug(
         'PlayerScoutingCheck: no teams found for tier=%s (crossFed=%s)',
@@ -5182,8 +5164,8 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
       const sortedDesc = [...pool].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
       const topCount = Math.max(3, Math.floor(sortedDesc.length * 0.2));
       pool = sortedDesc.slice(0, topCount);
-    } else if (leagueSignal >= 0.75) {
-      // Strong performance: bias toward top teams in that tier
+    } else if (scoutingQuality >= 0.75) {
+      // Strong performance or reputation: bias toward top teams in that tier.
       const sortedDesc = [...pool].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
       const topCount = Math.max(3, Math.floor(sortedDesc.length * 0.25));
       pool = sortedDesc.slice(0, topCount);
@@ -5191,6 +5173,8 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     const from = sample(pool);
     if (!from) return Promise.resolve();
+    pickedTierIdx = from.tier;
+    pickedTierSlug = Constants.Prestige[pickedTierIdx] as TierSlug;
 
     // Create transfer + offer
     const offerExpiresAt = addDays(profile.date, 7);
@@ -5198,22 +5182,48 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     const baseWages = player.wages ?? 0;
     const baseCost = player.cost ?? 0;
 
-    let wageMult = 0.9 + leagueSignal * 0.25; // 0.90..1.15
+    let wageMult = 0.9 + scoutingQuality * 0.25; // 0.90..1.15
     if (!player.starter) wageMult *= 0.9;
     if (player.transferListed) wageMult *= 0.85;
 
     const wages = Math.max(0, Math.round(baseWages * wageMult));
-    const cost = Math.max(0, Math.round(baseCost * (0.95 + leagueSignal * 0.15)));
-    const permanentTeamStints = await prisma.careerStint.count({
-      where: { playerId: player.id, teamId: { not: null }, isTrial: false },
+    const cost = isTeamless
+      ? 0
+      : Math.max(0, Math.round(baseCost * (0.95 + scoutingQuality * 0.15)));
+    const permanentTeamStints = careerStints.length;
+    const permanentChance = getPassivePermanentOfferChance({
+      level: careerLevel,
+      attention: scoutingQuality,
+      permanentStints: permanentTeamStints,
     });
-    const offerSource = permanentTeamStints === 0 ? 'FACEIT' : 'LEAGUE';
-    const response = directOfferResponse(leagueSignal);
+    const wantsTrial = isTeamless && !Chance.rollD2(permanentChance);
+    const replacementCandidates = from.players
+      .filter((candidate) => candidate.starter && candidate.id !== player.id)
+      .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0));
+    const replacedPlayer =
+      replacementCandidates.find((candidate) =>
+        role === UserRole.AWPER ? isSniperRole(candidate.role) : !isSniperRole(candidate.role),
+      ) ?? replacementCandidates[0];
+    const isTrial = wantsTrial && !!replacedPlayer;
+    const response = directOfferResponse(scoutingQuality);
     const contractMonths = rollDirectContractMonths(pickedTierSlug, response);
     const clauses = rollContractClauses(response, player.role);
     const copyVariant = random(0, 1);
-    const previousTierName =
-      offerSource === 'LEAGUE' ? getTeamTierName(profile.team?.tier ?? baselineTierIdx) : null;
+    const previousTierName = permanentTeamStints
+      ? getTeamTierName(profile.team?.tier ?? careerPeakTierIdx)
+      : null;
+    const trialSeries = isTrial ? rollFaceitTrialSeries() : null;
+    const trialGoal = isTrial ? rollFaceitTrialGoal(role) : null;
+    const trialBand =
+      scoutingQuality >= 0.85
+        ? 'absurd'
+        : scoutingQuality >= 0.7
+          ? 'excellent'
+          : scoutingQuality >= 0.55
+            ? 'good'
+            : scoutingQuality >= 0.4
+              ? 'adequate'
+              : 'poor';
 
     const transfer = await prisma.transfer.create({
       data: {
@@ -5226,14 +5236,19 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
               status: Constants.TransferStatus.PLAYER_PENDING,
               wages,
               cost,
-              contractYears: null,
-              contractMonths,
+              contractYears: isTrial ? rollContractYears(pickedTierSlug) : null,
+              contractMonths: isTrial ? null : contractMonths,
               expiresAt: offerExpiresAt,
-              offerType: 'PERMANENT',
-              trialResponseTier: response,
-              postBenchTerminationClause: clauses.postBenchTerminationClause,
-              postBenchTerminationMonths: clauses.postBenchTerminationMonths,
-              rosterStabilityClause: clauses.rosterStabilityClause,
+              offerType: isTrial ? 'TRIAL' : 'PERMANENT',
+              trialSeries,
+              trialGoalType: trialGoal?.type,
+              trialGoalValue: trialGoal?.value,
+              trialReplacedPlayerId: isTrial ? replacedPlayer?.id : null,
+              trialBand: isTrial ? trialBand : null,
+              trialResponseTier: isTrial ? null : response,
+              postBenchTerminationClause: !isTrial && clauses.postBenchTerminationClause,
+              postBenchTerminationMonths: isTrial ? null : clauses.postBenchTerminationMonths,
+              rosterStabilityClause: !isTrial && clauses.rosterStabilityClause,
             },
           ],
         },
@@ -5251,22 +5266,43 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
 
     await prisma.player.update({
       where: { id: player.id },
-      data: { lastOfferAt: profile.date },
+      data: {
+        lastOfferAt: profile.date,
+        passiveOfferSeason: currentSeason,
+        passiveOffersThisSeason: seasonOfferCount + 1,
+      },
     });
 
-    await sendDirectContractOffer({
-      transfer,
-      team: from,
-      player: { ...player, name: profile.player?.name ?? profile.name },
-      profileDate: profile.date,
-      expiresAt: offerExpiresAt,
-      contractMonths,
-      response,
-      source: offerSource,
-      previousTierName,
-      copyVariant,
-      clauses,
-    });
+    if (isTrial && trialGoal && replacedPlayer) {
+      const locale = getLocale(profile);
+      const persona =
+        from.personas.find(
+          (candidate) =>
+            candidate.role === Constants.PersonaRole.MANAGER ||
+            candidate.role === Constants.PersonaRole.ASSISTANT,
+        ) ?? from.personas[0];
+      await sendEmail(
+        Sqrl.render(locale.templates.TrialIncoming.SUBJECT, { transfer, profile }),
+        `Hello, **${profile.player?.name ?? profile.name}**.\n\nOur recruitment staff have been following your recent performances and career progress. We would like to invite you to a trial with **${from.name}**.\n\nFor the trial period, you will be replacing **${replacedPlayer.name}**.\n\nI have attached the trial terms to this message.\n\n<button className="trial-information-button" data-trial-information="true" data-transfer-id="${transfer.id}" data-team-name="${from.name}" data-team-blazon="${from.blazon ?? ''}" data-series="${trialSeries}" data-goal-type="${trialGoal.type}" data-goal-value="${trialGoal.value}" data-replaced-player="${replacedPlayer.name}">Trial Information</button>`,
+        persona,
+        profile.date,
+        true,
+      );
+    } else {
+      await sendDirectContractOffer({
+        transfer,
+        team: from,
+        player: { ...player, name: profile.player?.name ?? profile.name },
+        profileDate: profile.date,
+        expiresAt: offerExpiresAt,
+        contractMonths,
+        response,
+        source: 'LEAGUE',
+        previousTierName,
+        copyVariant,
+        clauses,
+      });
+    }
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
@@ -5274,14 +5310,22 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
     Engine.Runtime.Instance.stop();
 
     Engine.Runtime.Instance.log.info(
-      'League-based offer: %s -> %s (tier=%s months=%d wages=%d cost=%d pbx=%d)',
+      'Official scouting offer: %s -> %s (band=%s seasonOffers=%d/%d tier=%s type=%s months=%d wages=%d cost=%d chance=%s rating=%s maps=%d matches=%d permanentChance=%d)',
       from.name,
       (profile as any)?.player?.name ?? 'USER',
+      scoutingPlan.band,
+      seasonOfferCount + 1,
+      scoutingPlan.seasonMax,
       pickedTierSlug,
+      isTrial ? 'trial' : 'permanent',
       contractMonths,
       wages,
       cost,
-      pbx,
+      scoutingPlan.weeklyChance.toFixed(1),
+      officialEvidence.rating?.toFixed(2) ?? 'n/a',
+      officialEvidence.maps,
+      officialEvidence.matches,
+      permanentChance,
     );
 
     return Promise.resolve(transfer);

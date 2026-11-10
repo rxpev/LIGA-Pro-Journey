@@ -13,6 +13,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { DatabaseClient, DiscordPresence, Game, WindowManager, Worldgen } from '@liga/backend/lib';
 import { removeSaveIntegrity } from '@liga/backend/lib/save-integrity';
+import { addDays } from 'date-fns';
 
 const FACEIT_OPENING_MESSAGE = `Hey!
 
@@ -247,6 +248,15 @@ export default function registerProfileHandlers() {
           date: profile.date,
         },
       });
+      if (profile.player) {
+        await DatabaseClient.prisma.calendar.create({
+          data: {
+            type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+            date: addDays(profile.date, 7),
+            payload: String(profile.player.id),
+          },
+        });
+      }
 
       // Let the main window finish mounting, then deliver this as a real
       // incoming message so the normal Inbox notification sound plays.

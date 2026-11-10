@@ -211,6 +211,35 @@ async function reconcileActiveTrialMatchdays(
   });
 }
 
+/** Ensure new and legacy careers always have one recurring passive-scouting check. */
+async function reconcilePlayerScoutingCheck(
+  profile: NonNullable<Awaited<ReturnType<typeof DatabaseClient.prisma.profile.findFirst>>>,
+) {
+  if (!profile.playerId) return;
+  const existing = await DatabaseClient.prisma.calendar.findFirst({
+    where: {
+      type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+      payload: String(profile.playerId),
+      completed: false,
+    },
+    orderBy: { date: 'asc' },
+  });
+  if (!existing) {
+    await DatabaseClient.prisma.calendar.create({
+      data: {
+        type: Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
+        payload: String(profile.playerId),
+        date: addDays(profile.date, 7),
+      },
+    });
+  } else if (existing.date < startOfDay(profile.date)) {
+    await DatabaseClient.prisma.calendar.update({
+      where: { id: existing.id },
+      data: { date: profile.date },
+    });
+  }
+}
+
 /**
  * Engine middleware: start of each tick.
  */
@@ -229,6 +258,9 @@ async function onTickStart() {
   await measureCalendarPhase('reconcile-matchdays', () => reconcileOverdueMatchdays(profile));
   await measureCalendarPhase('reconcile-trial-matchdays', () =>
     reconcileActiveTrialMatchdays(profile),
+  );
+  await measureCalendarPhase('reconcile-player-scouting', () =>
+    reconcilePlayerScoutingCheck(profile),
   );
 
   // Fetch global calendar events for today (calendar-day window, not exact timestamp).

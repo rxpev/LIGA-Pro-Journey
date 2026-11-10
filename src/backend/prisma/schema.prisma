@@ -422,6 +422,8 @@ model Player {
   contractBenchStartedAt     DateTime?
   contractRosterBaseline     String?
   lastOfferAt                DateTime?
+  passiveOfferSeason         Int       @default(0)
+  passiveOffersThisSeason    Int       @default(0)
   retiredAt                  DateTime?
   isRegen                    Boolean   @default(false)
   generatedAt                DateTime?
