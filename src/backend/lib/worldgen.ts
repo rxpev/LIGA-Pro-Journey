@@ -307,6 +307,7 @@ const REGEN_REGION_SETTINGS = {
     xp: [20, 60],
   },
   north_america: {
+    namePool: 'north_america',
     countryCodes: ['CA', 'US'],
     elo: [2200, 3300],
     xp: [20, 50],
@@ -314,11 +315,13 @@ const REGEN_REGION_SETTINGS = {
   cis: {
     // Kazakhstan, Uzbekistan, Kyrgyzstan and Azerbaijan are stored in the
     // Asian continent in some saves, but remain valid CIS nationalities.
+    namePool: 'cis',
     countryCodes: ['RU', 'UA', 'BY', 'KZ', 'UZ', 'GE', 'AM', 'AZ', 'TM', 'TJ', 'KG', 'MD'],
     elo: [2200, 3500],
     xp: [20, 55],
   },
   europe: {
+    namePool: 'europe',
     countryCodes: [],
     elo: [2300, 4200],
     xp: [20, 65],
@@ -10948,7 +10951,6 @@ async function generateNpcRegenIntake(urgentOnly = false, repairTeamIds?: Set<nu
 
     const regionalNames = availableNamesByRegion.get(region);
     // Regions backed by a curated pool cannot create placeholder identities.
-    // Europe, CIS and North America retain numbered names until lists are added.
     const name = regionalNames ? regionalNames.pop() : `Regen ${nextRegenNumber++}`;
     if (!name) continue;
 
