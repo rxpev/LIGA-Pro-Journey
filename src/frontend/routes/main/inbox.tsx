@@ -18,7 +18,6 @@ import {
   FaEnvelopeOpen,
   FaFileAlt,
   FaFilter,
-  FaInfoCircle,
   FaPaperclip,
   FaSearch,
   FaUsers,
@@ -603,19 +602,7 @@ export default function Inbox() {
                       format(dialogueDate, 'yyyy-MM-dd') !== format(previousDate, 'yyyy-MM-dd');
 
                     if (isTerminal(dialogue.content)) {
-                      return (
-                        <React.Fragment key={dialogue.id}>
-                          {showDateDivider && (
-                            <div className="inbox-date-divider">
-                              <span>{format(dialogueDate, 'MMMM d, yyyy')}</span>
-                            </div>
-                          )}
-                          <div className="inbox-thread-status">
-                            <FaInfoCircle />
-                            {dialogue.content}
-                          </div>
-                        </React.Fragment>
-                      );
+                      return null;
                     }
 
                     const fromPlayer = dialogue.fromId !== active.fromId;
@@ -754,6 +741,9 @@ export default function Inbox() {
                                                     node.properties.dataOfferSource === 'LEAGUE'
                                                       ? node.properties.dataOfferSource
                                                       : 'TRIAL',
+                                                  isExtension:
+                                                    node.properties.dataContractExtension ===
+                                                    'true',
                                                   previousTierName: node.properties
                                                     .dataPreviousTierName
                                                     ? String(node.properties.dataPreviousTierName)
@@ -852,12 +842,6 @@ export default function Inbox() {
                           <i />
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {threadClosed && (
-                    <div className="inbox-closed-note">
-                      <FaInfoCircle />
-                      This conversation is closed. No further action is required.
                     </div>
                   )}
                   {teammateReplyDialogue && teammateReplyActions.length > 0 && !threadClosed && (

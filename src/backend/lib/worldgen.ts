@@ -93,7 +93,7 @@ import {
 } from './trial-contract-offer';
 import { upsertCompetitionMvp } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
-import { getTeamTrustModifier, processCompletedMatch } from './teammate-moods';
+import { processCompletedMatch } from './teammate-moods';
 import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
@@ -5600,6 +5600,222 @@ async function getUserMajorWinFlags(params: {
   };
 }
 
+type ExtensionEvaluation = {
+  probability: number;
+  importance: number;
+  recentRating: number | null;
+  recentMaps: number;
+  winRate: number | null;
+  recentMatches: number;
+  achievementScore: number;
+  worldRanking: number;
+};
+
+function extensionCompetitionPrestige(slug: string, name: string) {
+  const label = `${slug} ${name}`.toLowerCase();
+  if (label.includes('major') && !label.includes('qualifier')) return 1.5;
+  if (label.includes('cologne') || label.includes('katowice') || label.includes('blast:final')) {
+    return 1.3;
+  }
+  if (label.includes('pro') || label.includes('premier')) return 1.15;
+  if (label.includes('qualifier')) return 0.9;
+  return 1;
+}
+
+async function computeRecentPlayerRating(playerId: number, teamId: number, mapLimit: number) {
+  await backfillMissingMatchPlayerGameStats();
+  const rows = await DatabaseClient.prisma.$queryRaw<
+    Array<{ kills: number; deaths: number; assists: number }>
+  >`
+    SELECT
+      "MatchPlayerGameStat"."kills" AS "kills",
+      "MatchPlayerGameStat"."deaths" AS "deaths",
+      "MatchPlayerGameStat"."assists" AS "assists"
+    FROM "MatchPlayerGameStat"
+    INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
+    WHERE "MatchPlayerGameStat"."playerId" = ${playerId}
+      AND "Match"."status" = ${Constants.MatchStatus.COMPLETED}
+      AND "Match"."competitionId" IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM "MatchToTeam"
+        WHERE "MatchToTeam"."matchId" = "Match"."id"
+          AND "MatchToTeam"."teamId" = ${teamId}
+      )
+    ORDER BY "Match"."date" DESC, "MatchPlayerGameStat"."gameKey" DESC
+    LIMIT ${mapLimit}
+  `;
+  if (!rows.length) return { rating: null, maps: 0 };
+
+  // Newer maps receive up to twice the weight of the oldest map in the window.
+  let weightedRating = 0;
+  let totalWeight = 0;
+  rows.forEach((row, index) => {
+    const weight = 2 - index / Math.max(1, rows.length - 1);
+    weightedRating += Util.getPlayerRating(row.kills, row.deaths, row.assists) * weight;
+    totalWeight += weight;
+  });
+  return { rating: weightedRating / totalWeight, maps: rows.length };
+}
+
+async function computeRecentPlayerTeamWinRate(
+  playerId: number,
+  teamId: number,
+  matchLimit: number,
+) {
+  const matches = await DatabaseClient.prisma.match.findMany({
+    where: {
+      status: Constants.MatchStatus.COMPLETED,
+      competitionId: { not: null },
+      players: { some: { id: playerId } },
+      competitors: { some: { teamId } },
+    },
+    include: { competitors: true },
+    orderBy: { date: 'desc' },
+    take: matchLimit,
+  });
+  let points = 0;
+  for (const match of matches) {
+    const result = match.competitors.find((entry) => entry.teamId === teamId)?.result;
+    if (result === Constants.MatchResult.WIN) points += 1;
+    else if (result === Constants.MatchResult.DRAW) points += 0.5;
+  }
+  return {
+    matches: matches.length,
+    winRate: matches.length ? (points / matches.length) * 100 : null,
+  };
+}
+
+async function computeCompetitionAchievementScore(profile: any, teamId: number) {
+  const minimumSeason = Math.max(
+    1,
+    Number(profile.season ?? 1) -
+      (Constants.PlayerContractSettings.EXTENSION_COMPETITION_SEASONS ?? 2) +
+      1,
+  );
+  const competitions = await DatabaseClient.prisma.competition.findMany({
+    where: {
+      status: Constants.CompetitionStatus.COMPLETED,
+      season: { gte: minimumSeason },
+      competitors: { some: { teamId } },
+      matches: { some: { players: { some: { id: profile.playerId } } } },
+    },
+    include: {
+      tier: { include: { league: true } },
+      competitors: { include: { team: { select: { id: true, elo: true } } } },
+    },
+  });
+
+  let points = 0;
+  for (const competition of competitions) {
+    const field = competition.competitors.filter((entry) => entry.teamId && entry.team);
+    const result = field.find((entry) => entry.teamId === teamId);
+    if (!result?.position || field.length < 2) continue;
+
+    const teamElo = result.team?.elo ?? 1000;
+    const expectedPosition =
+      1 + field.filter((entry) => (entry.team?.elo ?? 1000) > teamElo).length;
+    const actualStrength = 1 - (result.position - 1) / (field.length - 1);
+    const expectedStrength = 1 - (expectedPosition - 1) / (field.length - 1);
+    const prestige = extensionCompetitionPrestige(
+      competition.tier.slug,
+      competition.tournament ?? competition.tier.name,
+    );
+
+    // Beating the placement implied by the team's world-Elo standing is the
+    // primary signal. A title remains meaningful, but is worth more in a
+    // prestigious field and especially meaningful for an underdog.
+    points += (actualStrength - expectedStrength) * 25 * prestige;
+    if (result.position === 1) points += 8 * prestige + Math.max(0, expectedPosition - 1) * 0.75;
+    else if (result.position <= Math.max(2, Math.ceil(field.length * 0.25))) points += 3 * prestige;
+
+    const label = `${competition.tier.slug} ${competition.tournament ?? ''}`.toLowerCase();
+    if (label.includes('qualifier')) {
+      if (result.position <= Math.max(1, Math.ceil(field.length * 0.25))) points += 6 * prestige;
+    } else if (competition.tier.league.slug === Constants.LeagueSlug.ESPORTS_LEAGUE) {
+      if (result.position <= Math.min(6, Math.ceil(field.length * 0.3))) points += 6;
+      if (result.position > Math.floor(field.length * 0.85)) points -= 10;
+    }
+  }
+  return Math.max(-25, Math.min(25, points));
+}
+
+async function evaluateContractExtension(profile: any, playerId: number, teamId: number) {
+  const settings = Constants.PlayerContractSettings;
+  const mapLimit = settings.EXTENSION_RECENT_MAPS ?? 15;
+  const matchLimit = settings.EXTENSION_RECENT_MATCHES ?? 15;
+  const [recent, teamStats, achievementScore, strongerTeams] = await Promise.all([
+    computeRecentPlayerRating(playerId, teamId, mapLimit),
+    computeRecentPlayerTeamWinRate(playerId, teamId, matchLimit),
+    computeCompetitionAchievementScore(profile, teamId),
+    DatabaseClient.prisma.team.count({
+      where: { elo: { gt: profile.team.elo ?? 1000 } },
+    }),
+  ]);
+
+  const ratingFloor = settings.EXTENSION_RATING_FLOOR ?? 0.85;
+  const ratingCeiling = settings.EXTENSION_RATING_CEILING ?? 1.3;
+  const ratingScore =
+    recent.rating == null
+      ? 0.5
+      : clamp01((recent.rating - ratingFloor) / (ratingCeiling - ratingFloor));
+  const winRateScore = teamStats.winRate == null ? 0.5 : clamp01(teamStats.winRate / 100);
+  const achievements = clamp01(0.5 + achievementScore / 50);
+  const isIgl = String(profile.player.role ?? '').toUpperCase() === UserRole.IGL;
+  const weights = isIgl ? settings.EXTENSION_IGL_WEIGHTS : settings.EXTENSION_RIFLER_AWPER_WEIGHTS;
+  const evidence = Math.min(1, recent.maps / (settings.EXTENSION_MIN_RECENT_MAPS ?? 5));
+  // Only the rating component loses confidence when map data is sparse. Team
+  // results and achievements remain valid, which is especially important for IGLs.
+  const evidenceAdjustedRating = ratingScore * evidence + 0.5 * (1 - evidence);
+  const importance = clamp01(
+    evidenceAdjustedRating * weights.rating +
+      winRateScore * weights.winRate +
+      achievements * weights.achievements,
+  );
+  const probability = Math.max(
+    settings.EXTENSION_MIN_OFFER_CHANCE ?? 5,
+    Math.min(settings.EXTENSION_MAX_OFFER_CHANCE ?? 95, Math.round(importance * 100)),
+  );
+
+  return {
+    probability,
+    importance,
+    recentRating: recent.rating,
+    recentMaps: recent.maps,
+    winRate: teamStats.winRate,
+    recentMatches: teamStats.matches,
+    achievementScore,
+    worldRanking: strongerTeams + 1,
+  } satisfies ExtensionEvaluation;
+}
+
+function rollExtensionClauses(importance: number) {
+  const settings = Constants.PlayerContractSettings;
+  const risk = 1 - clamp01(importance);
+  const postBenchChance =
+    (settings.EXTENSION_POST_BENCH_CHANCE_MIN ?? 20) +
+    risk *
+      ((settings.EXTENSION_POST_BENCH_CHANCE_MAX ?? 85) -
+        (settings.EXTENSION_POST_BENCH_CHANCE_MIN ?? 20));
+  const stabilityChance =
+    (settings.EXTENSION_ROSTER_STABILITY_CHANCE_MIN ?? 15) +
+    importance *
+      ((settings.EXTENSION_ROSTER_STABILITY_CHANCE_MAX ?? 70) -
+        (settings.EXTENSION_ROSTER_STABILITY_CHANCE_MIN ?? 15));
+  const postBenchTerminationClause = Chance.rollD2(Math.round(postBenchChance));
+  const postBenchTerminationMonths = postBenchTerminationClause
+    ? risk >= 0.67
+      ? 0.5
+      : risk >= 0.34
+        ? 1
+        : 2
+    : null;
+  return {
+    postBenchTerminationClause,
+    postBenchTerminationMonths,
+    rosterStabilityClause: Chance.rollD2(Math.round(stabilityChance)),
+  };
+}
+
 /**
  * One-shot contract extension evaluation.
  *
@@ -5630,12 +5846,6 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
 
   const now = profile.date;
   const teamId = profile.teamId;
-  const { hasWonMajorWithCurrentTeam } = await getUserMajorWinFlags({
-    prisma,
-    playerId,
-    currentTeamId: teamId,
-  });
-
   // Load the current player to check contract end
   const player = await prisma.player.findFirst({
     where: { id: playerId },
@@ -5652,13 +5862,6 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   if (!player) return logExit('player-missing');
   if (player.teamId !== teamId) return logExit('player-team-mismatch');
   if (!player.contractEnd) return logExit('contract-end-missing');
-  if (player.transferListed) {
-    Engine.Runtime.Instance.log.debug(
-      'onPlayerContractExtensionEval: playerId=%d is transferListed; skipping extension offer.',
-      playerId,
-    );
-    return logExit('transfer-listed');
-  }
 
   // Window check: 0 < daysLeft <= 30
   const daysLeft = differenceInDays(player.contractEnd, now);
@@ -5669,6 +5872,33 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     )
   ) {
     return logExit(`outside-window-days-left=${daysLeft}`);
+  }
+
+  // A player outside the active five never receives an extension. Keep this
+  // as a real inbox conversation instead of silently dropping the event.
+  if (!player.starter) {
+    const coach =
+      profile.team.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? profile.team.personas[0];
+    if (coach) {
+      await sendEmail(
+        `Your contract situation at ${profile.team.name}`,
+        `Hey **${profile.player.name}**,\n\nI wanted to speak to you before your contract runs out. We've reviewed the squad and, right now, we feel the active five are the better fit for where we want to take the team.\n\nBecause of that, we won't be offering you a new deal. I know this isn't the news you wanted, but I wanted you to hear it directly from me rather than leave you waiting.\n\nThank you for everything you've given the team.`,
+        coach,
+        now,
+        true,
+      );
+    }
+    return logExit('benched-player-notified');
+  }
+  if (player.transferListed) {
+    Engine.Runtime.Instance.log.debug(
+      'onPlayerContractExtensionEval: playerId=%d is transferListed; skipping extension offer.',
+      playerId,
+    );
+    return logExit('transfer-listed');
   }
 
   // Determine tier slug
@@ -5698,75 +5928,15 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     return logExit(`pending-extension-transfer-id=${existingPendingExtension.id}`);
   }
 
-  // Pull league stats
-  let kd = 0;
-  let matchesPlayed = 0;
+  let evaluation: ExtensionEvaluation;
   try {
-    const leagueRecent = await LeagueStats.computeLeagueLifetimeStats(teamId, playerId, 30);
-    kd = leagueRecent.kdRatio ?? 0;
-    matchesPlayed = leagueRecent.matchesPlayed ?? 0;
-  } catch (_) {
-    // If stats fail, do not offer an extension.
-    return logExit('league-stats-failed');
+    evaluation = await evaluateContractExtension(profile, playerId, teamId);
+  } catch (error) {
+    Engine.Runtime.Instance.log.error('Contract extension evaluation failed.', error);
+    return logExit('performance-evaluation-failed');
   }
 
-  // Team context
-  const standingScore = await computeTeamStandingScore(profile);
-  const formScore = await computeTeamFormScore(profile, 5);
-
-  const S = Constants.PlayerContractSettings;
-
-  const extMinMatches = S.EXTENSION_MIN_MATCHES ?? 7;
-
-  // Tier-indexed extension thresholds
-  const extOkKd = (S.EXTENSION_PLAYER_OK_KD_BY_TIER as Record<string, number>)[tierSlug] ?? 1.0;
-
-  // "Good team" and "good/ok player"
-  const goodTeam = formScore >= 0.5; // optionally also check standingScore >= 0.5
-  const goodPlayer = matchesPlayed >= extMinMatches && kd >= extOkKd;
-
-  // "Ok player" bucket (for the goodTeam+okPlayer case)
-  // Slightly below "good", but not bench-worthy.
-  const okKdFloor = extOkKd * 0.95;
-  const okPlayer = matchesPlayed >= extMinMatches && kd >= okKdFloor;
-
-  // Choose probability bucket
-  let pbx = 0;
-
-  if (goodTeam && goodPlayer) {
-    pbx = S.EXTENSION_PBX_GOOD_TEAM_GOOD_PLAYER ?? 85;
-  } else if (!goodTeam && goodPlayer) {
-    pbx = S.EXTENSION_PBX_BAD_TEAM_GOOD_PLAYER ?? 45;
-  } else if (goodTeam && okPlayer) {
-    pbx = S.EXTENSION_PBX_GOOD_TEAM_OK_PLAYER ?? 55;
-  } else {
-    pbx = 0;
-  }
-
-  if (hasWonMajorWithCurrentTeam) {
-    pbx = Math.max(pbx, 85);
-    Engine.Runtime.Instance.log.info(
-      'onPlayerContractExtensionEval: major winner with current team, forcing min extension pbx=85.',
-    );
-  }
-
-  // Lineup trust nudges retention in either direction, capped to ten points.
-  pbx += await getTeamTrustModifier();
-
-  // Additional small decline chance even when conditions are good
-  const declinePbx = S.EXTENSION_DECLINE_PBX_EVEN_IF_GOOD ?? 10;
-  if (pbx > 0 && declinePbx > 0 && Chance.rollD2(declinePbx)) {
-    Engine.Runtime.Instance.log.debug(
-      'onPlayerContractExtensionEval: declined to offer despite eligibility (declinePbx=%d).',
-      declinePbx,
-    );
-    return logExit(`declined-by-roll-pbx=${declinePbx}`);
-  }
-
-  if (pbx <= 0) return logExit('pbx-zero');
-
-  // Roll whether we offer
-  pbx = Math.max(1, Math.min(95, Math.round(pbx)));
+  const pbx = evaluation.probability;
   if (!Chance.rollD2(pbx)) {
     Engine.Runtime.Instance.log.debug(
       'onPlayerContractExtensionEval: offer roll failed (pbx=%d).',
@@ -5776,6 +5946,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   }
 
   const contractYears = rollContractYears(tierSlug);
+  const clauses = rollExtensionClauses(evaluation.importance);
   const rawExpiry = addDays(now, 30);
   const offerExpiresAt = player.contractEnd
     ? player.contractEnd < rawExpiry
@@ -5797,6 +5968,9 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
             cost: player.cost ?? 0,
             contractYears,
             expiresAt: offerExpiresAt,
+            postBenchTerminationClause: clauses.postBenchTerminationClause,
+            postBenchTerminationMonths: clauses.postBenchTerminationMonths,
+            rosterStabilityClause: clauses.rosterStabilityClause,
           },
         ],
       },
@@ -5812,33 +5986,29 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     },
   });
 
-  // Email
-  const locale = getLocale(profile);
-  const persona =
-    profile.team.personas.find(
-      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
-    ) ?? profile.team.personas[0];
-
-  const tierName = getTeamTierName(profile.team.tier);
-
-  if ((locale.templates as any).ContractExtensionOffer) {
-    await sendEmail(
-      Sqrl.render((locale.templates as any).ContractExtensionOffer.SUBJECT, {
-        profile,
-        transfer,
-        tierName,
-      }),
-      Sqrl.render((locale.templates as any).ContractExtensionOffer.CONTENT, {
-        profile,
-        transfer,
-        daysLeft,
-        contractYears,
-      }),
-      persona,
-      now,
-      true,
-    );
-  }
+  // Conversational inbox offer from the board, with the normal contract
+  // attachment opening the existing contract modal.
+  const managementBoard = await prisma.persona.upsert({
+    where: { name: `${profile.team.name} Management Board` },
+    update: { role: 'Management Board', team: { connect: { id: teamId } } },
+    create: {
+      name: `${profile.team.name} Management Board`,
+      role: 'Management Board',
+      team: { connect: { id: teamId } },
+    },
+  });
+  const coach =
+    profile.team.personas.find((p) => p.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((p) => p.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  const contractMonths = contractYears * 12;
+  await sendEmail(
+    `Contract extension offer from ${profile.team.name}`,
+    `Hello, **${profile.player.name}**.\n\nWe've reviewed your recent performances and the contribution you've made to the team. We're happy with what we've seen, and we'd like you to remain part of **${profile.team.name}**.\n\nWe've attached a proposed extension to your current contract. Take a look at the terms and let us know what you decide.\n\n<button className="contract-information-button" data-contract-information="true" data-contract-extension="true" data-transfer-id="${transfer.id}" data-team-id="${teamId}" data-team-name="${profile.team.name}" data-team-blazon="${profile.team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${contractMonths}" data-player-role="${profile.player.role ?? 'RIFLER'}" data-trial-response-tier="2" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-expires-at="${offerExpiresAt.toISOString()}">Review Contract Extension</button>`,
+    managementBoard,
+    now,
+    true,
+  );
 
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
 
@@ -5846,16 +6016,19 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
   Engine.Runtime.Instance.stop();
 
   Engine.Runtime.Instance.log.info(
-    'Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d pbx=%d kd=%.2f matches=%d form=%.2f standing=%.2f daysLeft=%d',
+    'Contract extension offer created: teamId=%d playerId=%d tier=%s years=%d role=%s pbx=%d rating=%s maps=%d winRate=%s matches=%d achievements=%.2f worldRank=%d daysLeft=%d',
     teamId,
     playerId,
     tierSlug,
     contractYears,
+    profile.player.role ?? 'RIFLER',
     pbx,
-    kd,
-    matchesPlayed,
-    formScore,
-    standingScore,
+    evaluation.recentRating?.toFixed(2) ?? 'n/a',
+    evaluation.recentMaps,
+    evaluation.winRate?.toFixed(1) ?? 'n/a',
+    evaluation.recentMatches,
+    evaluation.achievementScore,
+    evaluation.worldRanking,
     daysLeft,
   );
   Engine.Runtime.Instance.log.info(

@@ -25,6 +25,7 @@ type ContractOfferState = {
   playerRole: string;
   trialResponseTier: 1 | 2 | 3;
   offerSource?: 'TRIAL' | DirectOfferSource;
+  isExtension?: boolean;
   previousTierName?: string | null;
   copyVariant?: number;
   postBenchClause: boolean;
@@ -143,8 +144,9 @@ export default function ContractOffer() {
   const coachName =
     coach?.name ??
     (state.coachName && state.coachName !== 'undefined' ? state.coachName : 'Head Coach');
-  const opening =
-    state.offerSource && state.offerSource !== 'TRIAL'
+  const opening = state.isExtension
+    ? `We'd like you to continue with ${state.teamName}. Your performances and contribution to the team have earned you a new offer, and the proposed terms are set out below.`
+    : state.offerSource && state.offerSource !== 'TRIAL'
       ? getDirectContractOpening({
           response: state.trialResponseTier,
           source: state.offerSource,
@@ -160,6 +162,19 @@ export default function ContractOffer() {
         );
 
   if (signed) {
+    if (state.isExtension) {
+      return (
+        <JoinedTeamReveal
+          teamName={state.teamName}
+          teamBlazon={state.teamBlazon}
+          kicker="Contract update"
+          title={`Staying with ${state.teamName}`}
+          term={`Extended by ${state.contractMonths} ${state.contractMonths === 1 ? 'month' : 'months'}`}
+          copy={`Your new agreement is signed. The next chapter with ${state.teamName} starts now.`}
+          onComplete={completeReveal}
+        />
+      );
+    }
     return (
       <JoinedTeamReveal
         teamName={state.teamName}
@@ -206,7 +221,7 @@ export default function ContractOffer() {
                 </button>
               </div>
               <span className="text-primary mt-1.5 block text-xs font-black tracking-[0.2em] uppercase sm:text-sm">
-                Contract Offer
+                {state.isExtension ? 'Contract Extension' : 'Contract Offer'}
               </span>
             </div>
           </div>
@@ -253,7 +268,8 @@ export default function ContractOffer() {
 
           <div className="mt-auto flex items-end justify-between gap-8 pt-5">
             <p className="text-base-content/55 shrink-0 text-sm">
-              This offer expires on {new Date(state.expiresAt).toLocaleDateString()}.
+              This {state.isExtension ? 'extension' : 'offer'} expires on{' '}
+              {new Date(state.expiresAt).toLocaleDateString()}.
             </p>
             <div className="flex items-end gap-10">
               <div className="border-base-content/60 relative h-9 w-40 border-b">
@@ -311,7 +327,7 @@ export default function ContractOffer() {
               fillClassName="bg-error/20"
               onComplete={() => respond(false)}
             >
-              <FaTimes className="size-4" /> Reject offer
+              <FaTimes className="size-4" /> Reject {state.isExtension ? 'extension' : 'offer'}
             </HoldButton>
             <HoldButton
               className="btn-primary shadow-md"
