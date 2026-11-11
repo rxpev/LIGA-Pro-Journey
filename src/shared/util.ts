@@ -1155,6 +1155,40 @@ export function getCompetitionDisplayName(
   return `${cleanLeagueName} ${cleanTierName}`;
 }
 
+export function getTournamentDisplayName(options: {
+  federationName?: string | null;
+  federationSlug?: Constants.FederationSlug | string | null;
+  leagueName?: string | null;
+  leagueSlug?: Constants.LeagueSlug | string | null;
+  location?: string | null;
+  organizer?: string | null;
+  season?: number | null;
+  tierSlug?: Constants.TierSlug | string | null;
+}) {
+  const tierSlug = options.tierSlug as Constants.TierSlug | undefined;
+  const year = options.season == null ? null : 2025 + options.season;
+  let name: string;
+
+  if (isMajorStageTier(tierSlug)) {
+    name = getMajorEventDisplayName(options.location, options.organizer);
+  } else if (options.leagueSlug === Constants.LeagueSlug.ESPORTS_LEAGUE && tierSlug) {
+    const division = (Constants.IdiomaticTier[tierSlug] || tierSlug).replace(/\s+Playoffs$/i, '');
+    name = `${options.leagueName || 'ESEA'} ${division}`;
+  } else if (options.leagueSlug === Constants.LeagueSlug.ESPORTS_CCT) {
+    const region =
+      options.federationSlug === Constants.FederationSlug.ESPORTS_OCE
+        ? 'Oceania'
+        : options.federationName;
+    name = ['CCT Series', region].filter(Boolean).join(' ');
+  } else {
+    name =
+      getHostedEventTitleDisplayName(tierSlug, options.location) ||
+      getCompetitionDisplayName(options.leagueName, tierSlug).replace(/\s+Playoffs$/i, '');
+  }
+
+  return [name, year].filter(Boolean).join(' ');
+}
+
 /**
  * Gets the expected score value using the Elo formula.
  *

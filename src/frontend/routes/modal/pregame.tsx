@@ -554,10 +554,16 @@ export default function () {
         <ul>
           <li>
             <span>
-              {Util.getCompetitionDisplayName(
-                match.competition.tier.league.name,
-                match.competition.tier.slug,
-              )}
+              {Util.getTournamentDisplayName({
+                federationName: match.competition.federation.name,
+                federationSlug: match.competition.federation.slug,
+                leagueName: match.competition.tier.league.name,
+                leagueSlug: match.competition.tier.league.slug,
+                location: match.competition.location,
+                organizer: match.competition.organizer,
+                season: match.competition.season,
+                tierSlug: match.competition.tier.slug,
+              })}
             </span>
           </li>
           <li>{Util.getMatchRoundLabel(match, t('shared.matchday'))}</li>
