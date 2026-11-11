@@ -135,6 +135,50 @@
 .player-profile-honor b {
   font-size: 12px;
 }
+.top20-medal {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: hidden;
+  color: #171717;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+}
+.top20-medal-art {
+  position: absolute;
+  inset: 0;
+  background-image: var(--top20-medal-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+.top20-medal-year,
+.top20-medal-rank {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
+  translate: -50% 0;
+  text-align: center;
+}
+.top20-medal-year {
+  top: 14.5%;
+  width: 58%;
+  font-size: 14.5%;
+  letter-spacing: -0.04em;
+}
+.top20-medal-rank {
+  top: 33%;
+  width: 50%;
+  font-size: 38%;
+  letter-spacing: -0.08em;
+}
+.top20-medal-rank-double-digit {
+  top: 36%;
+  font-size: 29%;
+  letter-spacing: -0.12em;
+}
 .player-profile-history th {
   position: sticky;
   top: 0;

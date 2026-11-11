@@ -87,6 +87,7 @@ type MvpOccurrence = {
 
 type HonorGroup = {
   key: string;
+  date: Date;
   count: number;
   competitionIds: number[];
   seasons: number[];
@@ -121,7 +122,12 @@ type Top20Appearance = {
   articleId: number;
   rank: number;
   year: number;
+  date: Date;
 };
+
+type ChronologicalHonor =
+  | { type: 'top20'; date: Date; appearance: Top20Appearance }
+  | { type: 'trophy'; date: Date; honor: HonorGroup };
 
 const FACEIT_LEVEL_IMAGES: Record<number, string> = {
   1: faceitLevel1,
@@ -137,6 +143,33 @@ const FACEIT_LEVEL_IMAGES: Record<number, string> = {
 };
 
 const MVP_MEDAL_SRC = 'resources://competitions/mvp.png';
+
+function getTop20MedalSrc(rank: number) {
+  const medal = rank >= 1 && rank <= 3 ? String(rank) : 'rest';
+  return `resources://competitions/top20/display/${medal}.png`;
+}
+
+function Top20Medal(props: { appearance: Top20Appearance; className?: string }) {
+  const src = getTop20MedalSrc(props.appearance.rank);
+  const style = {
+    '--top20-medal-image': `url("${src}")`,
+  } as React.CSSProperties;
+
+  return (
+    <span className={cx('top20-medal', props.className)} style={style} aria-hidden="true">
+      <span className="top20-medal-art" />
+      <span className="top20-medal-year">{props.appearance.year}</span>
+      <span
+        className={cx(
+          'top20-medal-rank',
+          props.appearance.rank >= 10 && 'top20-medal-rank-double-digit',
+        )}
+      >
+        {props.appearance.rank}
+      </span>
+    </span>
+  );
+}
 
 enum Rating {
   LOW = 0.95,
@@ -285,15 +318,18 @@ export default function TransferModal() {
   const top20Ref = React.useRef<HTMLDivElement>(null);
   const [top20Page, setTop20Page] = React.useState(0);
   const [top20PageSize, setTop20PageSize] = React.useState(1);
+
   React.useEffect(() => {
     const node = top20Ref.current;
     if (!node) return;
+
     const update = () => setTop20PageSize(Math.max(1, Math.floor(node.clientWidth / 64)));
     const observer = new ResizeObserver(update);
     observer.observe(node);
     update();
     return () => observer.disconnect();
   }, [top20Appearances]);
+
   React.useEffect(() => {
     setTop20Page((page) =>
       Math.min(page, Math.max(0, Math.ceil(top20Appearances.length / top20PageSize) - 1)),
@@ -513,9 +549,13 @@ export default function TransferModal() {
               articleId: item.id,
               rank,
               year: getTop20Year(item, payload),
+              date: new Date(item.publishedAt),
             };
           })
-          .filter((item): item is Top20Appearance => Boolean(item));
+          .filter((item): item is Top20Appearance =>
+            Boolean(item && item.rank >= 1 && item.rank <= 20),
+          )
+          .sort((a, b) => b.date.getTime() - a.date.getTime());
 
         setTop20Appearances(appearances);
       });
@@ -526,6 +566,7 @@ export default function TransferModal() {
       if (!acc[honor.key]) {
         acc[honor.key] = {
           key: honor.key,
+          date: honor.date,
           count: 0,
           competitionIds: [],
           seasons: [],
@@ -538,6 +579,9 @@ export default function TransferModal() {
       }
 
       acc[honor.key].count += 1;
+      if (honor.date > acc[honor.key].date) {
+        acc[honor.key].date = honor.date;
+      }
       acc[honor.key].competitionIds.push(honor.competitionId);
       acc[honor.key].seasons.push(honor.season);
       if (!acc[honor.key].titles.includes(honor.title)) {
@@ -563,6 +607,22 @@ export default function TransferModal() {
 
     return ['MVP winner at:', ...mvps.map((mvp) => mvp.title)].join('\n');
   }, [mvps]);
+  const chronologicalHonors = React.useMemo<ChronologicalHonor[]>(
+    () =>
+      [
+        ...top20Appearances.map(
+          (appearance): ChronologicalHonor => ({
+            type: 'top20',
+            date: appearance.date,
+            appearance,
+          }),
+        ),
+        ...Object.values(honorGroups).map(
+          (honor): ChronologicalHonor => ({ type: 'trophy', date: honor.date, honor }),
+        ),
+      ].sort((a, b) => b.date.getTime() - a.date.getTime()),
+    [honorGroups, top20Appearances],
+  );
   const showTooltip = React.useCallback((event: React.MouseEvent<HTMLElement>, content: string) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const tooltipWidth = 280;
@@ -583,7 +643,7 @@ export default function TransferModal() {
     typeof faceitElo === 'number' && faceitElo > 0 ? levelFromElo(faceitElo) : null;
   const playerRating = player ? getRatingSummary(ratingGames) : null;
   const hasTop20Appearances = top20Appearances.length > 0;
-  const hasHonors = mvps.length > 0 || Object.keys(honorGroups).length > 0;
+  const hasHonors = hasTop20Appearances || mvps.length > 0 || Object.keys(honorGroups).length > 0;
   const hasRankingOrMajor = hasTop20Appearances || majorWinCount > 0 || majorMvpCount > 0;
   const openPlayerStatistics = React.useCallback(() => {
     if (!player) return;
@@ -715,7 +775,7 @@ export default function TransferModal() {
                       <button
                         type="button"
                         className="hover:text-primary flex min-w-0 items-center gap-2 text-left"
-                        title={`Open ${player.team.name} team page`}
+                        aria-label={`Open ${player.team.name} team page`}
                         data-interaction-sound="click"
                         onClick={() => openMainPage(`/teams?teamId=${player.team!.id}`)}
                       >
@@ -764,7 +824,7 @@ export default function TransferModal() {
                               key={`${appearance.articleId}-${appearance.rank}-${appearance.year}`}
                               type="button"
                               className="text-base-content/70 hover:text-primary w-[64px] shrink-0 text-center text-xs font-bold"
-                              title={`Open Top 20 players of ${appearance.year}`}
+                              aria-label={`Open Top 20 players of ${appearance.year}`}
                               data-interaction-sound="click"
                               onClick={() => openTop20Article(appearance.articleId)}
                             >
@@ -874,7 +934,6 @@ export default function TransferModal() {
                     type="button"
                     className="player-profile-honor"
                     aria-label={mvpTooltip}
-                    title="Open latest MVP tournament"
                     data-interaction-sound="click"
                     onClick={() =>
                       openMainPage(
@@ -894,44 +953,67 @@ export default function TransferModal() {
                     </div>
                   </button>
                 )}
-                {Object.values(honorGroups).map((honor) => (
-                  <button
-                    type="button"
-                    key={honor.key}
-                    className="player-profile-honor"
-                    title={`Open ${honor.titles[0]} tournament`}
-                    data-interaction-sound="click"
-                    onClick={() =>
-                      openMainPage(`/competitions?competitionId=${honor.competitionIds[0]}`)
-                    }
-                    onMouseEnter={(event) =>
-                      showTooltip(
-                        event,
-                        honor.titles.length === 1
-                          ? honor.titles[0]
-                          : ['Tournament wins at:', ...honor.titles].join('\n'),
-                      )
-                    }
-                    onMouseLeave={() => setActiveTooltip(null)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="relative">
-                        <Image
-                          className="size-11 object-contain"
-                          src={
-                            Util.getCompetitionHonorThumbnail(honor) ||
-                            Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
-                              location: honor.location,
-                              organizer: honor.organizer,
-                            })
-                          }
-                        />
-                        {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
-                      </span>
-                      <b>x{honor.count}</b>
-                    </div>
-                  </button>
-                ))}
+                {chronologicalHonors.map((item) => {
+                  if (item.type === 'top20') {
+                    const { appearance } = item;
+                    const tooltip = `No. ${appearance.rank} player of ${appearance.year}`;
+
+                    return (
+                      <button
+                        type="button"
+                        key={`top20-${appearance.articleId}-${appearance.rank}-${appearance.year}`}
+                        className="player-profile-honor"
+                        aria-label={tooltip}
+                        data-interaction-sound="click"
+                        onClick={() => openTop20Article(appearance.articleId)}
+                        onMouseEnter={(event) => showTooltip(event, tooltip)}
+                        onMouseLeave={() => setActiveTooltip(null)}
+                      >
+                        <Top20Medal appearance={appearance} className="size-11" />
+                      </button>
+                    );
+                  }
+
+                  const { honor } = item;
+                  return (
+                    <button
+                      type="button"
+                      key={`trophy-${honor.key}`}
+                      className="player-profile-honor"
+                      aria-label={`Open ${honor.titles[0]} tournament`}
+                      data-interaction-sound="click"
+                      onClick={() =>
+                        openMainPage(`/competitions?competitionId=${honor.competitionIds[0]}`)
+                      }
+                      onMouseEnter={(event) =>
+                        showTooltip(
+                          event,
+                          honor.titles.length === 1
+                            ? honor.titles[0]
+                            : ['Tournament wins at:', ...honor.titles].join('\n'),
+                        )
+                      }
+                      onMouseLeave={() => setActiveTooltip(null)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="relative">
+                          <Image
+                            className="size-11 object-contain"
+                            src={
+                              Util.getCompetitionHonorThumbnail(honor) ||
+                              Util.getCompetitionLogo(honor.tierSlug, honor.federationSlug, {
+                                location: honor.location,
+                                organizer: honor.organizer,
+                              })
+                            }
+                          />
+                          {Util.isMajorStageTier(honor.tierSlug) && <MajorHonorBadge />}
+                        </span>
+                        <b>x{honor.count}</b>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -992,7 +1074,7 @@ export default function TransferModal() {
                             <button
                               type="button"
                               className="hover:text-primary flex items-center gap-2 text-left"
-                              title={`Open ${stint.team.name} team page`}
+                              aria-label={`Open ${stint.team.name} team page`}
                               data-interaction-sound="click"
                               onClick={() => openMainPage(`/teams?teamId=${stint.team!.id}`)}
                             >
@@ -1036,7 +1118,7 @@ export default function TransferModal() {
                                   type="button"
                                   key={`${stint.id}-${honor.key}-${idx}`}
                                   className="relative shrink-0 cursor-pointer"
-                                  title={`Open ${honor.title} tournament`}
+                                  aria-label={`Open ${honor.title} tournament`}
                                   data-interaction-sound="click"
                                   onClick={() =>
                                     openMainPage(
