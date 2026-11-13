@@ -909,7 +909,9 @@ export const Items: Array<Item> = [
         target: Constants.TierSlug.LEAGUE_OPEN,
         federationSlug: Constants.FederationSlug.ESPORTS_ASIA,
         start: 1,
-        end: 12,
+        // The first twelve qualify; the rest are ranked alternates when an
+        // academy collides with a parent from Advanced playoffs.
+        end: 30,
         season: 0,
       },
     ],
@@ -3035,6 +3037,61 @@ export async function parse(
     federation,
     tierSize,
   });
+
+  if (
+    item.on === Constants.CalendarEntry.COMPETITION_START &&
+    tier.slug === Constants.TierSlug.ESEA_CASH_CUP &&
+    integrityField.length < competitors.length
+  ) {
+    // Cash Cup normally draws all Open/Intermediate clubs in EU/AM, and Open
+    // plus lower Advanced clubs in AS/OCE. When a parent excludes its academy,
+    // take the closest finisher from the next tier without inviting an EPL club.
+    const isEuropeOrAmericas = [
+      Constants.FederationSlug.ESPORTS_EUROPA,
+      Constants.FederationSlug.ESPORTS_AMERICAS,
+    ].includes(federation.slug as Constants.FederationSlug);
+    const reserveSource = isEuropeOrAmericas
+      ? Constants.TierSlug.LEAGUE_MAIN
+      : Constants.TierSlug.LEAGUE_ADVANCED;
+    const sourceField = await getTeamsFromCompetitionEntry(
+      {
+        action: Action.INCLUDE,
+        from: Constants.LeagueSlug.ESPORTS_LEAGUE,
+        target: reserveSource,
+        federationSlug: federation.slug as Constants.FederationSlug,
+        start: 1,
+        end: isEuropeOrAmericas ? 20 : 8,
+        season: 0,
+      },
+      federation,
+    );
+    const reserveRows = await DatabaseClient.prisma.team.findMany({
+      where: { id: { in: sourceField.map((team) => team.id) } },
+      include: { parentTeam: true },
+    });
+    const reserveById = new Map(reserveRows.map((team) => [team.id, team]));
+    const reserves = sourceField.reverse().flatMap((team) => {
+      const hydrated = reserveById.get(team.id);
+      return hydrated ? [hydrated] : [];
+    });
+    const profile = await DatabaseClient.prisma.profile.findFirst({ select: { season: true } });
+    const epl = await DatabaseClient.prisma.competition.findFirst({
+      where: { season: profile?.season ?? 0, tier: { slug: Constants.TierSlug.LEAGUE_PRO } },
+      select: { competitors: { select: { teamId: true } } },
+    });
+    const occupiedIds = new Set([
+      ...integrityField.map((team) => team.id),
+      ...(epl?.competitors.map((entry) => entry.teamId) ?? []),
+    ]);
+    for (const candidate of reserves) {
+      if (integrityField.length >= competitors.length) break;
+      if (occupiedIds.has(candidate.id)) continue;
+      if (candidate.parentTeamId && occupiedIds.has(candidate.parentTeamId)) continue;
+      if (integrityField.some((team) => team.parentTeamId === candidate.id)) continue;
+      integrityField.push(candidate);
+      occupiedIds.add(candidate.id);
+    }
+  }
 
   log.info('Autofilled %s - %s with %d teams', federation.name, tier.name, integrityField.length);
 

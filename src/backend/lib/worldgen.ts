@@ -11318,7 +11318,21 @@ async function enforceAcademyMentorLimitSeasonal() {
     where: { parentTeamId: { not: null }, profile: null },
     select: { id: true },
   });
-  const market = await loadNpcRosterMarket();
+  const [market, scoutedYouth] = await Promise.all([
+    loadNpcRosterMarket(),
+    // Senior clubs require FACEIT level 10 for unproven free agents. Academy
+    // development can scout level 7+ youth when aging creates a mentor excess.
+    prisma.player.findMany({
+      where: {
+        teamId: null,
+        age: { lte: 25 },
+        elo: { gte: 1551 },
+        userControlled: false,
+        retiredAt: null,
+      },
+      include: { country: { include: { continent: true } } },
+    }),
+  ]);
 
   for (const academy of academies) {
     for (let attempt = 0; attempt < Constants.Application.SQUAD_MIN_LENGTH; attempt++) {
@@ -11333,7 +11347,8 @@ async function enforceAcademyMentorLimitSeasonal() {
         ...(team.players || []).filter((player) => !player.starter && !player.userControlled),
         ...market.freeAgents,
         ...market.benched,
-      ].filter((player) => Number(player.age ?? 100) <= 22 && !player.userControlled);
+        ...scoutedYouth,
+      ].filter((player) => Number(player.age ?? 100) <= 25 && !player.userControlled);
       const uniqueYouth = [...new Map(youthPool.map((player) => [player.id, player])).values()];
       let rotated = false;
       for (const veteran of overAge.filter((player) => !player.userControlled)) {
