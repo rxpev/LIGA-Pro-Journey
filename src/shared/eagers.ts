@@ -136,6 +136,7 @@ export const profile = {
     },
     team: {
       include: {
+        parentTeam: true,
         competitionFederation: true,
         personas: true,
         players: player,

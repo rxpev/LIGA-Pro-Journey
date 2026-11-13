@@ -759,6 +759,19 @@ export default function Inbox() {
                                                   rosterStabilityClause:
                                                     node.properties.dataRosterStabilityClause ===
                                                     'true',
+                                                  academyPromotionClause: node.properties
+                                                    .dataAcademyPromotionClause
+                                                    ? String(
+                                                        node.properties.dataAcademyPromotionClause,
+                                                      )
+                                                    : null,
+                                                  academyPromotionTarget: Number(
+                                                    node.properties.dataAcademyPromotionTarget,
+                                                  ),
+                                                  academyParentName: node.properties
+                                                    .dataAcademyParentName
+                                                    ? String(node.properties.dataAcademyParentName)
+                                                    : null,
                                                   expiresAt: String(node.properties.dataExpiresAt),
                                                   readOnly:
                                                     dialogue.completed ||

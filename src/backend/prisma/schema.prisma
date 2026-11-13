@@ -424,6 +424,9 @@ model Player {
   lastOfferAt                DateTime?
   passiveOfferSeason         Int       @default(0)
   passiveOffersThisSeason    Int       @default(0)
+  academyPromotionClause     String?
+  academyPromotionTarget     Float?
+  academyPromotionPlayerId   Int?
   retiredAt                  DateTime?
   isRegen                    Boolean   @default(false)
   generatedAt                DateTime?
@@ -584,9 +587,16 @@ model Team {
   // npc-transfer-identity.ts for compatibility with old saves.
   npcRecruitmentPolicy String?
 
+  // An academy is linked only when its real parent club is also represented
+  // in the save. Independent youth-branded teams deliberately leave this null.
+  parentTeam   Team?  @relation("AcademyParent", fields: [parentTeamId], references: [id], onDelete: SetNull)
+  parentTeamId Int?
+  academyTeams Team[] @relation("AcademyParent")
+
   // improves sorting performance
   @@index([elo, id])
   @@index([competitionFederationId])
+  @@index([parentTeamId])
 }
 
 model Tier {
@@ -642,6 +652,9 @@ model Offer {
   postBenchTerminationClause Boolean   @default(false)
   postBenchTerminationMonths Float?
   rosterStabilityClause      Boolean   @default(false)
+  academyPromotionClause     String?
+  academyPromotionTarget     Float?
+  academyPromotionPlayerId   Int?
 
   // belongs to
   transfer   Transfer @relation(fields: [transferId], references: [id])

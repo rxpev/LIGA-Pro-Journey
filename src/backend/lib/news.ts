@@ -4948,6 +4948,7 @@ async function buildTransferDraft(
   const sellerIsShortEligible = !!seller && transferShortTeamIds.has(seller.id);
   const isShortEligibleTransfer = destinationIsShortEligible || sellerIsShortEligible;
   const latestOffer = transfer.offers[0];
+  const isAcademyPromotion = latestOffer?.offerType === 'ACADEMY_PROMOTION';
   const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
   const storyDate = isContractExpiry
     ? transfer.target.lastOfferAt || publishedAt
@@ -5152,8 +5153,9 @@ async function buildTransferDraft(
   const baseHeadline = canUseReplacementTitle
     ? pickVariant(replacementTitles, transfer.id)
     : pickVariant(baseTitlePool, transfer.id);
-  const headline =
-    !canUseReplacementTitle && benchedPlayer && transfer.id % 6 === 0
+  const headline = isAcademyPromotion
+    ? `${destinationName} promote ${targetName} from their Academy`
+    : !canUseReplacementTitle && benchedPlayer && transfer.id % 6 === 0
       ? `${baseHeadline}, ${benchedName} benched`
       : !canUseReplacementTitle && benchedPlayer && transfer.id % 6 === 1
         ? `${baseHeadline}, as ${benchedName} is benched`

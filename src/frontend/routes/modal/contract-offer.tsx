@@ -31,6 +31,9 @@ type ContractOfferState = {
   postBenchClause: boolean;
   postBenchMonths: number;
   rosterStabilityClause: boolean;
+  academyPromotionClause?: string | null;
+  academyPromotionTarget?: number | null;
+  academyParentName?: string | null;
   expiresAt: string;
   readOnly?: boolean;
 };
@@ -241,7 +244,9 @@ export default function ContractOffer() {
             </ContractTerm>
           </dl>
 
-          {(state.postBenchClause || state.rosterStabilityClause) && (
+          {(state.postBenchClause ||
+            state.rosterStabilityClause ||
+            state.academyPromotionClause) && (
             <section className="mt-6 max-w-4xl">
               <h2 className="flex items-center gap-3 text-sm font-black tracking-[0.16em] uppercase">
                 <FaFileContract className="text-primary size-5" /> Special clauses
@@ -261,6 +266,26 @@ export default function ContractOffer() {
                     Roster stability: If three of the five active players in place when you sign
                     leave the team, you may request to be benched and transfer-listed.
                   </li>
+                )}
+                {state.academyPromotionClause === 'PROMOTION_GUARANTEE' && (
+                  <li>
+                    Senior promotion guarantee: Achieve{' '}
+                    {state.playerRole.toUpperCase() === 'IGL'
+                      ? `${Math.round(Number(state.academyPromotionTarget ?? 0.85) * 100)}% wins`
+                      : `a ${Number(state.academyPromotionTarget ?? 1.3).toFixed(2)} rating`}{' '}
+                    across the full academy stint to receive a permanent offer from{' '}
+                    {state.academyParentName || 'the senior team'}.
+                  </li>
+                )}
+                {state.academyPromotionClause === 'PROMOTION_PRIORITY' && (
+                  <li>
+                    Senior promotion priority: If a matching senior starter leaves, you receive a
+                    three-month offer from {state.academyParentName || 'the senior team'} before
+                    normal replacement recruitment begins.
+                  </li>
+                )}
+                {state.academyPromotionClause === 'ACTIVATED' && (
+                  <li>Your academy promotion clause has been activated for this senior offer.</li>
                 )}
               </ul>
             </section>
