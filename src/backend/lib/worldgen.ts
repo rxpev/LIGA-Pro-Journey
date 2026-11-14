@@ -3308,18 +3308,8 @@ async function sendDirectContractOffer(params: {
     team.personas.find((item) => item.role === Constants.PersonaRole.ASSISTANT) ??
     team.personas[0];
   const offer = transfer.offers[0];
-  const academyClauseText =
-    offer?.academyPromotionClause === AcademyPromotionClause.GUARANTEE
-      ? normalizeRole(player.role) === 'IGL'
-        ? `Your contract includes a promotion guarantee. Maintain a win rate of at least ${Math.round(Number(offer.academyPromotionTarget ?? 0.85) * 100)}% across your academy stint and ${team.parentTeam?.name ?? 'the senior team'} will offer you a permanent senior contract.`
-        : `Your contract includes a promotion guarantee. Average at least ${Number(offer.academyPromotionTarget ?? 1.3).toFixed(2)} across your academy stint and ${team.parentTeam?.name ?? 'the senior team'} will offer you a permanent senior contract.`
-      : offer?.academyPromotionClause === AcademyPromotionClause.PRIORITY
-        ? `Your contract includes promotion priority. If a matching senior starter leaves, you will receive a three-month senior contract before the club uses its normal replacement search.`
-        : team.parentTeamId
-          ? `This is an academy agreement. Strong development can still lead to a senior offer, but no promotion clause is guaranteed in this contract.`
-          : null;
   const academyOpening = team.parentTeamId
-    ? `Hello, **${player.name}**.\n\nWe would like you to join **${team.name}** on a ${params.contractMonths}-month academy contract. The objective is to develop you for a possible place with **${team.parentTeam?.name ?? 'our senior team'}**.\n\n${academyClauseText}`
+    ? `Hello, **${player.name}**.\n\nWe have been impressed by your recent performances and would like to develop you further within our academy system.\n\nThe details are outlined in the attached contract.`
     : getDirectContractChatMessage(player.name, coach?.name ?? 'Head Coach', team.name);
 
   await sendEmail(
@@ -3936,44 +3926,32 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
       ]);
     }
 
-    // Extension accepted email.
-    const updatedPlayer = await DatabaseClient.prisma.player.findFirst({
-      where: { id: transfer.playerId },
-    });
-
-    const locale = getLocale(profile);
-    const persona =
-      transfer.from?.personas?.find(
-        (p) =>
-          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
-      ) ?? transfer.from?.personas?.[0];
-    if (!persona) return Promise.resolve();
-
-    const team = transfer.from;
-    const contractEndDate = format(contractEnd, Constants.Settings.calendar.calendarDateFormat);
-
-    const acceptanceEmail = await sendEmail(
-      Sqrl.render(locale.templates.ContractExtensionAccepted.SUBJECT, {
-        profile,
-        team,
-        transfer,
-      }),
-      Sqrl.render(locale.templates.ContractExtensionAccepted.CONTENT, {
-        profile,
-        team,
-        transfer,
-        years,
-        contractEndDate,
-      }),
-      persona,
-      profile.date,
-      notifyAcceptanceEmail,
-    );
-
     const refreshedProfile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
     mainWindow?.send(Constants.IPCRoute.PROFILES_CURRENT, refreshedProfile);
 
     WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+
+    const coach =
+      transfer.from.personas.find(
+        (persona) =>
+          persona.role === Constants.PersonaRole.MANAGER ||
+          persona.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.from.personas[0];
+    if (coach) {
+      setTimeout(() => {
+        void sendEmail(
+          `Glad to have you staying with ${transfer.from.name}`,
+          `Glad to have you staying with us! I've really enjoyed working with you so far, and I'm happy we'll get to continue this journey together. You've made great progress, and I still see a lot of potential in you. I'm excited to see how much further you can go, and I'll do everything I can to help you take that next step. Let's keep building on what we've achieved and aim even higher!`,
+          coach,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error(
+            'Could not send coach contract-extension acceptance message.',
+            error,
+          ),
+        );
+      }, 5_000);
+    }
 
     Engine.Runtime.Instance.log.info(
       '%s accepted a contract extension at %s (years=%d).',
@@ -3982,7 +3960,7 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
       years,
     );
 
-    return acceptanceEmail;
+    return Promise.resolve();
   }
 
   // Normal signing path
@@ -4234,11 +4212,6 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
     ]);
   }
 
-  // Welcome email
-  const updatedPlayer = await DatabaseClient.prisma.player.findFirst({
-    where: { id: transfer.playerId },
-  });
-  const locale = getLocale(profile);
   const persona =
     transfer.from?.personas?.find(
       (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
@@ -4246,24 +4219,68 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
   if (!persona) return Promise.resolve();
 
   const isTrialContract = offer.offerType === 'TRIAL_CONTRACT';
+  const isAcademyContract = transfer.from.parentTeamId != null;
+  const isAcademyPromotion = offer.offerType === 'ACADEMY_PROMOTION_USER';
   let acceptanceEmail;
-  if (!isTrialContract) {
-    acceptanceEmail = await sendEmail(
-      Sqrl.render(locale.templates.OfferAcceptedUser.SUBJECT, {
-        transfer,
-        profile,
-        player: updatedPlayer,
-      }),
-      Sqrl.render(locale.templates.OfferAcceptedUser.CONTENT, {
-        transfer,
-        profile,
-        player: updatedPlayer,
-      }),
-      persona,
-      profile.date,
-      notifyAcceptanceEmail,
-    );
-  } else {
+  if (isAcademyPromotion) {
+    const academyCoach =
+      transfer.to?.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.to?.personas[0];
+    const seniorCoach =
+      transfer.from.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.from.personas[0];
+
+    if (seniorCoach) {
+      setTimeout(() => {
+        void sendEmail(
+          `Welcome to ${transfer.from.name}`,
+          `Welcome to the main team! I've been following your progress in the academy for a while now, and I'm really impressed with how far you've come. You've worked hard to earn this opportunity, and I'm excited to finally have you on the roster. It's a big step up, and the expectations will be higher, but I believe you've got what it takes to compete against the best in the world. I'm looking forward to working with you and helping you reach that next level. Let's get to work!`,
+          seniorCoach,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error('Could not send senior coach welcome message.', error),
+        );
+      }, 10_000);
+    }
+
+    if (academyCoach) {
+      setTimeout(() => {
+        void sendEmail(
+          `Congratulations on your promotion to ${transfer.from.name}`,
+          `Congratulations on your promotion to the main team! You've worked hard throughout your time in the academy, and you've proven that you're ready to take the next step. It's been a pleasure watching you develop and grow as a player. You've earned this opportunity, and I'm confident you'll make the most of it. Good luck!`,
+          academyCoach,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error(
+            'Could not send academy coach promotion message.',
+            error,
+          ),
+        );
+      }, 15_000);
+    }
+  } else if (isAcademyContract) {
+    const academyCoach =
+      transfer.from.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.from.personas[0];
+    if (academyCoach) {
+      setTimeout(() => {
+        void sendEmail(
+          `Welcome to ${transfer.from.name}`,
+          `Hey **${profile.player?.name ?? profile.name}**,\n\nWelcome to **${transfer.from.name}**! We're excited to have you on board. My goal is to help you develop as a player, reach your full potential, and prepare you for the highest level of competition. I want to get you ready for the biggest tournaments and ultimately give you the opportunity to earn your spot on the main team. I'm looking forward to working with you and seeing how far you can go!`,
+          academyCoach,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error('Could not send academy coach welcome message.', error),
+        );
+      }, 5_000);
+    }
+  } else if (isTrialContract) {
     acceptanceEmail = await sendEmail(
       `Welcome to ${transfer.from.name}`,
       getTrialContractDecisionMessage(
@@ -4368,26 +4385,21 @@ export async function rejectTransferOffer(transferId: number, notifyResponseEmai
       (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
     ) ?? transfer.from.personas[0];
 
-  // Different email content for extensions vs new-team offers.
-  const locale = getLocale(profile);
-
   if (isExtension) {
-    let responseEmail;
-    if ((locale.templates as any).ContractExtensionRejected) {
-      responseEmail = await sendEmail(
-        Sqrl.render((locale.templates as any).ContractExtensionRejected.SUBJECT, {
-          transfer,
-          profile,
-        }),
-        Sqrl.render((locale.templates as any).ContractExtensionRejected.CONTENT, {
-          transfer,
-          profile,
-          offer,
-        }),
-        persona,
-        profile.date,
-        notifyResponseEmail,
-      );
+    if (persona) {
+      setTimeout(() => {
+        void sendEmail(
+          `Your contract decision at ${transfer.from.name}`,
+          `I'm sad to hear you've decided not to extend your contract, but I respect your decision. It's been a pleasure working with you, and I've really enjoyed seeing you grow as a player. You've put in a lot of hard work during your time here, and I hope you'll carry that experience with you wherever you go next. I would've loved to continue working together, but I understand that you want to take your career in a different direction. Thanks for everything, and I wish you nothing but the best in your next chapter!`,
+          persona,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error(
+            'Could not send coach contract-extension decline message.',
+            error,
+          ),
+        );
+      }, 5_000);
     }
 
     Engine.Runtime.Instance.log.info(
@@ -4396,7 +4408,7 @@ export async function rejectTransferOffer(transferId: number, notifyResponseEmai
       transfer.id,
     );
 
-    return responseEmail;
+    return Promise.resolve();
   }
   if (offer.offerType === 'TRIAL') {
     return Promise.resolve();
@@ -4415,28 +4427,35 @@ export async function rejectTransferOffer(transferId: number, notifyResponseEmai
     );
     return responseEmail;
   }
-  const responseEmail = await sendEmail(
-    Sqrl.render(locale.templates.OfferRejectedUser.SUBJECT, {
-      transfer,
-      profile,
-      offer,
-    }),
-    Sqrl.render(locale.templates.OfferRejectedUser.CONTENT, {
-      transfer,
-      profile,
-      offer,
-    }),
-    persona,
-    profile.date,
-    notifyResponseEmail,
-  );
-
+  if (offer.offerType === 'ACADEMY_PROMOTION_USER') {
+    const academyCoach =
+      transfer.to?.personas.find(
+        (p) =>
+          p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
+      ) ?? transfer.to?.personas[0];
+    if (academyCoach) {
+      setTimeout(() => {
+        void sendEmail(
+          `Your promotion decision`,
+          `I respect your decision to decline the promotion to the main team, although I am disappointed that our journey together ends here. You've shown great dedication and growth throughout your time in the academy, and I am proud of the progress you've made. While I had hoped to see you take the next step with us, I understand that every player has their own path. Good luck!`,
+          academyCoach,
+          profile.date,
+        ).catch((error) =>
+          Engine.Runtime.Instance.log.error(
+            'Could not send academy coach promotion-decline message.',
+            error,
+          ),
+        );
+      }, 5_000);
+    }
+    return Promise.resolve();
+  }
   Engine.Runtime.Instance.log.info(
     'User rejected invite from %s (transfer %d).',
     transfer.from.name,
     transfer.id,
   );
-  return responseEmail;
+  return Promise.resolve();
 }
 
 /**

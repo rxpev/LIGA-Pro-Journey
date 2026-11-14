@@ -117,10 +117,6 @@ export default function ContractOffer() {
     try {
       if (accepted) {
         deferredEmailId.current = await api.transfers.accept(state.transferId);
-        if (deferredEmailId.current == null) {
-          setOfferResolved(true);
-          return;
-        }
       } else {
         const responseEmailId = await api.transfers.reject(state.transferId);
         if (responseEmailId != null) await api.emails.notify(responseEmailId);
@@ -267,21 +263,29 @@ export default function ContractOffer() {
                     leave the team, you may request to be benched and transfer-listed.
                   </li>
                 )}
-                {state.academyPromotionClause === 'PROMOTION_GUARANTEE' && (
-                  <li>
-                    Senior promotion guarantee: Achieve{' '}
-                    {state.playerRole.toUpperCase() === 'IGL'
-                      ? `${Math.round(Number(state.academyPromotionTarget ?? 0.85) * 100)}% wins`
-                      : `a ${Number(state.academyPromotionTarget ?? 1.3).toFixed(2)} rating`}{' '}
-                    across the full academy stint to receive a permanent offer from{' '}
-                    {state.academyParentName || 'the senior team'}.
-                  </li>
-                )}
+                {state.academyPromotionClause === 'PROMOTION_GUARANTEE' &&
+                  state.playerRole.toUpperCase() === 'IGL' && (
+                    <li>
+                      Promotion Guarantee: Achieve{' '}
+                      {Math.round(Number(state.academyPromotionTarget ?? 0.85) * 100)}% wins across
+                      your full academy stint to receive a permanent offer from{' '}
+                      {state.academyParentName || 'the senior team'}.
+                    </li>
+                  )}
+                {state.academyPromotionClause === 'PROMOTION_GUARANTEE' &&
+                  state.playerRole.toUpperCase() !== 'IGL' && (
+                    <li>
+                      Promotion Guarantee: Maintain a{' '}
+                      {Number(state.academyPromotionTarget ?? 1.3).toFixed(2)} rating across your
+                      full academy stint to receive a permanent offer from{' '}
+                      {state.academyParentName || 'the senior team'}.
+                    </li>
+                  )}
                 {state.academyPromotionClause === 'PROMOTION_PRIORITY' && (
                   <li>
-                    Senior promotion priority: If a matching senior starter leaves, you receive a
-                    three-month offer from {state.academyParentName || 'the senior team'} before
-                    normal replacement recruitment begins.
+                    Promotion priority: If a player from the main team with the same role leaves,
+                    you will be given priority for promotion and receive a three-month offer from{' '}
+                    {state.academyParentName || 'the senior team'}.
                   </li>
                 )}
                 {state.academyPromotionClause === 'ACTIVATED' && (
