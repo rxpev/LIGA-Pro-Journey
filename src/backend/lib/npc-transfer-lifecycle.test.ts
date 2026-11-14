@@ -56,7 +56,8 @@ async function main() {
   process.env.APPDATA = appDataPath;
 
   // Require database/worldgen only after APPDATA points at the isolated copy.
-  const { default: DatabaseClient } = require('./database-client') as typeof import('./database-client');
+  const { default: DatabaseClient } =
+    require('./database-client') as typeof import('./database-client');
   const worldgen = require('./worldgen') as typeof import('./worldgen');
   let prisma: any;
   let sequence = 0;
@@ -255,10 +256,21 @@ async function main() {
     );
     assert.equal(repairedBeforeRegen, false, 'rifler supply alone cannot satisfy a missing AWP');
     let shortageRoster = await roster(shortageTeam.id);
-    assert.equal(shortageRoster.players.length, 5, 'two vacancy slots should be filled in one repair pass');
-    assert.equal(shortageRoster.snipers.length, 0, 'the pass should leave the unresolved AWP visible');
+    assert.equal(
+      shortageRoster.players.length,
+      5,
+      'two vacancy slots should be filled in one repair pass',
+    );
+    assert.equal(
+      shortageRoster.snipers.length,
+      0,
+      'the pass should leave the unresolved AWP visible',
+    );
     for (const player of shortageRiflers) {
-      const current = await prisma.player.findUnique({ where: { id: player.id }, select: { teamId: true } });
+      const current = await prisma.player.findUnique({
+        where: { id: player.id },
+        select: { teamId: true },
+      });
       assert.equal(current?.teamId, shortageTeam.id);
     }
     const domesticAwperSupply = await prisma.player.count({
@@ -268,7 +280,11 @@ async function main() {
     await worldgen.__npcWorldgenTest.generateNpcRegenIntake(true, new Set([shortageTeam.id]));
     shortageRoster = await roster(shortageTeam.id);
     assert.equal(shortageRoster.players.length, 5);
-    assert.equal(shortageRoster.snipers.length, 1, 'urgent regen should repair the missing AWP immediately');
+    assert.equal(
+      shortageRoster.snipers.length,
+      1,
+      'urgent regen should repair the missing AWP immediately',
+    );
     const shortageRegen = await prisma.player.findFirst({
       where: { teamId: shortageTeam.id, starter: true, isRegen: true, role: ROLE_SNIPER },
     });
@@ -295,20 +311,24 @@ async function main() {
         countryId: ad.id,
         userControlled: false,
         retiredAt: null,
-        OR: [
-          { teamId: null },
-          { teamId: { not: null }, starter: false },
-        ],
+        OR: [{ teamId: null }, { teamId: { not: null }, starter: false }],
       },
     });
-    assert.equal(domesticMarketCount, 0, 'simultaneous shortage starts with no domestic market supply');
+    assert.equal(
+      domesticMarketCount,
+      0,
+      'simultaneous shortage starts with no domestic market supply',
+    );
     const intakeStartedAt = Date.now();
     await worldgen.__npcWorldgenTest.generateNpcRegenIntake(
       true,
       new Set(manyVacancyTeams.map((team: any) => team.id)),
     );
     const intakeElapsedMs = Date.now() - intakeStartedAt;
-    assert.ok(intakeElapsedMs < 20_000, `targeted intake should stay bounded (took ${intakeElapsedMs}ms)`);
+    assert.ok(
+      intakeElapsedMs < 20_000,
+      `targeted intake should stay bounded (took ${intakeElapsedMs}ms)`,
+    );
     for (const team of manyVacancyTeams) {
       const currentRoster = await roster(team.id);
       assert.equal(currentRoster.players.length, 5);
@@ -427,16 +447,223 @@ async function main() {
         date,
       });
     } finally {
-      await prisma.$transaction(otherTiers.map((team: any) =>
-        prisma.team.update({ where: { id: team.id }, data: { tier: team.tier } }),
-      ));
+      await prisma.$transaction(
+        otherTiers.map((team: any) =>
+          prisma.team.update({ where: { id: team.id }, data: { tier: team.tier } }),
+        ),
+      );
     }
     assert.equal(elitePlaced, true, 'CIS elite placement should find a role-compatible victim');
     assert.equal(
-      (await prisma.player.findUnique({ where: { id: cisEliteCandidate.id }, select: { teamId: true } }))
-        ?.teamId,
+      (
+        await prisma.player.findUnique({
+          where: { id: cisEliteCandidate.id },
+          select: { teamId: true },
+        })
+      )?.teamId,
       cisEliteTeam.id,
     );
+
+    // The stale-bench lane is intentionally narrow: a credible listed player
+    // gets one normal pending offer after 90 days, while a fresh bench player
+    // and a second player from the same seller cannot create weekly churn.
+    const benchMarketBuyer = await createTeam('bench-market-buyer', { tier: 2 });
+    const benchMarketSeller = await createTeam('bench-market-seller', { tier: 2 });
+    await createStarters(
+      benchMarketBuyer.id,
+      [ROLE_SNIPER, ROLE_RIFLER, ROLE_RIFLER, ROLE_RIFLER, ROLE_RIFLER],
+      'bench-market-buyer',
+      [80, 20, 50, 50, 50],
+    );
+    await createStarters(
+      benchMarketSeller.id,
+      [ROLE_SNIPER, ROLE_RIFLER, ROLE_RIFLER, ROLE_RIFLER, ROLE_RIFLER],
+      'bench-market-seller',
+      [80, 50, 50, 50, 50],
+    );
+    const staleBenchPlayer = await createPlayer({
+      label: 'bench-market-stale',
+      teamId: benchMarketSeller.id,
+      starter: false,
+      xp: 70,
+    });
+    const secondStaleBenchPlayer = await createPlayer({
+      label: 'bench-market-second-stale',
+      teamId: benchMarketSeller.id,
+      starter: false,
+      xp: 65,
+    });
+    const freshBenchPlayer = await createPlayer({
+      label: 'bench-market-fresh',
+      teamId: benchMarketSeller.id,
+      starter: false,
+      xp: 90,
+    });
+    const staleBenchDate = new Date(date.getTime() - 120 * DAY_MS);
+    const oldBuyerRosterDate = new Date(date.getTime() - 100 * DAY_MS);
+    await prisma.player.updateMany({
+      where: { id: { in: [staleBenchPlayer.id, secondStaleBenchPlayer.id, freshBenchPlayer.id] } },
+      data: { transferListed: true, lastOfferAt: staleBenchDate },
+    });
+    await prisma.careerStint.updateMany({
+      where: { playerId: { in: [staleBenchPlayer.id, secondStaleBenchPlayer.id] }, endedAt: null },
+      data: { startedAt: staleBenchDate },
+    });
+    await prisma.careerStint.updateMany({
+      where: { playerId: freshBenchPlayer.id, endedAt: null },
+      data: { startedAt: new Date(date.getTime() - 30 * DAY_MS) },
+    });
+    await prisma.careerStint.updateMany({
+      where: { teamId: benchMarketBuyer.id, starter: true, endedAt: null },
+      data: { startedAt: oldBuyerRosterDate },
+    });
+
+    const staleMarketActions = await worldgen.__npcWorldgenTest.processLongBenchedNpcMarket(date, {
+      force: true,
+      maxActions: 2,
+      candidatePlayerIds: new Set([
+        staleBenchPlayer.id,
+        secondStaleBenchPlayer.id,
+        freshBenchPlayer.id,
+      ]),
+      buyerTeamIds: new Set([benchMarketBuyer.id]),
+    });
+    assert.equal(staleMarketActions, 1, 'one seller and buyer may create only one offer per pass');
+    const staleMarketTransfer = await prisma.transfer.findFirst({
+      where: {
+        playerId: { in: [staleBenchPlayer.id, secondStaleBenchPlayer.id] },
+        status: Constants.TransferStatus.TEAM_PENDING,
+      },
+      include: { offers: true },
+    });
+    assert.ok(staleMarketTransfer, 'a 90-day bench player should receive a normal pending offer');
+    assert.equal(staleMarketTransfer.teamIdFrom, benchMarketBuyer.id);
+    assert.equal(staleMarketTransfer.teamIdTo, benchMarketSeller.id);
+    assert.equal(staleMarketTransfer.offers[0]?.offerType, 'BENCH_MARKET');
+    assert.ok(
+      (staleMarketTransfer.offers[0]?.cost ?? 1000) < 1000,
+      'stale listed players should carry a realistic fee discount',
+    );
+    const freshMarketTransfer = await prisma.transfer.findFirst({
+      where: { playerId: freshBenchPlayer.id, status: Constants.TransferStatus.TEAM_PENDING },
+    });
+    assert.equal(freshMarketTransfer, null, 'a 30-day bench spell must not trigger the stale lane');
+
+    // Marketability can outweigh raw queue age without allowing rapid repeat
+    // bids. This keeps recognizable starters ahead of weak contract riders,
+    // while a rejection still imposes a meaningful priority penalty.
+    assert.ok(
+      worldgen.__npcWorldgenTest.getNpcBenchMarketPriorityScore({
+        listedDays: 341,
+        xp: 58,
+        attempts: 0,
+      }) >
+        worldgen.__npcWorldgenTest.getNpcBenchMarketPriorityScore({
+          listedDays: 731,
+          xp: 10,
+          attempts: 0,
+        }),
+    );
+    assert.ok(
+      worldgen.__npcWorldgenTest.getNpcBenchMarketPriorityScore({
+        listedDays: 731,
+        xp: 56,
+        attempts: 1,
+      }) >
+        worldgen.__npcWorldgenTest.getNpcBenchMarketPriorityScore({
+          listedDays: 731,
+          xp: 10,
+          attempts: 0,
+        }),
+    );
+    assert.equal(
+      worldgen.__npcWorldgenTest.getNpcBenchMarketListedDays(
+        { transferListed: true, lastOfferAt: null },
+        date,
+        staleBenchDate,
+      ),
+      120,
+      'the active bench stint must age legacy listings with no lastOfferAt timestamp',
+    );
+
+    // A year on the bench only makes mutual termination possible; it is never
+    // guaranteed. Weak players are especially likely to preserve their wages,
+    // while expiring deals simply run to completion.
+    assert.equal(
+      worldgen.__npcWorldgenTest.getNpcBenchMutualTerminationChance({
+        listedDays: 400,
+        failedOffers: 0,
+        xp: 1,
+        hasStructuralMatch: false,
+        contractDaysLeft: 365,
+      }),
+      1,
+    );
+    assert.equal(
+      worldgen.__npcWorldgenTest.getNpcBenchMutualTerminationChance({
+        listedDays: 400,
+        failedOffers: 3,
+        xp: 60,
+        hasStructuralMatch: true,
+        contractDaysLeft: 365,
+      }),
+      6,
+    );
+    assert.equal(
+      worldgen.__npcWorldgenTest.getNpcBenchMutualTerminationChance({
+        listedDays: 400,
+        failedOffers: 4,
+        xp: 60,
+        hasStructuralMatch: true,
+        contractDaysLeft: 60,
+      }),
+      0,
+    );
+    const releaseBenchPlayer = await createPlayer({
+      label: 'bench-market-release',
+      teamId: benchMarketSeller.id,
+      starter: false,
+      xp: 1,
+      age: 35,
+    });
+    const releaseBenchDate = new Date(date.getTime() - 400 * DAY_MS);
+    await prisma.player.update({
+      where: { id: releaseBenchPlayer.id },
+      data: { transferListed: true, lastOfferAt: releaseBenchDate },
+    });
+    await prisma.careerStint.updateMany({
+      where: { playerId: releaseBenchPlayer.id, endedAt: null },
+      data: { startedAt: releaseBenchDate },
+    });
+    const releaseRandom = Math.random;
+    Math.random = () => 0.0001;
+    let releaseActions: number;
+    try {
+      releaseActions = await worldgen.__npcWorldgenTest.processLongBenchedNpcMarket(date, {
+        force: true,
+        maxActions: 1,
+        candidatePlayerIds: new Set([releaseBenchPlayer.id]),
+        buyerTeamIds: new Set([benchMarketBuyer.id]),
+      });
+    } finally {
+      Math.random = releaseRandom;
+    }
+    assert.equal(releaseActions, 1);
+    const releasedPlayer = await prisma.player.findUnique({
+      where: { id: releaseBenchPlayer.id },
+      select: { teamId: true, contractEnd: true, starter: true, transferListed: true },
+    });
+    assert.deepEqual(releasedPlayer, {
+      teamId: null,
+      contractEnd: null,
+      starter: false,
+      transferListed: true,
+    });
+    const termination = await prisma.transfer.findFirst({
+      where: { playerId: releaseBenchPlayer.id, status: Constants.TransferStatus.EXPIRED },
+      include: { offers: true },
+    });
+    assert.equal(termination?.offers[0]?.offerType, 'MUTUAL_TERMINATION');
 
     // A real paid movement checks fresh ownership and records the buyer/seller
     // direction consistently across Player, CareerStint and Transfer.
@@ -469,7 +696,11 @@ async function main() {
       where: { id: atomicSellerPlayers[5].id },
       select: { teamId: true },
     });
-    assert.equal(atomicTarget?.teamId, atomicBuyer.id, 'signed ownership must move to the destination');
+    assert.equal(
+      atomicTarget?.teamId,
+      atomicBuyer.id,
+      'signed ownership must move to the destination',
+    );
     const atomicStint = await prisma.careerStint.findFirst({
       where: { playerId: atomicSellerPlayers[5].id, endedAt: null },
       orderBy: { startedAt: 'desc' },
@@ -592,7 +823,11 @@ async function main() {
       undefined,
       [azerbaijan.id, azerbaijan.id, azerbaijan.id, azerbaijan.id, azerbaijan.id],
     );
-    const paidBackfill = await createPlayer({ label: 'paid-backfill', elo: 2500, countryId: azerbaijan.id });
+    const paidBackfill = await createPlayer({
+      label: 'paid-backfill',
+      elo: 2500,
+      countryId: azerbaijan.id,
+    });
     const paidTransfer = await prisma.transfer.create({
       data: {
         status: Constants.TransferStatus.TEAM_PENDING,
@@ -648,7 +883,14 @@ async function main() {
         to: { connect: { id: paidSeller.id } },
         target: { connect: { id: paidSellerPlayers[4].id } },
         offers: {
-          create: [{ status: Constants.TransferStatus.TEAM_PENDING, cost: 1000, wages: 100, contractYears: 1 }],
+          create: [
+            {
+              status: Constants.TransferStatus.TEAM_PENDING,
+              cost: 1000,
+              wages: 100,
+              contractYears: 1,
+            },
+          ],
         },
       },
     });
@@ -689,7 +931,10 @@ async function main() {
     assert.equal(expiryRoster.players.length, 5);
     assert.equal(expiryRoster.snipers.length, 1);
     for (const expiredPlayer of [expiryPlayers[1], expiryPlayers[2]]) {
-      const current = await prisma.player.findUnique({ where: { id: expiredPlayer.id }, select: { teamId: true } });
+      const current = await prisma.player.findUnique({
+        where: { id: expiredPlayer.id },
+        select: { teamId: true },
+      });
       assert.equal(current?.teamId, null);
       const expiryTransfer = await prisma.transfer.findFirst({
         where: { playerId: expiredPlayer.id, status: Constants.TransferStatus.EXPIRED },
@@ -704,9 +949,15 @@ async function main() {
 
     // A subsequent healthy-world tick should avoid a per-team repair scan.
     const health = await worldgen.__npcWorldgenTest.loadNpcRosterHealth(true);
-    assert.deepEqual(health.find((team) => team.id === expiryTeam.id), {
-      id: expiryTeam.id, count: 5, snipers: 1,
-    }, 'starter-only projections must still count the sniper');
+    assert.deepEqual(
+      health.find((team) => team.id === expiryTeam.id),
+      {
+        id: expiryTeam.id,
+        count: 5,
+        snipers: 1,
+      },
+      'starter-only projections must still count the sniper',
+    );
     // The bulk scan must agree with the full roster for every NPC team,
     // including empty teams and legacy role spellings.
     const fullTeams = await prisma.team.findMany({
@@ -715,19 +966,41 @@ async function main() {
     });
     for (const team of fullTeams) {
       const starters = team.players.filter((player: any) => player.starter);
-      assert.deepEqual(health.find((entry) => entry.id === team.id), {
-        id: team.id, count: starters.length,
-        snipers: starters.filter((player: any) => isSniper(player.role)).length,
-      });
+      assert.deepEqual(
+        health.find((entry) => entry.id === team.id),
+        {
+          id: team.id,
+          count: starters.length,
+          snipers: starters.filter((player: any) => isSniper(player.role)).length,
+        },
+      );
     }
     const healthyPassStartedAt = Date.now();
     await worldgen.__npcWorldgenTest.processNPCContractExtensions();
     const healthyPassElapsedMs = Date.now() - healthyPassStartedAt;
-    assert.ok(healthyPassElapsedMs < 20_000, `healthy tick should stay bounded (took ${healthyPassElapsedMs}ms)`);
+    assert.ok(
+      healthyPassElapsedMs < 20_000,
+      `healthy tick should stay bounded (took ${healthyPassElapsedMs}ms)`,
+    );
+
+    // Exercise the production-sized weekly scan against the full packaged
+    // market. It may create at most two offers, regardless of candidate count.
+    const benchMarketStartedAt = Date.now();
+    const fullMarketActions = await worldgen.__npcWorldgenTest.processLongBenchedNpcMarket(
+      new Date(date.getTime() + 100 * DAY_MS),
+      { force: true },
+    );
+    const benchMarketElapsedMs = Date.now() - benchMarketStartedAt;
+    assert.ok(fullMarketActions <= 2, 'the full weekly market must respect its global action cap');
+    assert.ok(
+      benchMarketElapsedMs < 20_000,
+      `weekly stale-bench market should stay bounded (took ${benchMarketElapsedMs}ms)`,
+    );
 
     console.log(
       `NPC lifecycle integration passed (targeted intake ${intakeElapsedMs}ms; ` +
-        `healthy tick ${healthyPassElapsedMs}ms; ${createdTeamIds.length} temporary teams).`,
+        `healthy tick ${healthyPassElapsedMs}ms; stale market ${benchMarketElapsedMs}ms; ` +
+        `${createdTeamIds.length} temporary teams).`,
     );
   } finally {
     await DatabaseClient.disconnect().catch(() => Promise.resolve());

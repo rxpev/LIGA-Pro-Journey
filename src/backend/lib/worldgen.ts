@@ -9617,6 +9617,446 @@ function getListedDays(player: { transferListed?: boolean; lastOfferAt?: Date | 
   return Math.max(0, differenceInDays(now, player.lastOfferAt));
 }
 
+const NPC_BENCH_MARKET_OFFER_TYPE = 'BENCH_MARKET';
+const NPC_BENCH_MUTUAL_TERMINATION_OFFER_TYPE = 'MUTUAL_TERMINATION';
+
+type NpcTransferOfferOptions = {
+  targetPlayerId?: number;
+  offerType?: string;
+  costMultiplier?: number;
+};
+
+type NpcBenchMarketOptions = {
+  force?: boolean;
+  maxActions?: number;
+  candidatePlayerIds?: Set<number>;
+  buyerTeamIds?: Set<number>;
+};
+
+function getNpcBenchMarketTierFloor(sellerTier: number, listedDays: number) {
+  const settings = Constants.TransferSettings;
+  if (listedDays >= settings.NPC_BENCH_MARKET_SECOND_TIER_DROP_DAYS) {
+    return Math.max(0, sellerTier - 2);
+  }
+  if (listedDays >= settings.NPC_BENCH_MARKET_FIRST_TIER_DROP_DAYS) {
+    return Math.max(0, sellerTier - 1);
+  }
+  return sellerTier;
+}
+
+function getNpcBenchMarketFeeMultiplier(listedDays: number) {
+  const settings = Constants.TransferSettings;
+  if (listedDays >= settings.NPC_BENCH_MARKET_SECOND_TIER_DROP_DAYS) return 0.25;
+  if (listedDays >= settings.NPC_BENCH_MARKET_FIRST_TIER_DROP_DAYS) return 0.55;
+  return 0.8;
+}
+
+function getNpcBenchMarketListedDays(
+  player: { transferListed?: boolean; lastOfferAt?: Date | null },
+  now: Date,
+  benchStartedAt?: Date | null,
+) {
+  if (benchStartedAt) return Math.max(0, differenceInDays(now, benchStartedAt));
+  return getListedDays(player, now);
+}
+
+function getNpcBenchMarketPriorityScore(params: {
+  listedDays: number;
+  xp?: number | null;
+  attempts: number;
+}) {
+  const settings = Constants.TransferSettings;
+  const marketableXp = Math.max(
+    0,
+    Math.min(settings.NPC_BENCH_MARKET_XP_PRIORITY_CAP, params.xp ?? 0),
+  );
+  return (
+    params.listedDays +
+    marketableXp * settings.NPC_BENCH_MARKET_XP_PRIORITY_WEIGHT_DAYS -
+    params.attempts * settings.NPC_BENCH_MARKET_ATTEMPT_PRIORITY_PENALTY_DAYS
+  );
+}
+
+function getNpcBenchMutualTerminationChance(params: {
+  listedDays: number;
+  failedOffers: number;
+  xp?: number | null;
+  hasStructuralMatch: boolean;
+  contractDaysLeft: number;
+}) {
+  const { listedDays, failedOffers, xp = 0, hasStructuralMatch, contractDaysLeft } = params;
+  const settings = Constants.TransferSettings;
+  if (
+    listedDays < settings.NPC_BENCH_MARKET_RELEASE_DAYS ||
+    contractDaysLeft <= settings.NPC_BENCH_MARKET_RELEASE_CONTRACT_BUFFER_DAYS
+  ) {
+    return 0;
+  }
+  if (
+    hasStructuralMatch &&
+    failedOffers < settings.NPC_BENCH_MARKET_TERMINATION_MIN_FAILED_OFFERS
+  ) {
+    return 0;
+  }
+
+  let chance = hasStructuralMatch
+    ? settings.NPC_BENCH_MARKET_TERMINATION_FAILED_OFFERS_BASE_CHANCE
+    : settings.NPC_BENCH_MARKET_TERMINATION_NO_MATCH_BASE_CHANCE;
+  chance += Math.min(4, Math.max(0, failedOffers - 1));
+  if (listedDays >= 540) chance += 1;
+  if (listedDays >= 730) chance += 1;
+
+  // A weak player has more reason to preserve guaranteed wages and ride out
+  // the deal. A marketable player is slightly likelier to agree to leave.
+  if ((xp ?? 0) < 20) chance -= 2;
+  else if ((xp ?? 0) >= 50) chance += 2;
+  else if ((xp ?? 0) >= 30) chance += 1;
+
+  return Math.max(1, Math.min(settings.NPC_BENCH_MARKET_TERMINATION_MAX_CHANCE, chance));
+}
+
+function findNpcBenchMarketVictim(team: NpcTransferTeam, incoming: any) {
+  if (!ensureTeamFloorAndSniper({ players: team.players as any })) return null;
+
+  const role = normalizeRole(incoming.role);
+  return (
+    (team.players || [])
+      .filter(
+        (player) =>
+          player.starter &&
+          !player.userControlled &&
+          normalizeRole(player.role) === role &&
+          canReplaceStarterWithPlayer({ team, incoming, victim: player }),
+      )
+      .sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0) || a.id - b.id)[0] ?? null
+  );
+}
+
+async function releaseLongBenchedNpc(params: { playerId: number; teamId: number; date: Date }) {
+  const { playerId, teamId, date } = params;
+  const prisma = DatabaseClient.prisma;
+  try {
+    const released = await prisma.$transaction(async (tx) => {
+      const player = await tx.player.findFirst({
+        where: {
+          id: playerId,
+          teamId,
+          starter: false,
+          transferListed: true,
+          userControlled: false,
+          retiredAt: null,
+        },
+        select: { id: true, name: true, wages: true },
+      });
+      if (!player) return null;
+
+      await tx.careerStint.updateMany({
+        where: { playerId, teamId, endedAt: null },
+        data: { endedAt: date },
+      });
+      await tx.player.update({
+        where: { id: playerId },
+        data: {
+          teamId: null,
+          starter: false,
+          transferListed: true,
+          contractEnd: null,
+          lastOfferAt: date,
+          contractBenchStartedAt: null,
+        },
+      });
+      await tx.transfer.create({
+        data: {
+          status: Constants.TransferStatus.EXPIRED,
+          from: { connect: { id: teamId } },
+          target: { connect: { id: playerId } },
+          offers: {
+            create: [
+              {
+                status: Constants.TransferStatus.EXPIRED,
+                cost: 0,
+                wages: player.wages ?? 0,
+                contractYears: 0,
+                offerType: NPC_BENCH_MUTUAL_TERMINATION_OFFER_TYPE,
+              },
+            ],
+          },
+        },
+      });
+      return player;
+    });
+
+    if (!released) return false;
+    await scheduleNpcRetirementCheck(playerId, date);
+    await recalculateTeamCountryIdentity(teamId);
+    Engine.Runtime.Instance.log.info(
+      'NPC stale-bench release: %s left teamId=%d by mutual termination',
+      released.name,
+      teamId,
+    );
+    return true;
+  } catch (error) {
+    Engine.Runtime.Instance.log.debug(
+      'NPC stale-bench release skipped for player %d: %s',
+      playerId,
+      (error as Error).message,
+    );
+    return false;
+  }
+}
+
+/**
+ * A bounded weekly lane for genuinely stale NPC bench players. Normal daily
+ * recruitment remains unchanged; this lane merely prevents free-agent-first
+ * market ticks from starving listed players indefinitely.
+ */
+async function processLongBenchedNpcMarket(now: Date, options: NpcBenchMarketOptions = {}) {
+  const settings = Constants.TransferSettings;
+  const seasonStart = startOfDay(new Date(Constants.NewSaveSeasonStartDate));
+  const seasonDay = differenceInDays(startOfDay(now), seasonStart);
+  if (!options.force && ((seasonDay % 7) + 7) % 7 !== 0) return 0;
+
+  const maxActions = Math.max(
+    0,
+    options.maxActions ?? settings.NPC_BENCH_MARKET_MAX_WEEKLY_ACTIONS,
+  );
+  if (maxActions === 0) return 0;
+
+  const prisma = DatabaseClient.prisma;
+  const minimumBenchDate = subDays(now, settings.NPC_BENCH_MARKET_MIN_DAYS);
+  const candidateIdFilter = options.candidatePlayerIds?.size
+    ? { id: { in: [...options.candidatePlayerIds] } }
+    : {};
+  const staleStints = await prisma.careerStint.findMany({
+    where: {
+      starter: false,
+      endedAt: null,
+      startedAt: { lte: minimumBenchDate },
+      player: {
+        ...candidateIdFilter,
+        teamId: { not: null },
+        starter: false,
+        transferListed: true,
+        userControlled: false,
+        retiredAt: null,
+        team: { profile: null, parentTeamId: null },
+        transfers: { none: { status: Constants.TransferStatus.TEAM_PENDING } },
+      },
+    },
+    select: { playerId: true, startedAt: true },
+    orderBy: [{ startedAt: 'asc' }, { playerId: 'asc' }],
+    take: settings.NPC_BENCH_MARKET_CANDIDATE_LIMIT,
+  });
+  if (!staleStints.length) return 0;
+
+  const benchStartedByPlayer = new Map(
+    staleStints.map((stint) => [stint.playerId, stint.startedAt]),
+  );
+  const candidates = await prisma.player.findMany({
+    where: { id: { in: staleStints.map((stint) => stint.playerId) } },
+    include: {
+      country: { include: { continent: true } },
+      team: { include: NPC_TRANSFER_TEAM_INCLUDE },
+    },
+    orderBy: { id: 'asc' },
+  });
+  // Transfer has no game-date column. Its scheduled parse entry is the stable
+  // in-world timestamp used to prevent rejected offers being retried weekly.
+  const previousMarketTransfers = await prisma.transfer.findMany({
+    where: {
+      playerId: { in: candidates.map((player) => player.id) },
+      offers: { some: { offerType: NPC_BENCH_MARKET_OFFER_TYPE } },
+    },
+    select: { id: true, playerId: true, status: true },
+  });
+  const transferByPayload = new Map(
+    previousMarketTransfers.map((transfer) => [String(transfer.id), transfer]),
+  );
+  const marketAttemptEntries: Array<{ payload: string | null; date: Date }> = [];
+  const previousTransferPayloads = [...transferByPayload.keys()];
+  for (let offset = 0; offset < previousTransferPayloads.length; offset += 500) {
+    marketAttemptEntries.push(
+      ...(await prisma.calendar.findMany({
+        where: {
+          type: Constants.CalendarEntry.TRANSFER_PARSE,
+          payload: { in: previousTransferPayloads.slice(offset, offset + 500) },
+        },
+        select: { payload: true, date: true },
+      })),
+    );
+  }
+
+  const attemptCountByPlayer = new Map<number, number>();
+  const failedOfferCountByPlayer = new Map<number, number>();
+  const playersOnCooldown = new Set<number>();
+  const retryCutoff = subDays(now, settings.NPC_BENCH_MARKET_PLAYER_RETRY_DAYS);
+  for (const entry of marketAttemptEntries) {
+    if (!entry.payload) continue;
+    const transfer = transferByPayload.get(entry.payload);
+    const benchStartedAt = transfer && benchStartedByPlayer.get(transfer.playerId);
+    // A successful move from an earlier bench spell must not penalize a player
+    // who was later benched again by an unrelated roster change.
+    if (!transfer || !benchStartedAt || entry.date < benchStartedAt) continue;
+
+    attemptCountByPlayer.set(
+      transfer.playerId,
+      (attemptCountByPlayer.get(transfer.playerId) ?? 0) + 1,
+    );
+    if (
+      transfer.status === Constants.TransferStatus.TEAM_REJECTED ||
+      transfer.status === Constants.TransferStatus.PLAYER_REJECTED
+    ) {
+      failedOfferCountByPlayer.set(
+        transfer.playerId,
+        (failedOfferCountByPlayer.get(transfer.playerId) ?? 0) + 1,
+      );
+    }
+    if (entry.date >= retryCutoff) playersOnCooldown.add(transfer.playerId);
+  }
+
+  // Age keeps persistent cases moving, XP represents outside demand, and a
+  // rejected offer costs roughly four months of priority rather than putting
+  // the player behind every untouched low-level reserve indefinitely.
+  candidates.sort((a, b) => {
+    const aStarted = benchStartedByPlayer.get(a.id) ?? now;
+    const bStarted = benchStartedByPlayer.get(b.id) ?? now;
+    const aListedDays = Math.max(0, differenceInDays(now, aStarted));
+    const bListedDays = Math.max(0, differenceInDays(now, bStarted));
+    const scoreDiff =
+      getNpcBenchMarketPriorityScore({
+        listedDays: bListedDays,
+        xp: b.xp,
+        attempts: attemptCountByPlayer.get(b.id) ?? 0,
+      }) -
+      getNpcBenchMarketPriorityScore({
+        listedDays: aListedDays,
+        xp: a.xp,
+        attempts: attemptCountByPlayer.get(a.id) ?? 0,
+      });
+    return scoreDiff || aStarted.getTime() - bStarted.getTime() || b.xp - a.xp || a.id - b.id;
+  });
+
+  const buyerIdFilter = options.buyerTeamIds?.size ? { id: { in: [...options.buyerTeamIds] } } : {};
+  const buyers = await prisma.team.findMany({
+    where: { ...buyerIdFilter, profile: null, parentTeamId: null },
+    include: NPC_TRANSFER_TEAM_INCLUDE,
+    orderBy: { id: 'asc' },
+  });
+  if (!buyers.length) return 0;
+
+  const recentBuyerStints = await prisma.careerStint.findMany({
+    where: {
+      teamId: { in: buyers.map((team) => team.id) },
+      starter: true,
+      isTrial: false,
+      startedAt: { gte: subDays(now, settings.NPC_BENCH_MARKET_BUYER_COOLDOWN_DAYS) },
+    },
+    select: { teamId: true },
+  });
+  const buyersOnCooldown = new Set(recentBuyerStints.map((stint) => stint.teamId));
+  const sellerIds = [...new Set(candidates.map((player) => player.teamId!))];
+  const recentSellerExits = await prisma.careerStint.findMany({
+    where: {
+      teamId: { in: sellerIds },
+      starter: false,
+      endedAt: { gte: subDays(now, settings.NPC_BENCH_MARKET_SELLER_COOLDOWN_DAYS) },
+    },
+    select: { teamId: true },
+  });
+  const sellersOnCooldown = new Set(recentSellerExits.map((stint) => stint.teamId));
+
+  let actions = 0;
+  let offerAttempts = 0;
+  let terminationRolls = 0;
+  const usedBuyerIds = new Set<number>();
+  const usedSellerIds = new Set<number>();
+
+  for (const player of candidates) {
+    if (actions >= maxActions) break;
+    const seller = player.team;
+    const benchStartedAt = benchStartedByPlayer.get(player.id);
+    if (!seller || !benchStartedAt || player.teamId == null) continue;
+    if (playersOnCooldown.has(player.id) || sellersOnCooldown.has(seller.id)) continue;
+    if (usedSellerIds.has(seller.id)) continue;
+
+    const listedDays = Math.max(0, differenceInDays(now, benchStartedAt));
+    const tierFloor = getNpcBenchMarketTierFloor(seller.tier ?? 0, listedDays);
+    const structuralMatches = buyers
+      .filter((buyer) => buyer.id !== seller.id)
+      .filter((buyer) => (buyer.tier ?? 0) >= tierFloor)
+      .map((buyer) => ({ buyer, victim: findNpcBenchMarketVictim(buyer, player) }))
+      .filter((match) => Boolean(match.victim))
+      .map((match) => {
+        const victim = match.victim!;
+        const tierDistance = Math.abs((match.buyer.tier ?? 0) - (seller.tier ?? 0));
+        const sameFederation =
+          match.buyer.competitionFederationId != null &&
+          match.buyer.competitionFederationId === seller.competitionFederationId;
+        const compatibility = getNpcTransferCompatibilityScore(match.buyer, player);
+        return {
+          buyer: match.buyer,
+          victim,
+          score:
+            (match.buyer.tier ?? 0) * 20 -
+            tierDistance * 18 +
+            Math.max(-20, Math.min(80, compatibility)) +
+            ((player.xp ?? 0) - (victim.xp ?? 0)) * 3 +
+            (sameFederation ? 18 : 0) +
+            (matchesTeamCountryPreference(match.buyer, player) ? 24 : 0),
+        };
+      })
+      .sort((a, b) => b.score - a.score || a.buyer.id - b.buyer.id);
+
+    const contractDaysLeft = player.contractEnd ? differenceInDays(player.contractEnd, now) : 0;
+    const terminationChance = getNpcBenchMutualTerminationChance({
+      listedDays,
+      failedOffers: failedOfferCountByPlayer.get(player.id) ?? 0,
+      xp: player.xp,
+      hasStructuralMatch: structuralMatches.length > 0,
+      contractDaysLeft,
+    });
+    // Do not roll against the entire stale population. Even a 1% individual
+    // chance becomes near-certain when evaluated hundreds of times per week.
+    if (
+      terminationChance > 0 &&
+      terminationRolls < settings.NPC_BENCH_MARKET_MAX_WEEKLY_TERMINATION_ROLLS
+    ) {
+      terminationRolls += 1;
+      if (
+        Chance.rollD2(terminationChance) &&
+        (await releaseLongBenchedNpc({ playerId: player.id, teamId: seller.id, date: now }))
+      ) {
+        actions += 1;
+        usedSellerIds.add(seller.id);
+        continue;
+      }
+    }
+
+    const availableMatches = structuralMatches.filter(
+      (match) => !buyersOnCooldown.has(match.buyer.id) && !usedBuyerIds.has(match.buyer.id),
+    );
+    let created = false;
+    for (const match of availableMatches.slice(0, 3)) {
+      if (offerAttempts >= maxActions * 4) break;
+      offerAttempts += 1;
+      const transfer = await sendTransferOffer(match.buyer, seller, {
+        targetPlayerId: player.id,
+        offerType: NPC_BENCH_MARKET_OFFER_TYPE,
+        costMultiplier: getNpcBenchMarketFeeMultiplier(listedDays),
+      });
+      if (!transfer) continue;
+      actions += 1;
+      usedBuyerIds.add(match.buyer.id);
+      usedSellerIds.add(seller.id);
+      created = true;
+      break;
+    }
+    if (created) continue;
+  }
+
+  return actions;
+}
+
 // Read the roster as a flat table instead of hydrating a players relation for
 // every team. Keep role normalization in JS for legacy save compatibility.
 // This is a fresh snapshot per sweep, not a cross-day cache: transfers, user
@@ -10530,13 +10970,18 @@ export async function sendNPCTransferOffer(
     callback(),
 ) {
   await measure('npc-contracts-and-roster-repair', () => processNPCContractExtensions());
+  const transferProfile = await DatabaseClient.prisma.profile.findFirst({
+    select: { date: true, teamId: true },
+  });
+  const now = transferProfile?.date ?? new Date();
   await measure('user-academy-promotion', async () => {
-    const profile = await DatabaseClient.prisma.profile.findFirst({ select: { date: true } });
-    await processUserAcademyPromotion(profile?.date ?? new Date());
+    await processUserAcademyPromotion(now);
   });
   await measure('npc-academy-promotions', async () => {
-    const profile = await DatabaseClient.prisma.profile.findFirst({ select: { date: true } });
-    await processNPCAcademyPromotions(profile?.date ?? new Date());
+    await processNPCAcademyPromotions(now);
+  });
+  await measure('npc-stale-bench-market', async () => {
+    await processLongBenchedNpcMarket(now);
   });
   await measure('npc-retirement-scheduling', () => scheduleExistingNpcFreeAgentRetirementChecks());
 
@@ -10544,16 +10989,13 @@ export async function sendNPCTransferOffer(
     return Promise.resolve();
   }
 
-  const profile = await DatabaseClient.prisma.profile.findFirst();
-  const now = profile?.date || new Date();
-
   const tierSlug = Chance.pluck(Constants.Prestige, Constants.TransferSettings.PBX_NPC_TIER);
   const tierIdx = Constants.Prestige.findIndex((p) => p === tierSlug);
 
   const buyers = await DatabaseClient.prisma.team.findMany({
     where: {
       tier: tierIdx,
-      OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
+      OR: [{ profile: null }, ...(transferProfile?.teamId ? [{ id: transferProfile.teamId }] : [])],
     },
     include: NPC_TRANSFER_TEAM_INCLUDE,
   });
@@ -10571,7 +11013,7 @@ export async function sendNPCTransferOffer(
     where: {
       id: { not: from.id },
       tier: { lte: from.tier },
-      OR: [{ profile: null }, ...(profile?.teamId ? [{ id: profile.teamId }] : [])],
+      OR: [{ profile: null }, ...(transferProfile?.teamId ? [{ id: transferProfile.teamId }] : [])],
     },
     include: NPC_TRANSFER_TEAM_INCLUDE,
   });
@@ -10641,7 +11083,11 @@ export async function sendNPCTransferOffer(
   return sendTransferOffer(from, fallbackTo);
 }
 
-export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTeam) {
+export async function sendTransferOffer(
+  from: NpcTransferTeam,
+  to: NpcTransferTeam,
+  options: NpcTransferOfferOptions = {},
+) {
   if (!from || !to || from.id === to.id) {
     return Promise.resolve();
   }
@@ -10653,6 +11099,7 @@ export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTe
 
   const preCandidates = (to.players || [])
     .filter((player) => player.id !== profile.playerId)
+    .filter((player) => options.targetPlayerId == null || player.id === options.targetPlayerId)
     .filter((player) => isNpcTransferCompatible(from, player))
     .filter(
       (player) => !from.parentTeamId || isAcademyAgeMoveAllowed(player.age, from.players as any),
@@ -10688,8 +11135,21 @@ export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTe
       );
     });
 
+  // A player can be reached by the normal and stale-bench lanes on the same
+  // day. Keep a single live negotiation instead of creating duplicate bids.
+  const pendingTargets = preCandidates.length
+    ? await DatabaseClient.prisma.transfer.findMany({
+        where: {
+          playerId: { in: preCandidates.map((player) => player.id) },
+          status: Constants.TransferStatus.TEAM_PENDING,
+        },
+        select: { playerId: true },
+      })
+    : [];
+  const pendingPlayerIds = new Set(pendingTargets.map((transfer) => transfer.playerId));
+
   const candidates: typeof preCandidates = [];
-  for (const player of preCandidates) {
+  for (const player of preCandidates.filter((candidate) => !pendingPlayerIds.has(candidate.id))) {
     // destination must keep at least 5 players and at least one sniper after benching/replacement
     const role = normalizeRole(player.role);
     const victim = await selectBenchVictim({
@@ -10820,7 +11280,7 @@ export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTe
     return Promise.resolve();
   }
 
-  const offerPercent = random(95, 115) / 100;
+  const offerPercent = (random(95, 115) / 100) * (options.costMultiplier ?? 1);
   const cost = Math.max(0, Math.round((target.cost || 0) * offerPercent));
   const wages = Math.max(0, Math.round(((target.wages || 0) * random(95, 120)) / 100));
   const contractYears = getTierContractYears(from.tier);
@@ -10838,6 +11298,7 @@ export async function sendTransferOffer(from: NpcTransferTeam, to: NpcTransferTe
             cost,
             wages,
             contractYears,
+            offerType: options.offerType ?? 'PERMANENT',
           },
         ],
       },
@@ -10953,6 +11414,22 @@ export async function onTransferParse(entry: Calendar) {
   const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
   if (!profile) return Promise.resolve();
 
+  const isBenchMarketOffer = offer.offerType === NPC_BENCH_MARKET_OFFER_TYPE;
+  const activeBenchStint = isBenchMarketOffer
+    ? await DatabaseClient.prisma.careerStint.findFirst({
+        where: {
+          playerId: transfer.target.id,
+          teamId: transfer.to.id,
+          starter: false,
+          endedAt: null,
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { startedAt: true },
+      })
+    : null;
+  const listedDays = isBenchMarketOffer
+    ? getNpcBenchMarketListedDays(transfer.target as any, profile.date, activeBenchStint?.startedAt)
+    : getListedDays(transfer.target as any, profile.date);
   let teamAcceptPbx = 60;
   if (transfer.target.transferListed) teamAcceptPbx += 20;
   const toElo = transfer.to.elo || 0;
@@ -10960,6 +11437,11 @@ export async function onTransferParse(entry: Calendar) {
   if (toElo > fromElo) {
     teamAcceptPbx -= Constants.TransferSettings.PBX_NPC_SELLING_TEAM_PERFORMANCE_DAMPENER;
   }
+  // Apply stale-bench floors after normal selling resistance. Otherwise the
+  // performance dampener silently turns a 92% year-old listing into 72%.
+  if (isBenchMarketOffer && listedDays >= 90) teamAcceptPbx = Math.max(teamAcceptPbx, 80);
+  if (isBenchMarketOffer && listedDays >= 180) teamAcceptPbx = Math.max(teamAcceptPbx, 85);
+  if (isBenchMarketOffer && listedDays >= 365) teamAcceptPbx = Math.max(teamAcceptPbx, 92);
 
   if (!Chance.rollD2(Math.max(5, Math.min(95, teamAcceptPbx)))) {
     await DatabaseClient.prisma.transfer.update({
@@ -10982,7 +11464,9 @@ export async function onTransferParse(entry: Calendar) {
   if (matchesTeamCountryPreference(transfer.from as any, transfer.target as any))
     playerAcceptPbx += 10;
 
-  const listedDays = getListedDays(transfer.target as any, profile.date);
+  if (isBenchMarketOffer && listedDays >= 90) playerAcceptPbx = Math.max(playerAcceptPbx, 80);
+  if (isBenchMarketOffer && listedDays >= 180) playerAcceptPbx = Math.max(playerAcceptPbx, 88);
+  if (isBenchMarketOffer && listedDays >= 365) playerAcceptPbx = Math.max(playerAcceptPbx, 92);
   const lowerTierOffer = transfer.from.tier < transfer.to.tier;
   if (lowerTierOffer && listedDays >= 90) {
     playerAcceptPbx = Math.max(playerAcceptPbx, 92);
@@ -12085,9 +12569,13 @@ export async function onNpcRegenIntake(_: Calendar) {
 export const __npcWorldgenTest = {
   parseRegenNamePools,
   createMatchdays,
+  getNpcBenchMarketListedDays,
+  getNpcBenchMarketPriorityScore,
+  getNpcBenchMutualTerminationChance,
   getActiveUserTeamId,
   loadNpcRosterHealth,
   moveNpcPlayerAtomic,
+  processLongBenchedNpcMarket,
   processNPCContractExtensions,
   repairNpcTeamRoster,
   generateNpcRegenIntake,
@@ -12370,7 +12858,10 @@ export async function onCompetitionStart(entry: Calendar) {
       [Constants.FederationSlug.ESPORTS_OCE, 1],
     ];
     const selected = new Map(
-      [...competition.competitors.map((entry) => entry.team), ...teams].map((team) => [team.id, team]),
+      [...competition.competitors.map((entry) => entry.team), ...teams].map((team) => [
+        team.id,
+        team,
+      ]),
     );
     for (const [region, quota] of regionalSlots) {
       const playoff = await DatabaseClient.prisma.competition.findFirst({
@@ -12405,8 +12896,7 @@ export async function onCompetitionStart(entry: Calendar) {
   // RMR open qualifiers carry every eligible entrant forward. Their seeded
   // sizes are historical field counts and must not truncate the live pool.
   const openQualifierSize =
-    competition.tier.slug.startsWith('major:') &&
-    competition.tier.slug.includes('open-qualifier')
+    competition.tier.slug.startsWith('major:') && competition.tier.slug.includes('open-qualifier')
       ? Math.max(tierSize, competition.competitors.length + teams.length)
       : tierSize;
 
