@@ -481,10 +481,11 @@ export default {
       currentDate?: Date | string;
       countryCode?: string;
       federationSlug?: string;
+      matchType?: 'LAN' | 'ONLINE';
       name?: string;
       page: number;
       pageSize: number;
-      sort: 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team';
+      sort: 'rating' | 'kills' | 'deaths' | 'maps' | 'majorWins' | 'name' | 'team';
       role?: string;
       teamId?: number;
       tierId?: number;
@@ -509,6 +510,7 @@ export default {
           deaths: number;
           assists: number;
           maps: number;
+          majorWins: number;
           mvp?: {
             score: number;
             rating: number;

@@ -160,13 +160,17 @@ type CompetitionHoverCacheEntry = {
   competition: HoverCompetition | null;
   loaded: boolean;
 };
+type NewsPageRange = {
+  end: number;
+  start: number;
+};
 
 const FILTERS: Array<{ label: string; value: NewsTopic }> = [
   { label: 'Top Stories', value: 'ALL' },
   { label: 'Transfers', value: 'TRANSFERS' },
   { label: 'Shorts', value: 'SHORTS' },
 ];
-const NEWS_ITEMS_PER_PAGE = 8;
+const FALLBACK_NEWS_ITEMS_PER_PAGE = 7;
 const playerHoverCache = new Map<number, PlayerHoverCacheEntry>();
 const playerHoverRequests = new Map<number, Promise<PlayerHoverCacheEntry>>();
 const teamHoverCache = new Map<number, TeamHoverCacheEntry>();
@@ -454,8 +458,8 @@ function PlayerHoverCard(props: { children: React.ReactNode; playerId: number })
   return (
     <span className="group relative inline-block" onMouseEnter={load}>
       {props.children}
-      <span className="pointer-events-none absolute top-full left-0 z-50 mt-1 hidden w-[265px] border border-[#607186] bg-[#314253] text-[#b8c7d6] shadow-2xl group-hover:block">
-        <span className="flex h-5 items-center gap-1.5 border-b border-[#607186] bg-[#34485b] px-1.5 text-[10px] font-black text-[#c6d5e4]">
+      <span className="border-base-content/15 bg-base-100 text-base-content pointer-events-none absolute top-full left-0 z-50 mt-1 hidden w-[265px] border shadow-2xl group-hover:block">
+        <span className="border-base-content/15 bg-base-200 flex h-5 items-center gap-1.5 border-b px-1.5 text-[10px] font-black">
           <Flag code={player?.country?.code} className="opacity-100" />
           <span className="truncate">{player?.name || label}</span>
         </span>
@@ -466,18 +470,18 @@ function PlayerHoverCard(props: { children: React.ReactNode; playerId: number })
               className="absolute right-2 bottom-1 size-20 object-contain opacity-15"
             />
           )}
-          <span className="h-full overflow-hidden bg-[#2c3b4a]">
+          <span className="bg-base-200 h-full overflow-hidden">
             <img
               src={player?.avatar || 'resources://avatars/empty.png'}
               className="h-full w-full object-cover object-top"
             />
           </span>
           <span className="relative z-10 grid grid-rows-6 text-[10px]">
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186] px-1.5">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b px-1.5">
               <span>Age:</span>
               <span className="text-right font-bold">{player?.age ?? '-'}</span>
             </span>
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186] px-1.5">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b px-1.5">
               <span>Team:</span>
               <span className="flex min-w-0 items-center justify-end gap-1">
                 <span className="truncate">{teamName}</span>
@@ -488,15 +492,15 @@ function PlayerHoverCard(props: { children: React.ReactNode; playerId: number })
                 )}
               </span>
             </span>
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186] px-1.5">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b px-1.5">
               <span>Rating:</span>
               <span className="text-right font-bold">{formatHoverStat(stats?.rating)}</span>
             </span>
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186] px-1.5">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b px-1.5">
               <span>Maps:</span>
               <span className="text-right font-bold">{stats?.maps ?? '-'}</span>
             </span>
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186] px-1.5">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b px-1.5">
               <span>KPR:</span>
               <span className="text-right font-bold">{formatHoverStat(stats?.kpr)}</span>
             </span>
@@ -739,8 +743,8 @@ function CompetitionHoverCard(props: { children: React.ReactNode; competitionId:
   return (
     <span className="group relative inline-block" onMouseEnter={load}>
       {props.children}
-      <span className="pointer-events-none absolute top-full left-0 z-50 mt-1 hidden w-[250px] border border-[#607186] bg-[#314253] text-[#b8c7d6] shadow-2xl group-hover:block">
-        <span className="flex h-5 items-center gap-1.5 border-b border-[#607186] bg-[#34485b] px-1.5 text-[10px] font-black text-[#c6d5e4]">
+      <span className="border-base-content/15 bg-base-100 text-base-content pointer-events-none absolute top-full left-0 z-50 mt-1 hidden w-[250px] border shadow-2xl group-hover:block">
+        <span className="border-base-content/15 bg-base-200 flex h-5 items-center gap-1.5 border-b px-1.5 text-[10px] font-black">
           <Flag code={flagCode} className="opacity-100" />
           <span className="truncate">{name}</span>
         </span>
@@ -749,11 +753,11 @@ function CompetitionHoverCard(props: { children: React.ReactNode; competitionId:
             <img src={logo} className="size-20 object-contain" />
           </span>
           <span className="relative z-10 grid content-start text-[10px]">
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186]/70 py-1">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b py-1">
               <span>Season:</span>
               <span className="text-right font-bold">{competition?.season ?? '-'}</span>
             </span>
-            <span className="grid grid-cols-[58px_1fr] items-center border-b border-[#607186]/70 py-1">
+            <span className="border-base-content/15 grid grid-cols-[58px_1fr] items-center border-b py-1">
               <span>Date:</span>
               <span className="text-right font-bold">
                 {formatHoverDate(competition?.matches?.[0]?.date)}
@@ -793,6 +797,44 @@ function hasGoldenNewsHue(item?: NewsItem | null) {
   return (
     (Array.isArray(payload.mapUsage) && payload.mapUsage.length > 0) ||
     (Array.isArray(payload.ranking) && payload.ranking.length > 0)
+  );
+}
+
+function NewsSidebarArticle(props: {
+  articleRef?: React.Ref<HTMLElement>;
+  fmtDate: ReturnType<typeof useFormatAppDate>;
+  item: NewsItem;
+  onSelect?: () => void;
+  selected?: boolean;
+}) {
+  return (
+    <article
+      ref={props.articleRef}
+      className={cx(
+        'hover:bg-base-content/5 cursor-pointer border border-transparent p-4',
+        props.selected && 'bg-base-200',
+        hasGoldenNewsHue(props.item) &&
+          'border-warning/30 bg-warning/[0.075] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-warning)_14%,transparent)]',
+      )}
+      onClick={props.onSelect}
+    >
+      <header className="relative pr-4">
+        {!props.item.read && <span className="badge-xxs badge badge-info absolute top-1 right-0" />}
+        <div className="text-base-content/60 mb-2 flex items-center gap-2 text-xs font-bold uppercase">
+          {props.item.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
+          <Flag code={getFlagCode(props.item)} />
+          <span>{getTopicLabel(props.item)}</span>
+          <span className="flex items-center gap-1">
+            <FaClock />
+            {props.fmtDate(toDate(props.item.publishedAt))}
+          </span>
+        </div>
+        <p className="leading-tight font-bold">{props.item.headline}</p>
+      </header>
+      <footer>
+        <p className="line-clamp-2 pt-2 text-sm opacity-70">{props.item.summary}</p>
+      </footer>
+    </article>
   );
 }
 
@@ -1561,6 +1603,13 @@ export default function () {
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [filter, setFilter] = React.useState<NewsTopic>('ALL');
   const [page, setPage] = React.useState(1);
+  const newsListRef = React.useRef<HTMLDivElement | null>(null);
+  const newsMeasurementRef = React.useRef<HTMLDivElement | null>(null);
+  const newsItemMeasureRefs = React.useRef(new Map<number, HTMLElement>());
+  const [measuredPagination, setMeasuredPagination] = React.useState<{
+    itemKey: string;
+    ranges: NewsPageRange[];
+  }>({ itemKey: '', ranges: [] });
   const loadItems = React.useCallback(() => {
     api.news.all().then((data) => {
       setItems(data);
@@ -1634,11 +1683,87 @@ export default function () {
 
     return items.filter((item) => item.topic === filter);
   }, [filter, items]);
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / NEWS_ITEMS_PER_PAGE));
-  const visibleItems = React.useMemo(
-    () => filteredItems.slice((page - 1) * NEWS_ITEMS_PER_PAGE, page * NEWS_ITEMS_PER_PAGE),
-    [filteredItems, page],
+  const filteredItemKey = React.useMemo(
+    () => filteredItems.map((item) => item.id).join(','),
+    [filteredItems],
   );
+  const fallbackPageRanges = React.useMemo<NewsPageRange[]>(() => {
+    const ranges: NewsPageRange[] = [];
+
+    for (let start = 0; start < filteredItems.length; start += FALLBACK_NEWS_ITEMS_PER_PAGE) {
+      ranges.push({
+        end: Math.min(filteredItems.length, start + FALLBACK_NEWS_ITEMS_PER_PAGE),
+        start,
+      });
+    }
+
+    return ranges;
+  }, [filteredItems.length]);
+  const pageRanges =
+    measuredPagination.itemKey === filteredItemKey ? measuredPagination.ranges : fallbackPageRanges;
+  const totalPages = Math.max(1, pageRanges.length);
+  const visibleRange = pageRanges[Math.min(page - 1, pageRanges.length - 1)];
+  const visibleItems = visibleRange
+    ? filteredItems.slice(visibleRange.start, visibleRange.end)
+    : [];
+
+  const measureNewsPagination = React.useCallback(() => {
+    const availableHeight = newsListRef.current?.clientHeight || 0;
+
+    if (!availableHeight || !filteredItems.length) {
+      return;
+    }
+
+    const ranges: NewsPageRange[] = [];
+    let pageHeight = 0;
+    let pageStart = 0;
+
+    for (let index = 0; index < filteredItems.length; index += 1) {
+      const element = newsItemMeasureRefs.current.get(filteredItems[index].id);
+      if (!element) {
+        return;
+      }
+
+      const itemHeight = Math.ceil(element.getBoundingClientRect().height);
+      if (index > pageStart && pageHeight + itemHeight > availableHeight) {
+        ranges.push({ end: index, start: pageStart });
+        pageStart = index;
+        pageHeight = itemHeight;
+      } else {
+        pageHeight += itemHeight;
+      }
+    }
+
+    ranges.push({ end: filteredItems.length, start: pageStart });
+    const nextSignature = ranges.map((range) => `${range.start}:${range.end}`).join('|');
+
+    setMeasuredPagination((current) => {
+      const currentSignature = current.ranges
+        .map((range) => `${range.start}:${range.end}`)
+        .join('|');
+
+      return current.itemKey === filteredItemKey && currentSignature === nextSignature
+        ? current
+        : { itemKey: filteredItemKey, ranges };
+    });
+  }, [filteredItemKey, filteredItems]);
+
+  React.useLayoutEffect(() => {
+    measureNewsPagination();
+
+    const list = newsListRef.current;
+    if (!list) {
+      return;
+    }
+
+    const observer = new ResizeObserver(measureNewsPagination);
+    observer.observe(list);
+    if (newsMeasurementRef.current) {
+      observer.observe(newsMeasurementRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [measureNewsPagination]);
 
   const selected = React.useMemo(
     () => filteredItems.find((item) => item.id === selectedId) || filteredItems[0] || null,
@@ -1681,8 +1806,14 @@ export default function () {
       return;
     }
 
-    setPage(Math.floor(selectedIndex / NEWS_ITEMS_PER_PAGE) + 1);
-  }, [filteredItems, selectedId]);
+    const selectedPage = pageRanges.findIndex(
+      (range) => selectedIndex >= range.start && selectedIndex < range.end,
+    );
+
+    if (selectedPage >= 0) {
+      setPage(selectedPage + 1);
+    }
+  }, [filteredItems, pageRanges, selectedId]);
 
   React.useEffect(() => {
     if (!selected || selected.read) {
@@ -1700,8 +1831,8 @@ export default function () {
   return (
     <div id="news" className="dashboard">
       <main>
-        <section className="divide-base-content/10 divide-y">
-          <header className="bg-base-100 sticky top-0 z-10 p-3">
+        <section className="flex min-h-0 flex-col overflow-hidden">
+          <header className="bg-base-100 shrink-0 p-3">
             <nav className="mode-tabs w-full" aria-label="News category">
               {FILTERS.map((item) => (
                 <button
@@ -1717,56 +1848,57 @@ export default function () {
               ))}
             </nav>
           </header>
-          {!filteredItems.length && (
-            <article className="center h-96 gap-3 px-6 text-center">
-              <FaNewspaper className="text-muted size-20" />
-              <p className="text-muted">No stories yet. Run the generator to test the feed.</p>
-            </article>
-          )}
-          {visibleItems.map((item) => (
-            <article
-              key={`${item.id}__news_item`}
-              className={cx(
-                'hover:bg-base-content/5 cursor-pointer border border-transparent p-4',
-                selected?.id === item.id && 'bg-base-200',
-                hasGoldenNewsHue(item) &&
-                  'border-orange-300/10 bg-orange-500/[0.025] shadow-[inset_0_0_0_1px_rgba(251,146,60,0.03)]',
-              )}
-              onClick={() => setSelectedId(item.id)}
+          <div className="border-base-content/10 relative mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+            <div
+              ref={newsListRef}
+              className="divide-base-content/10 min-h-0 flex-1 divide-y overflow-y-auto"
             >
-              <header className="relative pr-4">
-                {!item.read && (
-                  <span className="badge-xxs badge badge-info absolute top-1 right-0" />
-                )}
-                <div className="text-base-content/60 mb-2 flex items-center gap-2 text-xs font-bold uppercase">
-                  {item.type === 'SHORT' ? <FaBolt /> : <FaNewspaper />}
-                  <Flag code={getFlagCode(item)} />
-                  <span>{getTopicLabel(item)}</span>
-                  <span className="flex items-center gap-1">
-                    <FaClock />
-                    {fmtDate(toDate(item.publishedAt))}
-                  </span>
-                </div>
-                <p className="leading-tight font-bold">{item.headline}</p>
-              </header>
-              <footer>
-                <p className="line-clamp-2 pt-2 text-sm opacity-70">{item.summary}</p>
-              </footer>
-            </article>
-          ))}
-          {filteredItems.length > NEWS_ITEMS_PER_PAGE && (
-            <footer className="border-base-content/10 bg-base-100 sticky bottom-0 z-10 flex items-center justify-between border-t px-3 py-2">
+              {!filteredItems.length && (
+                <article className="center h-full gap-3 px-6 text-center">
+                  <FaNewspaper className="text-muted size-20" />
+                  <p className="text-muted">No stories yet. Run the generator to test the feed.</p>
+                </article>
+              )}
+              {visibleItems.map((item) => (
+                <NewsSidebarArticle
+                  key={`${item.id}__news_item`}
+                  fmtDate={fmtDate}
+                  item={item}
+                  onSelect={() => setSelectedId(item.id)}
+                  selected={selected?.id === item.id}
+                />
+              ))}
+            </div>
+            <div
+              ref={newsMeasurementRef}
+              aria-hidden="true"
+              className="divide-base-content/10 pointer-events-none invisible absolute inset-x-0 top-0 divide-y"
+            >
+              {filteredItems.map((item) => (
+                <NewsSidebarArticle
+                  key={`${item.id}__news_measurement`}
+                  articleRef={(element) => {
+                    if (element) {
+                      newsItemMeasureRefs.current.set(item.id, element);
+                    } else {
+                      newsItemMeasureRefs.current.delete(item.id);
+                    }
+                  }}
+                  fmtDate={fmtDate}
+                  item={item}
+                />
+              ))}
+            </div>
+            <footer className="border-base-content/10 flex shrink-0 items-center justify-between border-t px-3 py-2">
               <Pagination
                 numPage={page}
                 totalPages={totalPages}
                 onChange={setPage}
                 onClick={setPage}
               />
-              <span className="text-base-content/60 font-mono text-xs">
-                {filteredItems.length} Stories
-              </span>
+              <span className="font-mono text-xs">{filteredItems.length} Stories</span>
             </footer>
-          )}
+          </div>
         </section>
         <section className="bg-base-100 overflow-y-auto p-6">
           {!selected && (

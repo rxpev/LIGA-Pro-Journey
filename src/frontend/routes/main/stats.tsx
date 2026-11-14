@@ -81,6 +81,7 @@ type StatsPlayerOption = {
   deaths?: number;
   assists?: number;
   maps?: number;
+  majorWins?: number;
 };
 
 type StatsRouteState = {
@@ -1099,6 +1100,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     React.useState<string>('');
   const [selectedGlobalListTeamId, setSelectedGlobalListTeamId] = React.useState<string>('');
   const [selectedGlobalYear, setSelectedGlobalYear] = React.useState<string>('');
+  const [selectedGlobalMatchType, setSelectedGlobalMatchType] = React.useState<MatchTypeOption>('');
   const [selectedGlobalPlayerName, setSelectedGlobalPlayerName] = React.useState('');
   const [selectedGlobalFederationSlug, setSelectedGlobalFederationSlug] =
     React.useState<string>('');
@@ -1111,7 +1113,7 @@ export default function LeagueStatsConcept(): JSX.Element {
     String(Constants.Prestige.indexOf(Constants.TierSlug.LEAGUE_PRO)),
   );
   const [selectedGlobalPlayerSort, setSelectedGlobalPlayerSort] = React.useState<
-    'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team'
+    'rating' | 'kills' | 'deaths' | 'maps' | 'majorWins' | 'name' | 'team'
   >('rating');
   const [matchPage, setMatchPage] = React.useState(1);
   const [teammatePage, setTeammatePage] = React.useState(1);
@@ -1367,6 +1369,7 @@ export default function LeagueStatsConcept(): JSX.Element {
         currentDate: state.profile?.date,
         countryCode: selectedGlobalCountryCode || undefined,
         federationSlug: selectedGlobalFederationSlug || undefined,
+        matchType: selectedGlobalMatchType || undefined,
         name: selectedGlobalPlayerName || undefined,
         page: globalPlayerPage,
         pageSize: GlobalPlayerPageSize,
@@ -3368,6 +3371,8 @@ export default function LeagueStatsConcept(): JSX.Element {
         ? 'Rifler'
         : '',
     selectedGlobalYear,
+    selectedGlobalMatchType ? MatchTypeLabels[selectedGlobalMatchType] : '',
+    selectedGlobalPlayerSort === 'majorWins' ? 'Major winners' : '',
   ].filter(Boolean);
 
   const renderGlobalPlayersList = () => (
@@ -3755,6 +3760,23 @@ export default function LeagueStatsConcept(): JSX.Element {
                     </select>
                   </fieldset>
                   <fieldset>
+                    <label className="label pb-1 text-xs font-semibold uppercase">Match type</label>
+                    <select
+                      className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
+                      value={selectedGlobalMatchType}
+                      onChange={(event) => {
+                        setSelectedGlobalMatchType(event.target.value as MatchTypeOption);
+                        setGlobalPlayerPage(1);
+                      }}
+                    >
+                      {MatchTypeOptions.map((option) => (
+                        <option key={option || 'any'} value={option}>
+                          {MatchTypeLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                  <fieldset>
                     <label className="label pb-1 text-xs font-semibold uppercase">Status</label>
                     <select
                       className="select select-bordered border-base-content/10 bg-base-200 h-10 w-full rounded-lg font-semibold shadow-none"
@@ -3785,6 +3807,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                             | 'kills'
                             | 'deaths'
                             | 'maps'
+                            | 'majorWins'
                             | 'name'
                             | 'team',
                         );
@@ -3795,6 +3818,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                       <option value="kills">Kills</option>
                       <option value="deaths">Deaths</option>
                       <option value="maps">Maps</option>
+                      <option value="majorWins">Major winners</option>
                       <option value="name">Name</option>
                       <option value="team">Team</option>
                     </select>
@@ -3822,6 +3846,7 @@ export default function LeagueStatsConcept(): JSX.Element {
                       setSelectedGlobalPlayerRole('');
                       setSelectedGlobalListTeamId('');
                       setSelectedGlobalYear('');
+                      setSelectedGlobalMatchType('');
                       setSelectedGlobalTransferStatus('');
                       setSelectedGlobalPlayerSort('rating');
                       setGlobalPlayerPage(1);

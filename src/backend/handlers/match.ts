@@ -22,10 +22,11 @@ type GlobalPlayerStatsParams = {
   currentDate?: Date | string;
   countryCode?: string;
   federationSlug?: string;
+  matchType?: 'LAN' | 'ONLINE';
   name?: string;
   page?: number;
   pageSize?: number;
-  sort?: 'rating' | 'kills' | 'deaths' | 'maps' | 'name' | 'team';
+  sort?: 'rating' | 'kills' | 'deaths' | 'maps' | 'majorWins' | 'name' | 'team';
   role?: string;
   teamId?: number;
   tierId?: number;
@@ -50,6 +51,8 @@ type GlobalPlayerStatsRow = {
   deaths: number;
   assists: number;
   maps: number;
+  majorWins: number;
+  firstMajorWinAt: number | null;
   mvp?: {
     score: number;
     rating: number;
@@ -64,6 +67,29 @@ const globalPlayerStatsCache = new Map<
   { createdAt: number; players: GlobalPlayerStatsRow[] }
 >();
 
+function normalizeRawDateTimestamp(value: bigint | Date | number | string | null): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'bigint' || typeof value === 'number') {
+    const timestamp = Number(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  const numericTimestamp = Number(value);
+  if (Number.isFinite(numericTimestamp)) {
+    return numericTimestamp;
+  }
+
+  const parsedTimestamp = new Date(value).getTime();
+  return Number.isFinite(parsedTimestamp) ? parsedTimestamp : null;
+}
+
 function getGlobalPlayerStatsCacheKey(params: GlobalPlayerStatsParams) {
   return JSON.stringify({
     competitionId: params.competitionId || 0,
@@ -71,6 +97,7 @@ function getGlobalPlayerStatsCacheKey(params: GlobalPlayerStatsParams) {
     currentDate: params.currentDate ? new Date(params.currentDate).toISOString() : '',
     countryCode: params.countryCode || '',
     federationSlug: params.federationSlug || '',
+    matchType: params.matchType || '',
     name: params.name || '',
     role: params.role || '',
     teamId: params.teamId || 0,
@@ -93,6 +120,19 @@ function sortGlobalPlayerStats(
 
     if (sort === 'team') {
       return (a.team?.name || '').localeCompare(b.team?.name || '') || a.name.localeCompare(b.name);
+    }
+
+    if (sort === 'majorWins') {
+      const firstWinDelta =
+        (normalizeRawDateTimestamp(a.firstMajorWinAt) ?? Number.MAX_SAFE_INTEGER) -
+        (normalizeRawDateTimestamp(b.firstMajorWinAt) ?? Number.MAX_SAFE_INTEGER);
+
+      return (
+        b.majorWins - a.majorWins ||
+        firstWinDelta ||
+        b.maps - a.maps ||
+        a.name.localeCompare(b.name)
+      );
     }
 
     return (
@@ -385,6 +425,20 @@ export default function () {
                 matchParams.push(...competitionIds);
               }
 
+              if (params.matchType) {
+                matchWhere.push(`
+                  EXISTS (
+                    SELECT 1
+                    FROM "Competition" AS "MatchCompetition"
+                    INNER JOIN "Tier" AS "MatchTier"
+                      ON "MatchTier"."id" = "MatchCompetition"."tierId"
+                    WHERE "MatchCompetition"."id" = "Match"."competitionId"
+                      AND "MatchTier"."lan" = ?
+                  )
+                `);
+                matchParams.push(params.matchType === 'LAN' ? 1 : 0);
+              }
+
               if (params.year) {
                 const year = Number(params.year);
                 if (Number.isFinite(year)) {
@@ -538,16 +592,14 @@ export default function () {
                     kills: bigint | number;
                     assists: bigint | number;
                     deaths: bigint | number;
-                    maps: bigint | number;
                   }>
                 >(
                   `
                     SELECT
                       "MatchPlayerGameStat"."playerId" AS "playerId",
-                      SUM("MatchPlayerGameStat"."kills") AS "kills",
-                      SUM("MatchPlayerGameStat"."assists") AS "assists",
-                      SUM("MatchPlayerGameStat"."deaths") AS "deaths",
-                      COUNT(*) AS "maps"
+                      "MatchPlayerGameStat"."kills" AS "kills",
+                      "MatchPlayerGameStat"."assists" AS "assists",
+                      "MatchPlayerGameStat"."deaths" AS "deaths"
                     FROM "MatchPlayerGameStat"
                     INNER JOIN "Match" ON "Match"."id" = "MatchPlayerGameStat"."matchId"
                     INNER JOIN "Player" ON "Player"."id" = "MatchPlayerGameStat"."playerId"
@@ -557,7 +609,6 @@ export default function () {
                     LEFT JOIN "Federation" ON "Federation"."id" = ${teamAlias}."competitionFederationId"
                     WHERE ${matchWhere.join(' AND ')}
                       AND ${playerWhere.join(' AND ')}
-                    GROUP BY "MatchPlayerGameStat"."playerId"
                   `,
                   ...seasonTeamParams,
                   ...matchParams,
@@ -567,12 +618,10 @@ export default function () {
                 statRows.forEach((row) => {
                   const candidate = playerById.get(row.playerId);
                   if (!candidate) return;
-                  const maps = Number(row.maps);
                   const kills = Number(row.kills);
                   const assists = Number(row.assists);
                   const deaths = Number(row.deaths);
-
-                  byPlayer.set(row.playerId, {
+                  const player = byPlayer.get(row.playerId) || {
                     id: row.playerId,
                     name: candidate.name,
                     avatar: candidate.avatar,
@@ -590,14 +639,23 @@ export default function () {
                         }
                       : null,
                     rating: 0,
-                    kills,
-                    deaths,
-                    assists,
-                    maps,
-                    ratingMaps: maps,
-                    ratingSum:
-                      maps * Util.getPlayerRating(kills / maps, deaths / maps, assists / maps),
-                  } as GlobalPlayerStatsRow & { ratingMaps: number; ratingSum: number });
+                    kills: 0,
+                    deaths: 0,
+                    assists: 0,
+                    maps: 0,
+                    majorWins: 0,
+                    firstMajorWinAt: null,
+                    ratingMaps: 0,
+                    ratingSum: 0,
+                  };
+
+                  player.kills += kills;
+                  player.deaths += deaths;
+                  player.assists += assists;
+                  player.maps += 1;
+                  player.ratingMaps += 1;
+                  player.ratingSum += Util.getPlayerRating(kills, deaths, assists);
+                  byPlayer.set(row.playerId, player);
                 });
               }
 
@@ -607,6 +665,68 @@ export default function () {
                   rating: ratingMaps ? ratingSum / ratingMaps : 0,
                 }),
               );
+
+              if (players.length) {
+                const playerIds = players.map((player) => player.id);
+                const majorWinRows = await DatabaseClient.prisma.$queryRawUnsafe<
+                  Array<{
+                    firstMajorWinAt: bigint | Date | number | string | null;
+                    majorWins: bigint | number;
+                    playerId: bigint | number;
+                  }>
+                >(
+                  `
+                    SELECT
+                      "CareerStint"."playerId" AS "playerId",
+                      COUNT(DISTINCT "Competition"."id") AS "majorWins",
+                      MIN("FinalMatch"."date") AS "firstMajorWinAt"
+                    FROM "Competition"
+                    INNER JOIN "Tier" ON "Tier"."id" = "Competition"."tierId"
+                    INNER JOIN "CompetitionToTeam" AS "Winner"
+                      ON "Winner"."competitionId" = "Competition"."id"
+                      AND "Winner"."position" = 1
+                      AND "Winner"."teamId" IS NOT NULL
+                    INNER JOIN "Match" AS "FinalMatch"
+                      ON "FinalMatch"."id" = (
+                        SELECT "ChampionshipMatch"."id"
+                        FROM "Match" AS "ChampionshipMatch"
+                        WHERE "ChampionshipMatch"."competitionId" = "Competition"."id"
+                        ORDER BY "ChampionshipMatch"."date" DESC, "ChampionshipMatch"."id" DESC
+                        LIMIT 1
+                      )
+                    INNER JOIN "CareerStint"
+                      ON "CareerStint"."teamId" = "Winner"."teamId"
+                      AND "CareerStint"."starter" = 1
+                      AND "CareerStint"."startedAt" <= "FinalMatch"."date"
+                      AND (
+                        "CareerStint"."endedAt" IS NULL
+                        OR "CareerStint"."endedAt" >= "FinalMatch"."date"
+                      )
+                    WHERE "Competition"."status" = ?
+                      AND "Tier"."slug" = ?
+                      AND "CareerStint"."playerId" IN (${playerIds.map(() => '?').join(',')})
+                    GROUP BY "CareerStint"."playerId"
+                  `,
+                  Constants.CompetitionStatus.COMPLETED,
+                  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+                  ...playerIds,
+                );
+                const majorWinsByPlayerId = new Map(
+                  majorWinRows.map((row) => [
+                    Number(row.playerId),
+                    {
+                      firstMajorWinAt: normalizeRawDateTimestamp(row.firstMajorWinAt),
+                      wins: Number(row.majorWins),
+                    },
+                  ]),
+                );
+
+                players.forEach((player) => {
+                  const majorRecord = majorWinsByPlayerId.get(player.id);
+                  player.majorWins = majorRecord?.wins || 0;
+                  player.firstMajorWinAt = majorRecord?.firstMajorWinAt || null;
+                });
+              }
 
               if (competitionIds.length && players.length) {
                 const playerIds = players.map((player) => player.id);
@@ -683,7 +803,9 @@ export default function () {
               return players;
             })();
 
-      const sorted = sortGlobalPlayerStats(basePlayers, sort);
+      const sortablePlayers =
+        sort === 'majorWins' ? basePlayers.filter((player) => player.majorWins > 0) : basePlayers;
+      const sorted = sortGlobalPlayerStats(sortablePlayers, sort);
       const start = (page - 1) * pageSize;
       const mvpByPlayerId = new Map<
         number,
