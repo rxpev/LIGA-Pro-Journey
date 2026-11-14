@@ -4948,7 +4948,9 @@ async function buildTransferDraft(
   const sellerIsShortEligible = !!seller && transferShortTeamIds.has(seller.id);
   const isShortEligibleTransfer = destinationIsShortEligible || sellerIsShortEligible;
   const latestOffer = transfer.offers[0];
-  const isAcademyPromotion = latestOffer?.offerType === 'ACADEMY_PROMOTION';
+  const isAcademyPromotion =
+    latestOffer?.offerType === 'ACADEMY_PROMOTION' ||
+    latestOffer?.offerType === 'ACADEMY_PROMOTION_USER';
   const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
   const storyDate = isContractExpiry
     ? transfer.target.lastOfferAt || publishedAt
@@ -5143,6 +5145,19 @@ async function buildTransferDraft(
     `${destinationName} replace ${benchedName} with ${targetName}`,
     `${destinationName} bring in ${targetName} as ${benchedName} is benched`,
   ];
+  const academyPromotionTitles = [
+    `${targetName} promoted to ${destinationName}`,
+    `${targetName} makes the leap from ${sellerName} to ${destinationName}`,
+    `${destinationName} welcomes academy standout ${targetName}`,
+    `${targetName} earns promotion to ${destinationName}`,
+    `From ${sellerName} to ${destinationName}: ${targetName} takes the next step`,
+    `${targetName} joins ${destinationName} following ${sellerName} success`,
+    `${destinationName} announces promotion of ${targetName}`,
+    `${targetName} graduates from ${sellerName} to ${destinationName}`,
+    `${targetName} takes the next step with ${destinationName}`,
+    `${sellerName} talent ${targetName} secures ${destinationName} spot`,
+    `${destinationName} promote ${targetName} from their academy`,
+  ];
   const baseTitlePool = destination
     ? [
         ...(isFreeAgentSigning ? playerFirstFreeAgent : playerFirstWithSeller),
@@ -5154,7 +5169,7 @@ async function buildTransferDraft(
     ? pickVariant(replacementTitles, transfer.id)
     : pickVariant(baseTitlePool, transfer.id);
   const headline = isAcademyPromotion
-    ? `${destinationName} promote ${targetName} from their Academy`
+    ? pickVariant(academyPromotionTitles, transfer.id)
     : !canUseReplacementTitle && benchedPlayer && transfer.id % 6 === 0
       ? `${baseHeadline}, ${benchedName} benched`
       : !canUseReplacementTitle && benchedPlayer && transfer.id % 6 === 1
@@ -5259,19 +5274,33 @@ async function buildTransferDraft(
     `${targetLabel} has departed ${sellerLabel}, putting another name into the free-agent pool.`,
     `${sellerLabel} move forward without ${targetLabel} after the player's exit from the roster.`,
   ];
+  const academyPromotionOpeners = [
+    `${targetLabel} has officially been promoted from ${sellerLabel} and will now represent ${destinationLabel}.`,
+    `After an impressive stint in ${sellerLabel}, ${targetLabel} has earned a promotion to ${destinationLabel}.`,
+    `${targetLabel} is taking the next step in their career, moving up from ${sellerLabel} to ${destinationLabel}.`,
+    `${destinationLabel} has officially promoted ${targetLabel} from its ${sellerLabel} roster to the main lineup.`,
+    `Following strong performances in ${sellerLabel}, ${targetLabel} has secured a spot on ${destinationLabel}.`,
+    `From academy prospect to main roster player, ${targetLabel} has officially joined ${destinationLabel}.`,
+    `${targetLabel} has completed their journey through ${sellerLabel} and is now set to compete for ${destinationLabel}.`,
+    `${destinationLabel} has welcomed ${targetLabel} to its starting lineup following a successful spell in ${sellerLabel}.`,
+    `Having proven their potential in ${sellerLabel}, ${targetLabel} has earned the opportunity to represent ${destinationLabel}.`,
+    `${targetLabel} makes the leap to the highest level of the organization, earning a promotion from ${sellerLabel} to ${destinationLabel}.`,
+  ];
   const sourceLine =
-    isSignedFromBench && destination && seller
-      ? pickVariant(signedFromBenchOpeners, transfer.id + 17)
-      : backfillDeparture && destination
-        ? pickVariant(
-            isFreeAgentSigning ? freeAgentBackfillOpeners : transferBackfillOpeners,
-            transfer.id + 17,
-          )
-        : !isFreeAgentSigning && seller
-          ? pickVariant(transferOpeners, transfer.id + 17)
-          : destination
-            ? pickVariant(freeAgentOpeners, transfer.id + 17)
-            : pickVariant(departureOpeners, transfer.id + 17);
+    isAcademyPromotion && destination && seller
+      ? pickVariant(academyPromotionOpeners, transfer.id + 17)
+      : isSignedFromBench && destination && seller
+        ? pickVariant(signedFromBenchOpeners, transfer.id + 17)
+        : backfillDeparture && destination
+          ? pickVariant(
+              isFreeAgentSigning ? freeAgentBackfillOpeners : transferBackfillOpeners,
+              transfer.id + 17,
+            )
+          : !isFreeAgentSigning && seller
+            ? pickVariant(transferOpeners, transfer.id + 17)
+            : destination
+              ? pickVariant(freeAgentOpeners, transfer.id + 17)
+              : pickVariant(departureOpeners, transfer.id + 17);
   const hasAwperLine = Boolean(
     destination && benchedPlayer && isAwper(target) && isAwper(benchedPlayer),
   );
@@ -5322,7 +5351,7 @@ async function buildTransferDraft(
           transfer.id + 31,
         )
       : null;
-  const sourceStatsAddonLine =
+  const standardSourceStatsAddonLine =
     sourceStats && destination
       ? pickVariant(
           {
@@ -5378,6 +5407,24 @@ async function buildTransferDraft(
           transfer.id + 41,
         )
       : null;
+  const sourceStatsAddonLine =
+    isAcademyPromotion && sourceStats && destination
+      ? pickVariant(
+          [
+            `${targetLaterDescriptorSentenceLabel} hopes to continue developing while representing ${destinationLabel}.`,
+            `Now wearing ${destinationLabel}'s jersey, ${targetLaterDescriptorLabel} is looking to take their game to the next level.`,
+            `${targetLaterDescriptorSentenceLabel} aims to build on their progress and reach new heights with ${destinationLabel}.`,
+            `Representing ${destinationLabel} marks a new chapter for ${targetLaterDescriptorLabel}, who is eager to develop further.`,
+            `${targetLaterDescriptorSentenceLabel} will look to sharpen their skills and establish themselves in ${destinationLabel}'s lineup.`,
+            `With a spot on ${destinationLabel} secured, ${targetLaterDescriptorLabel} hopes to continue growing as a player.`,
+            `${targetLaterDescriptorSentenceLabel} is determined to make the most of this opportunity and further improve under ${destinationLabel}'s banner.`,
+            `Having earned their place on ${destinationLabel}, ${targetLaterDescriptorLabel} now sets their sights on reaching their full potential.`,
+            `${targetLaterDescriptorSentenceLabel} enters this new chapter with the ambition of improving further and proving themselves at the highest level.`,
+            `Donning ${destinationLabel}'s jersey for the first time, ${targetLaterDescriptorLabel} hopes to continue their upward trajectory and make a lasting impact.`,
+          ],
+          transfer.id + 41,
+        )
+      : standardSourceStatsAddonLine;
   const sourceStatsParagraph = [statLine, sourceStatsAddonLine].filter(Boolean).join(' ') || null;
   const awperLine = hasAwperLine
     ? pickVariant(
