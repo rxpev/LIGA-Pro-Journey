@@ -7,7 +7,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { addDays, differenceInDays, format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
-import { cx } from '@liga/frontend/lib';
+import { cx, isFreeAgentTransfer } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play, playErrorUpdate } from '@liga/frontend/redux/actions';
 import type { PlayingStatus } from '@liga/frontend/redux/state';
@@ -1101,14 +1101,11 @@ export default function () {
               <table className="table table-fixed">
                 <tbody>
                   {transfers.slice(0, NUM_PREVIOUS).map((transfer) => {
-                    const latestOffer = transfer.offers[0];
                     const isContractExpiry = transfer.status === Constants.TransferStatus.EXPIRED;
-                    const isFreeAgentTransfer =
-                      transfer.status === Constants.TransferStatus.TEAM_ACCEPTED &&
-                      (latestOffer?.cost || 0) === 0;
+                    const isFreeAgentSigning = isFreeAgentTransfer(transfer);
                     const destinationTeam = isContractExpiry ? transfer.from : transfer.to;
                     const isNoTeam =
-                      isFreeAgentTransfer ||
+                      isFreeAgentSigning ||
                       !destinationTeam ||
                       destinationTeam.id == null ||
                       destinationTeam.name?.toLowerCase() === 'no team' ||
