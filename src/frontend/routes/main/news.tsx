@@ -160,17 +160,13 @@ type CompetitionHoverCacheEntry = {
   competition: HoverCompetition | null;
   loaded: boolean;
 };
-type NewsPageRange = {
-  end: number;
-  start: number;
-};
 
 const FILTERS: Array<{ label: string; value: NewsTopic }> = [
   { label: 'Top Stories', value: 'ALL' },
   { label: 'Transfers', value: 'TRANSFERS' },
   { label: 'Shorts', value: 'SHORTS' },
 ];
-const FALLBACK_NEWS_ITEMS_PER_PAGE = 7;
+const NEWS_ITEMS_PER_PAGE = 7;
 const playerHoverCache = new Map<number, PlayerHoverCacheEntry>();
 const playerHoverRequests = new Map<number, Promise<PlayerHoverCacheEntry>>();
 const teamHoverCache = new Map<number, TeamHoverCacheEntry>();
@@ -199,7 +195,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asRelatedTeams(value: unknown): RelatedTeam[] {
-  return Array.isArray(value)
+  const teams = Array.isArray(value)
     ? value
         .filter(isRecord)
         .map((item) => ({
@@ -209,10 +205,12 @@ function asRelatedTeams(value: unknown): RelatedTeam[] {
         }))
         .filter((item) => Number.isFinite(item.id))
     : [];
+
+  return [...new Map(teams.map((team) => [team.id, team])).values()];
 }
 
 function asRelatedPlayers(value: unknown): RelatedPlayer[] {
-  return Array.isArray(value)
+  const players = Array.isArray(value)
     ? value
         .filter(isRecord)
         .map((item) => ({
@@ -223,6 +221,8 @@ function asRelatedPlayers(value: unknown): RelatedPlayer[] {
         }))
         .filter((item) => Number.isFinite(item.id))
     : [];
+
+  return [...new Map(players.map((player) => [player.id, player])).values()];
 }
 
 function asTopPlayerRanking(value: unknown): TopPlayerRankingEntry[] {
@@ -801,7 +801,6 @@ function hasGoldenNewsHue(item?: NewsItem | null) {
 }
 
 function NewsSidebarArticle(props: {
-  articleRef?: React.Ref<HTMLElement>;
   fmtDate: ReturnType<typeof useFormatAppDate>;
   item: NewsItem;
   onSelect?: () => void;
@@ -809,9 +808,8 @@ function NewsSidebarArticle(props: {
 }) {
   return (
     <article
-      ref={props.articleRef}
       className={cx(
-        'hover:bg-base-content/5 cursor-pointer border border-transparent p-4',
+        'hover:bg-base-content/5 min-h-0 cursor-pointer overflow-hidden border border-transparent p-4',
         props.selected && 'bg-base-200',
         hasGoldenNewsHue(props.item) &&
           'border-warning/30 bg-warning/[0.075] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-warning)_14%,transparent)]',
@@ -829,7 +827,7 @@ function NewsSidebarArticle(props: {
             {props.fmtDate(toDate(props.item.publishedAt))}
           </span>
         </div>
-        <p className="leading-tight font-bold">{props.item.headline}</p>
+        <p className="line-clamp-2 leading-tight font-bold">{props.item.headline}</p>
       </header>
       <footer>
         <p className="line-clamp-2 pt-2 text-sm opacity-70">{props.item.summary}</p>
@@ -1603,13 +1601,6 @@ export default function () {
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [filter, setFilter] = React.useState<NewsTopic>('ALL');
   const [page, setPage] = React.useState(1);
-  const newsListRef = React.useRef<HTMLDivElement | null>(null);
-  const newsMeasurementRef = React.useRef<HTMLDivElement | null>(null);
-  const newsItemMeasureRefs = React.useRef(new Map<number, HTMLElement>());
-  const [measuredPagination, setMeasuredPagination] = React.useState<{
-    itemKey: string;
-    ranges: NewsPageRange[];
-  }>({ itemKey: '', ranges: [] });
   const loadItems = React.useCallback(() => {
     api.news.all().then((data) => {
       setItems(data);
@@ -1683,87 +1674,11 @@ export default function () {
 
     return items.filter((item) => item.topic === filter);
   }, [filter, items]);
-  const filteredItemKey = React.useMemo(
-    () => filteredItems.map((item) => item.id).join(','),
-    [filteredItems],
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / NEWS_ITEMS_PER_PAGE));
+  const visibleItems = React.useMemo(
+    () => filteredItems.slice((page - 1) * NEWS_ITEMS_PER_PAGE, page * NEWS_ITEMS_PER_PAGE),
+    [filteredItems, page],
   );
-  const fallbackPageRanges = React.useMemo<NewsPageRange[]>(() => {
-    const ranges: NewsPageRange[] = [];
-
-    for (let start = 0; start < filteredItems.length; start += FALLBACK_NEWS_ITEMS_PER_PAGE) {
-      ranges.push({
-        end: Math.min(filteredItems.length, start + FALLBACK_NEWS_ITEMS_PER_PAGE),
-        start,
-      });
-    }
-
-    return ranges;
-  }, [filteredItems.length]);
-  const pageRanges =
-    measuredPagination.itemKey === filteredItemKey ? measuredPagination.ranges : fallbackPageRanges;
-  const totalPages = Math.max(1, pageRanges.length);
-  const visibleRange = pageRanges[Math.min(page - 1, pageRanges.length - 1)];
-  const visibleItems = visibleRange
-    ? filteredItems.slice(visibleRange.start, visibleRange.end)
-    : [];
-
-  const measureNewsPagination = React.useCallback(() => {
-    const availableHeight = newsListRef.current?.clientHeight || 0;
-
-    if (!availableHeight || !filteredItems.length) {
-      return;
-    }
-
-    const ranges: NewsPageRange[] = [];
-    let pageHeight = 0;
-    let pageStart = 0;
-
-    for (let index = 0; index < filteredItems.length; index += 1) {
-      const element = newsItemMeasureRefs.current.get(filteredItems[index].id);
-      if (!element) {
-        return;
-      }
-
-      const itemHeight = Math.ceil(element.getBoundingClientRect().height);
-      if (index > pageStart && pageHeight + itemHeight > availableHeight) {
-        ranges.push({ end: index, start: pageStart });
-        pageStart = index;
-        pageHeight = itemHeight;
-      } else {
-        pageHeight += itemHeight;
-      }
-    }
-
-    ranges.push({ end: filteredItems.length, start: pageStart });
-    const nextSignature = ranges.map((range) => `${range.start}:${range.end}`).join('|');
-
-    setMeasuredPagination((current) => {
-      const currentSignature = current.ranges
-        .map((range) => `${range.start}:${range.end}`)
-        .join('|');
-
-      return current.itemKey === filteredItemKey && currentSignature === nextSignature
-        ? current
-        : { itemKey: filteredItemKey, ranges };
-    });
-  }, [filteredItemKey, filteredItems]);
-
-  React.useLayoutEffect(() => {
-    measureNewsPagination();
-
-    const list = newsListRef.current;
-    if (!list) {
-      return;
-    }
-
-    const observer = new ResizeObserver(measureNewsPagination);
-    observer.observe(list);
-    if (newsMeasurementRef.current) {
-      observer.observe(newsMeasurementRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [measureNewsPagination]);
 
   const selected = React.useMemo(
     () => filteredItems.find((item) => item.id === selectedId) || filteredItems[0] || null,
@@ -1806,14 +1721,8 @@ export default function () {
       return;
     }
 
-    const selectedPage = pageRanges.findIndex(
-      (range) => selectedIndex >= range.start && selectedIndex < range.end,
-    );
-
-    if (selectedPage >= 0) {
-      setPage(selectedPage + 1);
-    }
-  }, [filteredItems, pageRanges, selectedId]);
+    setPage(Math.floor(selectedIndex / NEWS_ITEMS_PER_PAGE) + 1);
+  }, [filteredItems, selectedId]);
 
   React.useEffect(() => {
     if (!selected || selected.read) {
@@ -1848,13 +1757,10 @@ export default function () {
               ))}
             </nav>
           </header>
-          <div className="border-base-content/10 relative mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
-            <div
-              ref={newsListRef}
-              className="divide-base-content/10 min-h-0 flex-1 divide-y overflow-y-auto"
-            >
+          <div className="border-base-content/10 mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+            <div className="divide-base-content/10 grid min-h-0 flex-1 grid-rows-7 divide-y overflow-hidden">
               {!filteredItems.length && (
-                <article className="center h-full gap-3 px-6 text-center">
+                <article className="center row-span-full h-full gap-3 px-6 text-center">
                   <FaNewspaper className="text-muted size-20" />
                   <p className="text-muted">No stories yet. Run the generator to test the feed.</p>
                 </article>
@@ -1866,26 +1772,6 @@ export default function () {
                   item={item}
                   onSelect={() => setSelectedId(item.id)}
                   selected={selected?.id === item.id}
-                />
-              ))}
-            </div>
-            <div
-              ref={newsMeasurementRef}
-              aria-hidden="true"
-              className="divide-base-content/10 pointer-events-none invisible absolute inset-x-0 top-0 divide-y"
-            >
-              {filteredItems.map((item) => (
-                <NewsSidebarArticle
-                  key={`${item.id}__news_measurement`}
-                  articleRef={(element) => {
-                    if (element) {
-                      newsItemMeasureRefs.current.set(item.id, element);
-                    } else {
-                      newsItemMeasureRefs.current.delete(item.id);
-                    }
-                  }}
-                  fmtDate={fmtDate}
-                  item={item}
                 />
               ))}
             </div>

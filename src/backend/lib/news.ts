@@ -280,6 +280,18 @@ function toRelatedPlayer(player?: {
     : null;
 }
 
+function uniqueRelatedEntities<T extends { id?: number | null }>(entities: Array<T | null>) {
+  const unique = new Map<number, T>();
+
+  entities.forEach((entity) => {
+    if (entity?.id != null && !unique.has(entity.id)) {
+      unique.set(entity.id, entity);
+    }
+  });
+
+  return [...unique.values()];
+}
+
 function getCompetitionFlagCode(competition?: NewsCompetition | null) {
   if (!competition) {
     return null;
@@ -3674,15 +3686,15 @@ async function buildTopPlayersOfYearDraft(
           }),
         )
         .filter(Boolean),
-      relatedTeams: ranking
-        .map((player) =>
+      relatedTeams: uniqueRelatedEntities(
+        ranking.map((player) =>
           toRelatedTeam({
             id: player.teamId,
             name: player.teamName,
             blazon: player.teamBlazon,
           }),
-        )
-        .filter(Boolean),
+        ),
+      ),
       ranking: ranking.map((player, index) => ({
         rank: index + 1,
         playerId: player.playerId,
