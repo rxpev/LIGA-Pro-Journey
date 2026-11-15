@@ -1045,13 +1045,15 @@ export default function TransferModal() {
                     </tr>
                   )}
                   {teamHistory.map((stint) => {
-                    const stintHonors = honors.filter(
-                      (honor) =>
-                        honor.teamId === stint.teamId &&
-                        isWithinStint(honor.date, stint.startedAt, stint.endedAt),
-                    );
+                    const stintHonors = stint.starter
+                      ? honors.filter(
+                          (honor) =>
+                            honor.teamId === stint.teamId &&
+                            isWithinStint(honor.date, stint.startedAt, stint.endedAt),
+                        )
+                      : [];
                     const stintRating =
-                      state.profile?.simulateNpcMatchStats && stint.teamId
+                      state.profile?.simulateNpcMatchStats && stint.teamId && stint.starter
                         ? getRatingSummary(
                             ratingGames,
                             (game) =>

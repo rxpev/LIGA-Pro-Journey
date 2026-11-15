@@ -165,9 +165,13 @@ function formatHoverRating(value: number | null) {
   return value == null || !Number.isFinite(value) ? '-' : value.toFixed(2);
 }
 
-function getStintStats(
+export function getStintStats(
   games: PlayerRatingGame[] | undefined,
-  stint: { endedAt: Date | string | null; startedAt: Date | string },
+  stint: {
+    endedAt: Date | string | null;
+    starter: boolean;
+    startedAt: Date | string;
+  },
   teamId: number,
   now: Date,
 ) {
@@ -175,7 +179,7 @@ function getStintStats(
   const end = stint.endedAt ? new Date(stint.endedAt) : now;
   const startMs = start.getTime();
   const endMs = end.getTime();
-  const stintGames = (games || []).filter((game) => {
+  const stintGames = (stint.starter ? games || [] : []).filter((game) => {
     const gameMs = toMs(game.date);
     return game.teamIds.includes(teamId) && gameMs >= startMs && gameMs <= endMs;
   });
@@ -269,6 +273,27 @@ function isNoTeam(team: TransferTeam | null | undefined) {
   );
 }
 
+function getReleaseEvent(
+  player: RosterPlayer,
+  team: TransferTeam,
+  stint: NonNullable<RosterPlayer['careerStints']>[number],
+): TransferListItem {
+  return {
+    date: new Date(stint.endedAt!),
+    from: toTransferTeam(team),
+    fromBenched: !stint.starter,
+    id: `release_${player.id}_${stint.id}`,
+    player,
+    text: (
+      <>
+        <b>{player.name}</b> parts ways with <b>{team.name}</b>
+      </>
+    ),
+    to: getNoTeamTeam(),
+    toBenched: false,
+  };
+}
+
 export function getCareerTransferEvents(
   players: RosterPlayer[],
   team: TransferTeam,
@@ -318,20 +343,7 @@ export function getCareerTransferEvents(
         ];
 
         if (stint.endedAt && !next) {
-          items.push({
-            date: new Date(stint.endedAt),
-            from: currentTeam,
-            fromBenched: !stint.starter,
-            id: `release_${player.id}_${stint.id}`,
-            player,
-            text: (
-              <>
-                <b>{player.name}</b> parts ways with <b>{team.name}</b>
-              </>
-            ),
-            to: getNoTeamTeam(),
-            toBenched: false,
-          });
+          items.push(getReleaseEvent(player, team, stint));
         }
 
         return items;
@@ -343,7 +355,7 @@ export function getCareerTransferEvents(
         previous.isTrial &&
         !stint.isTrial
       ) {
-        return [
+        const items: TransferListItem[] = [
           {
             date,
             from: currentTeam,
@@ -360,27 +372,12 @@ export function getCareerTransferEvents(
             toBenched: !stint.starter,
           },
         ];
-      }
 
-      // A player can leave a team at the end of their final recorded stint
-      // without a separate No Team stint being stored afterward.
-      if (stint.teamId === team.id && stint.endedAt && !next) {
-        return [
-          {
-            date: new Date(stint.endedAt),
-            from: currentTeam,
-            fromBenched: !stint.starter,
-            id: `release_${player.id}_${stint.id}`,
-            player,
-            text: (
-              <>
-                <b>{player.name}</b> parts ways with <b>{team.name}</b>
-              </>
-            ),
-            to: getNoTeamTeam(),
-            toBenched: false,
-          },
-        ];
+        if (stint.endedAt && !next) {
+          items.push(getReleaseEvent(player, team, stint));
+        }
+
+        return items;
       }
 
       if (previous?.teamId === team.id && stint.teamId !== team.id) {
@@ -414,7 +411,7 @@ export function getCareerTransferEvents(
         previous.starter &&
         !stint.starter
       ) {
-        return [
+        const items: TransferListItem[] = [
           {
             date,
             from: currentTeam,
@@ -430,6 +427,12 @@ export function getCareerTransferEvents(
             toBenched: true,
           },
         ];
+
+        if (stint.endedAt && !next) {
+          items.push(getReleaseEvent(player, team, stint));
+        }
+
+        return items;
       }
 
       if (
@@ -438,7 +441,7 @@ export function getCareerTransferEvents(
         !previous.starter &&
         stint.starter
       ) {
-        return [
+        const items: TransferListItem[] = [
           {
             date,
             from: currentTeam,
@@ -454,6 +457,18 @@ export function getCareerTransferEvents(
             toBenched: false,
           },
         ];
+
+        if (stint.endedAt && !next) {
+          items.push(getReleaseEvent(player, team, stint));
+        }
+
+        return items;
+      }
+
+      // A player can leave a team at the end of their final recorded stint
+      // without a separate No Team stint being stored afterward.
+      if (stint.teamId === team.id && stint.endedAt && !next) {
+        return [getReleaseEvent(player, team, stint)];
       }
 
       return [];
