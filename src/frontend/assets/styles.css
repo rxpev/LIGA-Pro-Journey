@@ -1120,6 +1120,489 @@ meter::-webkit-meter-bar {
   }
 }
 
+/* Team dashboard overview */
+.team-dashboard-overview {
+  @apply bg-base-100 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-5;
+  font-family: inherit;
+}
+
+.team-dashboard-calendar {
+  @apply border-base-content/10 bg-base-200/55 grid min-h-28 shrink-0 grid-cols-[8rem_repeat(6,minmax(0,1fr))] overflow-hidden rounded-lg border;
+}
+
+.team-dashboard-advance {
+  @apply bg-base-300/80 hover:bg-base-300 text-base-content flex flex-col items-center justify-center gap-2 border-0 p-3 text-xs font-bold tracking-wide uppercase transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.team-dashboard-advance svg {
+  @apply text-3xl;
+}
+
+.team-dashboard-advance.is-stop {
+  @apply bg-error/15 text-error hover:bg-error/25;
+}
+
+.team-dashboard-day {
+  @apply border-base-content/10 flex min-w-0 items-center justify-start gap-3 border-l px-4 py-3;
+}
+
+.team-dashboard-day.is-today {
+  background-image:
+    linear-gradient(var(--color-primary), var(--color-primary)),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-primary) 18%, transparent),
+      transparent 50%
+    );
+  background-size:
+    100% 2px,
+    100% 100%;
+  background-position: top, top;
+  background-repeat: no-repeat;
+}
+
+.team-dashboard-day-icon {
+  @apply text-base-content/55 grid size-12 shrink-0 place-items-center;
+}
+
+.team-dashboard-day-icon img {
+  @apply size-11 object-contain;
+}
+
+.team-dashboard-day-icon svg {
+  @apply text-3xl;
+}
+
+.team-dashboard-day-kicker {
+  @apply text-base-content/65 truncate text-sm leading-none font-bold tracking-wide uppercase;
+}
+
+.team-dashboard-day.is-today .team-dashboard-day-kicker {
+  @apply text-primary;
+}
+
+.team-dashboard-day-number {
+  @apply mt-1 text-3xl leading-none font-bold;
+}
+
+.team-dashboard-day-label {
+  @apply text-base-content/65 mt-1 truncate text-sm font-medium;
+}
+
+.team-dashboard-grid {
+  @apply grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(20rem,26%)] items-stretch gap-4;
+}
+
+.team-dashboard-main-column,
+.team-dashboard-side-column {
+  @apply flex min-h-0 min-w-0 flex-col gap-4;
+}
+
+.team-dashboard-recent-matches {
+  @apply flex min-h-64 flex-1 flex-col;
+}
+
+.team-dashboard-recent-matches .team-dashboard-match-list {
+  @apply flex flex-1 flex-col;
+}
+
+.team-dashboard-recent-matches .team-dashboard-match-list > article {
+  @apply flex-1;
+}
+
+.team-dashboard-side-column > .team-dashboard-panel:last-child {
+  @apply flex flex-1 flex-col;
+}
+
+.team-dashboard-side-column > .team-dashboard-panel:last-child .team-dashboard-news-list {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+}
+
+.team-dashboard-side-column > .team-dashboard-panel:last-child .team-dashboard-list-empty {
+  @apply flex-1;
+}
+
+.team-dashboard-panel {
+  @apply border-base-content/10 bg-base-200/45 overflow-hidden rounded-lg border;
+}
+
+.team-dashboard-next-match {
+  @apply relative isolate;
+}
+
+.team-dashboard-map-background {
+  @apply pointer-events-none absolute inset-0 h-full w-full object-cover;
+  opacity: 0.52;
+  filter: blur(3px) saturate(0.72);
+  transform: scale(1.015);
+}
+
+.team-dashboard-selected-map-background {
+  filter: blur(3px) saturate(0.72);
+  transform: scale(1.015);
+}
+
+.team-dashboard-map-overlay {
+  @apply pointer-events-none absolute inset-0;
+  background: linear-gradient(
+    90deg,
+    rgb(8 23 32 / 55%) 0%,
+    rgb(8 23 32 / 68%) 50%,
+    rgb(8 23 32 / 55%) 100%
+  );
+}
+
+.team-dashboard-next-match > :not(.team-dashboard-map-background, .team-dashboard-map-overlay) {
+  @apply relative z-10;
+}
+
+.team-dashboard-panel-header {
+  @apply border-base-content/10 flex min-h-12 items-center justify-between gap-3 border-b px-4 py-3;
+}
+
+.team-dashboard-panel-header.is-borderless {
+  @apply border-b-0;
+}
+
+.team-dashboard-panel-header h2 {
+  @apply flex items-center gap-2 text-base font-bold;
+}
+
+.team-dashboard-panel-header h2 svg {
+  @apply text-base-content/55;
+}
+
+.team-dashboard-panel-header > a,
+.team-dashboard-panel-header > button {
+  @apply text-base-content/65 hover:text-base-content flex shrink-0 items-center gap-1 text-xs font-semibold transition-colors;
+}
+
+.team-dashboard-panel-header > a svg,
+.team-dashboard-panel-header > button svg {
+  @apply text-[0.55rem];
+}
+
+.team-dashboard-date-pill {
+  @apply border-base-content/20 bg-base-300/30 rounded-full border px-3 py-1 text-xs font-bold tracking-wide uppercase;
+}
+
+.team-dashboard-date-pill.is-today {
+  @apply border-primary text-primary bg-primary/5;
+}
+
+.team-dashboard-match-content {
+  @apply relative grid min-h-88 grid-cols-[minmax(0,1fr)_minmax(12rem,0.8fr)_minmax(0,1fr)] items-center gap-4 px-7 pt-6 pb-20;
+}
+
+.team-dashboard-team {
+  @apply flex min-w-0 flex-col items-center text-center;
+}
+
+.team-dashboard-team > img {
+  @apply mb-3 size-28 object-contain;
+}
+
+.team-dashboard-team h3 {
+  @apply max-w-full truncate text-2xl font-bold;
+}
+
+.team-dashboard-team p {
+  @apply text-base-content/65 mt-1 text-xs font-medium;
+}
+
+.team-dashboard-team > ul,
+.team-dashboard-team > div:last-child {
+  @apply mt-2;
+}
+
+.team-dashboard-match-meta {
+  @apply flex min-w-0 flex-col items-center text-center;
+}
+
+.team-dashboard-event-logo {
+  @apply mb-3 size-32 object-contain;
+}
+
+.team-dashboard-match-meta strong {
+  @apply max-w-full text-lg leading-tight font-bold;
+}
+
+.team-dashboard-match-meta > span {
+  @apply text-base-content/65 mt-2 text-xs;
+}
+
+.team-dashboard-match-meta small {
+  @apply border-primary bg-primary/10 text-primary mt-3 rounded border px-2 py-0.5 text-xs font-bold uppercase;
+}
+
+.team-dashboard-live {
+  @apply text-error absolute top-1 left-1/2 flex -translate-x-1/2 items-center gap-1 text-xs font-bold uppercase;
+}
+
+.team-dashboard-live i {
+  @apply bg-error size-1.5 rounded-full;
+}
+
+.team-dashboard-match-actions {
+  @apply absolute bottom-7 left-1/2 flex -translate-x-1/2 gap-2;
+}
+
+.team-dashboard-setup-button {
+  @apply border-base-content/10 bg-base-300/65 hover:bg-base-300 h-11 min-h-11 w-11 rounded-md border p-0;
+}
+
+.team-dashboard-play-button {
+  @apply h-11 min-h-11 w-52 rounded-md text-sm font-bold;
+}
+
+.team-dashboard-empty-match {
+  @apply text-base-content/55 flex min-h-64 flex-col items-center justify-center gap-2;
+}
+
+.team-dashboard-empty-match svg {
+  @apply text-3xl;
+}
+
+.team-dashboard-empty-match strong {
+  @apply text-base-content text-base;
+}
+
+.team-dashboard-empty-match span {
+  @apply text-xs;
+}
+
+.team-dashboard-match-table-header,
+.team-dashboard-match-list > article {
+  @apply grid grid-cols-[4.5rem_minmax(15rem,1.25fr)_minmax(9rem,0.8fr)_5rem] items-center gap-3 px-4;
+}
+
+.team-dashboard-match-table-header {
+  @apply border-base-content/10 min-h-9 border-b text-xs font-bold text-[#75899d] uppercase;
+}
+
+.team-dashboard-match-list > article {
+  @apply border-base-content/10 min-h-14 border-b py-2 text-sm;
+}
+
+.team-dashboard-match-list > article:last-child {
+  @apply border-b-0;
+}
+
+.team-dashboard-match-list > article > time,
+.team-dashboard-match-list > article > span {
+  @apply text-base-content/65 truncate;
+}
+
+.team-dashboard-result {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.team-dashboard-result img {
+  @apply size-6 shrink-0 object-contain;
+}
+
+.team-dashboard-result strong {
+  @apply truncate;
+}
+
+.team-dashboard-result b {
+  @apply shrink-0;
+}
+
+.team-dashboard-result-badge {
+  @apply badge badge-sm inline-flex shrink-0 items-center justify-center border-0 px-2 text-xs font-semibold text-white;
+}
+
+.team-dashboard-result-badge.is-win {
+  @apply bg-success/80;
+}
+
+.team-dashboard-result-badge.is-draw {
+  @apply bg-warning/80;
+}
+
+.team-dashboard-result-badge.is-loss {
+  @apply bg-error/80;
+}
+
+.team-dashboard-event {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.team-dashboard-event img {
+  @apply size-5 shrink-0 object-contain;
+}
+
+.team-dashboard-event b {
+  @apply truncate font-semibold;
+}
+
+.team-dashboard-transfer-list > article {
+  @apply border-base-content/10 grid min-h-20 grid-cols-[3.5rem_minmax(0,1fr)_8.5rem] items-center gap-3 border-b px-4 py-2;
+}
+
+.team-dashboard-transfer-list > article:last-child {
+  @apply border-b-0;
+}
+
+.team-dashboard-player-avatar {
+  @apply bg-base-300 grid size-14 shrink-0 place-items-center overflow-hidden rounded-full;
+}
+
+.team-dashboard-player-avatar img {
+  @apply size-full object-cover;
+}
+
+.team-dashboard-transfer-route {
+  @apply flex min-w-0 items-center justify-between gap-2 text-[#9aa8b5];
+}
+
+.team-dashboard-transfer-route a {
+  @apply relative grid size-11 shrink-0 place-items-center;
+}
+
+.team-dashboard-transfer-route small {
+  @apply bg-base-300 absolute right-0 bottom-0 px-0.5 text-[7px] leading-3 font-bold;
+}
+
+.team-dashboard-transfer-route img {
+  @apply size-11 shrink-0 object-contain;
+}
+
+.team-dashboard-transfer-route svg {
+  @apply shrink-0 text-xs;
+}
+
+.team-dashboard-transfer-copy {
+  @apply text-base-content/70 min-w-0 text-left text-xs leading-snug;
+}
+
+.team-dashboard-transfer-copy strong {
+  @apply text-base-content block truncate text-sm font-bold;
+}
+
+.team-dashboard-transfer-copy span {
+  @apply mt-0.5 block;
+}
+
+.team-dashboard-transfer-copy b {
+  @apply text-base-content font-bold;
+}
+
+.team-dashboard-news-list > a {
+  @apply border-base-content/10 hover:bg-base-content/5 flex min-h-0 flex-1 items-center gap-3 border-b px-4 py-3 transition-colors;
+}
+
+.team-dashboard-news-list > a:last-child {
+  @apply border-b-0;
+}
+
+.team-dashboard-news-list > a.is-golden {
+  @apply border-warning/30 bg-warning/[0.075];
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-warning) 75%, transparent);
+}
+
+.team-dashboard-news-copy {
+  @apply min-w-0 flex-1;
+}
+
+.team-dashboard-news-copy > span {
+  @apply block text-xs font-bold text-[#75899d] uppercase;
+}
+
+.team-dashboard-news-list strong {
+  @apply mt-1 flex items-start gap-2 text-sm leading-snug font-bold;
+}
+
+.team-dashboard-news-list strong .fp {
+  @apply mt-0.5 inline-block shrink-0;
+  width: 20px;
+  height: 15px;
+  line-height: 0;
+  background-size: 100% 100%;
+}
+
+.team-dashboard-news-list strong .fp::before {
+  content: none;
+}
+
+.team-dashboard-news-image {
+  @apply border-base-content/10 size-14 shrink-0 rounded border object-cover;
+}
+
+.team-dashboard-news-list > a.is-featured {
+  @apply min-h-0 flex-[1.6] flex-row items-center gap-3;
+}
+
+.team-dashboard-news-feature {
+  @apply relative order-first w-44 shrink-0 overflow-hidden rounded;
+  container-type: inline-size;
+}
+
+.team-dashboard-news-feature > img:first-child {
+  @apply size-full object-cover;
+}
+
+.team-dashboard-news-feature-avatar {
+  @apply absolute object-contain object-bottom;
+}
+
+.team-dashboard-news-feature figcaption {
+  @apply absolute truncate text-center font-black uppercase;
+  font-size: clamp(0.35rem, 5cqw, 0.7rem);
+}
+
+.team-dashboard-list-empty {
+  @apply text-base-content/45 grid min-h-20 place-items-center px-3 text-xs;
+}
+
+@media (max-width: 960px) {
+  .team-dashboard-overview {
+    @apply overflow-y-auto;
+  }
+  .team-dashboard-calendar {
+    @apply grid-cols-[6rem_repeat(6,minmax(8.5rem,1fr))] overflow-x-auto;
+  }
+
+  .team-dashboard-grid {
+    @apply grid-cols-1;
+  }
+
+  .team-dashboard-side-column {
+    @apply grid grid-cols-2;
+  }
+}
+
+@media (max-width: 720px) {
+  .team-dashboard-overview {
+    @apply p-3;
+  }
+
+  .team-dashboard-match-content {
+    @apply grid-cols-2 gap-y-5 px-4 pt-8 pb-16;
+  }
+
+  .team-dashboard-match-meta {
+    @apply order-first col-span-2;
+  }
+
+  .team-dashboard-side-column {
+    @apply grid-cols-1;
+  }
+
+  .team-dashboard-match-table-header {
+    @apply hidden;
+  }
+
+  .team-dashboard-match-list > article {
+    @apply grid-cols-[3rem_minmax(0,1fr)_4rem];
+  }
+
+  .team-dashboard-match-list > article > span {
+    @apply hidden;
+  }
+}
+
 @utility competitions-dashboard {
   main {
     @apply grid-cols-5;

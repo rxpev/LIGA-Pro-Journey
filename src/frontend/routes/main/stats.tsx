@@ -434,7 +434,7 @@ function getStatisticsEventGroup(competition: any) {
   ].join(':');
 }
 
-function getStatisticsEventTitle(competition: any) {
+export function getStatisticsEventTitle(competition: any) {
   const tierSlug = competition?.tier?.slug as Constants.TierSlug | undefined;
   const year = competition?.season ? 2025 + competition.season : null;
   const city = Util.getCompetitionHostingLocationCity(competition?.location);

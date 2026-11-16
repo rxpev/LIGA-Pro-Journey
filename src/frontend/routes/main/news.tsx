@@ -99,6 +99,7 @@ type MvpGraphic = {
 type NewsPayload = Record<string, unknown> & {
   competitionId?: number | null;
   flagCode?: string | null;
+  goldenTransfer?: boolean;
   hideArticleImage?: boolean;
   mapUsage?: MapUsageDatum[];
   matchId?: number | null;
@@ -795,6 +796,7 @@ function hasGoldenNewsHue(item?: NewsItem | null) {
   const payload = parsePayload(item);
 
   return (
+    payload.goldenTransfer === true ||
     (Array.isArray(payload.mapUsage) && payload.mapUsage.length > 0) ||
     (Array.isArray(payload.ranking) && payload.ranking.length > 0)
   );

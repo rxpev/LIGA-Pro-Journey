@@ -1631,10 +1631,7 @@ export async function hasAutomaticItemsDue(date: Date) {
     DatabaseClient.prisma.transfer.findFirst({
       where: {
         status: {
-          in: [
-            Constants.TransferStatus.TEAM_ACCEPTED,
-            Constants.TransferStatus.PLAYER_ACCEPTED,
-          ],
+          in: [Constants.TransferStatus.TEAM_ACCEPTED, Constants.TransferStatus.PLAYER_ACCEPTED],
         },
         target: {
           careerStints: {
@@ -4166,6 +4163,7 @@ async function buildContractExpiryDraft(
   articleDate: Date,
   includeStatistics: boolean,
   isTopTeamTransfer: boolean,
+  isTopFiveTeamTransfer: boolean,
 ): Promise<NewsDraft> {
   const target = transfer.target;
   const targetName = playerName(target);
@@ -4397,6 +4395,7 @@ async function buildContractExpiryDraft(
     eventKey: `${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`,
     payload: {
       transferId: transfer.id,
+      goldenTransfer: isTopFiveTeamTransfer,
       playerId: target.id,
       teamId: previousTeam.id,
       teamIds: [previousTeam.id],
@@ -4946,6 +4945,7 @@ async function buildTransferDraft(
   transfer: TransferSeed,
   transfers: TransferSeed[],
   topTeamIds: Set<number>,
+  topFiveTeamIds: Set<number>,
   transferShortTeamIds: Set<number>,
   publishedAt: Date,
   includeStatistics: boolean,
@@ -4956,6 +4956,9 @@ async function buildTransferDraft(
   const destinationIsTop = !!destination && topTeamIds.has(destination.id);
   const sellerIsTop = !!seller && topTeamIds.has(seller.id);
   const isTopTeamTransfer = destinationIsTop || sellerIsTop;
+  const isTopFiveTeamTransfer =
+    (!!destination && topFiveTeamIds.has(destination.id)) ||
+    (!!seller && topFiveTeamIds.has(seller.id));
   const destinationIsShortEligible = !!destination && transferShortTeamIds.has(destination.id);
   const sellerIsShortEligible = !!seller && transferShortTeamIds.has(seller.id);
   const isShortEligibleTransfer = destinationIsShortEligible || sellerIsShortEligible;
@@ -4988,6 +4991,7 @@ async function buildTransferDraft(
       articleDate,
       includeStatistics,
       isTopTeamTransfer,
+      isTopFiveTeamTransfer,
     );
   }
 
@@ -5755,6 +5759,7 @@ async function buildTransferDraft(
     eventKey: `${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`,
     payload: {
       transferId: transfer.id,
+      goldenTransfer: isTopFiveTeamTransfer,
       playerId: target.id,
       teamId: destination?.id || seller?.id,
       teamIds: [destination?.id, isFreeAgentSigning ? null : seller?.id].filter(Boolean),
@@ -6650,9 +6655,10 @@ export async function createNpcRetirementItem(args: { playerId: number; publishe
           player.id + 23,
         )
     : null;
-  const majorSentence = isRetirementShort && majorHistory.appearances
-    ? buildRetirementMajorSentence(player.age, majorHistory, player.id)
-    : null;
+  const majorSentence =
+    isRetirementShort && majorHistory.appearances
+      ? buildRetirementMajorSentence(player.age, majorHistory, player.id)
+      : null;
   const isDifferentFinalSpell = Boolean(
     finalActiveStint &&
       firstStint &&
@@ -6791,6 +6797,7 @@ export async function generateAutomaticItems(date?: Date) {
 
   const publishedAt = date || profile?.date || new Date();
   const topTeamIds = await getTopTeamIds();
+  const topFiveTeamIds = await getTopTeamIds(5);
   const transferShortTeamIds = await getTransferShortTeamIds();
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
 
@@ -6800,28 +6807,38 @@ export async function generateAutomaticItems(date?: Date) {
   // keys. Avoid reconstructing their statistics, graphics and prose first.
   // Keep the complete transfer/MVP arrays for unpublished stories' context.
   const existingItems = await DatabaseClient.prisma.newsItem.findMany({
-    where: { OR: [
-      { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:transfer:` } },
-      { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:competition-mvp:` } },
-    ] },
+    where: {
+      OR: [
+        { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:transfer:` } },
+        { eventKey: { startsWith: `${AUTO_EVENT_PREFIX}:competition-mvp:` } },
+      ],
+    },
     select: { eventKey: true },
   });
   const publishedKeys = new Set(existingItems.map((item) => item.eventKey));
-  const mvpSeeds = includeStatistics ? await getCompetitionMvpSeedsForNews(publishedAt,
-    allMvps.filter((mvp) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:competition-mvp:${mvp.competitionId}`)),
-  ) : [];
+  const mvpSeeds = includeStatistics
+    ? await getCompetitionMvpSeedsForNews(
+        publishedAt,
+        allMvps.filter(
+          (mvp) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:competition-mvp:${mvp.competitionId}`),
+        ),
+      )
+    : [];
   const transferDrafts = (
     await Promise.all(
-      transfers.filter((transfer) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`)).map((transfer) =>
-        buildTransferDraft(
-          transfer,
-          transfers,
-          topTeamIds,
-          transferShortTeamIds,
-          publishedAt,
-          includeStatistics,
+      transfers
+        .filter((transfer) => !publishedKeys.has(`${AUTO_EVENT_PREFIX}:transfer:${transfer.id}`))
+        .map((transfer) =>
+          buildTransferDraft(
+            transfer,
+            transfers,
+            topTeamIds,
+            topFiveTeamIds,
+            transferShortTeamIds,
+            publishedAt,
+            includeStatistics,
+          ),
         ),
-      ),
     )
   ).filter(Boolean) as NewsDraft[];
   const mvpDrafts = (

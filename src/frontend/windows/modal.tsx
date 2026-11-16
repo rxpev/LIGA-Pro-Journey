@@ -57,6 +57,10 @@ const routes = createMemoryRouter([
         element: <Routes.Modal.Transfer />,
       },
       {
+        path: '/transfer-history',
+        element: <Routes.Modal.TransferHistory />,
+      },
+      {
         path: '/contract-offer',
         element: <Routes.Modal.ContractOffer />,
       },

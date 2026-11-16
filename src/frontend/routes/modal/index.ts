@@ -16,6 +16,7 @@ import Pregame from './pregame';
 import Settings from './settings';
 import Team from './team';
 import Transfer from './transfer';
+import TransferHistory from './transfer-history';
 import TrialContract from './trial-contract';
 import User from './user';
 
@@ -35,6 +36,7 @@ export default {
   Pregame,
   Settings,
   Transfer,
+  TransferHistory,
   TrialContract,
   User,
 

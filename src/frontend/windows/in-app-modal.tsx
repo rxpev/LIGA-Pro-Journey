@@ -238,6 +238,7 @@ function ModalContent(props: {
               <Route path="/pregame" element={<Routes.Modal.Pregame />} />
               <Route path="/settings" element={<Routes.Modal.Settings />} />
               <Route path="/transfer" element={<Routes.Modal.Transfer />} />
+              <Route path="/transfer-history" element={<Routes.Modal.TransferHistory />} />
               <Route path="/trial-contract" element={<Routes.Modal.TrialContract />} />
               <Route path="/user" element={<Routes.Modal.User />} />
               <Route path="/issues/all" element={<Routes.Modal.Issues.All />} />

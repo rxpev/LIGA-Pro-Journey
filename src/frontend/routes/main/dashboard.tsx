@@ -8,21 +8,30 @@ import { Link } from 'react-router-dom';
 import { addDays, differenceInDays, format } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx, isFreeAgentTransfer } from '@liga/frontend/lib';
+import {
+  describeTransferEvent,
+  loadTransferEvents,
+  type TransferEvent,
+} from '@liga/frontend/lib/transfer-events';
 import { AppStateContext } from '@liga/frontend/redux';
 import { calendarAdvance, play, playErrorUpdate } from '@liga/frontend/redux/actions';
 import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
 import { getTeamsRoundLabel, getTeamsTierLabel } from './teams/labels';
+import { getStatisticsEventTitle } from './stats';
 import {
+  FaArrowRight,
   FaCalendarDay,
   FaChartBar,
   FaCheckCircle,
   FaCloudMoon,
   FaCog,
+  FaExchangeAlt,
   FaExclamationTriangle,
   FaForward,
   FaMapSigns,
+  FaNewspaper,
   FaSpinner,
   FaStop,
   FaStopwatch,
@@ -35,10 +44,43 @@ interface StatusBannerProps {
 }
 
 /** @constant */
-const NUM_UPCOMING = 5 + 1; // adds an extra for "next match"
+const NUM_UPCOMING = 6 + 1; // adds an extra for "next match"
 
 /** @constant */
 const NUM_PREVIOUS = 5;
+
+type DashboardNewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
+
+function getDashboardNewsDisplay(item: DashboardNewsItem) {
+  let payload: Record<string, unknown> = {};
+
+  try {
+    const parsed = item.payload ? (JSON.parse(item.payload) as unknown) : null;
+    payload =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+  } catch (_) {
+    // A malformed story still displays its headline.
+  }
+
+  return {
+    flagCode: typeof payload.flagCode === 'string' ? payload.flagCode.toLowerCase() : null,
+    image:
+      item.image ||
+      (typeof payload.promotedMap === 'string'
+        ? `resources://maps/${payload.promotedMap}.png`
+        : null),
+    golden:
+      payload.goldenTransfer === true ||
+      (Array.isArray(payload.mapUsage) && payload.mapUsage.length > 0) ||
+      (Array.isArray(payload.ranking) && payload.ranking.length > 0),
+    graphic:
+      payload.welcomeGraphic && typeof payload.welcomeGraphic === 'object'
+        ? (payload.welcomeGraphic as Record<string, unknown>)
+        : null,
+  };
+}
 
 const ARENA_MODE_TIER_SLUGS = new Set<string>([
   Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
@@ -143,6 +185,28 @@ export default function () {
   const [transfers, setTransfers] = React.useState<
     Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>
   >([]);
+  const [recentTransferEvents, setRecentTransferEvents] = React.useState<TransferEvent[]>([]);
+  const [newsItems, setNewsItems] = React.useState<Awaited<ReturnType<typeof api.news.all>>>([]);
+  const dashboardNewsItems = React.useMemo(() => {
+    // Fill the rail with its first five stories, then let only Top Stories replace them.
+    const oldestFirst = [...newsItems].reverse();
+    const candidates = oldestFirst
+      .filter((item, index) => index < 5 || item.type === 'ARTICLE')
+      .slice(-5)
+      .reverse();
+    const featured = candidates.find((item) => {
+      const { golden, graphic } = getDashboardNewsDisplay(item);
+      return golden && typeof graphic?.template === 'string';
+    });
+    if (!featured) return candidates;
+    const selected = candidates.slice(0, 4);
+    if (!selected.some((item) => item.id === featured.id)) selected[3] = featured;
+    return selected;
+  }, [newsItems]);
+  const featuredNewsId = dashboardNewsItems.find((item) => {
+    const { golden, graphic } = getDashboardNewsDisplay(item);
+    return golden && typeof graphic?.template === 'string';
+  })?.id;
   const [standingMatches, setStandingMatches] = React.useState<
     Awaited<ReturnType<typeof api.matches.all<typeof Eagers.match>>>
   >([]);
@@ -169,6 +233,9 @@ export default function () {
 
     return `${tierLabel}${suffix}`;
   };
+
+  const toDashboardTournamentLabel = (match: (typeof upcoming)[number]): string =>
+    getStatisticsEventTitle(match.competition);
 
   const toDashboardRoundLabel = (match: (typeof upcoming)[number]): string =>
     match.competition.tier.groupSize
@@ -320,6 +387,43 @@ export default function () {
       .then(setTransfers);
   }, [state.profile]);
 
+  React.useEffect(() => {
+    if (!state.profile?.teamId) return;
+    let active = true;
+    loadTransferEvents().then((events) => {
+      if (active) setRecentTransferEvents(events.slice(0, 4));
+    });
+    return () => {
+      active = false;
+    };
+  }, [state.profile?.id, state.profile?.date]);
+
+  // fetch the newsroom headlines used by the compact dashboard rail
+  React.useEffect(() => {
+    if (!state.profile) {
+      setNewsItems([]);
+      return;
+    }
+
+    let active = true;
+    const refreshNews = () => {
+      api.news.all().then((items) => {
+        if (active) setNewsItems(items);
+      });
+    };
+
+    refreshNews();
+    const removeNewsItemsUpdatedListener = api.ipc.on(
+      Constants.IPCRoute.NEWS_ITEMS_UPDATED,
+      refreshNews,
+    );
+
+    return () => {
+      active = false;
+      removeNewsItemsUpdatedListener();
+    };
+  }, [state.profile?.id]);
+
   // fetch match facts for spotlight
   React.useEffect(() => {
     const [nextMatch] = upcoming.slice(0, 1);
@@ -470,6 +574,24 @@ export default function () {
       .sort((a, b) => a.position - b.position);
   }, [standings, userTeam]);
 
+  const userRecentMatches = React.useMemo(() => {
+    if (!state.profile?.teamId) {
+      return [];
+    }
+
+    if (!spotlight) {
+      return previous;
+    }
+
+    const userCompetitorIndex = spotlight.competitors.findIndex(
+      (competitor) => competitor.teamId === state.profile?.teamId,
+    );
+
+    return userCompetitorIndex >= 0 ? matchHistorial[userCompetitorIndex] || [] : [];
+  }, [matchHistorial, previous, spotlight, state.profile?.teamId]);
+
+  const profile = state.profile;
+
   return (
     <div className="dashboard">
       {/** PLAYING MODAL */}
@@ -530,8 +652,539 @@ export default function () {
       {/** SETTINGS VALIDATION WARNING BANNER */}
       <StatusBanner error={state.appStatus} />
 
+      {/** TEAM DASHBOARD */}
+      {!!profile?.teamId && (
+        <section className="team-dashboard-overview">
+          <section className="team-dashboard-calendar" aria-label="Upcoming calendar">
+            {!state.working ? (
+              <button
+                type="button"
+                title={t('main.dashboard.advanceCalendar')}
+                data-interaction-sound="none"
+                className="team-dashboard-advance"
+                disabled={state.working || isCalendarFaceitBlocked || (isMatchday && !isBenched)}
+                onClick={() => {
+                  if (state.working || isCalendarFaceitBlocked) {
+                    return;
+                  }
+
+                  if (isMatchday && isBenched) {
+                    audioClick();
+                    api.calendar.sim().then(() => dispatch(calendarAdvance(1)));
+                    return;
+                  }
+
+                  if (!isMatchday) {
+                    audioClick();
+                    dispatch(calendarAdvance());
+                  }
+                }}
+              >
+                <FaForward aria-hidden="true" />
+                <span>{t('main.dashboard.advanceCalendar').replace(' Calendar', '')}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                title={t('main.dashboard.stopCalendar')}
+                className="team-dashboard-advance is-stop"
+                onClick={api.calendar.stop}
+              >
+                <FaStop aria-hidden="true" />
+                <span>{t('main.dashboard.stopCalendar').replace(' Calendar', '')}</span>
+              </button>
+            )}
+
+            {[...Array(6)].map((_, idx) => {
+              const day = addDays(profile.date, idx);
+              const entry = upcoming.find(
+                (match) => match.date.toISOString() === day.toISOString(),
+              );
+              const opponent = entry?.competitors.find(
+                (competitor) => competitor.teamId !== profile.teamId,
+              );
+              const trainingAllowed =
+                differenceInDays(day, profile.trainedAt || profile.date) ===
+                Constants.Application.TRAINING_FREQUENCY;
+
+              return (
+                <article
+                  key={`${idx}__team_calendar`}
+                  className={cx('team-dashboard-day', idx === 0 && 'is-today')}
+                >
+                  <div className="team-dashboard-day-icon">
+                    {opponent ? (
+                      <img src={opponent.team.blazon} title={opponent.team.name} />
+                    ) : trainingAllowed ? (
+                      <FaStopwatch aria-hidden="true" />
+                    ) : (
+                      <FaCloudMoon aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="team-dashboard-day-kicker">
+                      {idx === 0 ? `Today · ${format(day, 'EEE')}` : format(day, 'EEE')}
+                    </p>
+                    <p className="team-dashboard-day-number">{format(day, 'd')}</p>
+                    <p className="team-dashboard-day-label">
+                      {opponent
+                        ? `vs ${opponent.team.name}`
+                        : trainingAllowed
+                          ? t('shared.training')
+                          : t('main.dashboard.rest').toUpperCase()}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+
+          <div className="team-dashboard-grid">
+            <div className="team-dashboard-main-column">
+              <section className="team-dashboard-panel team-dashboard-next-match">
+                <Image
+                  className="team-dashboard-map-background"
+                  src="resources://maps/allmaps.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <div className="team-dashboard-map-overlay" aria-hidden="true" />
+                <header className="team-dashboard-panel-header is-borderless justify-end">
+                  {!!spotlight && (
+                    <time className={cx('team-dashboard-date-pill', isMatchday && 'is-today')}>
+                      {isMatchday ? 'Today · ' : ''}
+                      {format(spotlight.date, 'EEE d MMM yyyy')}
+                    </time>
+                  )}
+                </header>
+
+                {!spotlight ? (
+                  <div className="team-dashboard-empty-match">
+                    <FaCalendarDay aria-hidden="true" />
+                    <strong>{t('main.dashboard.noMatch')}</strong>
+                    <span>{t('main.dashboard.noMatchScheduled')}</span>
+                  </div>
+                ) : (
+                  (() => {
+                    const competitors = spotlight.competitors.filter(
+                      (competitor) => !!competitor.team,
+                    );
+                    const own = competitors.find(
+                      (competitor) => competitor.teamId === profile.teamId,
+                    );
+                    const opponent = competitors.find(
+                      (competitor) => competitor.teamId !== profile.teamId,
+                    );
+
+                    if (!own || !opponent) {
+                      return (
+                        <div className="team-dashboard-empty-match">
+                          <FaCalendarDay aria-hidden="true" />
+                          <strong>{t('main.dashboard.noMatchScheduled')}</strong>
+                        </div>
+                      );
+                    }
+
+                    const spotlightGames = spotlight.games || [];
+                    const spotlightUsesVetoFlow = shouldUseVetoFlow(spotlight);
+                    const ownIndex = spotlight.competitors.findIndex(
+                      (competitor) => competitor.teamId === own.teamId,
+                    );
+                    const opponentIndex = spotlight.competitors.findIndex(
+                      (competitor) => competitor.teamId === opponent.teamId,
+                    );
+                    const ownRanking = worldRankings[ownIndex] || 0;
+                    const opponentRanking = worldRankings[opponentIndex] || 0;
+                    const ownHistory = matchHistorial[ownIndex] || [];
+                    const opponentHistory = matchHistorial[opponentIndex] || [];
+                    const disabled =
+                      state.working || !isMatchday || isBenched || isActiveFaceitMatchroom;
+
+                    const teamPosition = (teamId: number, tier: number) => {
+                      if (!spotlight.competition.tier.groupSize || !userGroupCompetitors) {
+                        return toDashboardTeamTierLabel(Constants.Prestige[tier]);
+                      }
+
+                      const position = userGroupCompetitors.findIndex(
+                        (competitor) => competitor.teamId === teamId,
+                      );
+                      return position >= 0
+                        ? Util.toOrdinalSuffix(position + 1)
+                        : toDashboardTeamTierLabel(Constants.Prestige[tier]);
+                    };
+
+                    const launchMatch = () => {
+                      if (isActiveFaceitMatchroom) {
+                        return;
+                      }
+
+                      const hasMapInProgress = spotlightGames.some(
+                        (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
+                      );
+
+                      if (!spotlightUsesVetoFlow || hasMapInProgress) {
+                        dispatchPlayWithArenaModeGuard(spotlight);
+                        return;
+                      }
+
+                      audioClick();
+                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                        target:
+                          spotlight.status === Constants.MatchStatus.PLAYING
+                            ? '/postgame'
+                            : '/play',
+                        payload: spotlight.id,
+                      });
+                    };
+
+                    return (
+                      <div className="team-dashboard-match-content">
+                        <div className="team-dashboard-team">
+                          <img src={own.team.blazon} alt="" />
+                          <h3>{own.team.name}</h3>
+                          <p>
+                            #{ownRanking || '—'} {t('shared.worldRanking')} ·{' '}
+                            {teamPosition(own.teamId, own.team.tier)}
+                          </p>
+                          <Historial matches={ownHistory} teamId={own.teamId} />
+                        </div>
+
+                        <div className="team-dashboard-match-meta">
+                          <Image
+                            className="team-dashboard-event-logo"
+                            src={Util.getCompetitionLogo(
+                              spotlight.competition.tier.slug,
+                              spotlight.competition.federation.slug,
+                              {
+                                location: spotlight.competition.location,
+                                organizer: spotlight.competition.organizer,
+                              },
+                            )}
+                            alt=""
+                          />
+                          <strong>{toDashboardTournamentLabel(spotlight)}</strong>
+                          <span>{toDashboardRoundLabel(spotlight)}</span>
+                          <small>
+                            {t('shared.bestOf')} {spotlightGames.length || 1}
+                          </small>
+                        </div>
+
+                        <div className="team-dashboard-team">
+                          <img src={opponent.team.blazon} alt="" />
+                          <h3>{opponent.team.name}</h3>
+                          <p>
+                            #{opponentRanking || '—'} {t('shared.worldRanking')} ·{' '}
+                            {teamPosition(opponent.teamId, opponent.team.tier)}
+                          </p>
+                          <Historial matches={opponentHistory} teamId={opponent.teamId} />
+                        </div>
+
+                        {spotlight.status === Constants.MatchStatus.PLAYING && (
+                          <span className="team-dashboard-live">
+                            <i /> Live ·{' '}
+                            {spotlight.competitors
+                              .map((competitor) => competitor.score)
+                              .join(' – ')}
+                          </span>
+                        )}
+
+                        <footer className="team-dashboard-match-actions">
+                          <button
+                            type="button"
+                            title={t('main.dashboard.matchSetup')}
+                            className="btn team-dashboard-setup-button"
+                            disabled={disabled}
+                            onClick={() =>
+                              api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                                target: '/pregame',
+                                payload: spotlight.id,
+                              })
+                            }
+                          >
+                            <FaCog aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            data-interaction-sound="none"
+                            className="btn btn-primary team-dashboard-play-button"
+                            disabled={disabled}
+                            onClick={launchMatch}
+                          >
+                            {t('main.dashboard.play')}
+                          </button>
+                        </footer>
+                      </div>
+                    );
+                  })()
+                )}
+              </section>
+
+              <section className="team-dashboard-panel team-dashboard-recent-matches">
+                <header className="team-dashboard-panel-header">
+                  <h2>
+                    <FaChartBar aria-hidden="true" />
+                    {t('main.dashboard.headerRecentMatches')}
+                  </h2>
+                  <Link to={`/teams/matches?teamId=${profile.teamId}`}>
+                    View all matches <FaArrowRight aria-hidden="true" />
+                  </Link>
+                </header>
+                <div className="team-dashboard-match-table-header">
+                  <span>Date</span>
+                  <span>Match</span>
+                  <span>Event</span>
+                  <span />
+                </div>
+                <div className="team-dashboard-match-list">
+                  {userRecentMatches.slice(0, NUM_PREVIOUS).map((match) => {
+                    const own = match.competitors.find(
+                      (competitor) => competitor.teamId === profile.teamId,
+                    );
+                    const opponent = match.competitors.find(
+                      (competitor) => competitor.teamId !== profile.teamId,
+                    );
+                    const resultLabel =
+                      own?.result === Constants.MatchResult.WIN
+                        ? 'Win'
+                        : own?.result === Constants.MatchResult.DRAW
+                          ? 'Draw'
+                          : 'Loss';
+                    const eventThumbnail =
+                      Util.getCompetitionThumbnail({
+                        federationSlug: match.competition.federation.slug,
+                        organizer: match.competition.organizer,
+                        tierSlug: match.competition.tier.slug,
+                      }) ||
+                      Util.getCompetitionLogo(
+                        match.competition.tier.slug,
+                        match.competition.federation.slug,
+                        {
+                          location: match.competition.location,
+                          organizer: match.competition.organizer,
+                        },
+                      );
+                    const canOpen = match._count.events > 0;
+
+                    return (
+                      <article key={`${match.id}__team_recent`}>
+                        <time title={format(match.date, 'PPPP')}>{fmtShortDate(match.date)}</time>
+                        <div className="team-dashboard-result">
+                          <span
+                            className={cx(
+                              'team-dashboard-result-badge',
+                              resultLabel === 'Win' && 'is-win',
+                              resultLabel === 'Draw' && 'is-draw',
+                              resultLabel === 'Loss' && 'is-loss',
+                            )}
+                          >
+                            {resultLabel}
+                          </span>
+                          <img src={own?.team.blazon} alt="" />
+                          <strong>{own?.team.name || '—'}</strong>
+                          <b className={Util.getResultTextColor(own?.result)}>
+                            {own?.score ?? 0} : {opponent?.score ?? 0}
+                          </b>
+                          {!!opponent?.team && <img src={opponent.team.blazon} alt="" />}
+                          <strong>{opponent?.team.name || 'BYE'}</strong>
+                        </div>
+                        <span
+                          className="team-dashboard-event"
+                          title={toDashboardTournamentLabel(match)}
+                        >
+                          <img src={eventThumbnail} alt="" />
+                          <b>{toDashboardTournamentLabel(match)}</b>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-xs w-16 justify-self-end bg-[#4d6783] text-[#d8e5f1]"
+                          disabled={!canOpen}
+                          onClick={() =>
+                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                              target: '/postgame',
+                              payload: match.id,
+                            })
+                          }
+                        >
+                          Match
+                        </button>
+                      </article>
+                    );
+                  })}
+                  {!userRecentMatches.length && (
+                    <p className="team-dashboard-list-empty">{t('shared.noRecentMatch')}</p>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <aside className="team-dashboard-side-column">
+              <section className="team-dashboard-panel">
+                <header className="team-dashboard-panel-header">
+                  <h2>
+                    <FaExchangeAlt aria-hidden="true" />
+                    Recent Transfers
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                        target: '/transfer-history',
+                      })
+                    }
+                  >
+                    View all <FaArrowRight aria-hidden="true" />
+                  </button>
+                </header>
+                <div className="team-dashboard-transfer-list">
+                  {recentTransferEvents.map((event) => {
+                    const fromTeam = event.from;
+                    const toTeam = event.to;
+                    return (
+                      <article key={`${event.id}__team_transfer`}>
+                        <button
+                          type="button"
+                          className="team-dashboard-player-avatar"
+                          title={`View ${event.player.name}`}
+                          aria-label={`View ${event.player.name}`}
+                          onClick={() => openPlayerTransferModal(event.player.id)}
+                        >
+                          <img
+                            src={event.player.avatar || 'resources://avatars/empty.png'}
+                            alt=""
+                          />
+                        </button>
+                        <div className="team-dashboard-transfer-copy">
+                          <strong>{event.player.name}</strong>
+                          <span>{describeTransferEvent(event)}</span>
+                        </div>
+                        <div className="team-dashboard-transfer-route">
+                          {fromTeam ? (
+                            <Link to={`/teams?teamId=${fromTeam.id}`} title={fromTeam.name}>
+                              <img src={fromTeam.blazon} alt={fromTeam.name} />
+                              {event.fromBenched && <small>BENCH</small>}
+                            </Link>
+                          ) : (
+                            <img src="resources://blazonry/noteam.svg" alt="No Team" />
+                          )}
+                          <FaArrowRight aria-hidden="true" />
+                          {toTeam ? (
+                            <Link to={`/teams?teamId=${toTeam.id}`} title={toTeam.name}>
+                              <img src={toTeam.blazon} alt={toTeam.name} />
+                              {event.toBenched && <small>BENCH</small>}
+                            </Link>
+                          ) : (
+                            <img src="resources://blazonry/noteam.svg" alt="No Team" />
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {!recentTransferEvents.length && (
+                    <p className="team-dashboard-list-empty">No recent transfers</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="team-dashboard-panel">
+                <header className="team-dashboard-panel-header">
+                  <h2>
+                    <FaNewspaper aria-hidden="true" />
+                    News
+                  </h2>
+                  <Link to="/news">
+                    View all <FaArrowRight aria-hidden="true" />
+                  </Link>
+                </header>
+                <div className="team-dashboard-news-list">
+                  {dashboardNewsItems.map((item) => {
+                    const display = getDashboardNewsDisplay(item);
+                    const graphic = display.graphic;
+                    const avatarLayout = graphic?.avatarLayout as
+                      | Record<string, string>
+                      | undefined;
+                    const nameLayout = graphic?.nameLayout as Record<string, string> | undefined;
+
+                    return (
+                      <Link
+                        key={`${item.id}__team_news`}
+                        className={cx(
+                          'team-dashboard-news-item',
+                          display.golden && 'is-golden',
+                          item.id === featuredNewsId && 'is-featured',
+                        )}
+                        to="/news"
+                        state={{ articleId: item.id }}
+                      >
+                        <div className="team-dashboard-news-copy">
+                          <span>
+                            {item.topic} · {fmtShortDate(item.publishedAt)}
+                          </span>
+                          <strong>
+                            {display.flagCode && (
+                              <span className={cx('fp', display.flagCode)} aria-hidden="true" />
+                            )}
+                            {item.headline}
+                          </strong>
+                        </div>
+                        {item.id === featuredNewsId && graphic && (
+                          <figure
+                            className="team-dashboard-news-feature"
+                            style={{ aspectRatio: String(graphic.aspectRatio || '1836 / 857') }}
+                          >
+                            <img src={String(graphic.template)} alt="" />
+                            {typeof graphic.avatar === 'string' && (
+                              <img
+                                className="team-dashboard-news-feature-avatar"
+                                src={graphic.avatar}
+                                alt=""
+                                style={{
+                                  bottom: avatarLayout?.bottom || '0%',
+                                  height: avatarLayout?.height || '90%',
+                                  left: avatarLayout?.left || '3%',
+                                  maxWidth: avatarLayout?.maxWidth || '37%',
+                                }}
+                              />
+                            )}
+                            <figcaption
+                              style={{
+                                color:
+                                  typeof graphic.textColor === 'string'
+                                    ? graphic.textColor
+                                    : '#fff',
+                                fontFamily:
+                                  typeof graphic.fontFamily === 'string'
+                                    ? graphic.fontFamily
+                                    : undefined,
+                                fontStyle:
+                                  typeof graphic.fontStyle === 'string'
+                                    ? graphic.fontStyle
+                                    : undefined,
+                                left: nameLayout?.left || '68%',
+                                top: nameLayout?.top || '84%',
+                                width: nameLayout?.width || '34%',
+                                transform: `translate(-50%, -50%) rotate(${graphic.rotate || '0deg'}) skewX(${graphic.skewX || '0deg'})`,
+                              }}
+                            >
+                              {String(graphic.playerName || '')}
+                            </figcaption>
+                          </figure>
+                        )}
+                        {item.id !== featuredNewsId && display.golden && display.image && (
+                          <img className="team-dashboard-news-image" src={display.image} alt="" />
+                        )}
+                      </Link>
+                    );
+                  })}
+                  {!newsItems.length && <p className="team-dashboard-list-empty">No news yet</p>}
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      )}
+
       {/** MAIN CONTENT */}
-      <main>
+      <main style={profile?.teamId ? { display: 'none' } : undefined}>
         {/** LEFT COLUMN */}
         <div className="stack-y gap-0!">
           <section className="stack-y gap-0!">
@@ -640,8 +1293,7 @@ export default function () {
                         }
                         zones={
                           Util.shouldShowStandingsZones(standings.competition.status) &&
-                          (standings.competition.tier.slug ===
-                            Constants.TierSlug.LEAGUE_ADVANCED &&
+                          (standings.competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED &&
                           standings.competition.federation.slug ===
                             Constants.FederationSlug.ESPORTS_OCE
                             ? [
@@ -955,7 +1607,10 @@ export default function () {
                     )}
                     <figure>
                       <Image
-                        className="h-full w-full"
+                        className={cx(
+                          'h-full w-full',
+                          !spotlightUsesVetoFlow && 'team-dashboard-selected-map-background',
+                        )}
                         src={
                           spotlightUsesVetoFlow
                             ? 'resources://maps/allmaps.png'
