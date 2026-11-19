@@ -83,6 +83,13 @@ export function buildTransferEvents(players: HistoryPlayer[]): TransferEvent[] {
         !previous &&
         !stint.isTrial &&
         date.toISOString().slice(0, 10) === Constants.NewSaveSeasonStartDate.slice(0, 10);
+      // Save bootstrap can contain consecutive same-team stints on day one so
+      // that the imported roster's starter/bench state matches the live Player
+      // snapshot. Those rows describe the initial roster; they are not roster
+      // moves that happened during the save.
+      const isInitialRosterSnapshot =
+        previous?.teamId === stint.teamId &&
+        date.toISOString().slice(0, 10) === Constants.NewSaveSeasonStartDate.slice(0, 10);
 
       if (previous?.teamId !== stint.teamId && !isInitialStint) {
         if (toTeam) {
@@ -112,7 +119,7 @@ export function buildTransferEvents(players: HistoryPlayer[]): TransferEvent[] {
             to: toTeam,
             kind: 'trial-signing',
           });
-        } else if (previous.starter && !stint.starter) {
+        } else if (!isInitialRosterSnapshot && previous.starter && !stint.starter) {
           playerEvents.push({
             ...base,
             id: `bench_${player.id}_${stint.id}`,
@@ -120,7 +127,7 @@ export function buildTransferEvents(players: HistoryPlayer[]): TransferEvent[] {
             to: toTeam,
             kind: 'bench',
           });
-        } else if (!previous.starter && stint.starter) {
+        } else if (!isInitialRosterSnapshot && !previous.starter && stint.starter) {
           playerEvents.push({
             ...base,
             id: `reinstate_${player.id}_${stint.id}`,
