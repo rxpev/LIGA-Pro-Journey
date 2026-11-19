@@ -60,14 +60,14 @@ async function createFaceitOpeningChat(
 
   const regionalPlayers = await DatabaseClient.prisma.player.findMany({
     where: { ...regionalWhere, elo: { gte: 1300, lte: 1500 } },
-    select: { id: true, name: true, elo: true },
+    select: { id: true, name: true, elo: true, avatar: true },
   });
 
   let candidates = regionalPlayers;
   if (!candidates.length) {
     const nearbyPlayers = await DatabaseClient.prisma.player.findMany({
       where: { ...regionalWhere, elo: { gt: 0 } },
-      select: { id: true, name: true, elo: true },
+      select: { id: true, name: true, elo: true, avatar: true },
     });
     candidates = nearbyPlayers
       .sort((a, b) => Math.abs(a.elo - 1400) - Math.abs(b.elo - 1400))
@@ -84,14 +84,14 @@ async function createFaceitOpeningChat(
         retiredAt: null,
         elo: { gte: 1300, lte: 1500 },
       },
-      select: { id: true, name: true, elo: true },
+      select: { id: true, name: true, elo: true, avatar: true },
     });
   }
 
   if (!candidates.length) return;
 
   const player = candidates[Math.floor(Math.random() * candidates.length)];
-  const senderRole = `FACEIT Player [player:${player.id}]`;
+  const senderRole = `FACEIT Player [player:${player.id}]${player.avatar ? ` [avatar:${encodeURIComponent(player.avatar)}]` : ''}`;
   const sender = await DatabaseClient.prisma.persona.upsert({
     where: { name: player.name },
     update: { role: senderRole },

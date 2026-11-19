@@ -8,7 +8,7 @@ import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
 import { format as formatDate } from 'date-fns';
 import { Toast, Toaster, toast } from 'react-hot-toast';
-import { FaBars, FaCaretDown, FaEnvelopeOpen, FaExclamationTriangle, FaHome } from 'react-icons/fa';
+import { FaBars, FaCaretDown, FaExclamationTriangle, FaHome } from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
@@ -194,20 +194,38 @@ const routes = createMemoryRouter([
  * @function
  */
 function ToastEmail(props: Toast & { email: Parameters<typeof emailsUpdate>[number][number] }) {
+  const teammateAvatar = props.email.from.role?.match(/\[avatar:([^\]]+)\]/)?.[1];
+  const playerId = Number(props.email.from.role?.match(/\[player:(\d+)\]/)?.[1]);
+  const fallbackAvatar = teammateAvatar
+    ? decodeURIComponent(teammateAvatar)
+    : props.email.from.role === 'Management Board'
+      ? props.email.from.team?.blazon || 'resources://blazonry/noteam.svg'
+      : `resources://coaches/${props.email.from.name === 'T.c' ? 'tc' : props.email.from.name}.png`;
+  const [avatar, setAvatar] = React.useState(fallbackAvatar);
+
+  React.useEffect(() => {
+    if (!Number.isInteger(playerId) || teammateAvatar) return;
+
+    api.players
+      .all({ where: { id: playerId }, select: { avatar: true } })
+      .then(([player]) => player?.avatar && setAvatar(player.avatar));
+  }, [playerId, teammateAvatar]);
+
   return (
-    <dialog>
-      <section>
-        <figure>
-          <FaEnvelopeOpen />
-        </figure>
-        <article>
-          <header>{props.email.from.name}</header>
-          <footer>{props.email.subject}</footer>
-        </article>
-      </section>
-      <section>
-        <button onClick={() => toast.dismiss(props.id)}>Dismiss</button>
-      </section>
+    <dialog className="new-message-toast">
+      <figure className="new-message-toast__avatar">
+        <img
+          src={avatar}
+          alt=""
+          onError={(event) => {
+            event.currentTarget.onerror = null;
+            event.currentTarget.src = 'resources://avatars/empty.png';
+          }}
+        />
+      </figure>
+      <p>
+        New message from <em>{props.email.from.name}</em>
+      </p>
     </dialog>
   );
 }
@@ -767,6 +785,8 @@ function Index() {
       <Confetti.Confetti />
       <Toaster
         position="bottom-right"
+        gutter={0}
+        containerStyle={{ right: 0, bottom: 0 }}
         toastOptions={{
           className: 'react-hot-toast',
         }}
