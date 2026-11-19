@@ -14,7 +14,7 @@ import {
   type TransferEvent,
 } from '@liga/frontend/lib/transfer-events';
 import { AppStateContext } from '@liga/frontend/redux';
-import { calendarAdvance, play, playErrorUpdate } from '@liga/frontend/redux/actions';
+import { calendarAdvance, playErrorUpdate } from '@liga/frontend/redux/actions';
 import type { PlayingStatus } from '@liga/frontend/redux/state';
 import { useAudio, useFormatAppShortDate, useTranslation } from '@liga/frontend/hooks';
 import { Standings, Image, Historial } from '@liga/frontend/components';
@@ -42,7 +42,6 @@ import {
   FaClock,
   FaClipboardCheck,
   FaCloudMoon,
-  FaCog,
   FaExchangeAlt,
   FaExclamationTriangle,
   FaForward,
@@ -190,16 +189,6 @@ function getDashboardNewsDisplay(item: DashboardNewsItem) {
   };
 }
 
-const ARENA_MODE_TIER_SLUGS = new Set<string>([
-  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
-  Constants.TierSlug.BLAST_FINALS,
-  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
-  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
-  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
-  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
-  Constants.TierSlug.CCT_GLOBAL_FINALS,
-]);
-
 const PLAYING_STATUS_STEPS: Array<PlayingStatus> = [
   'PREPARING_MATCH',
   'COPYING_FILES',
@@ -323,7 +312,6 @@ export default function () {
 
   const [dismissedNoTeamAdvanceWarning, setDismissedNoTeamAdvanceWarning] = React.useState(false);
   const [noTeamAdvanceWarningVisible, setNoTeamAdvanceWarningVisible] = React.useState(false);
-  const [arenaModePromptMatchId, setArenaModePromptMatchId] = React.useState<number | null>(null);
   const [activeFaceitMatch, setActiveFaceitMatch] = React.useState<{
     id: number;
     status: number;
@@ -359,11 +347,6 @@ export default function () {
     });
   }, []);
 
-  const isArenaModeMatch = React.useCallback((match?: (typeof upcoming)[number]) => {
-    const tierSlug = match?.competition?.tier?.slug;
-    return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
-  }, []);
-
   const shouldUseVetoFlow = React.useCallback((match?: (typeof upcoming)[number]) => {
     return (
       !!match &&
@@ -371,36 +354,6 @@ export default function () {
       match.status !== Constants.MatchStatus.COMPLETED
     );
   }, []);
-
-  const dispatchPlayWithArenaModeGuard = React.useCallback(
-    async (match: (typeof upcoming)[number] | undefined) => {
-      if (!match) {
-        return;
-      }
-
-      if (!isArenaModeMatch(match)) {
-        audioClick();
-        dispatch(play(match.id));
-        return;
-      }
-
-      const arenaModeStatus = await api.app.arenaModeStatus(settings).catch((): null => null);
-      const arenaModeReady =
-        settings.arenaMode.enabled &&
-        arenaModeStatus?.installed &&
-        arenaModeStatus?.equalizerApoInstalled &&
-        arenaModeStatus?.valhallaSupermassiveInstalled;
-
-      if (arenaModeReady) {
-        audioClick();
-        dispatch(play(match.id));
-        return;
-      }
-
-      setArenaModePromptMatchId(match.id);
-    },
-    [audioClick, dispatch, isArenaModeMatch, settings],
-  );
 
   // load settings
   React.useEffect(() => {
@@ -452,10 +405,10 @@ export default function () {
   }, [state.profile?.id]);
 
   React.useEffect(() => {
-    if (noTeamAdvanceWarningVisible || arenaModePromptMatchId) {
+    if (noTeamAdvanceWarningVisible) {
       audioNegativeAlert();
     }
-  }, [noTeamAdvanceWarningVisible, arenaModePromptMatchId]);
+  }, [noTeamAdvanceWarningVisible]);
 
   // fetch upcoming list of matches
   React.useEffect(() => {
@@ -992,26 +945,14 @@ export default function () {
                             : toDashboardTeamTierLabel(Constants.Prestige[tier]);
                         };
 
-                        const launchMatch = () => {
+                        const openPregame = () => {
                           if (isActiveFaceitMatchroom) {
-                            return;
-                          }
-
-                          const hasMapInProgress = spotlightGames.some(
-                            (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
-                          );
-
-                          if (!spotlightUsesVetoFlow || hasMapInProgress) {
-                            dispatchPlayWithArenaModeGuard(spotlight);
                             return;
                           }
 
                           audioClick();
                           api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                            target:
-                              spotlight.status === Constants.MatchStatus.PLAYING
-                                ? '/postgame'
-                                : '/play',
+                            target: '/pregame',
                             payload: spotlight.id,
                           });
                         };
@@ -1079,24 +1020,10 @@ export default function () {
                             <footer className="team-dashboard-match-actions">
                               <button
                                 type="button"
-                                title={t('main.dashboard.matchSetup')}
-                                className="btn team-dashboard-setup-button"
-                                disabled={disabled}
-                                onClick={() =>
-                                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                                    target: '/pregame',
-                                    payload: spotlight.id,
-                                  })
-                                }
-                              >
-                                <FaCog aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
                                 data-interaction-sound="none"
                                 className="btn btn-primary team-dashboard-play-button"
                                 disabled={disabled}
-                                onClick={launchMatch}
+                                onClick={openPregame}
                               >
                                 {t('main.dashboard.play')}
                               </button>
@@ -1256,6 +1183,9 @@ export default function () {
                           backgroundRepeat: 'no-repeat',
                         }}
                       >
+                        <time className="team-dashboard-date-pill absolute top-4 left-4 z-10">
+                          Today · {format(profile.date, 'EEE d MMM yyyy')}
+                        </time>
                         <div className="teamless-dashboard-faceit-content">
                           <div className="teamless-dashboard-player">
                             <span className="teamless-dashboard-avatar">
@@ -2102,19 +2032,6 @@ export default function () {
                       </header>
                       <footer className="join justify-center">
                         <button
-                          title={t('main.dashboard.matchSetup')}
-                          className="btn join-item"
-                          disabled={disabled}
-                          onClick={() =>
-                            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                              target: '/pregame',
-                              payload: spotlight.id,
-                            })
-                          }
-                        >
-                          <FaCog />
-                        </button>
-                        <button
                           data-interaction-sound="none"
                           className="btn btn-primary join-item btn-wide"
                           disabled={disabled}
@@ -2123,23 +2040,9 @@ export default function () {
                               return;
                             }
 
-                            const hasMapInProgress = spotlightGames.some(
-                              (matchGame) => matchGame.status === Constants.MatchStatus.PLAYING,
-                            );
-                            const shouldOpenVeto = spotlightUsesVetoFlow;
-
-                            // only jump directly into game when a map is already live,
-                            // or when no veto flow is required.
-                            if (!shouldOpenVeto || hasMapInProgress) {
-                              return dispatchPlayWithArenaModeGuard(spotlight);
-                            }
-
                             audioClick();
                             api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                              target:
-                                spotlight.status === Constants.MatchStatus.PLAYING
-                                  ? '/postgame'
-                                  : '/play',
+                              target: '/pregame',
                               payload: spotlight.id,
                             });
                           }}
@@ -2425,46 +2328,6 @@ export default function () {
                   {t('main.dashboard.openSettings')}
                 </button>
               )}
-            </footer>
-          </article>
-        </section>
-      )}
-      {!!arenaModePromptMatchId && (
-        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
-            <header className="stack-y mb-6">
-              <p className="text-lg font-bold">Arena Mode is turned off</p>
-              <p>
-                This playoff match supports Arena Mode. It adds arena reverb and crowd noise for
-                maximum immersion, and it is strongly recommended to be turned on before playing.
-              </p>
-              <p>Enable Arena Mode by installing it in the Game Settings tab.</p>
-            </header>
-            <footer className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  const matchId = arenaModePromptMatchId;
-                  setArenaModePromptMatchId(null);
-                  dispatch(play(matchId));
-                }}
-              >
-                Continue without Arena Mode
-              </button>
-              <button
-                type="button"
-                data-interaction-sound="back"
-                className="btn btn-primary"
-                onClick={() => {
-                  setArenaModePromptMatchId(null);
-                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                    target: '/settings',
-                  });
-                }}
-              >
-                Go to settings
-              </button>
             </footer>
           </article>
         </section>

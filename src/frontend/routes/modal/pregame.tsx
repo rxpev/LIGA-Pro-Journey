@@ -10,7 +10,7 @@ import { subMonths } from 'date-fns';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useTranslation } from '@liga/frontend/hooks';
+import { useAudio, useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
 import asiaFlag from '@liga/frontend/assets/flags/as.svg';
 import euFlag from '@liga/frontend/assets/flags/eu.svg';
@@ -25,6 +25,21 @@ type MatchVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number]
 type CompetitionMatch = Matches[number];
 type MiniSwissConfig = { maxLosses: number; maxWins: number };
 type SwissRecord = { losses: number; wins: number };
+
+const ARENA_MODE_TIER_SLUGS = new Set<string>([
+  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+  Constants.TierSlug.BLAST_FINALS,
+  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
+  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  Constants.TierSlug.CCT_GLOBAL_FINALS,
+]);
+
+function isArenaModeMatch(match?: Matches[number]) {
+  const tierSlug = match?.competition?.tier?.slug;
+  return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
+}
 
 const VETO_BADGE_STYLES = {
   [Constants.MapVetoAction.BAN]: 'badge-error',
@@ -449,6 +464,8 @@ export default function () {
   const location = useLocation();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
+  const audioClick = useAudio('button-click-inapp.wav');
+  const audioNegativeAlert = useAudio('negative-alert.wav');
   const [match, setMatch] = React.useState<Matches[number]>();
   const [competitionMatches, setCompetitionMatches] = React.useState<CompetitionMatch[]>([]);
   const [vetoes, setVetoes] = React.useState<Array<MatchVetoEntry>>([]);
@@ -458,6 +475,14 @@ export default function () {
   const [recentPlayerRatings, setRecentPlayerRatings] = React.useState<
     Record<number, { maps: number; rating: number }>
   >({});
+  const [working, setWorking] = React.useState(false);
+  const [arenaModePromptVisible, setArenaModePromptVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    if (arenaModePromptVisible) {
+      audioNegativeAlert();
+    }
+  }, [arenaModePromptVisible, audioNegativeAlert]);
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -487,8 +512,6 @@ export default function () {
       return;
     }
 
-    api.match.findVetoList(match.id).then(setVetoes);
-
     if (
       Constants.TierSwissConfig[match.competition.tier.slug as Constants.TierSlug] ||
       getGroupSwissConfig(match)
@@ -517,6 +540,74 @@ export default function () {
     [game, mapListDecided, vetoMapList],
   );
   const [home, away] = React.useMemo(() => (match ? match.competitors : []), [match]);
+
+  React.useEffect(() => {
+    if (!match || mapListDecided) {
+      return;
+    }
+
+    let active = true;
+    const refreshVetoes = () => {
+      api.match.findVetoList(match.id).then((nextVetoes) => {
+        if (active) {
+          setVetoes(nextVetoes);
+        }
+      });
+    };
+
+    refreshVetoes();
+    const interval = window.setInterval(refreshVetoes, 500);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [mapListDecided, match]);
+
+  const startMatch = React.useCallback(async () => {
+    if (!match || !mapListDecided) {
+      return;
+    }
+
+    setWorking(true);
+    await Promise.all([
+      api.match.updateMapList(
+        match.id,
+        vetoMapList.map((item) => item.map),
+      ),
+      api.match.updateVetoList(match.id, vetoes),
+    ]);
+    api.window.send(Constants.WindowIdentifier.Main, match.id, null);
+    api.window.close(Constants.WindowIdentifier.Modal);
+  }, [mapListDecided, match, vetoes, vetoMapList]);
+
+  const onPlay = React.useCallback(async () => {
+    if (!match) {
+      return;
+    }
+
+    if (!isArenaModeMatch(match)) {
+      audioClick();
+      await startMatch();
+      return;
+    }
+
+    const settings = Util.loadSettings(state.profile.settings);
+    const arenaModeStatus = await api.app.arenaModeStatus(settings);
+    const arenaModeReady =
+      settings.arenaMode.enabled &&
+      arenaModeStatus.installed &&
+      arenaModeStatus.equalizerApoInstalled &&
+      arenaModeStatus.valhallaSupermassiveInstalled;
+
+    if (arenaModeReady) {
+      audioClick();
+      await startMatch();
+      return;
+    }
+
+    setArenaModePromptVisible(true);
+  }, [audioClick, match, startMatch, state.profile.settings]);
 
   React.useEffect(() => {
     setRecentPlayerRatings({});
@@ -666,6 +757,71 @@ export default function () {
           );
         })}
       </section>
+      {arenaModePromptVisible && (
+        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
+            <header className="stack-y mb-6">
+              <p className="text-lg font-bold">Arena Mode is turned off</p>
+              <p>
+                This playoff match supports Arena Mode. It adds arena reverb and crowd noise for
+                maximum immersion, and it is strongly recommended to be turned on before playing.
+              </p>
+              <p>Enable Arena Mode by installing it in the Game Settings tab.</p>
+            </header>
+            <footer className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setArenaModePromptVisible(false);
+                  startMatch();
+                }}
+              >
+                Continue without Arena Mode
+              </button>
+              <button
+                type="button"
+                data-interaction-sound="back"
+                className="btn btn-primary"
+                onClick={() => {
+                  setArenaModePromptVisible(false);
+                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                    target: '/settings',
+                    payload: { inCareer: true },
+                  });
+                }}
+              >
+                Go to settings
+              </button>
+            </footer>
+          </article>
+        </section>
+      )}
+      {mapListDecided ? (
+        <button
+          type="button"
+          data-interaction-sound="none"
+          className="btn btn-xl btn-block btn-primary mt-auto shrink-0 rounded-none active:translate-0!"
+          disabled={working}
+          onClick={onPlay}
+        >
+          {t('main.dashboard.play')}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-xl btn-block btn-primary mt-auto shrink-0 rounded-none active:translate-0!"
+          disabled={working}
+          onClick={() =>
+            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+              target: '/play',
+              payload: match.id,
+            })
+          }
+        >
+          Start Veto
+        </button>
+      )}
     </main>
   );
 }

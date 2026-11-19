@@ -5,12 +5,12 @@
  * @module
  */
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { differenceBy, random, sample } from 'lodash';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
-import { useAudio, useTranslation } from '@liga/frontend/hooks';
+import { useTranslation } from '@liga/frontend/hooks';
 import { Image, PlayerCard } from '@liga/frontend/components';
 import { PregameMatchHeader } from './pregame';
 
@@ -56,21 +56,6 @@ const MAP_WINRATE_PRIOR_GAMES = 4;
 
 /** @constant */
 const MAP_RANDOMNESS = 0.35;
-
-const ARENA_MODE_TIER_SLUGS = new Set<string>([
-  Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
-  Constants.TierSlug.BLAST_FINALS,
-  Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
-  Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
-  Constants.TierSlug.LEAGUE_PRO_PLAYOFFS,
-  Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
-  Constants.TierSlug.CCT_GLOBAL_FINALS,
-]);
-
-function isArenaModeMatch(match?: Matches[number]) {
-  const tierSlug = match?.competition?.tier?.slug;
-  return Boolean(tierSlug && ARENA_MODE_TIER_SLUGS.has(tierSlug));
-}
 
 /** @constants */
 const VETO_STYLES = {
@@ -170,11 +155,8 @@ function weightedMapSample(
  */
 export default function () {
   const location = useLocation();
-  const navigate = useNavigate();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
-  const audioNegativeAlert = useAudio('negative-alert.wav');
-  const audioClick = useAudio('button-click-inapp.wav');
   const [activeTab, setActiveTab] = React.useState<Tab>(Tab.MAPS);
   const [match, setMatch] = React.useState<Matches[number]>();
   const [userSquad, setUserSquad] = React.useState<
@@ -185,14 +167,7 @@ export default function () {
   const [mapPool, setMapPool] = React.useState<Awaited<ReturnType<typeof api.mapPool.find>>>([]);
   const [historicalMatches, setHistoricalMatches] = React.useState<Array<HistoricalMatch>>([]);
   const [historicalMatchesLoaded, setHistoricalMatchesLoaded] = React.useState(false);
-  const [arenaModePromptVisible, setArenaModePromptVisible] = React.useState(false);
   const savedVetoSignature = React.useRef<string>();
-
-  React.useEffect(() => {
-    if (arenaModePromptVisible) {
-      audioNegativeAlert();
-    }
-  }, [arenaModePromptVisible]);
 
   // load profile settings for game-specific visuals
   const settingsAll = React.useMemo(
@@ -414,61 +389,22 @@ export default function () {
     [cpuPool, mapPerformance, match, userCompetitorIdx],
   );
 
-  const startMatch = React.useCallback(() => {
+  const completeVeto = React.useCallback(async () => {
     if (!match) {
       return;
     }
 
     setWorking(true);
-
-    Promise.all([
+    await Promise.all([
       api.match.updateMapList(
         match.id,
         vetoMapList.map((item) => item.map),
       ),
       api.match.updateVetoList(match.id, vetoHistory),
-    ]).then(() => {
-      setWorking(false);
-      api.window.send(Constants.WindowIdentifier.Main, match.id, null);
-      api.window.close(Constants.WindowIdentifier.Modal);
-    });
+    ]);
+    setWorking(false);
+    api.window.close(Constants.WindowIdentifier.Modal);
   }, [match, vetoHistory, vetoMapList]);
-
-  const savePregameState = React.useCallback(async () => {
-    if (!match) {
-      return;
-    }
-
-    await api.match.updateVetoList(match.id, vetoHistory);
-  }, [match, vetoHistory]);
-
-  const onPlay = React.useCallback(async () => {
-    if (!match) {
-      return;
-    }
-
-    if (!isArenaModeMatch(match)) {
-      audioClick();
-      startMatch();
-      return;
-    }
-
-    const settings = Util.loadSettings(state.profile.settings);
-    const arenaModeStatus = await api.app.arenaModeStatus(settings);
-    const arenaModeReady =
-      settings.arenaMode.enabled &&
-      arenaModeStatus.installed &&
-      arenaModeStatus.equalizerApoInstalled &&
-      arenaModeStatus.valhallaSupermassiveInstalled;
-
-    if (arenaModeReady) {
-      audioClick();
-      startMatch();
-      return;
-    }
-
-    setArenaModePromptVisible(true);
-  }, [audioClick, match, startMatch, state.profile.settings]);
 
   React.useEffect(() => {
     const isCpuTurn = !!vetoSequenceStep && vetoSequenceStep.team === cpuIdx;
@@ -568,9 +504,7 @@ export default function () {
               })}
             </span>
           </li>
-          <li>
-            {Util.getMatchRoundLabel(match, t('shared.matchday'))}
-          </li>
+          <li>{Util.getMatchRoundLabel(match, t('shared.matchday'))}</li>
           <li>
             {t('shared.bestOf')}&nbsp;
             {match.games.length}
@@ -578,23 +512,6 @@ export default function () {
         </ul>
       </header>
       <PregameMatchHeader home={home} away={away} match={match} />
-      <section
-        role="tablist"
-        className="tabs-box tabs border-base-content/10 tabs-xs rounded-none border-y"
-      >
-        {Object.keys(Tab)
-          .filter((tabKey) => isNaN(Number(tabKey)))
-          .map((tabKey: keyof typeof Tab) => (
-            <a
-              key={tabKey + '__tab'}
-              role="tab"
-              className={cx('tab capitalize', Tab[tabKey] === activeTab && 'tab-active')}
-              onClick={() => setActiveTab(Tab[tabKey])}
-            >
-              {tabKey.replace('_', ' ').toLowerCase()}
-            </a>
-          ))}
-      </section>
       {activeTab === Tab.MAPS && (
         <section className="flex flex-1 flex-col gap-1 overflow-y-scroll">
           <p className="p-2">
@@ -769,55 +686,14 @@ export default function () {
           })}
         </section>
       )}
-      {arenaModePromptVisible && (
-        <section className="bg-base-300/80 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-          <article className="bg-base-100 border-base-content/10 max-w-lg border p-6 shadow-2xl">
-            <header className="stack-y mb-6">
-              <p className="text-lg font-bold">Arena Mode is turned off</p>
-              <p>
-                This playoff match supports Arena Mode. It adds arena reverb and crowd noise for
-                maximum immersion, and it is strongly recommended to be turned on before playing.
-              </p>
-              <p>
-                Enable Arena Mode by installing it in the Game Settings tab.
-              </p>
-            </header>
-            <footer className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  setArenaModePromptVisible(false);
-                  startMatch();
-                }}
-              >
-                Continue without Arena Mode
-              </button>
-              <button
-                type="button"
-                data-interaction-sound="back"
-                className="btn btn-primary"
-                onClick={async () => {
-                  await savePregameState();
-                  navigate('/settings', {
-                    state: { inCareer: true, returnToPlayMatchId: match.id },
-                  });
-                }}
-              >
-                Go to settings
-              </button>
-            </footer>
-          </article>
-        </section>
-      )}
-
       <button
-        data-interaction-sound="none"
+        type="button"
+        data-interaction-sound="back"
         className="btn btn-xl btn-block btn-secondary rounded-none active:translate-0!"
-        disabled={!vetoSequenceComplete}
-        onClick={onPlay}
+        disabled={!vetoSequenceComplete || working}
+        onClick={completeVeto}
       >
-        {t('main.dashboard.play')}
+        Done
       </button>
     </main>
   );
