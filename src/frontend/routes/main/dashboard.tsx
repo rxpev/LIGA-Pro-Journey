@@ -82,6 +82,44 @@ const FACEIT_LEVEL_IMAGES: Record<number, string> = {
 
 type DashboardNewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type DashboardFaceitProfile = Awaited<ReturnType<typeof api.faceit.profile>>;
+type DashboardVetoEntry = Awaited<ReturnType<typeof api.match.findVetoList>>[number];
+
+function getDecidedVetoMaps(vetoes: Array<DashboardVetoEntry>) {
+  return vetoes.filter((entry) =>
+    [Constants.MapVetoAction.PICK, Constants.MapVetoAction.DECIDER].includes(
+      entry.type as Constants.MapVetoAction,
+    ),
+  );
+}
+
+function DashboardMapBackground({
+  maps,
+  game,
+  className,
+}: {
+  maps: Array<string>;
+  game: Constants.Game;
+  className?: string;
+}) {
+  if (!maps.length) {
+    return (
+      <Image className={className} src="resources://maps/allmaps.png" alt="" aria-hidden="true" />
+    );
+  }
+
+  return (
+    <div className={cx(className, 'team-dashboard-veto-map-background')} aria-hidden="true">
+      {maps.map((map, index) => (
+        <Image
+          key={`${index}__${map}`}
+          src={Util.convertMapPool(map, game, true)}
+          alt=""
+          style={{ width: `${100 / maps.length}%` }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function DashboardRequirement({
   complete,
@@ -252,6 +290,7 @@ export default function () {
   const [matchHistorial, setMatchHistorial] = React.useState<Array<typeof upcoming>>([[], []]);
   const [previous, setPrevious] = React.useState<typeof upcoming>([]);
   const [worldRankings, setWorldRankings] = React.useState<Array<number>>([]);
+  const [spotlightVetoes, setSpotlightVetoes] = React.useState<Array<DashboardVetoEntry>>([]);
   const [transfers, setTransfers] = React.useState<
     Awaited<ReturnType<typeof api.transfers.all<typeof Eagers.transfer>>>
   >([]);
@@ -570,6 +609,41 @@ export default function () {
 
   // grab next match info
   const [spotlight] = React.useMemo(() => upcoming.slice(0, 1), [upcoming]);
+  const spotlightVetoMaps = React.useMemo(() => {
+    if (!spotlight) return [];
+    const decidedMaps = getDecidedVetoMaps(spotlightVetoes);
+    return decidedMaps.length >= spotlight.games.length
+      ? decidedMaps.slice(0, spotlight.games.length).map((entry) => entry.map)
+      : [];
+  }, [spotlight, spotlightVetoes]);
+
+  React.useEffect(() => {
+    if (!spotlight) {
+      setSpotlightVetoes([]);
+      return;
+    }
+
+    let active = true;
+    let refreshInterval: ReturnType<typeof setInterval> | undefined;
+    const refreshVetoes = () => {
+      api.match.findVetoList(spotlight.id).then((vetoes) => {
+        if (!active) return;
+
+        setSpotlightVetoes(vetoes);
+        if (getDecidedVetoMaps(vetoes).length >= spotlight.games.length && refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = undefined;
+        }
+      });
+    };
+
+    refreshVetoes();
+    refreshInterval = setInterval(refreshVetoes, 1000);
+    return () => {
+      active = false;
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, [spotlight?.id]);
   const playingStatus = state.playing ? state.playing.status : undefined;
   const playingStatusIndex = Math.max(
     0,
@@ -848,11 +922,10 @@ export default function () {
               {profile.teamId ? (
                 <>
                   <section className="team-dashboard-panel team-dashboard-next-match">
-                    <Image
+                    <DashboardMapBackground
                       className="team-dashboard-map-background"
-                      src="resources://maps/allmaps.png"
-                      alt=""
-                      aria-hidden="true"
+                      maps={spotlightVetoMaps}
+                      game={settings.general.game}
                     />
                     <div className="team-dashboard-map-overlay" aria-hidden="true" />
                     <header className="team-dashboard-panel-header is-borderless justify-end">
@@ -1937,20 +2010,19 @@ export default function () {
                       </figure>
                     )}
                     <figure>
-                      <Image
+                      <DashboardMapBackground
                         className={cx(
                           'h-full w-full',
                           !spotlightUsesVetoFlow && 'team-dashboard-selected-map-background',
                         )}
-                        src={
-                          spotlightUsesVetoFlow
-                            ? 'resources://maps/allmaps.png'
-                            : Util.convertMapPool(
-                                spotlightGames[0]?.map || 'de_dust2',
-                                settings.general.game,
-                                true,
-                              )
+                        maps={
+                          spotlightVetoMaps.length
+                            ? spotlightVetoMaps
+                            : spotlightUsesVetoFlow
+                              ? []
+                              : [spotlightGames[0]?.map || 'de_dust2']
                         }
+                        game={settings.general.game}
                       />
                     </figure>
                     <article className="card-body">
