@@ -295,6 +295,26 @@ export default {
           faceitElo: number;
           faceitLevel: number;
         }>;
+        offerProgress?: {
+          federationSlug: string | null;
+          faceit: {
+            eligible: boolean;
+            minimumMatches: number;
+            offerCeilingMatch: number;
+            performanceScore: number;
+            band: 'poor' | 'adequate' | 'good' | 'excellent' | 'absurd';
+            offerChance: number;
+            guaranteed: boolean;
+            minimumElo: number;
+            blockedReason: string | null;
+          } | null;
+          advance: {
+            chance: number;
+            band: 'inactive' | 'low' | 'established' | 'strong' | 'exceptional';
+            matches: number;
+            maps: number;
+          } | null;
+        };
         daily?: DailyState | null;
       }>,
     queue: (payload?: { queueElo?: number; maxPartyEloDelta?: number }) =>

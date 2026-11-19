@@ -16,6 +16,12 @@ import { sample } from 'lodash';
 import { Engine } from '@liga/backend/lib';
 import { Util } from '@liga/shared';
 import { FACEIT_PLACEMENT_MATCHES } from '@liga/backend/lib/faceit-placement';
+import { getFaceitRecruitmentPlan } from '@liga/backend/lib/faceit-recruitment';
+import {
+  getOfficialScoutingPlan,
+  getOfficialScoutingQuality,
+} from '@liga/backend/lib/passive-scouting';
+import { computeOfficialScoutingEvidence } from '@liga/backend/lib/worldgen';
 
 // ------------------------------
 // Types sent to frontend
@@ -655,7 +661,56 @@ export default function registerFaceitHandlers() {
 
       const recent = await getRecentMatches(profile.id);
       const lifetime = await computeLifetimeStats(profile.id, profile.playerId);
+      const recent20 = await computeLifetimeStats(profile.id, profile.playerId, 20);
       const daily = await getFaceitDailyState(prisma, profile);
+      const federationSlug = fullPlayer?.country?.continent?.federationId
+        ? ((
+            await prisma.federation.findUnique({
+              where: { id: fullPlayer.country.continent.federationId },
+              select: { slug: true },
+            })
+          )?.slug as Constants.FederationSlug | undefined)
+        : undefined;
+      const faceitRecruitment = federationSlug
+        ? getFaceitRecruitmentPlan({
+            federation: federationSlug,
+            matchCount: Math.max(lifetime.matchesPlayed ?? 0, recent20.matchesPlayed ?? 0),
+            elo: profile.faceitElo ?? 0,
+            xp: fullPlayer?.xp ?? 0,
+            kd: recent20.kdRatio ?? lifetime.kdRatio ?? 1,
+            winRatePct: recent20.winRate ?? lifetime.winRate ?? 50,
+          })
+        : null;
+      const officialEvidence = profile.playerId
+        ? await computeOfficialScoutingEvidence(profile.playerId, profile.date)
+        : null;
+      const officialScouting = officialEvidence
+        ? getOfficialScoutingPlan({
+            evidence: officialEvidence,
+            quality: getOfficialScoutingQuality({
+              evidence: officialEvidence,
+              promotionCount: 0,
+              titleReputation: 0,
+              majorWinner: false,
+            }),
+            transferListed: fullPlayer?.transferListed ?? false,
+          })
+        : null;
+      const minimumElo = federationSlug === Constants.FederationSlug.ESPORTS_EUROPA ? 2001 : 0;
+      const pendingOffers = profile.playerId
+        ? await prisma.transfer.count({
+            where: { playerId: profile.playerId, status: Constants.TransferStatus.PLAYER_PENDING },
+          })
+        : 0;
+      const faceitOfferBlockedReason =
+        pendingOffers > 0
+          ? 'Respond to your pending offer to resume FACEIT scouting'
+          : profile.teamId != null
+            ? 'FACEIT scouting is paused while you are on a team'
+            : profile.faceitRecruitmentOutcome != null &&
+                profile.faceitRecruitmentMatches < profile.faceitRecruitmentMinimumMatches
+              ? `Play ${profile.faceitRecruitmentMinimumMatches - profile.faceitRecruitmentMatches} more FACEIT matches to resume scouting`
+              : null;
       const leaderboard = fullPlayer
         ? await getFaceitLeaderboard(prisma, profile, {
             federationId:
@@ -672,6 +727,29 @@ export default function registerFaceitHandlers() {
         recent,
         lifetime,
         leaderboard,
+        offerProgress: {
+          federationSlug: federationSlug ?? null,
+          faceit: faceitRecruitment
+            ? {
+                ...faceitRecruitment,
+                offerChance: faceitOfferBlockedReason
+                  ? 0
+                  : faceitRecruitment.guaranteed
+                    ? 100
+                    : faceitRecruitment.offerChance,
+                blockedReason: faceitOfferBlockedReason,
+                minimumElo,
+              }
+            : null,
+          advance: officialScouting
+            ? {
+                chance: officialScouting.weeklyChance,
+                band: officialScouting.band,
+                matches: officialEvidence?.matches ?? 0,
+                maps: officialEvidence?.maps ?? 0,
+              }
+            : null,
+        },
 
         daily: {
           playedToday: daily.playedToday,

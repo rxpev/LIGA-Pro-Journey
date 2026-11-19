@@ -878,7 +878,9 @@ function buildSimulatedMatchEvents({
     });
   }
 
-  if (forcedPlayerStats && requiredTeamId != null) {
+  // Historical matches may belong to a previous team after a career move.
+  // Only inject the user's forced statistics when that team is in this match.
+  if (forcedPlayerStats && requiredTeamId != null && lineups[requiredTeamId]) {
     const opponentTeamId = requiredTeamId === home.team.id ? away.team.id : home.team.id;
     const opponentLineup = lineups[opponentTeamId];
     const teammateLineup = lineups[requiredTeamId].filter(
@@ -4870,7 +4872,7 @@ function getOfficialEventPrestige(row: OfficialScoutingMapRow) {
   return tierMultiplier * eventMultiplier * lanMultiplier;
 }
 
-async function computeOfficialScoutingEvidence(
+export async function computeOfficialScoutingEvidence(
   playerId: number,
   now: Date,
 ): Promise<OfficialScoutingEvidence> {

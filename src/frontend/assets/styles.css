@@ -1371,6 +1371,460 @@ meter::-webkit-meter-bar {
   @apply text-xs;
 }
 
+.teamless-dashboard-faceit {
+  @apply relative;
+  background-size: cover;
+  background-position: center;
+  background:
+    radial-gradient(circle at 50% 45%, rgb(255 85 64 / 9%), transparent 34%),
+    linear-gradient(135deg, rgb(8 31 43 / 80%), rgb(28 31 39 / 90%));
+}
+
+.teamless-dashboard-faceit-content {
+  @apply relative grid grid-cols-3 items-center gap-8 px-10 pt-5 pb-20;
+  min-height: 25rem;
+}
+
+.teamless-dashboard-player,
+.teamless-dashboard-rank,
+.teamless-dashboard-form {
+  @apply flex min-w-0 flex-col items-center text-center;
+}
+
+.teamless-dashboard-avatar {
+  @apply bg-base-300 mb-3 grid size-24 place-items-center overflow-hidden rounded-full;
+}
+
+.teamless-dashboard-avatar img {
+  @apply size-full object-cover;
+}
+
+.teamless-dashboard-avatar svg {
+  @apply text-base-content/35 text-5xl;
+}
+
+.teamless-dashboard-player strong,
+.teamless-dashboard-rank > strong {
+  @apply text-xl font-bold;
+}
+
+.teamless-dashboard-player > span:last-child,
+.teamless-dashboard-rank > span:not(.teamless-dashboard-level) {
+  @apply text-base-content/65 mt-1 text-xs capitalize;
+}
+
+.teamless-dashboard-level {
+  @apply mb-2 grid size-20 place-items-center text-4xl font-black;
+}
+
+.teamless-dashboard-level.is-unranked {
+  @apply rounded-full;
+}
+
+.teamless-dashboard-level img {
+  @apply size-full object-contain;
+  image-rendering: auto;
+}
+
+.teamless-dashboard-rank small {
+  @apply bg-base-content/10 text-base-content/70 mt-3 rounded px-2 py-1 text-[0.65rem] font-bold tracking-wide uppercase;
+}
+
+.teamless-dashboard-form > span {
+  @apply text-base-content/60 text-xs font-bold tracking-wide uppercase;
+}
+
+.teamless-dashboard-form > strong {
+  @apply mt-1 text-4xl leading-none font-black;
+}
+
+.teamless-dashboard-form small {
+  @apply text-base-content/65 mt-2 text-xs;
+}
+
+.teamless-dashboard-form > div {
+  @apply mt-3 flex gap-1.5;
+}
+
+.teamless-dashboard-form i {
+  @apply bg-base-content/15 size-2 rounded-full;
+}
+
+.teamless-dashboard-form i.is-active {
+  @apply bg-success;
+}
+
+.teamless-dashboard-play {
+  @apply absolute bottom-7 left-1/2 h-11 min-h-11 w-60 -translate-x-1/2 rounded-md text-sm font-bold;
+}
+
+/* FACEIT spotlight: identity, queue action, and compact performance tiles. */
+.teamless-dashboard-faceit-content {
+  left: -15px;
+  display: grid;
+  grid-template-columns: 7rem 7rem 8rem 1fr;
+  grid-template-rows: 3rem 7rem 5rem;
+  align-content: center;
+  gap: 1rem;
+  padding: 2rem 2.5rem;
+  min-height: 25rem;
+}
+
+.teamless-dashboard-player {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 2.75rem auto;
+  justify-content: start;
+  column-gap: 1rem;
+  text-align: left;
+  transform: translateY(-0.75rem);
+  position: relative;
+}
+
+.teamless-dashboard-player::before {
+  content: '';
+  position: absolute;
+  left: 3.75rem;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  width: 3px;
+  background: var(--color-primary);
+}
+
+.teamless-dashboard-player > strong,
+.teamless-dashboard-player > .teamless-dashboard-no-team {
+  padding-left: 0.875rem;
+}
+
+.teamless-dashboard-player > .teamless-dashboard-no-team {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0;
+}
+
+.teamless-dashboard-no-team img {
+  width: 1rem;
+  height: 1rem;
+  object-fit: contain;
+}
+
+.teamless-dashboard-player .teamless-dashboard-avatar {
+  grid-row: 1 / 3;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0;
+}
+
+.teamless-dashboard-avatar svg {
+  font-size: 1.25rem;
+}
+.teamless-dashboard-player strong {
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+
+.teamless-dashboard-rank {
+  grid-column: 1 / 3;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 7rem 11rem;
+  justify-items: start;
+  column-gap: 1rem;
+  text-align: left;
+  align-content: start;
+  align-self: stretch;
+  grid-template-rows: 2.25rem 1.75rem 3rem;
+}
+
+.teamless-dashboard-rank .teamless-dashboard-level {
+  grid-row: 1 / 4;
+  width: 7rem;
+  height: 7rem;
+  margin: 0;
+}
+
+.teamless-dashboard-rank > strong {
+  font-size: 1.75rem;
+}
+.teamless-dashboard-rank small {
+  margin-top: 0.25rem;
+}
+.teamless-dashboard-play {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  transform: none;
+  translate: none;
+  width: 12rem;
+  min-height: 2.5rem;
+  height: 2.5rem;
+  margin: 0;
+  justify-self: start;
+}
+
+.teamless-dashboard-form {
+  grid-column: 1;
+  grid-row: 3;
+  border: 1px solid rgb(79 151 174 / 35%);
+  border-radius: 0.4rem;
+  padding: 0.65rem;
+  background: rgb(2 23 32 / 55%);
+  align-self: stretch;
+  justify-content: center;
+  width: 7rem;
+}
+
+.teamless-dashboard-form > span {
+  font-size: 0.75rem;
+}
+.teamless-dashboard-form > strong {
+  font-size: 1.5rem;
+}
+.teamless-dashboard-form > div {
+  margin-top: 0.35rem;
+}
+.teamless-dashboard-win-rate {
+  grid-column: 2;
+  width: 7rem;
+}
+
+.teamless-dashboard-player > .teamless-dashboard-no-team {
+  font-size: 0.875rem;
+}
+.teamless-dashboard-rank small {
+  font-size: 0.75rem;
+}
+.teamless-dashboard-last-five {
+  grid-column: 3;
+  width: 8rem;
+}
+.teamless-dashboard-last-five > div {
+  height: 1.5rem;
+  align-items: center;
+}
+.teamless-dashboard-form i.is-loss {
+  background: var(--color-error);
+}
+
+.teamless-dashboard-offers {
+  @apply flex min-h-64 flex-1 flex-col;
+  min-height: 0;
+}
+
+.team-dashboard-main-column:has(.teamless-dashboard-offers) {
+  overflow: hidden;
+}
+
+.team-dashboard-main-column > .teamless-dashboard-faceit {
+  flex-shrink: 0;
+}
+
+.teamless-dashboard-offer-methods {
+  @apply border-base-content/10 grid grid-cols-2 divide-x border-b;
+}
+
+.teamless-dashboard-offer-methods > article {
+  border-color: color-mix(in srgb, var(--color-base-content) 10%, transparent);
+}
+
+.team-dashboard-panel-header.teamless-dashboard-requirements-header {
+  min-height: 2rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+.teamless-dashboard-requirements-header h2 {
+  font-size: 0.875rem;
+}
+
+.teamless-dashboard-offer-methods > article {
+  @apply flex flex-col gap-3 p-4;
+}
+
+.teamless-dashboard-offer-methods header {
+  @apply flex items-center gap-3;
+}
+
+.teamless-dashboard-offer-methods header > svg {
+  @apply bg-base-300 text-base-content/60 size-10 shrink-0 rounded p-3;
+}
+
+.teamless-dashboard-offer-methods header div {
+  @apply min-w-0;
+}
+
+.teamless-dashboard-offer-methods header strong,
+.teamless-dashboard-offer-methods header span {
+  @apply block;
+}
+
+.teamless-dashboard-offer-methods header strong {
+  @apply text-sm font-bold;
+}
+
+.teamless-dashboard-offer-methods header span {
+  @apply text-base-content/55 mt-0.5 truncate text-xs;
+}
+
+.teamless-dashboard-offer-methods p {
+  @apply text-base-content/60 text-xs;
+}
+
+.teamless-dashboard-offer-methods p strong {
+  @apply text-base-content mr-1 text-3xl font-black;
+}
+
+.teamless-dashboard-offer-methods progress {
+  @apply bg-base-content/10 h-2 w-full overflow-hidden rounded-full;
+  appearance: none;
+}
+
+.teamless-dashboard-offer-methods progress::-webkit-progress-bar {
+  background: rgb(255 255 255 / 8%);
+  border-radius: 9999px;
+}
+
+.teamless-dashboard-offer-methods progress::-webkit-progress-value {
+  background: var(--color-primary);
+  border-radius: 9999px;
+}
+
+.teamless-dashboard-offer-methods > article:last-child progress::-webkit-progress-value {
+  background: var(--color-info);
+}
+
+.teamless-dashboard-offer-methods .btn {
+  @apply border-primary mt-auto w-full rounded bg-transparent text-xs;
+}
+
+.teamless-dashboard-offer-methods > article:last-child .btn {
+  @apply border-base-content/20 bg-base-content/10;
+}
+
+.teamless-dashboard-requirements {
+  @apply grid flex-1 grid-cols-2;
+  min-height: 0;
+}
+
+.teamless-dashboard-requirements > div {
+  @apply flex flex-col gap-3 p-4;
+  min-height: 0;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.teamless-dashboard-offer-info {
+  @apply text-base-content mt-auto flex items-center justify-center gap-3 px-3 pt-4 pb-1 text-center text-sm;
+  flex-shrink: 0;
+  min-height: 2rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0;
+}
+
+.teamless-dashboard-requirements .teamless-dashboard-offer-info svg {
+  @apply text-base-content shrink-0 text-2xl;
+}
+
+.teamless-dashboard-requirements > div:not(:has(article)) > .teamless-dashboard-offer-info {
+  margin-top: auto;
+  margin-bottom: auto;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.teamless-dashboard-requirements > div:last-child {
+  @apply border-r-0;
+}
+
+.teamless-dashboard-requirements article {
+  @apply border-base-content/15 bg-base-300/30 flex min-h-20 min-w-0 items-center gap-3 rounded-lg border px-5 py-4;
+  min-height: 3.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.teamless-dashboard-requirements svg {
+  @apply text-base-content/60 shrink-0 text-lg;
+}
+
+.teamless-dashboard-requirements article.is-complete svg {
+  @apply text-success;
+}
+
+.teamless-dashboard-requirements article.requirement-completing {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  animation: requirement-dismiss 0.35s ease 1.6s forwards;
+}
+
+.requirement-completing::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--color-success) 35%, transparent);
+  transform-origin: left;
+  animation: requirement-fill 1.2s ease-out both;
+}
+
+@keyframes requirement-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes requirement-dismiss {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .requirement-completing::before {
+    animation-duration: 0.01s;
+  }
+  .teamless-dashboard-requirements article.requirement-completing {
+    animation-delay: 0.5s;
+  }
+}
+
+.teamless-dashboard-requirements div {
+  @apply min-w-0;
+}
+
+.teamless-dashboard-requirements strong,
+.teamless-dashboard-requirements span {
+  @apply block truncate;
+}
+
+.teamless-dashboard-requirements strong {
+  @apply text-base-content text-sm font-bold;
+  overflow: visible;
+}
+
+.teamless-dashboard-requirements strong .tooltip {
+  display: inline-block;
+  overflow: visible;
+  margin-top: 0;
+}
+
+.teamless-dashboard-requirements strong .tooltip svg {
+  color: inherit;
+}
+
+.teamless-dashboard-requirements span {
+  @apply text-base-content/70 mt-1 text-xs;
+}
+
 .team-dashboard-match-table-header,
 .team-dashboard-match-list > article {
   @apply grid grid-cols-[4.5rem_minmax(15rem,1.25fr)_minmax(9rem,0.8fr)_5rem] items-center gap-3 px-4;
@@ -1580,6 +2034,25 @@ meter::-webkit-meter-bar {
 
   .team-dashboard-match-content {
     @apply grid-cols-2 gap-y-5 px-4 pt-8 pb-16;
+  }
+
+  .teamless-dashboard-faceit-content {
+    @apply grid-cols-1 gap-5 px-4 pt-5 pb-20;
+  }
+
+  .teamless-dashboard-player,
+  .teamless-dashboard-form {
+    @apply hidden;
+  }
+
+  .teamless-dashboard-offer-methods,
+  .teamless-dashboard-requirements {
+    @apply grid-cols-1;
+  }
+
+  .teamless-dashboard-offer-methods > article,
+  .teamless-dashboard-requirements > div {
+    @apply border-r-0 border-b;
   }
 
   .team-dashboard-match-meta {
