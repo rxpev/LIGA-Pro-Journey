@@ -30,6 +30,12 @@ export enum Application {
 
 export const NewSaveSeasonStartDate = '2026-01-01T00:00:00.000Z';
 
+export const BotXpEasterEgg = {
+  playerName: 'JuhobOb',
+  multiplier: 1.75,
+  maximumXp: 100,
+} as const;
+
 export type CustomGameOptions = {
   mode: 'classic' | 'deathmatch' | 'chaos';
   serverSettings?: {

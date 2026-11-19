@@ -11,7 +11,14 @@ import { ipcMain } from 'electron';
 import { glob } from 'glob';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Constants, Eagers, Util } from '@liga/shared';
-import { DatabaseClient, DiscordPresence, Game, WindowManager, Worldgen } from '@liga/backend/lib';
+import {
+  DatabaseClient,
+  DiscordPresence,
+  Game,
+  sealActiveSaveIntegrity,
+  WindowManager,
+  Worldgen,
+} from '@liga/backend/lib';
 import { removeSaveIntegrity } from '@liga/backend/lib/save-integrity';
 import { addDays } from 'date-fns';
 
@@ -241,6 +248,17 @@ export default function registerProfileHandlers() {
         include: { player: true },
       });
 
+      if (playerName === Constants.BotXpEasterEgg.playerName) {
+        await DatabaseClient.prisma.$executeRaw`
+          UPDATE "Player"
+          SET "xp" = MIN(
+            ${Constants.BotXpEasterEgg.maximumXp},
+            CAST(ROUND("xp" * ${Constants.BotXpEasterEgg.multiplier}) AS INTEGER)
+          )
+          WHERE "userControlled" = 0
+        `;
+      }
+
       // Create the season-start calendar entry
       await DatabaseClient.prisma.calendar.create({
         data: {
@@ -257,6 +275,11 @@ export default function registerProfileHandlers() {
           },
         });
       }
+
+      // Career creation is an authorized change to protected player data. Seal
+      // it now so the Easter-egg XP values become the integrity baseline while
+      // later manual database edits continue to be detected and restored.
+      await sealActiveSaveIntegrity();
 
       // Let the main window finish mounting, then deliver this as a real
       // incoming message so the normal Inbox notification sound plays.

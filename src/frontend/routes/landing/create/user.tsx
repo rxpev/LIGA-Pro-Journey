@@ -141,6 +141,7 @@ export default function () {
     ? highlightedWorldMaps[selectedContinent] || worldMap
     : worldMap;
   const selectedRegion = selectedContinent ? regionDetails[selectedContinent] : undefined;
+  const botXpEasterEggActive = watch('name') === Constants.BotXpEasterEgg.playerName;
 
   // assign avatar if none found in window data
   React.useEffect(() => {
@@ -249,12 +250,19 @@ export default function () {
                   className={cx('input', 'w-full', !!formState.errors?.name?.type && 'input-error')}
                   placeholder="Enter your alias..."
                 />
-                <footer className="label h-5">
-                  <span className="label-text-alt">
-                    {formState.errors?.name?.type === 'required' && t('shared.required')}
-                    {formState.errors?.name?.type === 'pattern' &&
-                      t('shared.specialCharactersError')}
-                  </span>
+                <footer className="label h-5" aria-live="polite">
+                  {botXpEasterEggActive ? (
+                    <span className="landing-create-user-step__easter-egg-info label-text-alt">
+                      <FaInfoCircle aria-hidden="true" />
+                      All bots' XP will be increased by 75%.
+                    </span>
+                  ) : (
+                    <span className="label-text-alt">
+                      {formState.errors?.name?.type === 'required' && t('shared.required')}
+                      {formState.errors?.name?.type === 'pattern' &&
+                        t('shared.specialCharactersError')}
+                    </span>
+                  )}
                 </footer>
               </section>
               <section className="landing-create-user-step__age-field fieldset w-full">

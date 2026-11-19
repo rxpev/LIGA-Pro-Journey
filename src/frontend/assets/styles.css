@@ -5046,6 +5046,16 @@ button.inbox-chats-nav:hover {
   display: block;
   overflow-wrap: anywhere;
 }
+.landing-create-user-step__easter-egg-info {
+  display: flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  color: #ff8a53;
+  white-space: nowrap;
+}
+.landing-create-user-step__easter-egg-info svg {
+  flex: 0 0 auto;
+}
 
 .landing-create-user-step__statistics {
   display: flex;
