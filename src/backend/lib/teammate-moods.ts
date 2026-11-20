@@ -387,7 +387,9 @@ function getFirstResultReplySetId(
 }
 
 function replyButtons(playerId: number, replySetId?: string) {
-  const route = Constants.IPCRoute.TEAMMATE_MORALE_REPLY;
+  // Kept only so legacy saves containing teammate messages can still render
+  // their stored HTML. The route is intentionally not registered anywhere.
+  const route = '/teammate-morale/reply';
   if (replySetId) {
     const replies = getFirstResultReplySet(replySetId);
     if (replies) {

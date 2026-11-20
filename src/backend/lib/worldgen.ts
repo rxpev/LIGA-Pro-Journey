@@ -93,7 +93,6 @@ import {
 } from './trial-contract-offer';
 import { upsertCompetitionMvp } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
-import { processCompletedMatch } from './teammate-moods';
 import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
@@ -13520,9 +13519,6 @@ export async function onMatchdayNPC(
     : await DatabaseClient.prisma.$transaction(writes!.transaction);
   if (samplePersistence) report?.('sample-persist-total', performance.now() - persistenceStarted);
   phase('match-persist');
-  if (involvesCareerTeam) {
-    await processCompletedMatch(match.id);
-  }
   if (entry.type === Constants.CalendarEntry.MATCHDAY_USER) {
     await progressActiveFaceitTrial(
       match.competitors.flatMap((competitor) =>

@@ -23,7 +23,6 @@ import { compact, flatten, random, uniq } from 'lodash';
 import { Constants, Bot, Chance, Util, Eagers, Dedent, is } from '@liga/shared';
 import DatabaseClient from './database-client';
 import { CSGO_BOTPROFILE_TEMPLATE } from './csgo-botprofile-template';
-import { getMoodPerformanceModifiers } from './teammate-moods';
 
 /**
  * Promisified version of `exec`.
@@ -976,13 +975,8 @@ export class Server {
     const original = path.join(baseDir, this.botConfigFile); // e.g. "botprofile.db"
     const [home, away] = this.competitors;
 
-    const moodModifiers = await getMoodPerformanceModifiers();
-    const applyMood = (player: (typeof home.team.players)[number]) => ({
-      ...player,
-      xp: Math.max(0, Math.round(player.xp * (1 + (moodModifiers.get(player.id) || 0)))),
-    });
-    const homePlayers = home.team.players.map(applyMood);
-    const awayPlayers = away.team.players.map(applyMood);
+    const homePlayers = home.team.players;
+    const awayPlayers = away.team.players;
     const allPlayers = [...homePlayers, ...awayPlayers];
     await this.exportBotTemplatesJSON(allPlayers);
 

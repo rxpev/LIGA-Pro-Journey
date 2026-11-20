@@ -42,40 +42,6 @@ function useEmptyAvatar(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.src = 'resources://avatars/empty.png';
 }
 
-function MoraleIcon({
-  morale,
-  playerName,
-}: {
-  morale: 'Very Happy' | 'Happy' | 'Content' | 'Unhappy' | 'Very Unhappy';
-  playerName: string;
-}) {
-  const className = `is-${morale.toLowerCase().replace(/ /g, '-')}`;
-  const mouthPath =
-    morale === 'Very Happy'
-      ? 'M8.5 16c1.2 1.4 2.7 2.1 4.5 2.1s3.3-.7 4.5-2.1'
-      : morale === 'Happy'
-        ? 'M8.5 16c1.2 1.4 2.7 2.1 4.5 2.1s3.3-.7 4.5-2.1'
-        : morale === 'Content'
-          ? 'M8 17h10'
-          : morale === 'Unhappy'
-            ? 'M8 18.25c1.4-2.3 3.1-3.4 5-3.4s3.6 1.1 5 3.4'
-            : 'M8 19.25c1.4-2.3 3.1-3.4 5-3.4s3.6 1.1 5 3.4';
-  return (
-    <span
-      className={`squad-player-morale ${className}`}
-      title={`Morale: ${morale}`}
-      aria-label={`${playerName} morale: ${morale}`}
-    >
-      <svg aria-hidden="true" viewBox="0 0 26 26">
-        <circle className="morale-face" cx="13" cy="13" r="12" />
-        <circle className="morale-feature" cx="9" cy="9.75" r="1.25" />
-        <circle className="morale-feature" cx="17" cy="9.75" r="1.25" />
-        <path className="morale-mouth" d={mouthPath} />
-      </svg>
-    </span>
-  );
-}
-
 const SquadPlayerQuery = {
   include: {
     country: {
@@ -175,9 +141,6 @@ export default function () {
     Awaited<ReturnType<typeof api.matches.previous<typeof Eagers.match>>>
   >([]);
   const [transferHistoryPlayers, setTransferHistoryPlayers] = React.useState<RosterPlayer[]>([]);
-  const [teammateMorale, setTeammateMorale] = React.useState<
-    Awaited<ReturnType<typeof api.teammateMorale.all>>
-  >([]);
   const fmtDate = useFormatAppDate();
   const fmtShortDate = useFormatAppShortDate();
 
@@ -208,11 +171,6 @@ export default function () {
         where: { careerStints: { some: { teamId: state.profile.team.id } } },
       })
       .then((players) => setTransferHistoryPlayers(players as RosterPlayer[]));
-    if (!state.profile.trialTeamId) {
-      api.teammateMorale.all().then(setTeammateMorale);
-    } else {
-      setTeammateMorale([]);
-    }
   }, [state.profile?.playerId, state.profile?.team, state.profile?.trialTeamId]);
 
   React.useEffect(() => {
@@ -594,8 +552,6 @@ export default function () {
             const isTrialPlayer =
               state.profile?.trialTeamId === state.profile?.teamId &&
               player.id === state.profile?.playerId;
-            const morale = teammateMorale.find((item) => item.playerId === player.id);
-
             return (
               <article
                 className="squad-player-card"
@@ -617,7 +573,6 @@ export default function () {
                 <header>
                   <figure>
                     {isTrialPlayer && <span className="squad-player-trial-badge">Trial</span>}
-                    {morale && <MoraleIcon morale={morale.morale} playerName={player.name} />}
                     <img src={player.avatar || 'resources://avatars/empty.png'} alt={player.name} />
                   </figure>
                   <div className="squad-player-identity">

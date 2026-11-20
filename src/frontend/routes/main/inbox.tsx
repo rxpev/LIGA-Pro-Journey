@@ -94,17 +94,6 @@ function normalizeCoachEmphasis(content: string) {
   return content.replace(/\*\*Head Coach ([^*]+)\*\*/g, 'Head Coach **$1**');
 }
 
-function getTeammateReplyActions(content: string) {
-  const document = new DOMParser().parseFromString(content, 'text/html');
-  return [...document.querySelectorAll<HTMLButtonElement>('button[data-ipc-route]')]
-    .filter((button) => button.dataset.ipcRoute === Constants.IPCRoute.TEAMMATE_MORALE_REPLY)
-    .map((button) => ({
-      label: button.textContent?.trim() || 'Reply',
-      route: button.dataset.ipcRoute || '',
-      payload: button.dataset.payload || '',
-    }));
-}
-
 export default function Inbox() {
   const location = useLocation();
   const fmtDate = useFormatAppDate();
@@ -302,18 +291,6 @@ export default function Inbox() {
       )
     : false;
   const playerAvatar = state.profile?.player?.avatar || emptyAvatar;
-  const teammateReplyDialogue = [...dialogues]
-    .reverse()
-    .find(
-      (dialogue) =>
-        !dialogue.completed &&
-        !closedEmailIds.has(dialogue.emailId) &&
-        dialogue.content.includes(Constants.IPCRoute.TEAMMATE_MORALE_REPLY),
-    );
-  const teammateReplyActions = teammateReplyDialogue
-    ? getTeammateReplyActions(teammateReplyDialogue.content)
-    : [];
-
   React.useLayoutEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
@@ -333,21 +310,6 @@ export default function Inbox() {
       localStorage.removeItem(key);
     }
   }, []);
-
-  const respondToTeammate = (route: string, payload: string) => {
-    if (!teammateReplyDialogue) return;
-    setWorking(true);
-    api.ipc
-      .invoke(route, payload)
-      .then(() =>
-        api.emails.updateDialogue({
-          where: { id: teammateReplyDialogue.id },
-          data: { completed: true },
-        }),
-      )
-      .then((email) => dispatch(emailsUpdate([email])))
-      .finally(() => setWorking(false));
-  };
 
   React.useEffect(() => {
     if (!active || !acceptedFaceitInvite || restoredRequestForEmail.current === active.id) return;
@@ -644,10 +606,7 @@ export default function Inbox() {
                                 components={{
                                   button(props) {
                                     const { node, children, ...rest } = props;
-                                    if (
-                                      node.properties.dataIpcRoute ===
-                                      Constants.IPCRoute.TEAMMATE_MORALE_REPLY
-                                    )
+                                    if (node.properties.dataIpcRoute === '/teammate-morale/reply')
                                       return null;
                                     const isTrialInformation =
                                       node.properties.dataTrialInformation === 'true';
@@ -855,21 +814,6 @@ export default function Inbox() {
                           <i />
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {teammateReplyDialogue && teammateReplyActions.length > 0 && !threadClosed && (
-                    <div className="inbox-reply-actions">
-                      {teammateReplyActions.map((action, index) => (
-                        <button
-                          type="button"
-                          className={index === 0 ? 'btn btn-primary' : 'btn btn-ghost'}
-                          disabled={working}
-                          key={action.payload}
-                          onClick={() => respondToTeammate(action.route, action.payload)}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
                     </div>
                   )}
                   {isFaceitOpeningChat && !hasPlayerReply && !threadClosed && (
