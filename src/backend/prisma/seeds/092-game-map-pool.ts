@@ -11,16 +11,17 @@ import { Constants } from '@liga/shared';
 const data: Record<Constants.Game, Array<string>> = {
   [Constants.Game.CSGO]: [
     // active
-    'de_ancient',
+    'de_cache',
     'de_dust2',
-    'de_inferno',
     'de_mirage',
+    'de_inferno',
     'de_nuke',
-    'de_overpass',
+    'de_ancient',
     'de_anubis',
 
     // reserve
-    'de_cache',
+    'de_overpass',
+    'de_vertigo',
     'de_train',
   ],
 };
