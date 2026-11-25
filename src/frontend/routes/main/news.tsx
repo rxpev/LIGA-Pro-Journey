@@ -17,6 +17,8 @@ type NewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type NewsTopic = NewsItem['topic'] | 'ALL' | 'SHORTS';
 type NewsRouteState = {
   articleId?: number;
+  relatedPlayerId?: number;
+  relatedPlayerName?: string;
 };
 type RelatedTeam = {
   id: number;
@@ -224,6 +226,12 @@ function asRelatedPlayers(value: unknown): RelatedPlayer[] {
     : [];
 
   return [...new Map(players.map((player) => [player.id, player])).values()];
+}
+
+function isRelatedPlayerNews(item: NewsItem, playerId: number) {
+  return asRelatedPlayers(parsePayload(item).relatedPlayers).some(
+    (player) => player.id === playerId,
+  );
 }
 
 function asTopPlayerRanking(value: unknown): TopPlayerRankingEntry[] {
@@ -1598,7 +1606,19 @@ export default function () {
   const location = useLocation();
   const routeState = (location.state || {}) as NewsRouteState;
   const routeArticleId = typeof routeState.articleId === 'number' ? routeState.articleId : null;
+  const routeRelatedPlayerId =
+    typeof routeState.relatedPlayerId === 'number' ? routeState.relatedPlayerId : null;
+  const routeRelatedPlayerName =
+    typeof routeState.relatedPlayerName === 'string' ? routeState.relatedPlayerName : null;
   const [requestedArticleId, setRequestedArticleId] = React.useState<number | null>(routeArticleId);
+  const [relatedPlayer, setRelatedPlayer] = React.useState<{
+    id: number;
+    name: string | null;
+  } | null>(
+    routeRelatedPlayerId === null
+      ? null
+      : { id: routeRelatedPlayerId, name: routeRelatedPlayerName },
+  );
   const [items, setItems] = React.useState<NewsItem[]>([]);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
   const [filter, setFilter] = React.useState<NewsTopic>('ALL');
@@ -1624,18 +1644,33 @@ export default function () {
 
   React.useEffect(() => {
     setRequestedArticleId(routeArticleId);
-  }, [routeArticleId, location.key]);
+    setRelatedPlayer(
+      routeRelatedPlayerId === null
+        ? null
+        : { id: routeRelatedPlayerId, name: routeRelatedPlayerName },
+    );
+  }, [routeArticleId, routeRelatedPlayerId, routeRelatedPlayerName, location.key]);
 
   React.useEffect(() => {
     const removeWindowSendListener = api.ipc.on(
       Constants.IPCRoute.WINDOW_SEND,
       (payload: number | (ModalRequest<NewsRouteState> & { inAppModal?: boolean })) => {
-        if (
-          typeof payload !== 'number' &&
-          payload?.target === '/news' &&
-          typeof payload.payload?.articleId === 'number'
-        ) {
-          setRequestedArticleId(payload.payload.articleId);
+        if (typeof payload !== 'number' && payload?.target === '/news') {
+          const nextArticleId = payload.payload?.articleId;
+          const nextRelatedPlayerId = payload.payload?.relatedPlayerId;
+
+          setRequestedArticleId(typeof nextArticleId === 'number' ? nextArticleId : null);
+          setRelatedPlayer(
+            typeof nextRelatedPlayerId === 'number'
+              ? {
+                  id: nextRelatedPlayerId,
+                  name:
+                    typeof payload.payload?.relatedPlayerName === 'string'
+                      ? payload.payload.relatedPlayerName
+                      : null,
+                }
+              : null,
+          );
         }
       },
     );
@@ -1665,17 +1700,22 @@ export default function () {
     );
   }, [items, requestedArticleId]);
 
+  const relatedItems = React.useMemo(
+    () =>
+      relatedPlayer ? items.filter((item) => isRelatedPlayerNews(item, relatedPlayer.id)) : items,
+    [items, relatedPlayer],
+  );
   const filteredItems = React.useMemo(() => {
     if (filter === 'ALL') {
-      return items.filter(isTopStoryItem);
+      return relatedItems.filter(isTopStoryItem);
     }
 
     if (filter === 'SHORTS') {
-      return items.filter((item) => item.type === 'SHORT');
+      return relatedItems.filter((item) => item.type === 'SHORT');
     }
 
-    return items.filter((item) => item.topic === filter);
-  }, [filter, items]);
+    return relatedItems.filter((item) => item.topic === filter);
+  }, [filter, relatedItems]);
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / NEWS_ITEMS_PER_PAGE));
   const visibleItems = React.useMemo(
     () => filteredItems.slice((page - 1) * NEWS_ITEMS_PER_PAGE, page * NEWS_ITEMS_PER_PAGE),
@@ -1707,7 +1747,7 @@ export default function () {
 
   React.useEffect(() => {
     setPage(1);
-  }, [filter]);
+  }, [filter, relatedPlayer?.id]);
 
   React.useEffect(() => {
     setPage((current) => Math.min(Math.max(1, current), totalPages));
@@ -1758,13 +1798,25 @@ export default function () {
                 </button>
               ))}
             </nav>
+            {relatedPlayer && (
+              <p className="text-base-content/60 mt-2 text-center text-xs">
+                Showing stories related to{' '}
+                <span className="text-base-content font-semibold">
+                  {relatedPlayer.name || `Player #${relatedPlayer.id}`}
+                </span>
+              </p>
+            )}
           </header>
           <div className="border-base-content/10 mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
             <div className="divide-base-content/10 grid min-h-0 flex-1 grid-rows-7 divide-y overflow-hidden">
               {!filteredItems.length && (
                 <article className="center row-span-full h-full gap-3 px-6 text-center">
                   <FaNewspaper className="text-muted size-20" />
-                  <p className="text-muted">No stories yet. Run the generator to test the feed.</p>
+                  <p className="text-muted">
+                    {relatedPlayer
+                      ? `No ${filter === 'ALL' ? 'top stories' : filter.toLowerCase()} related to ${relatedPlayer.name || `Player #${relatedPlayer.id}`}.`
+                      : 'No stories yet. Run the generator to test the feed.'}
+                  </p>
                 </article>
               )}
               {visibleItems.map((item) => (

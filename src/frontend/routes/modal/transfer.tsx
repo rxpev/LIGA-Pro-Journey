@@ -661,16 +661,22 @@ export default function TransferModal() {
     );
     api.window.close(Constants.WindowIdentifier.Modal, true);
   }, [player]);
-  const openNewsPlaceholder = React.useCallback(() => {
-    api.window.send<ModalRequest>(
+  const openRelatedNews = React.useCallback(() => {
+    if (!player) return;
+
+    api.window.send<ModalRequest<{ relatedPlayerId: number; relatedPlayerName: string }>>(
       Constants.WindowIdentifier.Main,
       {
         target: '/news',
+        payload: {
+          relatedPlayerId: player.id,
+          relatedPlayerName: player.name,
+        },
       },
       0,
     );
     api.window.close(Constants.WindowIdentifier.Modal, true);
-  }, []);
+  }, [player]);
   const openTop20Article = React.useCallback((articleId: number) => {
     api.window.send<ModalRequest<{ articleId: number }>>(
       Constants.WindowIdentifier.Main,
@@ -740,7 +746,7 @@ export default function TransferModal() {
                     type="button"
                     className="player-profile-action shrink-0"
                     data-interaction-sound="click"
-                    onClick={openNewsPlaceholder}
+                    onClick={openRelatedNews}
                   >
                     <FaNewspaper /> News
                   </button>
