@@ -14,8 +14,8 @@ function parsePayload(item: NewsItem) {
   }
 }
 
-function isRelated(item: NewsItem, competitionId: number) {
-  return Number(parsePayload(item).competitionId) === competitionId;
+function isRelated(item: NewsItem, competitionIds: Set<number>) {
+  return competitionIds.has(Number(parsePayload(item).competitionId));
 }
 
 function getFlagCode(item: NewsItem) {
@@ -30,7 +30,24 @@ export default function CompetitionNews() {
   const [items, setItems] = React.useState<NewsItem[]>([]);
 
   React.useEffect(() => {
-    api.news.all().then((news) => setItems(news.filter((item) => isRelated(item, competition.id))));
+    let isCurrent = true;
+
+    Promise.all([
+      api.news.all(),
+      api.competitions.mvps({ competitionId: competition.id }),
+    ]).then(([news, mvps]) => {
+      if (!isCurrent) return;
+
+      const relatedCompetitionIds = new Set([
+        competition.id,
+        ...mvps.map((mvp) => mvp.competitionId),
+      ]);
+      setItems(news.filter((item) => isRelated(item, relatedCompetitionIds)));
+    });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [competition.id]);
 
   const groupedItems = React.useMemo(() => {

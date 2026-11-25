@@ -171,25 +171,47 @@ function getOpponentFactor(opponentElo: number | null, tournamentAverageElo: num
 function getCompetitionMvpStageWeights(tierSlug: string) {
   const entries: Array<{ slug: string; weight: number }> = [];
 
-  if (tierSlug === Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) {
+  if (
+    [
+      Constants.TierSlug.MAJOR_CHALLENGERS_STAGE,
+      Constants.TierSlug.MAJOR_LEGENDS_STAGE,
+      Constants.TierSlug.MAJOR_CHAMPIONS_STAGE,
+    ].includes(tierSlug as Constants.TierSlug)
+  ) {
     entries.push(
       { slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE, weight: 0.15 },
       { slug: Constants.TierSlug.MAJOR_LEGENDS_STAGE, weight: 0.4 },
       { slug: Constants.TierSlug.MAJOR_CHAMPIONS_STAGE, weight: 1 },
     );
-  } else if (tierSlug === Constants.TierSlug.IEM_COLOGNE_PLAYOFFS) {
+  } else if (
+    [
+      Constants.TierSlug.IEM_COLOGNE_GROUP_A,
+      Constants.TierSlug.IEM_COLOGNE_GROUP_B,
+      Constants.TierSlug.IEM_COLOGNE_PLAYOFFS,
+    ].includes(tierSlug as Constants.TierSlug)
+  ) {
     entries.push(
       { slug: Constants.TierSlug.IEM_COLOGNE_GROUP_A, weight: 0.25 },
       { slug: Constants.TierSlug.IEM_COLOGNE_GROUP_B, weight: 0.25 },
       { slug: Constants.TierSlug.IEM_COLOGNE_PLAYOFFS, weight: 1 },
     );
-  } else if (tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS) {
+  } else if (
+    [
+      Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+      Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+      Constants.TierSlug.IEM_KRAKOW_PLAYOFFS,
+    ].includes(tierSlug as Constants.TierSlug)
+  ) {
     entries.push(
       { slug: Constants.TierSlug.IEM_KRAKOW_GROUP_A, weight: 0.25 },
       { slug: Constants.TierSlug.IEM_KRAKOW_GROUP_B, weight: 0.25 },
       { slug: Constants.TierSlug.IEM_KRAKOW_PLAYOFFS, weight: 1 },
     );
-  } else if (tierSlug === Constants.TierSlug.LEAGUE_PRO_PLAYOFFS) {
+  } else if (
+    [Constants.TierSlug.LEAGUE_PRO, Constants.TierSlug.LEAGUE_PRO_PLAYOFFS].includes(
+      tierSlug as Constants.TierSlug,
+    )
+  ) {
     entries.push(
       { slug: Constants.TierSlug.LEAGUE_PRO, weight: 0.2 },
       { slug: Constants.TierSlug.LEAGUE_PRO_PLAYOFFS, weight: 1 },
@@ -634,8 +656,14 @@ export async function findCompetitionMvps(options: { competitionId?: number; pla
   // Competition-scoped views may repair one legacy record cheaply. Player profile
   // reads must stay read-only: backfilling every historical competition here made
   // opening a player increasingly expensive with every completed season.
-  if (options.competitionId) {
-    await backfillMissingCompetitionMvps(options.competitionId);
+  const competitionIds = options.competitionId
+    ? await getCompetitionMvpStageCompetitionIds(options.competitionId)
+    : [];
+
+  if (competitionIds.length) {
+    for (const competitionId of competitionIds) {
+      await backfillMissingCompetitionMvps(competitionId);
+    }
   } else {
     await ensureCompetitionMvpTable();
   }
@@ -643,9 +671,11 @@ export async function findCompetitionMvps(options: { competitionId?: number; pla
   const where: string[] = [];
   const params: unknown[] = [];
 
-  if (options.competitionId) {
-    where.push('"CompetitionMvp"."competitionId" = ?');
-    params.push(options.competitionId);
+  if (competitionIds.length) {
+    where.push(
+      `"CompetitionMvp"."competitionId" IN (${competitionIds.map(() => '?').join(',')})`,
+    );
+    params.push(...competitionIds);
   }
 
   if (options.playerId) {
