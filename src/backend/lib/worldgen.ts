@@ -94,6 +94,21 @@ import {
 import { upsertCompetitionMvp } from './competition-mvps';
 import { backfillMissingMatchPlayerGameStats } from './match-player-game-stats';
 import {
+  getCoachTierFromTeamTier,
+  getMajorOpenQualifierCoachMessage,
+  getMajorOpenQualifierCoachSubject,
+  getMajorOpenQualifierConfig,
+  hasSecuredMajorOpenQualifierPlace,
+  MajorOpenQualifierCoachOutcome,
+} from './major-open-qualifier-coach-messages';
+import {
+  getMajorRmrCoachMessage,
+  getMajorRmrCoachOutcome,
+  getMajorRmrCoachSubject,
+  getMajorRmrConfig,
+  MajorRmrCoachOutcome,
+} from './major-rmr-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -6799,6 +6814,8 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       phase('results-persist');
       // awards and prize pool distribution
       await Promise.all([
+        sendMajorOpenQualifierCoachOutcome(competition, tournament, matches),
+        sendMajorRmrCoachOutcome(competition, tournament, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -6928,6 +6945,256 @@ export async function sendEmail(
   }
 
   return Promise.resolve(email);
+}
+
+async function sendMajorOpenQualifierCoachMessage(params: {
+  competitionId: number;
+  qualifierTierSlug: string;
+  outcome: MajorOpenQualifierCoachOutcome;
+}) {
+  const qualifier = getMajorOpenQualifierConfig(params.qualifierTierSlug);
+  if (!qualifier) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      season: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: {
+        select: {
+          tier: true,
+          personas: true,
+        },
+      },
+    },
+  });
+
+  // These are messages to an active member of the qualifying lineup, not to a
+  // contracted spectator. The competition membership check also prevents a
+  // message after a mid-qualifier transfer to another club.
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const teamTierSlug = getCoachTierFromTeamTier(profile.team.tier);
+  const content = getMajorOpenQualifierCoachMessage({
+    qualifierTierSlug: params.qualifierTierSlug,
+    teamTierSlug,
+    outcome: params.outcome,
+  });
+  const subject = getMajorOpenQualifierCoachSubject({
+    qualifierTierSlug: params.qualifierTierSlug,
+    season: profile.season,
+  });
+  if (!content || !subject) return null;
+
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  // Once a qualifier outcome was sent, a later semi-final/final loss must not
+  // overwrite the fact that the team had already secured one of the RMR slots.
+  if (
+    params.outcome !== 'start' &&
+    existingConversation?.dialogues.some((dialogue) => {
+      const qualified = getMajorOpenQualifierCoachMessage({
+        qualifierTierSlug: params.qualifierTierSlug,
+        teamTierSlug,
+        outcome: 'qualified',
+      });
+      const loss = getMajorOpenQualifierCoachMessage({
+        qualifierTierSlug: params.qualifierTierSlug,
+        teamTierSlug,
+        outcome: 'loss',
+      });
+      return dialogue.content === qualified || dialogue.content === loss;
+    })
+  ) {
+    return null;
+  }
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorOpenQualifierCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  const qualifier = getMajorOpenQualifierConfig(competition.tier.slug);
+  if (!qualifier) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const lostThisBatch = completedMatches.some((match) =>
+    match.competitors.some(
+      (competitor) =>
+        competitor.teamId === profile.teamId && competitor.result === Constants.MatchResult.LOSS,
+    ),
+  );
+
+  const standings = tournament.$base.results();
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = standings.find((standing) => standing.seed === userSeed);
+  const qualified = hasSecuredMajorOpenQualifierPlace(userStanding, qualifier.qualificationPlaces);
+
+  if (!qualified && !lostThisBatch) return null;
+  return sendMajorOpenQualifierCoachMessage({
+    competitionId: competition.id,
+    qualifierTierSlug: competition.tier.slug,
+    outcome: qualified ? 'qualified' : 'loss',
+  });
+}
+
+async function sendMajorRmrCoachMessageEvent(params: {
+  competitionId: number;
+  rmrTierSlug: string;
+  season: number;
+  rmrLocation?: string | null;
+  outcome: MajorRmrCoachOutcome;
+  wins?: number | null;
+}) {
+  const config = getMajorRmrConfig(params.rmrTierSlug);
+  if (!config) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  let city = Util.getCompetitionHostingLocationCity(params.rmrLocation) || 'the RMR host city';
+  if (params.outcome === 'qualified') {
+    const major = await DatabaseClient.prisma.competition.findFirst({
+      where: {
+        season: params.season,
+        tier: { slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE },
+      },
+      select: { location: true },
+    });
+    city = Util.getCompetitionHostingLocationCity(major?.location) || 'the Major host city';
+  }
+
+  const teamTierSlug = getCoachTierFromTeamTier(profile.team.tier);
+  const content = getMajorRmrCoachMessage({
+    rmrTierSlug: params.rmrTierSlug,
+    teamTierSlug,
+    outcome: params.outcome,
+    wins: params.wins,
+    city,
+  });
+  const subject = getMajorRmrCoachSubject({
+    rmrTierSlug: params.rmrTierSlug,
+    season: params.season,
+  });
+  if (!content || !subject) return null;
+
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  if (params.outcome !== 'start' && existingConversation) {
+    const possibleStartMessages = Constants.Prestige.flatMap((tierSlug) => {
+      const message = getMajorRmrCoachMessage({
+        rmrTierSlug: params.rmrTierSlug,
+        teamTierSlug: tierSlug,
+        outcome: 'start',
+        city: Util.getCompetitionHostingLocationCity(params.rmrLocation) || 'the RMR host city',
+      });
+      return message ? [message] : [];
+    });
+    if (
+      existingConversation.dialogues.some(
+        (dialogue) => !possibleStartMessages.includes(dialogue.content),
+      )
+    ) {
+      return null;
+    }
+  }
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorRmrCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (!getMajorRmrConfig(competition.tier.slug)) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+  const lostThisBatch = userResults.some(
+    (competitor) => competitor.result === Constants.MatchResult.LOSS,
+  );
+
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const outcome = getMajorRmrCoachOutcome({
+    rmrTierSlug: competition.tier.slug,
+    standing: userStanding,
+    lostThisBatch,
+  });
+  if (!outcome) return null;
+
+  return sendMajorRmrCoachMessageEvent({
+    competitionId: competition.id,
+    rmrTierSlug: competition.tier.slug,
+    season: competition.season ?? 0,
+    rmrLocation: competition.location,
+    outcome,
+    wins: userStanding?.wins,
+  });
 }
 
 /**
@@ -13165,6 +13432,22 @@ export async function onCompetitionStart(entry: Calendar) {
       tournament.competitors.length,
       tournament.$base.rounds().flat().length,
     );
+
+  await Promise.all([
+    sendMajorOpenQualifierCoachMessage({
+      competitionId: competition.id,
+      qualifierTierSlug: competition.tier.slug,
+      outcome: 'start',
+    }),
+    sendMajorRmrCoachMessageEvent({
+      competitionId: competition.id,
+      rmrTierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      rmrLocation: competition.location,
+      outcome: 'start',
+    }),
+  ]);
+
   return result;
 }
 
