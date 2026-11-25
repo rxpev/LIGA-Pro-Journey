@@ -6921,6 +6921,12 @@ export async function sendEmail(
     mainWindow.send(Constants.IPCRoute.EMAILS_NEW, email);
   }
 
+  // Every message is a user-facing event. Pause multi-day calendar advancement
+  // after delivering it so the player cannot skip past new information.
+  if (Engine.Runtime.Instance.running) {
+    Engine.Runtime.Instance.stop();
+  }
+
   return Promise.resolve(email);
 }
 

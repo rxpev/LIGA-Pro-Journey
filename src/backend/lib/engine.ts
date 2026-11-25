@@ -76,6 +76,11 @@ export class Runtime {
    */
   private abortController: AbortController;
 
+  /** Whether the engine is currently advancing the calendar. */
+  public get running() {
+    return Boolean(this.abortController);
+  }
+
   /**
    * The main loop interval reference.
    *
@@ -198,7 +203,7 @@ export class Runtime {
         // run generic middleware sequentially to keep calendar side-effects deterministic
         // (multiple same-day competition starts can otherwise race each other).
         const genericResults = [] as unknown[];
-        for (let index = 0; index < this.input.length;) {
+        for (let index = 0; index < this.input.length; ) {
           const item = this.input[index];
           const batch = this.batchMiddleware.get(item.type);
           if (!batch) {
@@ -214,7 +219,9 @@ export class Runtime {
         }
 
         // run tick middleware after generic handlers complete
-        const tickResults = await Promise.all(this.middleware.onTick.map((m) => m.callback(this.input)));
+        const tickResults = await Promise.all(
+          this.middleware.onTick.map((m) => m.callback(this.input)),
+        );
         const results = [...genericResults, ...tickResults];
 
         // check if any middleware returned falsy
