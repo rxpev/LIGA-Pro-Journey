@@ -9,6 +9,7 @@ export type TrialContractTerms = {
   postBenchTerminationClause: boolean;
   postBenchTerminationMonths: number | null;
   rosterStabilityClause: boolean;
+  rosterStabilityRequiredDepartures: 2 | 3 | null;
 };
 
 export type ContractClauses = Omit<TrialContractTerms, 'contractMonths'>;
@@ -256,11 +257,13 @@ export function rollTrialContractTerms(
         ? 15
         : 25
       : ROSTER_STABILITY_CHANCE[response];
+  const rosterStabilityClause = random() * 100 < rosterChance;
   return {
     contractMonths: randomInteger(duration, random),
     postBenchTerminationClause: hasPostBenchClause,
     postBenchTerminationMonths: hasPostBenchClause ? pick(BENCH_MONTHS[response], random) : null,
-    rosterStabilityClause: random() * 100 < rosterChance,
+    rosterStabilityClause,
+    rosterStabilityRequiredDepartures: rosterStabilityClause ? (random() < 0.5 ? 2 : 3) : null,
   };
 }
 
@@ -277,9 +280,11 @@ export function rollContractClauses(
         : 25
       : ROSTER_STABILITY_CHANCE[response];
 
+  const rosterStabilityClause = random() * 100 < rosterChance;
   return {
     postBenchTerminationClause: hasPostBenchClause,
     postBenchTerminationMonths: hasPostBenchClause ? pick(BENCH_MONTHS[response], random) : null,
-    rosterStabilityClause: random() * 100 < rosterChance,
+    rosterStabilityClause,
+    rosterStabilityRequiredDepartures: rosterStabilityClause ? (random() < 0.5 ? 2 : 3) : null,
   };
 }

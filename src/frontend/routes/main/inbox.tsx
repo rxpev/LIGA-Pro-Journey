@@ -8,6 +8,7 @@ import { cx, getTeamHue } from '@liga/frontend/lib';
 import { AppStateContext } from '@liga/frontend/redux';
 import { emailsUpdate } from '@liga/frontend/redux/actions';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
+import { useAudioControls } from '@liga/frontend/hooks';
 import { Link, useLocation } from 'react-router-dom';
 import {
   FaArchive,
@@ -18,10 +19,77 @@ import {
   FaEnvelopeOpen,
   FaFileAlt,
   FaFilter,
+  FaInfoCircle,
   FaPaperclip,
   FaSearch,
   FaUsers,
 } from 'react-icons/fa';
+
+type RosterStabilityStatus = Awaited<ReturnType<typeof api.emails.rosterStabilityStatus>>;
+
+function RosterStabilityHoldButton(props: { disabled: boolean; onComplete: () => void }) {
+  const [progress, setProgress] = React.useState(0);
+  const frame = React.useRef<number | null>(null);
+  const startedAt = React.useRef(0);
+  const holding = React.useRef(false);
+  const fillAudio = useAudioControls('button-riser-1s.wav');
+
+  const cancel = React.useCallback(() => {
+    holding.current = false;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    setProgress(0);
+    fillAudio.stop();
+  }, [fillAudio.stop]);
+
+  const start = React.useCallback(() => {
+    if (props.disabled || holding.current) return;
+    holding.current = true;
+    startedAt.current = performance.now();
+    fillAudio.play();
+    const tick = (now: number) => {
+      if (!holding.current) return;
+      const next = Math.min(1, (now - startedAt.current) / 1000);
+      setProgress(next);
+      if (next >= 1) {
+        holding.current = false;
+        frame.current = null;
+        fillAudio.stop();
+        props.onComplete();
+        return;
+      }
+      frame.current = requestAnimationFrame(tick);
+    };
+    frame.current = requestAnimationFrame(tick);
+  }, [fillAudio.play, fillAudio.stop, props.disabled, props.onComplete]);
+
+  React.useEffect(() => cancel, [cancel]);
+
+  return (
+    <button
+      type="button"
+      className="inbox-roster-request"
+      disabled={props.disabled}
+      data-interaction-sound="none"
+      aria-label="Hold for one second to request benching"
+      onClick={(event) => event.preventDefault()}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        start();
+      }}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onLostPointerCapture={cancel}
+    >
+      <span className="inbox-roster-request-fill" style={{ width: `${progress * 100}%` }} />
+      <span className="inbox-roster-request-copy">
+        <strong>Request Benching</strong>
+      </span>
+      <FaChevronRight aria-hidden="true" />
+    </button>
+  );
+}
 
 const emptyAvatar = 'resources://avatars/empty.png';
 
@@ -106,6 +174,9 @@ export default function Inbox() {
   const [archiveHydrated, setArchiveHydrated] = React.useState(false);
   const [working, setWorking] = React.useState(false);
   const [trialReplyTyping, setTrialReplyTyping] = React.useState(false);
+  const [rosterReplyTypingFromId, setRosterReplyTypingFromId] = React.useState<number | null>(null);
+  const [newMessageOpen, setNewMessageOpen] = React.useState(false);
+  const [rosterStatus, setRosterStatus] = React.useState<RosterStabilityStatus | null>(null);
   const [readTrialTransfers, setReadTrialTransfers] = React.useState<Set<number>>(new Set());
   const [guideStorageKey, setGuideStorageKey] = React.useState<string | null>(null);
   const [guideDismissed, setGuideDismissed] = React.useState(false);
@@ -119,6 +190,14 @@ export default function Inbox() {
   const restoredRequestForEmail = React.useRef<number | null>(null);
   const trialReplyInFlight = React.useRef(false);
   const threadRef = React.useRef<HTMLDivElement | null>(null);
+
+  const refreshRosterStatus = React.useCallback(() => {
+    return api.emails.rosterStabilityStatus().then(setRosterStatus);
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRosterStatus();
+  }, [refreshRosterStatus, state.profile?.player?.id, state.profile?.player?.starter]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -181,6 +260,11 @@ export default function Inbox() {
       })
       .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [state.emails, archivedIds]);
+  const hasRosterStabilityRequest = state.emails.some((email) =>
+    email.subject.startsWith('Roster stability clause request - '),
+  );
+  const canCreateRosterStabilityRequest =
+    Boolean(rosterStatus?.available) && !hasRosterStabilityRequest;
 
   const folderConversations = conversations.filter((conversation) =>
     folder === 'archived' ? conversation.archived : !conversation.archived,
@@ -294,7 +378,13 @@ export default function Inbox() {
   React.useLayoutEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
-  }, [active?.fromId, dialogues.at(-1)?.id, trialReplyTyping, threadClosed]);
+  }, [
+    active?.fromId,
+    dialogues.at(-1)?.id,
+    trialReplyTyping,
+    rosterReplyTypingFromId,
+    threadClosed,
+  ]);
 
   const persistIncomingFaceitRequest = React.useCallback(async (recommendation: any | null) => {
     const saveId = await api.database.current();
@@ -389,6 +479,29 @@ export default function Inbox() {
       });
   };
 
+  const requestRosterStabilityBenching = React.useCallback(() => {
+    if (working || !canCreateRosterStabilityRequest) return;
+    setWorking(true);
+    api.emails
+      .startRosterStabilityRequest()
+      .then(async (email) => {
+        dispatch(emailsUpdate([email]));
+        setNewMessageOpen(false);
+        setFolder('all');
+        setSelected(email.fromId);
+        setRosterReplyTypingFromId(email.fromId);
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        const completedEmail = await api.emails.completeRosterStabilityRequest(email.id);
+        dispatch(emailsUpdate([completedEmail]));
+        setRosterStatus((current) => (current ? { ...current, available: false } : current));
+      })
+      .finally(() => {
+        setRosterReplyTypingFromId(null);
+        setWorking(false);
+        void refreshRosterStatus();
+      });
+  }, [canCreateRosterStabilityRequest, dispatch, refreshRosterStatus, working]);
+
   const toggleArchive = (emailIds: number[]) => {
     setArchivedIds((current) => {
       const shouldUnarchive = emailIds.every((emailId) => current.includes(emailId));
@@ -406,7 +519,23 @@ export default function Inbox() {
           <div className="inbox-conversations-toolbar">
             <header className="inbox-conversations-title">
               <h2>Chats</h2>
-              <button type="button" className="inbox-new-message">
+              <button
+                type="button"
+                className="inbox-new-message"
+                onClick={() => {
+                  void refreshRosterStatus();
+                  setNewMessageOpen(true);
+                }}
+              >
+                {canCreateRosterStabilityRequest && (
+                  <span
+                    className="inbox-new-message-info"
+                    title="A new message action is available"
+                    aria-label="A new message action is available"
+                  >
+                    <FaInfoCircle />
+                  </span>
+                )}
                 New Message
               </button>
             </header>
@@ -718,6 +847,10 @@ export default function Inbox() {
                                                   rosterStabilityClause:
                                                     node.properties.dataRosterStabilityClause ===
                                                     'true',
+                                                  rosterStabilityRequiredDepartures: Number(
+                                                    node.properties
+                                                      .dataRosterStabilityRequiredDepartures ?? 3,
+                                                  ),
                                                   academyPromotionClause: node.properties
                                                     .dataAcademyPromotionClause
                                                     ? String(
@@ -789,7 +922,7 @@ export default function Inbox() {
                       </React.Fragment>
                     );
                   })}
-                  {trialReplyTyping && (
+                  {(trialReplyTyping || rosterReplyTypingFromId === active.fromId) && (
                     <div className="inbox-chat-row">
                       <img
                         src={
@@ -981,6 +1114,70 @@ export default function Inbox() {
           )}
         </section>
       </main>
+      {newMessageOpen && (
+        <div
+          className="inbox-new-message-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !working) setNewMessageOpen(false);
+          }}
+        >
+          <section
+            className="inbox-new-message-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inbox-new-message-title"
+          >
+            <header>
+              <div>
+                <small>NEW CONVERSATION</small>
+                <h2 id="inbox-new-message-title">Select new message</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={working}
+                onClick={() => setNewMessageOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            {canCreateRosterStabilityRequest && rosterStatus?.coach ? (
+              <div className="inbox-new-message-option">
+                <div className="inbox-new-message-contact">
+                  <div className="inbox-new-message-coach">
+                    <span className="inbox-new-message-coach-portrait">
+                      <img
+                        src={rosterStatus.coach.teamBlazon || 'resources://blazonry/noteam.svg'}
+                        alt=""
+                      />
+                      <img
+                        src={getSenderAvatar(rosterStatus.coach.name, rosterStatus.coach.role)}
+                        alt={rosterStatus.coach.name}
+                        onError={useEmptyAvatar}
+                      />
+                    </span>
+                    <span>
+                      <strong>{rosterStatus.coach.name}</strong>
+                      <small>
+                        {rosterStatus.coach.teamName} · {getCoachTitle(rosterStatus.coach.role)}
+                      </small>
+                    </span>
+                  </div>
+                  <RosterStabilityHoldButton
+                    disabled={working}
+                    onComplete={requestRosterStabilityBenching}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="inbox-new-message-empty">
+                There are currently no new message actions available.
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

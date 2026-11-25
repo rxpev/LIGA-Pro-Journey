@@ -401,35 +401,37 @@ model Persona {
 }
 
 model Player {
-  id                         Int       @id @default(autoincrement())
-  name                       String
-  personality                String?
-  role                       String?
-  xp                         Int       @default(0)
-  elo                        Int       @default(0)
-  cost                       Int?      @default(0)
-  wages                      Int?      @default(0)
-  starter                    Boolean   @default(false)
-  transferListed             Boolean   @default(false)
-  avatar                     String?
-  prestige                   Int?
-  userControlled             Boolean   @default(false)
-  age                        Int?
-  contractEnd                DateTime?
-  postBenchTerminationClause Boolean   @default(false)
-  postBenchTerminationMonths Float?
-  rosterStabilityClause      Boolean   @default(false)
-  contractBenchStartedAt     DateTime?
-  contractRosterBaseline     String?
-  lastOfferAt                DateTime?
-  passiveOfferSeason         Int       @default(0)
-  passiveOffersThisSeason    Int       @default(0)
-  academyPromotionClause     String?
-  academyPromotionTarget     Float?
-  academyPromotionPlayerId   Int?
-  retiredAt                  DateTime?
-  isRegen                    Boolean   @default(false)
-  generatedAt                DateTime?
+  id                                Int       @id @default(autoincrement())
+  name                              String
+  personality                       String?
+  role                              String?
+  xp                                Int       @default(0)
+  elo                               Int       @default(0)
+  cost                              Int?      @default(0)
+  wages                             Int?      @default(0)
+  starter                           Boolean   @default(false)
+  transferListed                    Boolean   @default(false)
+  avatar                            String?
+  prestige                          Int?
+  userControlled                    Boolean   @default(false)
+  age                               Int?
+  contractEnd                       DateTime?
+  postBenchTerminationClause        Boolean   @default(false)
+  postBenchTerminationMonths        Float?
+  rosterStabilityClause             Boolean   @default(false)
+  rosterStabilityRequiredDepartures Int?
+  rosterStabilityTriggeredAt        DateTime?
+  contractBenchStartedAt            DateTime?
+  contractRosterBaseline            String?
+  lastOfferAt                       DateTime?
+  passiveOfferSeason                Int       @default(0)
+  passiveOffersThisSeason           Int       @default(0)
+  academyPromotionClause            String?
+  academyPromotionTarget            Float?
+  academyPromotionPlayerId          Int?
+  retiredAt                         DateTime?
+  isRegen                           Boolean   @default(false)
+  generatedAt                       DateTime?
 
   // has many
   matches         Match[]
@@ -634,27 +636,28 @@ model Transfer {
 }
 
 model Offer {
-  id                         Int       @id @default(autoincrement())
-  status                     Int
-  cost                       Int?      @default(0)
-  wages                      Int?      @default(0)
-  contractYears              Int?      @default(1)
-  contractMonths             Int?
-  expiresAt                  DateTime?
-  createdAt                  DateTime  @default(now())
-  offerType                  String    @default("PERMANENT")
-  trialSeries                Int?
-  trialGoalType              String?
-  trialGoalValue             Float?
-  trialReplacedPlayerId      Int?
-  trialBand                  String?
-  trialResponseTier          Int?
-  postBenchTerminationClause Boolean   @default(false)
-  postBenchTerminationMonths Float?
-  rosterStabilityClause      Boolean   @default(false)
-  academyPromotionClause     String?
-  academyPromotionTarget     Float?
-  academyPromotionPlayerId   Int?
+  id                                Int       @id @default(autoincrement())
+  status                            Int
+  cost                              Int?      @default(0)
+  wages                             Int?      @default(0)
+  contractYears                     Int?      @default(1)
+  contractMonths                    Int?
+  expiresAt                         DateTime?
+  createdAt                         DateTime  @default(now())
+  offerType                         String    @default("PERMANENT")
+  trialSeries                       Int?
+  trialGoalType                     String?
+  trialGoalValue                    Float?
+  trialReplacedPlayerId             Int?
+  trialBand                         String?
+  trialResponseTier                 Int?
+  postBenchTerminationClause        Boolean   @default(false)
+  postBenchTerminationMonths        Float?
+  rosterStabilityClause             Boolean   @default(false)
+  rosterStabilityRequiredDepartures Int?
+  academyPromotionClause            String?
+  academyPromotionTarget            Float?
+  academyPromotionPlayerId          Int?
 
   // belongs to
   transfer   Transfer @relation(fields: [transferId], references: [id])

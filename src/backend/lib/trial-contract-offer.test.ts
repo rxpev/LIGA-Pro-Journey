@@ -22,6 +22,7 @@ assert.deepEqual(rollTrialContractTerms(TierSlug.LEAGUE_OPEN, 1, 'RIFLER', seque
   postBenchTerminationClause: true,
   postBenchTerminationMonths: 0.5,
   rosterStabilityClause: true,
+  rosterStabilityRequiredDepartures: 2,
 });
 assert.equal(
   rollTrialContractTerms(TierSlug.LEAGUE_ADVANCED, 3, 'AWPER', () => 0).contractMonths,
@@ -33,12 +34,12 @@ assert.equal(
   12,
 );
 assert.equal(
-  rollTrialContractTerms(TierSlug.LEAGUE_MAIN, 2, 'IGL', sequence(0.9, 0, 0.149))
+  rollTrialContractTerms(TierSlug.LEAGUE_MAIN, 2, 'IGL', sequence(0.9, 0.149, 0.9, 0))
     .rosterStabilityClause,
   true,
 );
 assert.equal(
-  rollTrialContractTerms(TierSlug.LEAGUE_MAIN, 2, 'IGL', sequence(0.9, 0, 0.15))
+  rollTrialContractTerms(TierSlug.LEAGUE_MAIN, 2, 'IGL', sequence(0.9, 0.15, 0.9))
     .rosterStabilityClause,
   false,
 );
@@ -106,7 +107,12 @@ assert.deepEqual(rollContractClauses(1, 'RIFLER', sequence(0, 0, 0)), {
   postBenchTerminationClause: true,
   postBenchTerminationMonths: 0.5,
   rosterStabilityClause: true,
+  rosterStabilityRequiredDepartures: 2,
 });
+assert.equal(
+  rollContractClauses(1, 'RIFLER', sequence(0.99, 0, 0.5)).rosterStabilityRequiredDepartures,
+  3,
+);
 assert.equal(
   rollDirectContractMonths(TierSlug.LEAGUE_OPEN, 1, () => 0),
   6,

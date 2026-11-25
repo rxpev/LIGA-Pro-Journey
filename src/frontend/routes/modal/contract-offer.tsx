@@ -31,6 +31,7 @@ type ContractOfferState = {
   postBenchClause: boolean;
   postBenchMonths: number;
   rosterStabilityClause: boolean;
+  rosterStabilityRequiredDepartures?: number | null;
   academyPromotionClause?: string | null;
   academyPromotionTarget?: number | null;
   academyParentName?: string | null;
@@ -261,8 +262,10 @@ export default function ContractOffer() {
                 )}
                 {state.rosterStabilityClause && (
                   <li>
-                    Roster stability: If three of the five active players in place when you sign
-                    leave the team, you may request to be benched and transfer-listed.
+                    Roster stability: If{' '}
+                    {state.rosterStabilityRequiredDepartures === 2 ? 'two' : 'three'} of the four
+                    other active players in place when you sign leave the team, you may request to
+                    be benched and transfer-listed.
                   </li>
                 )}
                 {state.academyPromotionClause === 'PROMOTION_GUARANTEE' &&

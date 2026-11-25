@@ -224,6 +224,27 @@ export default {
           teamCountryId: number | null;
         } | null;
       }>,
+    rosterStabilityStatus: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.EMAILS_ROSTER_STABILITY_STATUS) as Promise<{
+        available: boolean;
+        departed: number;
+        required: number;
+        coach: {
+          id: number;
+          name: string;
+          role: string;
+          teamName: string;
+          teamBlazon: string | null;
+        } | null;
+      }>,
+    startRosterStabilityRequest: () =>
+      ipcRenderer.invoke(Constants.IPCRoute.EMAILS_ROSTER_STABILITY_START) as Promise<
+        Prisma.EmailGetPayload<typeof Eagers.email>
+      >,
+    completeRosterStabilityRequest: (emailId: number) =>
+      ipcRenderer.invoke(Constants.IPCRoute.EMAILS_ROSTER_STABILITY_COMPLETE, emailId) as Promise<
+        Prisma.EmailGetPayload<typeof Eagers.email>
+      >,
     replyTrial: (emailId: number, transferId: number, choice: 'accept' | 'reject') =>
       ipcRenderer.invoke(
         Constants.IPCRoute.EMAILS_TRIAL_REPLY,

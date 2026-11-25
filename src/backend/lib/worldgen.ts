@@ -3229,6 +3229,7 @@ export async function onTrialContractOffer(entry: Calendar) {
             postBenchTerminationClause: terms.postBenchTerminationClause,
             postBenchTerminationMonths: terms.postBenchTerminationMonths,
             rosterStabilityClause: terms.rosterStabilityClause,
+            rosterStabilityRequiredDepartures: terms.rosterStabilityRequiredDepartures,
           },
         ],
       },
@@ -3250,7 +3251,7 @@ export async function onTrialContractOffer(entry: Calendar) {
     team.personas[0];
   await sendEmail(
     `Permanent contract offer from ${team.name}`,
-    `${getTrialContractChatMessage(response, player.name, coach?.name ?? 'Head Coach', team.name)}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${terms.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${response}" data-post-bench-clause="${terms.postBenchTerminationClause}" data-post-bench-months="${terms.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${terms.rosterStabilityClause}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
+    `${getTrialContractChatMessage(response, player.name, coach?.name ?? 'Head Coach', team.name)}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${terms.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${response}" data-post-bench-clause="${terms.postBenchTerminationClause}" data-post-bench-months="${terms.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${terms.rosterStabilityClause}" data-roster-stability-required-departures="${terms.rosterStabilityRequiredDepartures ?? ''}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
     managementBoard,
     profile.date,
     true,
@@ -3317,7 +3318,7 @@ async function sendDirectContractOffer(params: {
 
   await sendEmail(
     `${team.parentTeamId ? 'Academy' : 'Permanent'} contract offer from ${team.name}`,
-    `${academyOpening}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${params.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${params.response}" data-offer-source="${params.source}" data-previous-tier-name="${params.previousTierName ?? ''}" data-copy-variant="${params.copyVariant}" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-academy-promotion-clause="${offer?.academyPromotionClause ?? ''}" data-academy-promotion-target="${offer?.academyPromotionTarget ?? ''}" data-academy-parent-name="${team.parentTeam?.name ?? ''}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
+    `${academyOpening}\n\n<button className="contract-information-button" data-contract-information="true" data-transfer-id="${transfer.id}" data-team-id="${team.id}" data-team-name="${team.name}" data-team-blazon="${team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${params.contractMonths}" data-player-role="${player.role ?? 'RIFLER'}" data-trial-response-tier="${params.response}" data-offer-source="${params.source}" data-previous-tier-name="${params.previousTierName ?? ''}" data-copy-variant="${params.copyVariant}" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-roster-stability-required-departures="${clauses.rosterStabilityRequiredDepartures ?? ''}" data-academy-promotion-clause="${offer?.academyPromotionClause ?? ''}" data-academy-promotion-target="${offer?.academyPromotionTarget ?? ''}" data-academy-parent-name="${team.parentTeam?.name ?? ''}" data-expires-at="${expiresAt.toISOString()}">Contract Offer</button>`,
     managementBoard,
     params.profileDate,
     true,
@@ -3830,6 +3831,9 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
         postBenchTerminationClause: offer.postBenchTerminationClause,
         postBenchTerminationMonths: offer.postBenchTerminationMonths,
         rosterStabilityClause: offer.rosterStabilityClause,
+        rosterStabilityRequiredDepartures:
+          offer.rosterStabilityRequiredDepartures ?? (offer.rosterStabilityClause ? 3 : null),
+        rosterStabilityTriggeredAt: null,
         academyPromotionClause: offer.academyPromotionClause,
         academyPromotionTarget: offer.academyPromotionTarget,
         academyPromotionPlayerId: offer.academyPromotionPlayerId,
@@ -3845,7 +3849,11 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
       where: { id: transfer.playerId },
       data: {
         contractRosterBaseline: offer.rosterStabilityClause
-          ? JSON.stringify(extensionRoster.map((item) => item.id))
+          ? JSON.stringify(
+              extensionRoster
+                .filter((item) => item.id !== transfer.playerId)
+                .map((item) => item.id),
+            )
           : null,
       },
     });
@@ -4026,6 +4034,9 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
       postBenchTerminationClause: offer.postBenchTerminationClause,
       postBenchTerminationMonths: offer.postBenchTerminationMonths,
       rosterStabilityClause: offer.rosterStabilityClause,
+      rosterStabilityRequiredDepartures:
+        offer.rosterStabilityRequiredDepartures ?? (offer.rosterStabilityClause ? 3 : null),
+      rosterStabilityTriggeredAt: null,
       academyPromotionClause:
         offer.offerType === 'ACADEMY_PROMOTION_USER' ? null : offer.academyPromotionClause,
       academyPromotionTarget:
@@ -4044,7 +4055,9 @@ export async function acceptTransferOffer(transferId: number, notifyAcceptanceEm
     where: { id: transfer.playerId },
     data: {
       contractRosterBaseline: offer.rosterStabilityClause
-        ? JSON.stringify(contractRoster.map((item) => item.id))
+        ? JSON.stringify(
+            contractRoster.filter((item) => item.id !== transfer.playerId).map((item) => item.id),
+          )
         : null,
     },
   });
@@ -4472,8 +4485,9 @@ export async function benchUserPlayer(params: {
   playerId: number;
   now: Date;
   reason?: string;
+  suppressEmail?: boolean;
 }) {
-  const { teamId, playerId, now, reason } = params;
+  const { teamId, playerId, now, reason, suppressEmail = false } = params;
   const prisma = DatabaseClient.prisma;
 
   const profile = await prisma.profile.findFirst(Eagers.profile);
@@ -4567,7 +4581,7 @@ export async function benchUserPlayer(params: {
 
   const kdFmt = Number.isFinite(kd) ? Number(kd).toFixed(2) : '1.00';
 
-  if (persona && (locale.templates as any).PlayerBenched) {
+  if (!suppressEmail && persona && (locale.templates as any).PlayerBenched) {
     await sendEmail(
       Sqrl.render((locale.templates as any).PlayerBenched.SUBJECT, {
         profile,
@@ -5412,6 +5426,9 @@ export async function onPlayerScoutingCheck(entry: Calendar) {
               postBenchTerminationClause: !isTrial && clauses.postBenchTerminationClause,
               postBenchTerminationMonths: isTrial ? null : clauses.postBenchTerminationMonths,
               rosterStabilityClause: !isTrial && clauses.rosterStabilityClause,
+              rosterStabilityRequiredDepartures: !isTrial
+                ? clauses.rosterStabilityRequiredDepartures
+                : null,
             },
           ],
         },
@@ -6019,10 +6036,12 @@ function rollExtensionClauses(importance: number) {
         ? 1
         : 2
     : null;
+  const rosterStabilityClause = Chance.rollD2(Math.round(stabilityChance));
   return {
     postBenchTerminationClause,
     postBenchTerminationMonths,
-    rosterStabilityClause: Chance.rollD2(Math.round(stabilityChance)),
+    rosterStabilityClause,
+    rosterStabilityRequiredDepartures: rosterStabilityClause ? (Chance.rollD2(50) ? 2 : 3) : null,
   };
 }
 
@@ -6216,6 +6235,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
             postBenchTerminationClause: clauses.postBenchTerminationClause,
             postBenchTerminationMonths: clauses.postBenchTerminationMonths,
             rosterStabilityClause: clauses.rosterStabilityClause,
+            rosterStabilityRequiredDepartures: clauses.rosterStabilityRequiredDepartures,
             academyPromotionClause: academyClause?.clause,
             academyPromotionTarget: academyClause?.target,
             academyPromotionPlayerId,
@@ -6258,7 +6278,7 @@ export async function onPlayerContractExtensionEval(entry: Calendar) {
     : '';
   await sendEmail(
     `Contract extension offer from ${profile.team.name}`,
-    `Hello, **${profile.player.name}**.\n\nWe've reviewed your recent performances and the contribution you've made to the team. We're happy with what we've seen, and we'd like you to remain part of **${profile.team.name}**.${academyExtensionText}\n\nWe've attached a proposed extension to your current contract. Take a look at the terms and let us know what you decide.\n\n<button className="contract-information-button" data-contract-information="true" data-contract-extension="true" data-transfer-id="${transfer.id}" data-team-id="${teamId}" data-team-name="${profile.team.name}" data-team-blazon="${profile.team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${contractMonths}" data-player-role="${profile.player.role ?? 'RIFLER'}" data-trial-response-tier="2" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-academy-promotion-clause="${academyClause?.clause ?? ''}" data-academy-promotion-target="${academyClause?.target ?? ''}" data-academy-parent-name="${profile.team.parentTeam?.name ?? ''}" data-expires-at="${offerExpiresAt.toISOString()}">Review Contract Extension</button>`,
+    `Hello, **${profile.player.name}**.\n\nWe've reviewed your recent performances and the contribution you've made to the team. We're happy with what we've seen, and we'd like you to remain part of **${profile.team.name}**.${academyExtensionText}\n\nWe've attached a proposed extension to your current contract. Take a look at the terms and let us know what you decide.\n\n<button className="contract-information-button" data-contract-information="true" data-contract-extension="true" data-transfer-id="${transfer.id}" data-team-id="${teamId}" data-team-name="${profile.team.name}" data-team-blazon="${profile.team.blazon ?? ''}" data-coach-name="${coach?.name ?? 'Head Coach'}" data-coach-signature-font="${coach?.signatureFont ?? ''}" data-contract-months="${contractMonths}" data-player-role="${profile.player.role ?? 'RIFLER'}" data-trial-response-tier="2" data-post-bench-clause="${clauses.postBenchTerminationClause}" data-post-bench-months="${clauses.postBenchTerminationMonths ?? ''}" data-roster-stability-clause="${clauses.rosterStabilityClause}" data-roster-stability-required-departures="${clauses.rosterStabilityRequiredDepartures ?? ''}" data-academy-promotion-clause="${academyClause?.clause ?? ''}" data-academy-promotion-target="${academyClause?.target ?? ''}" data-academy-parent-name="${profile.team.parentTeam?.name ?? ''}" data-expires-at="${offerExpiresAt.toISOString()}">Review Contract Extension</button>`,
     managementBoard,
     now,
     true,
@@ -8368,6 +8388,7 @@ export async function sendUserFaceitOffer() {
         postBenchTerminationClause: false,
         postBenchTerminationMonths: null,
         rosterStabilityClause: false,
+        rosterStabilityRequiredDepartures: null,
       }
     : rollContractClauses(directResponse, target.role);
   const directCopyVariant = random(0, 1);
@@ -8433,6 +8454,9 @@ export async function sendUserFaceitOffer() {
             postBenchTerminationClause: !isTrial && directClauses.postBenchTerminationClause,
             postBenchTerminationMonths: isTrial ? null : directClauses.postBenchTerminationMonths,
             rosterStabilityClause: !isTrial && directClauses.rosterStabilityClause,
+            rosterStabilityRequiredDepartures: !isTrial
+              ? directClauses.rosterStabilityRequiredDepartures
+              : null,
             academyPromotionClause: academyClause?.clause,
             academyPromotionTarget: academyClause?.target,
             academyPromotionPlayerId,

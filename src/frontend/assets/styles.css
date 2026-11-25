@@ -2842,8 +2842,80 @@ meter::-webkit-meter-bar {
   @apply text-2xl font-black;
 }
 .inbox-new-message {
-  @apply border-primary bg-primary/10 text-primary hover:text-base-content h-10 rounded-lg border px-6 text-sm font-bold transition-colors;
+  @apply border-primary bg-primary/10 text-primary hover:text-base-content relative h-10 rounded-lg border px-6 text-sm font-bold transition-colors;
   box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+.inbox-new-message-info {
+  @apply bg-info text-info-content border-base-200 absolute -top-2 -left-2 flex size-5 items-center justify-center rounded-full border-2 shadow-md;
+}
+.inbox-new-message-info svg {
+  @apply size-3;
+}
+.inbox-new-message-backdrop {
+  @apply bg-base-300/75 fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm;
+}
+.inbox-new-message-modal {
+  @apply border-base-content/15 bg-base-200 w-full max-w-lg overflow-hidden rounded-2xl border shadow-2xl;
+}
+.inbox-new-message-modal > header {
+  @apply border-base-content/10 flex items-center justify-between border-b px-6 py-5;
+}
+.inbox-new-message-modal > header small {
+  @apply text-primary text-[0.65rem] font-black tracking-[0.18em];
+}
+.inbox-new-message-modal > header h2 {
+  @apply mt-0.5 text-xl font-black;
+}
+.inbox-new-message-modal > header button {
+  @apply border-base-content/15 bg-base-100/40 text-base-content/65 hover:text-base-content flex size-9 items-center justify-center rounded-lg border text-2xl leading-none;
+}
+.inbox-new-message-option {
+  @apply p-5;
+}
+.inbox-new-message-contact {
+  @apply border-base-content/10 overflow-hidden rounded-xl border;
+}
+.inbox-new-message-coach {
+  @apply bg-base-300/35 flex items-center gap-4 p-3;
+}
+.inbox-new-message-coach > span:last-child {
+  @apply flex min-w-0 flex-col;
+}
+.inbox-new-message-coach > span:last-child > strong {
+  @apply truncate text-base font-black;
+}
+.inbox-new-message-coach > span:last-child > small {
+  @apply text-base-content/60 truncate text-xs font-semibold;
+}
+.inbox-new-message-coach-portrait {
+  @apply border-base-content/15 bg-base-300 relative size-16 shrink-0 overflow-hidden rounded-xl border;
+}
+.inbox-new-message-coach-portrait img:first-child {
+  @apply absolute inset-1 size-14 object-contain opacity-20;
+}
+.inbox-new-message-coach-portrait img:last-child {
+  @apply absolute inset-0 size-full object-contain object-bottom;
+}
+.inbox-roster-request {
+  @apply border-primary/50 bg-primary/10 hover:bg-primary/15 relative flex h-13 w-full touch-none items-center overflow-hidden border-x-0 border-t border-b-0 px-5 text-left transition-colors;
+}
+.inbox-roster-request:disabled {
+  @apply cursor-wait opacity-60;
+}
+.inbox-roster-request-fill {
+  @apply bg-primary/25 pointer-events-none absolute inset-y-0 left-0;
+}
+.inbox-roster-request-copy {
+  @apply relative z-10 flex flex-1 flex-col;
+}
+.inbox-roster-request-copy strong {
+  @apply text-sm font-black;
+}
+.inbox-roster-request > svg {
+  @apply text-primary relative z-10 size-3.5;
+}
+.inbox-new-message-empty {
+  @apply text-base-content/55 p-8 text-center text-sm;
 }
 .inbox-search-row {
   @apply flex items-center gap-2 px-3 pb-3;

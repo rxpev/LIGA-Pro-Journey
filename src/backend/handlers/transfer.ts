@@ -14,12 +14,198 @@ import {
   getTrialLatePlayerResponse,
 } from '@liga/locale/en/trial';
 
+function parseRosterBaseline(value: string | null, playerId: number) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    const ids = Array.isArray(parsed) ? parsed : parsed?.playerIds;
+    if (!Array.isArray(ids)) return [];
+    return [...new Set(ids.filter((id): id is number => Number.isInteger(id) && id !== playerId))];
+  } catch {
+    return [];
+  }
+}
+
+async function getRosterStabilityStatus() {
+  const profile = await DatabaseClient.prisma.profile.findFirst(Eagers.profile);
+  const player = profile?.player;
+  const team = profile?.team;
+  const requiredDepartures = player?.rosterStabilityRequiredDepartures === 2 ? 2 : 3;
+  const coach =
+    team?.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    team?.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    team?.personas[0] ??
+    null;
+
+  if (!profile || !player || !team || !player.rosterStabilityClause) {
+    return { profile, player, team, coach, available: false, departed: 0, requiredDepartures };
+  }
+
+  const baseline = parseRosterBaseline(player.contractRosterBaseline, player.id);
+  const baselinePlayers = baseline.length
+    ? await DatabaseClient.prisma.player.findMany({
+        where: { id: { in: baseline } },
+        select: { id: true, teamId: true },
+      })
+    : [];
+  const currentTeamByPlayer = new Map(baselinePlayers.map((item) => [item.id, item.teamId]));
+  const departed = baseline.filter((id) => currentTeamByPlayer.get(id) !== team.id).length;
+
+  let triggeredAt = player.rosterStabilityTriggeredAt;
+  if (!triggeredAt && departed >= requiredDepartures) {
+    triggeredAt = profile.date;
+    await DatabaseClient.prisma.player.update({
+      where: { id: player.id },
+      data: { rosterStabilityTriggeredAt: triggeredAt },
+    });
+  }
+
+  const contractActive = !player.contractEnd || profile.date < player.contractEnd;
+  const available = Boolean(
+    triggeredAt && contractActive && player.starter && !player.transferListed && coach,
+  );
+
+  return { profile, player, team, coach, available, departed, requiredDepartures };
+}
+
 /**
  * Register the IPC event handlers.
  *
  * @function
  */
 export default function () {
+  ipcMain.handle(Constants.IPCRoute.EMAILS_ROSTER_STABILITY_STATUS, async () => {
+    const status = await getRosterStabilityStatus();
+    const existingRequest =
+      status.player && status.team
+        ? await DatabaseClient.prisma.email.findUnique({
+            where: {
+              subject: `Roster stability clause request - ${status.player.id} - ${status.team.id}`,
+            },
+            select: { id: true },
+          })
+        : null;
+    return {
+      available: status.available && !existingRequest,
+      departed: status.departed,
+      required: status.requiredDepartures,
+      coach:
+        status.coach && status.team
+          ? {
+              id: status.coach.id,
+              name: status.coach.name,
+              role: status.coach.role,
+              teamName: status.team.name,
+              teamBlazon: status.team.blazon,
+            }
+          : null,
+    };
+  });
+
+  ipcMain.handle(Constants.IPCRoute.EMAILS_ROSTER_STABILITY_START, async () => {
+    const status = await getRosterStabilityStatus();
+    if (!status.available || !status.profile || !status.player || !status.team || !status.coach) {
+      throw new Error('The roster stability clause is not currently available.');
+    }
+
+    const subject = `Roster stability clause request - ${status.player.id} - ${status.team.id}`;
+    const existing = await DatabaseClient.prisma.email.findUnique({
+      where: { subject },
+      include: Eagers.email.include,
+    });
+    if (existing) return existing;
+
+    const playerPersona = await DatabaseClient.prisma.persona.upsert({
+      where: { name: `__player_profile_${status.profile.id}` },
+      update: { role: 'Player' },
+      create: { name: `__player_profile_${status.profile.id}`, role: 'Player' },
+    });
+    return DatabaseClient.prisma.email.create({
+      data: {
+        subject,
+        sentAt: status.profile.date,
+        read: true,
+        fromId: status.coach.id,
+        dialogues: {
+          create: {
+            fromId: playerPersona.id,
+            sentAt: status.profile.date,
+            content:
+              "Hello,\n\nI want to initiate my roster stability clause. I'm sorry this didn't work out as we expected.",
+          },
+        },
+      },
+      include: Eagers.email.include,
+    });
+  });
+
+  ipcMain.handle(
+    Constants.IPCRoute.EMAILS_ROSTER_STABILITY_COMPLETE,
+    async (_, emailId: number) => {
+      const email = await DatabaseClient.prisma.email.findUnique({
+        where: { id: Number(emailId) },
+        include: Eagers.email.include,
+      });
+      if (!email?.subject.startsWith('Roster stability clause request - ')) {
+        throw new Error('Roster stability request not found.');
+      }
+
+      const existingCoachReply = email.dialogues.find(
+        (dialogue) => dialogue.fromId === email.fromId,
+      );
+      if (existingCoachReply) {
+        // Repair an interrupted first attempt where the reply was persisted but
+        // the larger bench/replacement operation did not finish.
+        const retryStatus = await getRosterStabilityStatus();
+        if (
+          retryStatus.available &&
+          retryStatus.profile &&
+          retryStatus.player &&
+          retryStatus.team
+        ) {
+          await Worldgen.benchUserPlayer({
+            teamId: retryStatus.team.id,
+            playerId: retryStatus.player.id,
+            now: retryStatus.profile.date,
+            reason: 'Roster stability clause exercised by player.',
+            suppressEmail: true,
+          });
+        }
+        return email;
+      }
+
+      const status = await getRosterStabilityStatus();
+      if (!status.available || !status.profile || !status.player || !status.team || !status.coach) {
+        throw new Error('The roster stability clause is no longer available.');
+      }
+      if (status.coach.id !== email.fromId) throw new Error('Roster stability coach mismatch.');
+
+      await DatabaseClient.prisma.dialogue.create({
+        data: {
+          emailId: email.id,
+          fromId: status.coach.id,
+          sentAt: status.profile.date,
+          content:
+            'I understand. We respect your decision and will place you on the transfer list immediately. I am sorry it did not work out, and I wish you the best of luck with your next team.',
+        },
+      });
+      await Worldgen.benchUserPlayer({
+        teamId: status.team.id,
+        playerId: status.player.id,
+        now: status.profile.date,
+        reason: 'Roster stability clause exercised by player.',
+        suppressEmail: true,
+      });
+
+      const updatedEmail = await DatabaseClient.prisma.email.findUnique({
+        where: { id: email.id },
+        include: Eagers.email.include,
+      });
+      WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
+      return updatedEmail;
+    },
+  );
+
   ipcMain.handle(
     Constants.IPCRoute.EMAILS_TRIAL_REPLY,
     async (_, emailId: number, transferId: number, choice: 'accept' | 'reject') => {
