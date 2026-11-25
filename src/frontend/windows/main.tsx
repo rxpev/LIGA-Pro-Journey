@@ -480,13 +480,13 @@ function Root() {
   // setup the navigation menu items
   const navItems = [
     ['/', t('navigation.dashboard')],
-    ...(state.profile?.simulateNpcMatchStats ? [['/news', 'News']] : []),
-    ['/faceit', 'FACEIT'],
     ['/squad', t('navigation.squadHub')],
-    ['/stats', 'Statistics'],
-    ['/teams', t('navigation.teams'), useMatch('/teams/*')],
-    ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
+    ['/faceit', 'FACEIT'],
     ['/calendar', t('navigation.calendar')],
+    ...(state.profile?.simulateNpcMatchStats ? [['/news', 'News']] : []),
+    ['/competitions', t('navigation.competitions'), useMatch('/competitions/*')],
+    ['/teams', t('navigation.teams'), useMatch('/teams/*')],
+    ['/stats', 'Statistics'],
     ['/inbox', t('navigation.inbox')],
   ];
   const isFaceitRoute = location.pathname.startsWith('/faceit');
