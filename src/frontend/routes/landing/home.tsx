@@ -34,8 +34,10 @@ const ROLE_ICONS: Record<string, string> = {
 const QUIT_ALERT_DELAY = 700;
 
 type ContinueProfile = AppState['profiles'][number] & {
+  benched?: boolean;
   player?: {
     role?: string | null;
+    starter?: boolean | null;
     team?: {
       name?: string | null;
       blazon?: string | null;
@@ -75,6 +77,7 @@ export default function () {
   const team = profile?.trialTeam || profile?.team || profile?.player?.team;
   const teamBlazon = team?.blazon || NO_TEAM_ICON;
   const teamName = `${team?.name || 'No Team'}${profile?.trialTeam ? ' (Trial)' : ''}`;
+  const isBenched = profile?.benched === true;
   const dateFormat = getCalendarDateFormat(state.profile?.settings);
 
   // load audio files
@@ -207,6 +210,11 @@ export default function () {
                   className="landing-continue__team-logo"
                 />
                 {profile.trialTeam && <span className="landing-continue__trial-badge">TRIAL</span>}
+                {isBenched && (
+                  <span className="landing-continue__trial-badge landing-continue__bench-badge">
+                    BENCH
+                  </span>
+                )}
               </span>
             </section>
           )}
@@ -262,6 +270,7 @@ export default function () {
                 savedCareer.trialTeam || savedCareer.team || savedCareer.player?.team;
               const savedTeamBlazon = savedTeam?.blazon || NO_TEAM_ICON;
               const savedTeamName = `${savedTeam?.name || 'No Team'}${savedCareer.trialTeam ? ' (Trial)' : ''}`;
+              const savedCareerIsBenched = savedCareer.benched === true;
               const role = savedCareer.player?.role || 'RIFLER';
               const roleIcon = ROLE_ICONS[role] || riflerIcon;
 
@@ -283,6 +292,11 @@ export default function () {
                       {savedCareer.trialTeam && (
                         <span className="absolute -right-2 -bottom-1 rounded bg-[#ff7300] px-1 text-[7px] font-black tracking-wide text-black">
                           TRIAL
+                        </span>
+                      )}
+                      {savedCareerIsBenched && (
+                        <span className="absolute -right-2 -bottom-1 rounded bg-gray-500 px-1 text-[7px] font-black tracking-wide text-white">
+                          BENCH
                         </span>
                       )}
                     </span>

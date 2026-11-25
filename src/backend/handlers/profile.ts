@@ -453,6 +453,7 @@ export default function registerProfileHandlers() {
               player: {
                 select: {
                   role: true,
+                  starter: true,
                   team: {
                     select: {
                       name: true,
@@ -487,8 +488,11 @@ export default function registerProfileHandlers() {
       });
 
       if (profile) {
-        profile.id = databaseId;
-        saves.push(profile);
+        saves.push({
+          ...profile,
+          id: databaseId,
+          benched: Boolean(profile.team && !profile.trialTeam && profile.player?.starter === false),
+        });
       }
     }
 

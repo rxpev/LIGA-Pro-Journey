@@ -490,6 +490,9 @@ function Root() {
     ['/inbox', t('navigation.inbox')],
   ];
   const isFaceitRoute = location.pathname.startsWith('/faceit');
+  const isBenched = Boolean(
+    state.profile?.team && !state.profile.trialTeam && state.profile.player?.starter === false,
+  );
 
   React.useEffect(() => {
     document.documentElement.dataset.faceitRoute = String(isFaceitRoute);
@@ -616,6 +619,11 @@ function Root() {
                   TRIAL
                 </span>
               )}
+              {isBenched && (
+                <span className="absolute -right-1 -bottom-2 rounded bg-gray-500 px-1 text-[8px] leading-3 font-black tracking-wide text-white">
+                  BENCH
+                </span>
+              )}
             </span>
             <FaCaretDown />
           </article>
@@ -689,7 +697,10 @@ function Root() {
                     }
                     className="h-5 w-5 object-contain"
                   />
-                  {state.profile?.team?.name ?? 'You are currently teamless'}
+                  <span>
+                    {state.profile?.team?.name ?? 'You are currently teamless'}
+                    {isBenched && <strong className="ml-1 text-red-500">(BENCHED)</strong>}
+                  </span>
                 </a>
               </li>
               <div className="divider mt-2 mb-0 before:h-px after:h-px" />

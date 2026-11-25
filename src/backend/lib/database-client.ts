@@ -610,6 +610,7 @@ export default class DatabaseClient {
       maintainedDatabasePaths.add(saveMeta.path);
     } catch (error) {
       await pool[id].client.$disconnect().catch(() => Promise.resolve());
+      migratedDatabasePaths.delete(saveMeta.path);
       delete pool[id];
       activeId = 0;
       throw error;
@@ -1120,7 +1121,9 @@ export default class DatabaseClient {
       return;
     }
 
+    const savePath = pool[activeId].path;
     await pool[activeId].client.$disconnect();
+    migratedDatabasePaths.delete(savePath);
     delete pool[activeId];
   }
 

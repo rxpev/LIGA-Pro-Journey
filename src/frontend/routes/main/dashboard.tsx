@@ -881,13 +881,21 @@ export default function () {
                       game={settings.general.game}
                     />
                     <div className="team-dashboard-map-overlay" aria-hidden="true" />
-                    <header className="team-dashboard-panel-header is-borderless justify-end">
-                      {!!spotlight && (
-                        <time className={cx('team-dashboard-date-pill', isMatchday && 'is-today')}>
-                          {isMatchday ? 'Today · ' : ''}
-                          {format(spotlight.date, 'EEE d MMM yyyy')}
-                        </time>
+                    <header
+                      className={cx(
+                        'team-dashboard-panel-header is-borderless',
+                        spotlight ? 'justify-end' : 'justify-start',
                       )}
+                    >
+                      <time
+                        className={cx(
+                          'team-dashboard-date-pill',
+                          (isMatchday || !spotlight) && 'is-today',
+                        )}
+                      >
+                        {isMatchday || !spotlight ? 'Today · ' : ''}
+                        {format(spotlight?.date || profile.date, 'EEE d MMM yyyy')}
+                      </time>
                     </header>
 
                     {!spotlight ? (
