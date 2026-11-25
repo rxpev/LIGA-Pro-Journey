@@ -1050,7 +1050,8 @@ meter::-webkit-meter-bar {
 
 /** adjust react-hot-toast stylings */
 .react-hot-toast {
-  width: min(29rem, 100vw);
+  box-sizing: border-box;
+  width: min(29rem, calc(100vw - 0.75rem));
   max-width: none;
   padding: 0;
   border: 0;
@@ -1067,9 +1068,13 @@ meter::-webkit-meter-bar {
   .new-message-toast {
     position: static;
     display: flex;
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 1rem;
+    margin: 0;
     padding: 0.7rem 1.25rem 0.7rem 1rem;
   }
 
@@ -1092,20 +1097,22 @@ meter::-webkit-meter-bar {
   }
 
   .new-message-toast p {
+    flex: 1 1 auto;
     min-width: 0;
+    max-width: 100%;
     margin: 0;
-    overflow: hidden;
     font-size: clamp(1.15rem, 1.6vw, 1.45rem);
     font-weight: 800;
     letter-spacing: 0.01em;
-    line-height: 1.05;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .new-message-toast em {
     font-style: italic;
     font-weight: 800;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 640px) {

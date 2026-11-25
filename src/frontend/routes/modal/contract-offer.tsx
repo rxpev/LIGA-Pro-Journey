@@ -52,6 +52,7 @@ export default function ContractOffer() {
   const [working, setWorking] = React.useState(false);
   const [signed, setSigned] = React.useState(false);
   const [offerResolved, setOfferResolved] = React.useState(Boolean(state?.readOnly));
+  const [offerAccepted, setOfferAccepted] = React.useState(false);
   const [acceptProgress, setAcceptProgress] = React.useState(0);
   const [coach, setCoach] = React.useState<{ name: string; signatureFont?: string | null } | null>(
     null,
@@ -107,8 +108,9 @@ export default function ContractOffer() {
         setOfferResolved(
           transfer?.status !== Constants.TransferStatus.PLAYER_PENDING || !pendingOffer,
         );
+        setOfferAccepted(transfer?.status === Constants.TransferStatus.PLAYER_ACCEPTED);
       });
-  }, [state?.teamId, state?.teamName]);
+  }, [state?.teamId, state?.teamName, state?.transferId]);
 
   if (!state) return null;
 
@@ -139,7 +141,7 @@ export default function ContractOffer() {
   };
   const role = roleLabels[state.playerRole.toUpperCase()] ?? state.playerRole;
   const playerName = appState.profile?.player?.name ?? appState.profile?.name ?? '';
-  const signatureProgress = offerResolved ? 1 : acceptProgress;
+  const signatureProgress = offerAccepted ? 1 : acceptProgress;
   const coachName =
     coach?.name ??
     (state.coachName && state.coachName !== 'undefined' ? state.coachName : 'Head Coach');
