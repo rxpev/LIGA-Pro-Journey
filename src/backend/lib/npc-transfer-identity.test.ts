@@ -3,11 +3,13 @@ import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
+  getNpcTransferRegionIdentity,
   getNpcTransferRecruitmentPolicy,
   getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
   isNpcTransferCompatible,
+  isNpcTransferFederationMatch,
   inferNpcTransferRecruitmentPolicy,
   NPC_TRANSFER_AFFINITY_COUNTRY_CODES,
   serializeNpcTransferRecruitmentPolicy,
@@ -83,6 +85,7 @@ const countries = {
   croatia: { id: 91, country: { code: 'hr', continent: continents.europe } },
   bosnia: { id: 92, country: { code: 'ba', continent: continents.europe } },
   montenegro: { id: 93, country: { code: 'me', continent: continents.europe } },
+  israel: { id: 94, country: { code: 'il', continent: continents.asia } },
   europe: { id: 60, country: { code: 'eu', continent: continents.europe } },
   asia: { id: 61, country: { code: 'as', continent: continents.asia } },
   northAmerica: { id: 62, country: { code: 'na', continent: continents.northAmerica } },
@@ -357,6 +360,43 @@ assert.equal(
   ])[0].countryId,
   countries.germany.id,
   'mixed European teams prefer European players',
+);
+
+assert.equal(
+  countries.israel.country.continent.code,
+  'AS',
+  'Israel remains geographically Asian for user starts and regional competitions',
+);
+assert.equal(
+  getNpcTransferRegionIdentity(player(101, countries.israel)),
+  'Europe',
+  'Israeli players use Europe as their NPC transfer region',
+);
+assert.equal(
+  isNpcTransferFederationMatch(europeanRegionalTeam, player(101, countries.israel)),
+  true,
+  'European NPC teams treat Israeli players as federation-local transfer candidates',
+);
+assert.equal(
+  isNpcTransferFederationMatch(asianRegionalTeam, player(101, countries.israel)),
+  false,
+  'Asian NPC teams do not receive a same-federation boost for Israeli players',
+);
+assert.equal(
+  sortNpcTransferCandidatesByFit(mixedEuropeanTeam, [
+    player(101, countries.korea, 60),
+    player(102, countries.israel, 60),
+  ])[0].countryId,
+  countries.israel.id,
+  'mixed European teams prefer Israeli players over Asian-region players',
+);
+assert.equal(
+  sortNpcTransferCandidatesByFit(mixedAsianTeam, [
+    player(101, countries.israel, 60),
+    player(102, countries.korea, 60),
+  ])[0].countryId,
+  countries.korea.id,
+  'mixed Asian teams do not treat Israeli players as regional candidates',
 );
 
 assert.deepEqual(

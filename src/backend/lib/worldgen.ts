@@ -97,12 +97,14 @@ import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
+  getNpcTransferRegionIdentity,
   getNpcTransferRecruitmentPolicy,
   getNpcTransferTeamIdentity,
   getUserOfferFitBucket,
   getUserOfferFitScore,
   isNpcTransferAffinityCountry,
   isNpcTransferCompatible,
+  isNpcTransferFederationMatch,
   isNpcTransferNationalAffinityCandidate,
   sortNpcTransferCandidatesByFit,
   inferNpcTransferRecruitmentPolicy,
@@ -7058,13 +7060,16 @@ function matchesTeamCountryPreference(
   },
   candidate: {
     countryId?: number | null;
-    country?: { continent?: { code?: string | null } | null } | null;
+    country?: {
+      code?: string | null;
+      continent?: { code?: string | null } | null;
+    } | null;
   },
 ) {
   const teamRegionCode = getTeamRegionCode(team);
 
   if (teamRegionCode && MIXED_REGION_COUNTRY_CODES.has(teamRegionCode)) {
-    return candidate.country?.continent?.code?.toUpperCase() === teamRegionCode;
+    return getNpcTransferRegionIdentity(candidate) === getNpcTransferRegionIdentity(team);
   }
 
   return candidate.countryId === team.countryId;
@@ -7330,6 +7335,7 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     id: number;
     countryId?: number | null;
     country?: {
+      code?: string | null;
       continent?: { code?: string | null; federationId?: number | null } | null;
     } | null;
   },
@@ -7387,21 +7393,15 @@ function selectNPCFreeAgentCandidatesByCountryPreference<
     return crossAffinityCandidates;
   }
 
-  const teamFederationId = team.competitionFederationId ?? null;
-  const sameFederationCandidates =
-    teamFederationId == null
-      ? []
-      : compatibleCandidates.filter((candidate) => {
-          if (
-            sameCountryCandidates.some(
-              (sameCountryCandidate) => sameCountryCandidate.id === candidate.id,
-            )
-          ) {
-            return false;
-          }
+  const sameFederationCandidates = compatibleCandidates.filter((candidate) => {
+    if (
+      sameCountryCandidates.some((sameCountryCandidate) => sameCountryCandidate.id === candidate.id)
+    ) {
+      return false;
+    }
 
-          return candidate.country?.continent?.federationId === teamFederationId;
-        });
+    return isNpcTransferFederationMatch(team, candidate);
+  });
 
   if (
     sameFederationCandidates.length &&
@@ -7424,7 +7424,8 @@ function selectNPCTargetCandidatesByCountryPreference<
     id: number;
     countryId?: number | null;
     country?: {
-      continent?: { federationId?: number | null } | null;
+      code?: string | null;
+      continent?: { code?: string | null; federationId?: number | null } | null;
     } | null;
   },
 >(
@@ -7443,8 +7444,6 @@ function selectNPCTargetCandidatesByCountryPreference<
   const compatibleCandidates = filterNpcTransferCompatibleCandidates(team, candidates);
   if (!compatibleCandidates.length) return [];
 
-  const teamRegionCode = getTeamRegionCode(team);
-  const teamFederationId = team.competitionFederationId ?? null;
   const isInternationalTeam = isInternationalTeamCountry(team);
   const identity = getNpcTransferTeamIdentity(team);
 
@@ -7465,11 +7464,7 @@ function selectNPCTargetCandidatesByCountryPreference<
           return false;
         }
 
-        if (teamFederationId == null) {
-          return false;
-        }
-
-        return candidate.country?.continent?.federationId === teamFederationId;
+        return isNpcTransferFederationMatch(team, candidate);
       })
     : [];
   const otherCountryCandidates = compatibleCandidates.filter(

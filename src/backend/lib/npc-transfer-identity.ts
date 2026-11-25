@@ -299,6 +299,15 @@ const CONTINENT_REGION_CODES: Record<string, RegionIdentity> = {
   AF: 'Other',
 };
 
+/**
+ * Esports career regions do not always follow geographic continents. Keep
+ * these exceptions in the transfer layer so the stored continent can still
+ * drive a user's starting circuit and regional competitions.
+ */
+const NPC_TRANSFER_REGION_COUNTRY_OVERRIDES: Readonly<Record<string, RegionIdentity>> = {
+  il: 'Europe',
+};
+
 export const NPC_TRANSFER_AFFINITY_COUNTRY_CODES: Readonly<
   Record<NpcTransferAffinityGroup, ReadonlySet<string>>
 > = {
@@ -352,6 +361,10 @@ function getNpcTransferRosterAffinity(players: PlayerLike[]) {
 
 export function getNpcTransferRegionIdentity(entity: { country?: CountryLike }): RegionIdentity {
   const countryCode = entity.country?.code?.toLowerCase() ?? null;
+  if (countryCode && NPC_TRANSFER_REGION_COUNTRY_OVERRIDES[countryCode]) {
+    return NPC_TRANSFER_REGION_COUNTRY_OVERRIDES[countryCode];
+  }
+
   if (countryCode && REGION_STORAGE_CODES[countryCode]) {
     return REGION_STORAGE_CODES[countryCode];
   }
@@ -362,6 +375,27 @@ export function getNpcTransferRegionIdentity(entity: { country?: CountryLike }):
   }
 
   return 'Other';
+}
+
+export function isNpcTransferFederationMatch(
+  team: { competitionFederationId?: number | null; country?: CountryLike },
+  candidate: { country?: CountryLike },
+) {
+  const teamCountryCode = team.country?.code?.toLowerCase() ?? null;
+  const candidateCountryCode = candidate.country?.code?.toLowerCase() ?? null;
+  const hasCareerRegionOverride = Boolean(
+    (teamCountryCode && NPC_TRANSFER_REGION_COUNTRY_OVERRIDES[teamCountryCode]) ||
+      (candidateCountryCode && NPC_TRANSFER_REGION_COUNTRY_OVERRIDES[candidateCountryCode]),
+  );
+
+  if (hasCareerRegionOverride) {
+    return getNpcTransferRegionIdentity(team) === getNpcTransferRegionIdentity(candidate);
+  }
+
+  return (
+    team.competitionFederationId != null &&
+    candidate.country?.continent?.federationId === team.competitionFederationId
+  );
 }
 
 export function isNpcTransferRegionalSquadIdentity(entity: { country?: CountryLike }) {
@@ -495,9 +529,7 @@ export function getNpcTransferCompatibilityScore(team: TeamLike, candidate: Play
   }
 
   const sameRegion = getNpcTransferRegionIdentity(candidate) === identity.region;
-  const sameFederation =
-    team.competitionFederationId != null &&
-    candidate.country?.continent?.federationId === team.competitionFederationId;
+  const sameFederation = isNpcTransferFederationMatch(team, candidate);
 
   if (identity.type === 'national-core') {
     if (candidate.countryId === identity.countryId) return 180;
@@ -568,9 +600,7 @@ export function getUserOfferFitScore(team: TeamLike, candidate: PlayerLike) {
   const identity = getNpcTransferTeamIdentity(team);
   const starterMatches = getStarterNationalityMatchCount(team, candidate);
   const sameRegion = getNpcTransferRegionIdentity(candidate) === identity.region;
-  const sameFederation =
-    team.competitionFederationId != null &&
-    candidate.country?.continent?.federationId === team.competitionFederationId;
+  const sameFederation = isNpcTransferFederationMatch(team, candidate);
   const regionalSquad = identity.type === 'regional' && isNpcTransferRegionalSquadIdentity(team);
 
   if (identity.type === 'cis-core' || identity.type === 'affinity-core') {
@@ -692,6 +722,7 @@ export const __npcTransferIdentityTest = {
   inferNpcTransferRecruitmentPolicy,
   serializeNpcTransferRecruitmentPolicy,
   getNpcTransferRegionIdentity,
+  isNpcTransferFederationMatch,
   isNpcTransferRegionalSquadIdentity,
   isNpcTransferAffinityCountry,
   isNpcTransferCisCountry,
