@@ -56,8 +56,19 @@ async function measureCalendarPhase<T>(phase: string, callback: () => Promise<T>
   }
 }
 async function resetDatabaseForMainMenu() {
+  const careerSaveId = DatabaseClient.id;
   await disconnectActiveDatabaseWithIntegrity();
-  await DatabaseClient.connect(0);
+  try {
+    await DatabaseClient.connect(0);
+  } catch (error) {
+    // Keep the still-open main window usable when the landing/root database
+    // cannot be initialized. Without this recovery every subsequent IPC route
+    // dereferences a missing Prisma client.
+    if (careerSaveId > 0) {
+      await DatabaseClient.connect(careerSaveId).catch(() => Promise.resolve());
+    }
+    throw error;
+  }
 }
 
 /**
@@ -254,7 +265,9 @@ async function onTickStart() {
   if (!profile) return Promise.resolve();
   tickDate = profile.date;
 
-  await measureCalendarPhase('reconcile-competition-starts', () => reconcileDueCompetitionStarts(profile));
+  await measureCalendarPhase('reconcile-competition-starts', () =>
+    reconcileDueCompetitionStarts(profile),
+  );
   await measureCalendarPhase('reconcile-matchdays', () => reconcileOverdueMatchdays(profile));
   await measureCalendarPhase('reconcile-trial-matchdays', () =>
     reconcileActiveTrialMatchdays(profile),
@@ -383,11 +396,14 @@ async function onTickEnd(input: Calendar[], status?: Engine.LoopStatus) {
   if (mainWindow) mainWindow.send(Constants.IPCRoute.PROFILES_CURRENT, profile);
 
   const elapsed = performance.now() - tickStartedAt;
-  if (elapsed >= 1000 && tickDate) Engine.Runtime.Instance.log.info(
-    'Slow calendar day %s: %dms, %d calendar entries, %d NPC matches',
-    format(tickDate, 'yyyy-MM-dd'), Math.round(elapsed), input.length,
-    input.filter((entry) => entry.type === Constants.CalendarEntry.MATCHDAY_NPC).length,
-  );
+  if (elapsed >= 1000 && tickDate)
+    Engine.Runtime.Instance.log.info(
+      'Slow calendar day %s: %dms, %d calendar entries, %d NPC matches',
+      format(tickDate, 'yyyy-MM-dd'),
+      Math.round(elapsed),
+      input.length,
+      input.filter((entry) => entry.type === Constants.CalendarEntry.MATCHDAY_NPC).length,
+    );
 
   return Promise.resolve();
 }
@@ -542,8 +558,11 @@ async function simulateWeeklyNpcFaceitElo(
       id: player.id,
       data: { elo: randomWeeklyFaceitDeltaForXp(player.xp, player.elo) },
     }));
-    await prisma.$transaction(numericUpdateBatches('Player', updates, true)
-      .map((statement) => prisma.$executeRaw(statement)));
+    await prisma.$transaction(
+      numericUpdateBatches('Player', updates, true).map((statement) =>
+        prisma.$executeRaw(statement),
+      ),
+    );
 
     await prisma.player.updateMany({
       where: {
@@ -616,14 +635,12 @@ export default function () {
   Engine.Runtime.Instance.register(Engine.MiddlewareType.LOOP_FINISH, onLoopFinish);
 
   // Worldgen handlers (global world events).
-  registerEvent(
-    Constants.CalendarEntry.COMPETITION_START,
-    Worldgen.onCompetitionStart,
-  );
+  registerEvent(Constants.CalendarEntry.COMPETITION_START, Worldgen.onCompetitionStart);
   registerEvent(Constants.CalendarEntry.EMAIL_SEND, Worldgen.onEmailSend);
   Engine.Runtime.Instance.registerBatch(Constants.CalendarEntry.MATCHDAY_NPC, (entries) =>
     measureCalendarPhase('npc-matchday', () =>
-      Worldgen.onMatchdayNPCBatch(entries as Calendar[], recordCalendarPhase)),
+      Worldgen.onMatchdayNPCBatch(entries as Calendar[], recordCalendarPhase),
+    ),
   );
 
   Engine.Runtime.Instance.register(
@@ -656,39 +673,21 @@ export default function () {
   );
 
   registerEvent(Constants.CalendarEntry.SEASON_START, Worldgen.onSeasonStart);
-  registerEvent(
-    Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE,
-    Worldgen.onPlayerContractExpire,
-  );
-  registerEvent(
-    Constants.CalendarEntry.PLAYER_SCOUTING_CHECK,
-    Worldgen.onPlayerScoutingCheck,
-  );
-  registerEvent(
-    Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW,
-    Worldgen.onPlayerContractReview,
-  );
+  registerEvent(Constants.CalendarEntry.PLAYER_CONTRACT_EXPIRE, Worldgen.onPlayerContractExpire);
+  registerEvent(Constants.CalendarEntry.PLAYER_SCOUTING_CHECK, Worldgen.onPlayerScoutingCheck);
+  registerEvent(Constants.CalendarEntry.PLAYER_CONTRACT_REVIEW, Worldgen.onPlayerContractReview);
   registerEvent(
     Constants.CalendarEntry.PLAYER_CONTRACT_EXTENSION_EVAL,
     Worldgen.onPlayerContractExtensionEval,
   );
-  registerEvent(
-    Constants.CalendarEntry.NPC_RETIREMENT_CHECK,
-    Worldgen.onNpcRetirementCheck,
-  );
-  registerEvent(
-    Constants.CalendarEntry.NPC_REGEN_INTAKE,
-    Worldgen.onNpcRegenIntake,
-  );
+  registerEvent(Constants.CalendarEntry.NPC_RETIREMENT_CHECK, Worldgen.onNpcRetirementCheck);
+  registerEvent(Constants.CalendarEntry.NPC_REGEN_INTAKE, Worldgen.onNpcRegenIntake);
   registerEvent(
     Constants.CalendarEntry.TRANSFER_OFFER_EXPIRY_CHECK,
     Worldgen.onTransferOfferExpiryCheck,
   );
   registerEvent(Constants.CalendarEntry.TRIAL_CONTRACT_OFFER, Worldgen.onTrialContractOffer);
-  registerEvent(
-    Constants.CalendarEntry.TRANSFER_PARSE,
-    Worldgen.onTransferParse,
-  );
+  registerEvent(Constants.CalendarEntry.TRANSFER_PARSE, Worldgen.onTransferParse);
 
   // IPC: create calendar entry.
   ipcMain.handle(Constants.IPCRoute.CALENDAR_CREATE, (_, data: Prisma.CalendarCreateInput) =>
@@ -778,12 +777,16 @@ export default function () {
         }
 
         await Engine.Runtime.Instance.start(days);
-      } catch (error) {
-        await sealActiveSaveIntegrity();
-        throw error;
       } finally {
-        mainWindow.off('close', disableClose);
-        WindowManager.enableMenu(Constants.WindowIdentifier.Main);
+        try {
+          // Calendar simulation commits directly to SQLite. Refresh the
+          // protected snapshot at the same completion boundary so a later
+          // crash cannot leave years of history paired with the initial seal.
+          await sealActiveSaveIntegrity({ throwOnError: true });
+        } finally {
+          mainWindow.off('close', disableClose);
+          WindowManager.enableMenu(Constants.WindowIdentifier.Main);
+        }
       }
       return Promise.resolve();
     },

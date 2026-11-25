@@ -65,6 +65,10 @@ interface InitSaveResult {
   created: boolean;
 }
 
+interface ConnectOptions {
+  beforeMaintenance?: (prisma: PrismaClientExtended, savePath: string) => Promise<void>;
+}
+
 interface SaveSchemaProbe {
   hasCompetitionFederationColumn: boolean;
   hasMigrationsTable: boolean;
@@ -517,7 +521,7 @@ export default class DatabaseClient {
    * @param id The database to connect with.
    * @method
    */
-  public static async connect(id = activeId) {
+  public static async connect(id = activeId, options: ConnectOptions = {}) {
     // return cached client if already connected to provided
     // db and the underlying save still exists
     if (pool[id] && activeId === id) {
@@ -544,7 +548,7 @@ export default class DatabaseClient {
     // run database migrations
     await DatabaseClient.migrate(id);
 
-    if (id === 0) {
+    if (id === 0 && !maintainedDatabasePaths.has(saveMeta.path)) {
       await DatabaseClient.ensureRootSaveMatchesTemplate(saveMeta.path);
       await DatabaseClient.migrate(id);
     }
@@ -568,6 +572,11 @@ export default class DatabaseClient {
 
     try {
       await DatabaseClient.enableExclusiveSaveLock(pool[id].client, id);
+
+      // Save integrity must be checked before any compatibility maintenance
+      // mutates protected roster or career-stint rows. Otherwise our own
+      // repairs look like tampering and trigger a false rollback.
+      await options.beforeMaintenance?.(pool[id].client, saveMeta.path);
 
       if (maintainedDatabasePaths.has(saveMeta.path)) {
         DatabaseClient.log.debug(
@@ -1500,8 +1509,7 @@ export default class DatabaseClient {
    * @method
    */
   public static async forget(id: number) {
-    const savePath =
-      pool[id]?.path ?? path.join(DatabaseClient.basePath, Util.getSaveFileName(id));
+    const savePath = pool[id]?.path ?? path.join(DatabaseClient.basePath, Util.getSaveFileName(id));
     DatabaseClient.invalidateDatabasePath(savePath);
 
     if (!pool[id]) {

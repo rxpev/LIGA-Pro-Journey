@@ -30,7 +30,16 @@ export default function registerDatabaseHandlers() {
 
     await Util.sleep(200);
 
-    const prisma = await DatabaseClient.connect(databaseId);
+    const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
+    let saveIntegrity: Awaited<ReturnType<typeof verifySaveIntegrity>> | undefined;
+    const prisma = await DatabaseClient.connect(databaseId, {
+      beforeMaintenance:
+        databaseId !== 0 && !saveIntegrityDevMode
+          ? async (client, savePath) => {
+              saveIntegrity = await verifySaveIntegrity(client as any, savePath);
+            }
+          : undefined,
+    });
 
     let profile = await prisma.profile.findFirst();
 
@@ -40,8 +49,6 @@ export default function registerDatabaseHandlers() {
     }
 
     if (databaseId !== 0) {
-      const saveIntegrityDevMode = isSaveIntegrityDevModeEnabled();
-
       if (saveIntegrityDevMode) {
         log.warn(
           'Save integrity development mode is enabled; skipping verification for %s.',
@@ -49,9 +56,7 @@ export default function registerDatabaseHandlers() {
         );
       }
 
-      if (!saveIntegrityDevMode) {
-        const saveIntegrity = await verifySaveIntegrity(prisma as any, DatabaseClient.path);
-
+      if (saveIntegrity) {
         if (!saveIntegrity.valid) {
           log.warn(
             'Could not restore save integrity after verification failed: actual=%s expected=%s',
@@ -67,6 +72,13 @@ export default function registerDatabaseHandlers() {
           );
           profile = await prisma.profile.findFirst();
           if (!profile) return;
+        }
+
+        if (saveIntegrity.resealed) {
+          log.warn(
+            'Detected a stale integrity seal with newer world history; accepted and resealed %s without a partial rollback.',
+            DatabaseClient.path,
+          );
         }
 
         if (saveIntegrity.initialized) {
@@ -125,6 +137,12 @@ export default function registerDatabaseHandlers() {
       where: { id: profile.id },
       data: { updatedAt: new Date().toISOString() },
     });
+
+    // Maintenance and the updated-at write happen after verification. Seal
+    // their final, known-good state so the next load compares like with like.
+    if (databaseId !== 0 && !saveIntegrityDevMode) {
+      await sealSaveIntegrity(prisma as any, DatabaseClient.path);
+    }
 
     log.debug('Database connect finished for save %d.', databaseId);
     return updatedProfile;

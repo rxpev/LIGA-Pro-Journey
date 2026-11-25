@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { app, safeStorage } from 'electron';
 import { PrismaClient, type PrismaClient as PrismaClientType } from '@prisma/client';
+import { Constants } from '@liga/shared';
 
 const SAVE_INTEGRITY_VERSION = 1;
 const SAVE_IDENTITY_KEY = 'saveUuid';
@@ -27,6 +28,7 @@ type SaveIntegrityResult = {
   valid: boolean;
   initialized: boolean;
   restored: boolean;
+  resealed: boolean;
   actualDigest: string;
   expectedDigest?: string;
 };
@@ -591,6 +593,40 @@ async function readIntegrityRecord(saveUuid: string) {
   return JSON.parse(raw) as SaveIntegrityRecord;
 }
 
+/**
+ * A seal can legitimately lag behind the SQLite save when the process is
+ * interrupted after a calendar run committed its work but before the
+ * encrypted sidecar was refreshed.  Restoring only the protected tables in
+ * that situation creates a mixed-timeline save: old profile/roster data next
+ * to newer matches and competitions.
+ *
+ * Ordinary match history is deliberately outside the protected snapshot, so
+ * use it as a durable progress marker.  If the database contains matches
+ * beyond the snapshot's profile date, the snapshot is stale and must never be
+ * partially restored.
+ */
+async function hasWorldProgressBeyondSnapshot(
+  prisma: PrismaClientType,
+  snapshot: ProtectedSaveSnapshot,
+) {
+  const snapshotTime = Math.max(
+    ...snapshot.profiles.map((profile) => new Date(profile.date).getTime()),
+    Number.NEGATIVE_INFINITY,
+  );
+  if (!Number.isFinite(snapshotTime)) return false;
+
+  const latestMatch = await prisma.match.findFirst({
+    where: {
+      matchType: { not: 'FACEIT_PUG' },
+      status: Constants.MatchStatus.COMPLETED,
+    },
+    orderBy: { date: 'desc' },
+    select: { date: true },
+  });
+
+  return Boolean(latestMatch?.date && latestMatch.date.getTime() > snapshotTime);
+}
+
 export async function sealSaveIntegrity(prisma: PrismaClientType, savePath: string) {
   const identity = await ensureSaveIdentity(prisma);
 
@@ -624,6 +660,7 @@ export async function verifySaveIntegrity(
       valid: true,
       initialized: true,
       restored: false,
+      resealed: false,
       actualDigest: '',
     };
   }
@@ -637,6 +674,7 @@ export async function verifySaveIntegrity(
       valid: false,
       initialized: false,
       restored: false,
+      resealed: false,
       actualDigest: '',
       expectedDigest: record.digest,
     };
@@ -657,6 +695,18 @@ export async function verifySaveIntegrity(
   }
 
   if (!valid && record.snapshot) {
+    if (await hasWorldProgressBeyondSnapshot(prisma, record.snapshot)) {
+      await sealSaveIntegrity(prisma, savePath);
+      return {
+        valid: true,
+        initialized: false,
+        restored: false,
+        resealed: true,
+        actualDigest,
+        expectedDigest: record.digest,
+      };
+    }
+
     await restoreProtectedSaveSnapshot(prisma, record.snapshot);
     await sealSaveIntegrity(prisma, savePath);
 
@@ -664,6 +714,7 @@ export async function verifySaveIntegrity(
       valid: true,
       initialized: false,
       restored: true,
+      resealed: false,
       actualDigest,
       expectedDigest: record.digest,
     };
@@ -673,6 +724,7 @@ export async function verifySaveIntegrity(
     valid,
     initialized: false,
     restored: false,
+    resealed: false,
     actualDigest,
     expectedDigest: record.digest,
   };
