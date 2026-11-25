@@ -3,6 +3,7 @@ import { Constants, TierSlug } from '@liga/shared';
 import {
   applyCareerPeakTierFloor,
   getFaceitRecruitmentBand,
+  getFaceitInactivityWeeks,
   getFaceitRecruitmentPerformance,
   getFaceitRecruitmentPlan,
   isFaceitRecruitmentSpotFit,
@@ -138,6 +139,56 @@ assert.equal(euRankedProspect?.eligible, true);
 assert.equal(euRankedProspect?.offerChance, 65);
 assert.equal(euRankedProspect?.tierWeights[TierSlug.LEAGUE_OPEN], 50);
 assert.equal(euRankedProspect?.tierWeights[TierSlug.LEAGUE_MAIN], 5);
+
+assert.equal(getFaceitInactivityWeeks('2026-02-05T00:00:00.000Z', '2026-01-15T00:00:00.000Z'), 3);
+const inactiveProspect = getFaceitRecruitmentPlan({
+  federation: Constants.FederationSlug.ESPORTS_EUROPA,
+  matchCount: 8,
+  elo: 2001,
+  xp: 35,
+  kd: 2.8,
+  winRatePct: 80,
+  lastPlayedAt: '2026-01-15T00:00:00.000Z',
+  now: '2026-02-05T00:00:00.000Z',
+});
+assert.equal(inactiveProspect?.inactivityPenaltyPct, 15);
+assert.equal(inactiveProspect?.offerChance, 55);
+const activeAgainProspect = getFaceitRecruitmentPlan({
+  federation: Constants.FederationSlug.ESPORTS_EUROPA,
+  matchCount: 8,
+  elo: 2001,
+  xp: 35,
+  kd: 2.8,
+  winRatePct: 80,
+  lastPlayedAt: '2026-04-15T00:00:00.000Z',
+  now: '2026-04-15T00:00:00.000Z',
+});
+assert.equal(activeAgainProspect?.inactivityPenaltyPct, 0);
+assert.equal(activeAgainProspect?.offerChance, euRankedProspect?.offerChance);
+
+const prospectWithLeagueEvidence = getFaceitRecruitmentPlan({
+  federation: Constants.FederationSlug.ESPORTS_EUROPA,
+  matchCount: 8,
+  elo: 2001,
+  xp: 35,
+  kd: 1.4,
+  winRatePct: 55,
+  officialRating: 1.35,
+  officialMaps: 10,
+});
+const sameProspectWithoutLeagueEvidence = getFaceitRecruitmentPlan({
+  federation: Constants.FederationSlug.ESPORTS_EUROPA,
+  matchCount: 8,
+  elo: 2001,
+  xp: 35,
+  kd: 1.4,
+  winRatePct: 55,
+});
+assert.ok(
+  (prospectWithLeagueEvidence?.performanceScore ?? 0) >
+    (sameProspectWithoutLeagueEvidence?.performanceScore ?? 0),
+  'recent official league performance contributes to FACEIT scouting',
+);
 
 const euCeiling = getFaceitRecruitmentPlan({
   federation: Constants.FederationSlug.ESPORTS_EUROPA,

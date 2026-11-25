@@ -1,4 +1,5 @@
 import { Constants, TierSlug } from '@liga/shared';
+import { differenceInWeeks } from 'date-fns';
 
 export type FaceitRecruitmentBand = 'poor' | 'adequate' | 'good' | 'excellent' | 'absurd';
 
@@ -10,6 +11,8 @@ export type FaceitRecruitmentPlan = {
   band: FaceitRecruitmentBand;
   offerChance: number;
   guaranteed: boolean;
+  inactivityWeeks: number;
+  inactivityPenaltyPct: number;
   projectedXp: number;
   minimumStarterRatio: number;
   tierWeights: Partial<Record<TierSlug, number>>;
@@ -201,6 +204,10 @@ export function getFaceitRecruitmentPerformance(kd: number, winRatePct: number) 
   return clamp01(kdScore * 0.95 + winRateScore * 0.05);
 }
 
+export function getFaceitInactivityWeeks(now: Date | string, lastPlayedAt?: Date | string | null) {
+  return lastPlayedAt ? Math.max(0, differenceInWeeks(new Date(now), new Date(lastPlayedAt))) : 0;
+}
+
 export function getFaceitRecruitmentBand(score: number): FaceitRecruitmentBand {
   if (score >= 0.88) return 'absurd';
   if (score >= 0.65) return 'excellent';
@@ -303,16 +310,28 @@ export function getFaceitRecruitmentPlan(input: {
   xp: number;
   kd: number;
   winRatePct: number;
+  officialRating?: number | null;
+  officialMaps?: number;
+  lastPlayedAt?: Date | string | null;
+  now?: Date | string;
+  inactivityWeeks?: number;
 }): FaceitRecruitmentPlan | null {
   const market = MARKETS[input.federation];
   if (!market) return null;
 
-  const performanceScore = getFaceitRecruitmentPerformance(input.kd, input.winRatePct);
+  const faceitPerformance = getFaceitRecruitmentPerformance(input.kd, input.winRatePct);
+  const officialMapWeight = Math.min(0.35, Math.max(0, input.officialMaps ?? 0) * 0.035);
+  const officialPerformance =
+    input.officialRating == null ? null : clamp01((input.officialRating - 0.85) / 0.65);
+  const performanceScore =
+    officialPerformance == null
+      ? faceitPerformance
+      : faceitPerformance * (1 - officialMapWeight) + officialPerformance * officialMapWeight;
   const band = getFaceitRecruitmentBand(performanceScore);
   const eligible = input.matchCount >= market.minimumMatches && input.elo >= market.minimumElo;
   const matchesVisible = Math.max(0, input.matchCount - market.minimumMatches);
   const chance = BAND_CHANCE[band];
-  const offerChance = eligible
+  const baseOfferChance = eligible
     ? Math.max(
         1,
         Math.min(
@@ -321,7 +340,20 @@ export function getFaceitRecruitmentPlan(input: {
         ),
       )
     : 0;
-  const guaranteed = eligible && band !== 'poor' && input.matchCount >= market.offerCeilingMatch;
+  const inactivityWeeks = Math.max(
+    0,
+    Math.floor(
+      input.inactivityWeeks ??
+        (input.now ? getFaceitInactivityWeeks(input.now, input.lastPlayedAt) : 0),
+    ),
+  );
+  const inactivityPenaltyPct = Math.min(100, inactivityWeeks * 5);
+  const offerChance = Math.round(baseOfferChance * (1 - inactivityPenaltyPct / 100));
+  const guaranteed =
+    inactivityWeeks === 0 &&
+    eligible &&
+    band !== 'poor' &&
+    input.matchCount >= market.offerCeilingMatch;
   const confidence = Math.min(1, Math.max(0, input.matchCount - 3) / 10);
   const projectedXp = Math.round(input.xp + performanceScore * 8 * (0.7 + confidence * 0.3));
 
@@ -333,6 +365,8 @@ export function getFaceitRecruitmentPlan(input: {
     band,
     offerChance,
     guaranteed,
+    inactivityWeeks,
+    inactivityPenaltyPct,
     projectedXp,
     minimumStarterRatio: STARTER_RATIO[band],
     tierWeights: getFaceitRecruitmentTierWeights(input.federation, input.elo, performanceScore),

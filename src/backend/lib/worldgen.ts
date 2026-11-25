@@ -8144,7 +8144,7 @@ async function isUserEligibleForAcademy(playerId: number) {
   });
 }
 
-export async function sendUserFaceitOffer() {
+export async function sendUserFaceitOffer(options?: { inactivityWeeks?: number }) {
   const prisma = DatabaseClient.prisma;
 
   const [profile] = await prisma.profile.findMany({
@@ -8165,7 +8165,7 @@ export async function sendUserFaceitOffer() {
   });
 
   if (!profile || !profile.player) return Promise.resolve();
-  if (profile.teamId != null) return Promise.resolve();
+  if (profile.teamId != null && profile.player.transferListed !== true) return Promise.resolve();
 
   const role = resolveUserRole(profile, profile.player);
   // Pending offers cap
@@ -8216,6 +8216,16 @@ export async function sendUserFaceitOffer() {
   const winratePct = blendFaceitMetric(recentWinratePct, lifetimeWinratePct);
 
   const elo = profile.faceitElo ?? 0;
+  const latestFaceitMatch = await prisma.match.findFirst({
+    where: {
+      profileId: profile.id,
+      matchType: 'FACEIT_PUG',
+      status: Constants.MatchStatus.COMPLETED,
+    },
+    orderBy: { date: 'desc' },
+    select: { date: true },
+  });
+  const officialEvidence = await computeOfficialScoutingEvidence(profile.playerId, profile.date);
   const recruitmentPlan = getFaceitRecruitmentPlan({
     federation: userFederationSlug,
     matchCount,
@@ -8223,6 +8233,11 @@ export async function sendUserFaceitOffer() {
     xp: profile.player.xp ?? 0,
     kd,
     winRatePct: winratePct,
+    officialRating: officialEvidence.rating,
+    officialMaps: officialEvidence.maps,
+    lastPlayedAt: latestFaceitMatch?.date,
+    now: profile.date,
+    inactivityWeeks: options?.inactivityWeeks,
   });
   if (!recruitmentPlan?.eligible) return Promise.resolve();
 

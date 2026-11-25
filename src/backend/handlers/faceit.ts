@@ -16,7 +16,10 @@ import { sample } from 'lodash';
 import { Engine } from '@liga/backend/lib';
 import { Util } from '@liga/shared';
 import { FACEIT_PLACEMENT_MATCHES } from '@liga/backend/lib/faceit-placement';
-import { getFaceitRecruitmentPlan } from '@liga/backend/lib/faceit-recruitment';
+import {
+  getFaceitRecruitmentPlan,
+  getFaceitInactivityWeeks,
+} from '@liga/backend/lib/faceit-recruitment';
 import {
   getOfficialScoutingPlan,
   getOfficialScoutingQuality,
@@ -671,6 +674,9 @@ export default function registerFaceitHandlers() {
             })
           )?.slug as Constants.FederationSlug | undefined)
         : undefined;
+      const officialEvidence = profile.playerId
+        ? await computeOfficialScoutingEvidence(profile.playerId, profile.date)
+        : null;
       const faceitRecruitment = federationSlug
         ? getFaceitRecruitmentPlan({
             federation: federationSlug,
@@ -679,10 +685,11 @@ export default function registerFaceitHandlers() {
             xp: fullPlayer?.xp ?? 0,
             kd: recent20.kdRatio ?? lifetime.kdRatio ?? 1,
             winRatePct: recent20.winRate ?? lifetime.winRate ?? 50,
+            officialRating: officialEvidence?.rating,
+            officialMaps: officialEvidence?.maps,
+            lastPlayedAt: recent[0]?.date,
+            now: profile.date,
           })
-        : null;
-      const officialEvidence = profile.playerId
-        ? await computeOfficialScoutingEvidence(profile.playerId, profile.date)
         : null;
       const officialScouting = officialEvidence
         ? getOfficialScoutingPlan({
@@ -705,7 +712,7 @@ export default function registerFaceitHandlers() {
       const faceitOfferBlockedReason =
         pendingOffers > 0
           ? 'Respond to your pending offer to resume FACEIT scouting'
-          : profile.teamId != null
+          : profile.teamId != null && fullPlayer?.transferListed !== true
             ? 'FACEIT scouting is paused while you are on a team'
             : profile.faceitRecruitmentOutcome != null &&
                 profile.faceitRecruitmentMatches < profile.faceitRecruitmentMinimumMatches
@@ -1170,11 +1177,15 @@ export default function registerFaceitHandlers() {
         },
       });
 
+      const previousFaceitMatches = await getRecentMatches(profile.id);
+      const inactivityWeeks = getFaceitInactivityWeeks(
+        profile.date,
+        previousFaceitMatches[0]?.date,
+      );
+
       await saveFaceitResult(game, realMatchId, profile);
 
-      if (profile.teamId == null) {
-        await Worldgen.sendUserFaceitOffer();
-      }
+      await Worldgen.sendUserFaceitOffer({ inactivityWeeks });
 
       const dailyAfter = await getFaceitDailyState(prisma, profile);
 

@@ -311,6 +311,8 @@ export default {
             band: 'poor' | 'adequate' | 'good' | 'excellent' | 'absurd';
             offerChance: number;
             guaranteed: boolean;
+            inactivityWeeks: number;
+            inactivityPenaltyPct: number;
             minimumElo: number;
             blockedReason: string | null;
           } | null;

@@ -158,6 +158,132 @@ function DashboardRequirement({
   );
 }
 
+function DashboardOfferProgress({
+  faceit,
+  profileId,
+  profileName,
+}: {
+  faceit: DashboardFaceitProfile | null;
+  profileId: number;
+  profileName: string;
+}) {
+  const faceitOffer = faceit?.offerProgress?.faceit;
+  const advanceOffer = faceit?.offerProgress?.advance;
+  const matchCount = faceit?.lifetime.matchesPlayed ?? 0;
+  const minimumMatches = faceitOffer?.minimumMatches ?? 8;
+  const minimumElo = faceitOffer?.minimumElo ?? 0;
+  const elo = faceit?.faceitElo ?? 0;
+  const requirements = [
+    [
+      {
+        label: `Complete ${minimumMatches} FACEIT matches`,
+        detail: `${Math.min(matchCount, minimumMatches)}/${minimumMatches} completed`,
+        complete: matchCount >= minimumMatches,
+      },
+      ...(minimumElo > 0
+        ? [
+            {
+              label: `Reach ${minimumElo} FACEIT ELO`,
+              detail: `${elo}/${minimumElo} ELO`,
+              complete: elo >= minimumElo,
+            },
+          ]
+        : []),
+    ],
+    [
+      {
+        label: 'Complete official matches',
+        detail: `${advanceOffer?.maps ?? 0} official maps recorded`,
+        complete: (advanceOffer?.matches ?? 0) > 0,
+      },
+    ],
+  ];
+
+  return (
+    <section className="team-dashboard-panel team-dashboard-recent-matches teamless-dashboard-offers">
+      <header className="team-dashboard-panel-header">
+        <h2>
+          <FaBullseye aria-hidden="true" /> Contract Offer Progress
+        </h2>
+      </header>
+      <div className="teamless-dashboard-offer-methods">
+        <article>
+          <header>
+            <img
+              src={faceitLogo}
+              className="bg-base-300 size-10 shrink-0 rounded object-contain p-1"
+              alt=""
+            />
+            <div>
+              <strong>FACEIT offer chance</strong>
+            </div>
+          </header>
+          <p>
+            <strong>{Math.round(faceitOffer?.offerChance ?? 0)}%</strong>{' '}
+            {faceitOffer?.blockedReason || 'chance after your next match'}
+          </p>
+          <progress value={Math.round(faceitOffer?.offerChance ?? 0)} max="100" />
+        </article>
+        <article>
+          <header>
+            <FaClock aria-hidden="true" />
+            <div>
+              <strong>Advancement offer chance</strong>
+            </div>
+          </header>
+          <p>
+            <strong>{Math.round(advanceOffer?.chance ?? 0)}%</strong> weekly chance
+          </p>
+          <progress value={Math.round(advanceOffer?.chance ?? 0)} max="100" />
+        </article>
+      </div>
+      <header className="team-dashboard-panel-header teamless-dashboard-requirements-header">
+        <h2>
+          <FaClipboardCheck aria-hidden="true" /> Requirements
+        </h2>
+      </header>
+      <div className="teamless-dashboard-requirements">
+        {requirements.map((pathRequirements, pathIndex) => (
+          <div key={pathIndex === 0 ? 'faceit' : 'advance'}>
+            {pathRequirements.map((requirement) => (
+              <DashboardRequirement
+                key={requirement.label}
+                complete={requirement.complete && !!faceit}
+                loaded={!!faceit}
+                storageKey={`dashboard-requirement:${profileId}:${profileName}:${requirement.label}`}
+              >
+                <FaCheckCircle aria-hidden="true" />
+                <div>
+                  <strong>
+                    {requirement.label}
+                    {requirement.label === `Reach ${minimumElo} FACEIT ELO` && (
+                      <span
+                        className="tooltip ml-2 inline-block align-middle"
+                        data-tip="FACEIT Level 10 is required for contract offers in Europe"
+                        tabIndex={0}
+                        aria-label="FACEIT Level 10 is required for contract offers in Europe"
+                      >
+                        <FaInfoCircle style={{ fontSize: '0.875rem' }} />
+                      </span>
+                    )}
+                  </strong>
+                  <span>{requirement.detail}</span>
+                </div>
+              </DashboardRequirement>
+            ))}
+            <p className="teamless-dashboard-offer-info">
+              <FaInfoCircle aria-hidden="true" />
+              {pathIndex === 0
+                ? 'Strong FACEIT results raise visibility'
+                : 'Teams review free agents over time'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function getDashboardNewsDisplay(item: DashboardNewsItem) {
   let payload: Record<string, unknown> = {};
 
@@ -462,7 +588,7 @@ export default function () {
   }, [state.profile?.id, state.profile?.date]);
 
   React.useEffect(() => {
-    if (!state.profile || state.profile.teamId) {
+    if (!state.profile || (state.profile.teamId && state.profile.player?.transferListed !== true)) {
       setDashboardFaceit(null);
       return;
     }
@@ -480,7 +606,12 @@ export default function () {
     return () => {
       active = false;
     };
-  }, [state.profile?.id, state.profile?.date, state.profile?.teamId]);
+  }, [
+    state.profile?.id,
+    state.profile?.date,
+    state.profile?.teamId,
+    state.profile?.player?.transferListed,
+  ]);
 
   // fetch the newsroom headlines used by the compact dashboard rail
   React.useEffect(() => {
@@ -1042,104 +1173,112 @@ export default function () {
                     )}
                   </section>
 
-                  <section className="team-dashboard-panel team-dashboard-recent-matches">
-                    <header className="team-dashboard-panel-header">
-                      <h2>
-                        <FaChartBar aria-hidden="true" />
-                        {t('main.dashboard.headerRecentMatches')}
-                      </h2>
-                      <Link to={`/teams/matches?teamId=${profile.teamId}`}>
-                        View all matches <FaArrowRight aria-hidden="true" />
-                      </Link>
-                    </header>
-                    <div className="team-dashboard-match-table-header">
-                      <span>Date</span>
-                      <span>Match</span>
-                      <span>Event</span>
-                      <span />
-                    </div>
-                    <div className="team-dashboard-match-list">
-                      {userRecentMatches.slice(0, NUM_PREVIOUS).map((match) => {
-                        const own = match.competitors.find(
-                          (competitor) => competitor.teamId === profile.teamId,
-                        );
-                        const opponent = match.competitors.find(
-                          (competitor) => competitor.teamId !== profile.teamId,
-                        );
-                        const resultLabel =
-                          own?.result === Constants.MatchResult.WIN
-                            ? 'Win'
-                            : own?.result === Constants.MatchResult.DRAW
-                              ? 'Draw'
-                              : 'Loss';
-                        const eventThumbnail =
-                          Util.getCompetitionThumbnail({
-                            federationSlug: match.competition.federation.slug,
-                            organizer: match.competition.organizer,
-                            tierSlug: match.competition.tier.slug,
-                          }) ||
-                          Util.getCompetitionLogo(
-                            match.competition.tier.slug,
-                            match.competition.federation.slug,
-                            {
-                              location: match.competition.location,
-                              organizer: match.competition.organizer,
-                            },
+                  {isBenched ? (
+                    <DashboardOfferProgress
+                      faceit={dashboardFaceit}
+                      profileId={profile.id}
+                      profileName={profile.name}
+                    />
+                  ) : (
+                    <section className="team-dashboard-panel team-dashboard-recent-matches">
+                      <header className="team-dashboard-panel-header">
+                        <h2>
+                          <FaChartBar aria-hidden="true" />
+                          {t('main.dashboard.headerRecentMatches')}
+                        </h2>
+                        <Link to={`/teams/matches?teamId=${profile.teamId}`}>
+                          View all matches <FaArrowRight aria-hidden="true" />
+                        </Link>
+                      </header>
+                      <div className="team-dashboard-match-table-header">
+                        <span>Date</span>
+                        <span>Match</span>
+                        <span>Event</span>
+                        <span />
+                      </div>
+                      <div className="team-dashboard-match-list">
+                        {userRecentMatches.slice(0, NUM_PREVIOUS).map((match) => {
+                          const own = match.competitors.find(
+                            (competitor) => competitor.teamId === profile.teamId,
                           );
-                        const canOpen = match._count.events > 0;
+                          const opponent = match.competitors.find(
+                            (competitor) => competitor.teamId !== profile.teamId,
+                          );
+                          const resultLabel =
+                            own?.result === Constants.MatchResult.WIN
+                              ? 'Win'
+                              : own?.result === Constants.MatchResult.DRAW
+                                ? 'Draw'
+                                : 'Loss';
+                          const eventThumbnail =
+                            Util.getCompetitionThumbnail({
+                              federationSlug: match.competition.federation.slug,
+                              organizer: match.competition.organizer,
+                              tierSlug: match.competition.tier.slug,
+                            }) ||
+                            Util.getCompetitionLogo(
+                              match.competition.tier.slug,
+                              match.competition.federation.slug,
+                              {
+                                location: match.competition.location,
+                                organizer: match.competition.organizer,
+                              },
+                            );
+                          const canOpen = match._count.events > 0;
 
-                        return (
-                          <article key={`${match.id}__team_recent`}>
-                            <time title={format(match.date, 'PPPP')}>
-                              {fmtShortDate(match.date)}
-                            </time>
-                            <div className="team-dashboard-result">
+                          return (
+                            <article key={`${match.id}__team_recent`}>
+                              <time title={format(match.date, 'PPPP')}>
+                                {fmtShortDate(match.date)}
+                              </time>
+                              <div className="team-dashboard-result">
+                                <span
+                                  className={cx(
+                                    'team-dashboard-result-badge',
+                                    resultLabel === 'Win' && 'is-win',
+                                    resultLabel === 'Draw' && 'is-draw',
+                                    resultLabel === 'Loss' && 'is-loss',
+                                  )}
+                                >
+                                  {resultLabel}
+                                </span>
+                                <img src={own?.team.blazon} alt="" />
+                                <strong>{own?.team.name || '—'}</strong>
+                                <b className={Util.getResultTextColor(own?.result)}>
+                                  {own?.score ?? 0} : {opponent?.score ?? 0}
+                                </b>
+                                {!!opponent?.team && <img src={opponent.team.blazon} alt="" />}
+                                <strong>{opponent?.team.name || 'BYE'}</strong>
+                              </div>
                               <span
-                                className={cx(
-                                  'team-dashboard-result-badge',
-                                  resultLabel === 'Win' && 'is-win',
-                                  resultLabel === 'Draw' && 'is-draw',
-                                  resultLabel === 'Loss' && 'is-loss',
-                                )}
+                                className="team-dashboard-event"
+                                title={toDashboardTournamentLabel(match)}
                               >
-                                {resultLabel}
+                                <img src={eventThumbnail} alt="" />
+                                <b>{toDashboardTournamentLabel(match)}</b>
                               </span>
-                              <img src={own?.team.blazon} alt="" />
-                              <strong>{own?.team.name || '—'}</strong>
-                              <b className={Util.getResultTextColor(own?.result)}>
-                                {own?.score ?? 0} : {opponent?.score ?? 0}
-                              </b>
-                              {!!opponent?.team && <img src={opponent.team.blazon} alt="" />}
-                              <strong>{opponent?.team.name || 'BYE'}</strong>
-                            </div>
-                            <span
-                              className="team-dashboard-event"
-                              title={toDashboardTournamentLabel(match)}
-                            >
-                              <img src={eventThumbnail} alt="" />
-                              <b>{toDashboardTournamentLabel(match)}</b>
-                            </span>
-                            <button
-                              type="button"
-                              className="btn btn-xs w-16 justify-self-end bg-[#4d6783] text-[#d8e5f1]"
-                              disabled={!canOpen}
-                              onClick={() =>
-                                api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-                                  target: '/postgame',
-                                  payload: match.id,
-                                })
-                              }
-                            >
-                              Match
-                            </button>
-                          </article>
-                        );
-                      })}
-                      {!userRecentMatches.length && (
-                        <p className="team-dashboard-list-empty">{t('shared.noRecentMatch')}</p>
-                      )}
-                    </div>
-                  </section>
+                              <button
+                                type="button"
+                                className="btn btn-xs w-16 justify-self-end bg-[#4d6783] text-[#d8e5f1]"
+                                disabled={!canOpen}
+                                onClick={() =>
+                                  api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
+                                    target: '/postgame',
+                                    payload: match.id,
+                                  })
+                                }
+                              >
+                                Match
+                              </button>
+                            </article>
+                          );
+                        })}
+                        {!userRecentMatches.length && (
+                          <p className="team-dashboard-list-empty">{t('shared.noRecentMatch')}</p>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 </>
               ) : (
                 (() => {
