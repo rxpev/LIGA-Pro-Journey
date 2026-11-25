@@ -1626,9 +1626,9 @@ export default function () {
   const loadItems = React.useCallback(() => {
     api.news.all().then((data) => {
       setItems(data);
-      setSelectedId((current) => requestedArticleId || current || data[0]?.id || null);
+      setSelectedId((current) => current || data[0]?.id || null);
     });
-  }, [requestedArticleId]);
+  }, []);
 
   React.useEffect(() => {
     loadItems();
@@ -1698,6 +1698,7 @@ export default function () {
           ? 'TRANSFERS'
           : 'ALL',
     );
+    setRequestedArticleId(null);
   }, [items, requestedArticleId]);
 
   const relatedItems = React.useMemo(
