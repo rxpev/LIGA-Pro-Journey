@@ -42,14 +42,14 @@ type MatchRecord = any;
 const weaponAssetContext = require.context('@liga/frontend/assets/weapons/3D', false, /\.png$/);
 
 type CareerStintRecord = {
-  teamId: number;
+  teamId: number | null;
   startedAt: Date | string;
   endedAt: Date | string | null;
   team: {
     id: number;
     name: string;
     blazon?: string;
-  };
+  } | null;
 };
 
 type MatchPerformance = {
@@ -1285,7 +1285,13 @@ export default function LeagueStatsConcept(): JSX.Element {
   }, [canViewGlobalPlayerStats, location.state]);
 
   const careerTeamIds = React.useMemo(
-    () => [...new Set(careerStints.map((stint) => stint.teamId))],
+    () => [
+      ...new Set(
+        careerStints
+          .map((stint) => stint.teamId)
+          .filter((teamId): teamId is number => teamId !== null),
+      ),
+    ],
     [careerStints],
   );
 
@@ -1627,13 +1633,15 @@ export default function LeagueStatsConcept(): JSX.Element {
         }),
       );
     } else {
-      careerStints.forEach((stint: any) =>
+      careerStints.forEach((stint) => {
+        if (!stint.team) return;
+
         map.set(stint.team.id, {
           id: stint.team.id,
           name: stint.team.name,
           blazon: stint.team.blazon,
-        }),
-      );
+        });
+      });
     }
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
