@@ -6918,6 +6918,7 @@ export async function sendEmail(
     update: {
       dialogues,
       read: false,
+      sentAt,
     },
     create: {
       subject,

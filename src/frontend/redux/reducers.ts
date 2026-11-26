@@ -3,7 +3,7 @@
  *
  * @module
  */
-import { keyBy, merge, values, xorBy } from "lodash";
+import { merge, xorBy } from "lodash";
 import { ReduxActions } from "./actions";
 import { AppAction, AppState, InitialState } from "./state";
 
@@ -27,20 +27,27 @@ function continents(state = InitialState.continents, action: AppAction) {
     : state;
 }
 
-function emails(state = InitialState.emails, action: AppAction) {
+function timestamp(value: Date | string | number | null | undefined) {
+  const parsed = value instanceof Date ? value.getTime() : new Date(value ?? 0).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function reduceEmails(state = InitialState.emails, action: AppAction) {
   switch (action.type) {
     case ReduxActions.EMAILS_DELETE:
       return xorBy(state, action.payload, "id");
 
-    case ReduxActions.EMAILS_UPDATE:
-      return values(merge(keyBy(state, "id"), keyBy(action.payload, "id")))
-        .sort((a: any, b: any) => b.sentAt.valueOf() - a.sentAt.valueOf())
-        .map((email: any) => {
-          email.dialogues.sort(
-            (a: any, b: any) => b.sentAt.valueOf() - a.sentAt.valueOf()
-          );
-          return email;
-        });
+    case ReduxActions.EMAILS_UPDATE: {
+      const incomingById = new Map(action.payload.map((email: any) => [email.id, email]));
+      return [...state.filter((email) => !incomingById.has(email.id)), ...incomingById.values()]
+        .map((email: any) => ({
+          ...email,
+          dialogues: [...email.dialogues].sort(
+            (a: any, b: any) => timestamp(b.sentAt) - timestamp(a.sentAt),
+          ),
+        }))
+        .sort((a: any, b: any) => timestamp(b.sentAt) - timestamp(a.sentAt));
+    }
 
     default:
       return state;
@@ -212,7 +219,7 @@ export default function reducer(state: AppState, action: AppAction) {
     appInfo: appInfo(state.appInfo, action),
     appStatus: appStatus(state.appStatus, action),
     continents: continents(state.continents, action),
-    emails: emails(state.emails, action),
+    emails: reduceEmails(state.emails, action),
     locale: locale(state.locale, action),
     playing: playing(state.playing, action),
     playError: playError(state.playError, action),
