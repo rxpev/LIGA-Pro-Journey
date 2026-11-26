@@ -576,6 +576,12 @@ export default function () {
     queryFederationId > 0 &&
     querySeasonId > 0 &&
     queryTierId > 0;
+  const queryRequestKey = hasQueryCompetitionId
+    ? `competition:${queryCompetitionId}`
+    : hasQueryParams
+      ? `filters:${queryFederationId}:${querySeasonId}:${queryTierId}`
+      : null;
+  const previousQueryRequestKey = React.useRef(queryRequestKey);
 
   // Build queries
   const tierQuery: Parameters<typeof api.tiers.all>[number] = React.useMemo(
@@ -912,6 +918,22 @@ export default function () {
   React.useEffect(() => {
     api.tiers.all(tierQuery).then(setTiers);
   }, [tierQuery]);
+
+  // AnimatedOutlet preserves each main tab's component state. Reset only the
+  // URL-driven initialization guards when a new tournament link enters this
+  // already-mounted tab, so the new target replaces the previously viewed one.
+  React.useLayoutEffect(() => {
+    if (previousQueryRequestKey.current === queryRequestKey) {
+      return;
+    }
+
+    previousQueryRequestKey.current = queryRequestKey;
+    setInitializedFromQuery(false);
+    setInitializedQueryCompetition(false);
+    if (queryRequestKey) {
+      setCompetition(undefined);
+    }
+  }, [queryRequestKey]);
 
   React.useEffect(() => {
     if (hasQueryParams || !hasQueryCompetitionId || initializedFromQuery) return;

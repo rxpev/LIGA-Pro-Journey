@@ -6,8 +6,7 @@
  */
 import type { Prisma } from '@prisma/client';
 import log from 'electron-log';
-import { random } from 'lodash';
-import { Constants, Bot, Chance, Util } from '@liga/shared';
+import { Constants, Bot, Util } from '@liga/shared';
 
 /** @constant */
 let simScaleFactor: number | null | undefined;
@@ -53,9 +52,97 @@ export interface SeriesScore {
 /** @enum */
 enum SimulationResult {
   DRAW = 12,
-  LOSE_HIGH = 11,
-  LOSE_LOW = 0,
-  WIN = 13,
+}
+
+type ScorelineBand = 'overtime' | 'close' | 'medium' | 'stomp';
+
+export interface SimulatedScoreline {
+  winner: number;
+  loser: number;
+  band: ScorelineBand;
+}
+
+interface WeightedScoreline extends SimulatedScoreline {
+  /** Unconditional HLTV probability for this scoreline at neutral strength. */
+  weight: number;
+}
+
+/**
+ * CS2 scoreline targets derived from the supplied HLTV sample:
+ * - overtime: 11.70%
+ * - 13-11 through 13-9: 33.85%
+ * - 13-8 through 13-5: 37.15%
+ * - 13-4 through 13-0: 17.30%
+ * - specifically 13-0: 0.6146%
+ *
+ * The exact-score split within each broader bucket is intentionally smooth;
+ * only the bucket totals and 13-0 rate are externally calibrated.
+ */
+const BASE_SCORELINES: ReadonlyArray<WeightedScoreline> = [
+  { winner: 16, loser: 14, band: 'overtime', weight: 0.0702 },
+  { winner: 16, loser: 13, band: 'overtime', weight: 0.0234 },
+  { winner: 16, loser: 12, band: 'overtime', weight: 0.00936 },
+  { winner: 19, loser: 17, band: 'overtime', weight: 0.00819 },
+  { winner: 19, loser: 16, band: 'overtime', weight: 0.002925 },
+  { winner: 19, loser: 15, band: 'overtime', weight: 0.00117 },
+  { winner: 22, loser: 20, band: 'overtime', weight: 0.00117 },
+  { winner: 22, loser: 19, band: 'overtime', weight: 0.000351 },
+  { winner: 22, loser: 18, band: 'overtime', weight: 0.000234 },
+  { winner: 13, loser: 11, band: 'close', weight: 0.12 },
+  { winner: 13, loser: 10, band: 'close', weight: 0.114 },
+  { winner: 13, loser: 9, band: 'close', weight: 0.1045 },
+  { winner: 13, loser: 8, band: 'medium', weight: 0.104 },
+  { winner: 13, loser: 7, band: 'medium', weight: 0.098 },
+  { winner: 13, loser: 6, band: 'medium', weight: 0.09 },
+  { winner: 13, loser: 5, band: 'medium', weight: 0.0795 },
+  { winner: 13, loser: 4, band: 'stomp', weight: 0.048 },
+  { winner: 13, loser: 3, band: 'stomp', weight: 0.045 },
+  { winner: 13, loser: 2, band: 'stomp', weight: 0.04 },
+  { winner: 13, loser: 1, band: 'stomp', weight: 0.033854 },
+  { winner: 13, loser: 0, band: 'stomp', weight: 0.006146 },
+];
+
+const BASE_BAND_WEIGHTS: Record<ScorelineBand, number> = {
+  overtime: 0.117,
+  close: 0.3385,
+  medium: 0.3715,
+  stomp: 0.173,
+};
+
+/**
+ * Produces a calibrated final score in constant time. Score-margin weights are
+ * conditioned on whether the result was expected, while their expectation for
+ * every matchup remains the HLTV baseline. This prevents the scheduled mix of
+ * strong and weak teams from drifting the global target percentages.
+ */
+export function sampleMapScoreline(
+  homeWinProbability: number,
+  winnerIsHome: boolean,
+  randomValue = Math.random(),
+): SimulatedScoreline {
+  const homeP = Math.max(0, Math.min(1, homeWinProbability));
+  const actualWinnerP = winnerIsHome ? homeP : 1 - homeP;
+  const expectedWinnerP = homeP * homeP + (1 - homeP) * (1 - homeP);
+  const resultExpectationDelta = actualWinnerP - expectedWinnerP;
+  const adjustedBands: Record<ScorelineBand, number> = {
+    overtime: BASE_BAND_WEIGHTS.overtime - 0.12 * resultExpectationDelta,
+    close: BASE_BAND_WEIGHTS.close - 0.1 * resultExpectationDelta,
+    medium: BASE_BAND_WEIGHTS.medium + 0.06 * resultExpectationDelta,
+    stomp: BASE_BAND_WEIGHTS.stomp + 0.16 * resultExpectationDelta,
+  };
+  const roll = Math.max(0, Math.min(1 - Number.EPSILON, randomValue));
+  let cumulative = 0;
+
+  for (const scoreline of BASE_SCORELINES) {
+    cumulative +=
+      scoreline.weight * (adjustedBands[scoreline.band] / BASE_BAND_WEIGHTS[scoreline.band]);
+    if (roll < cumulative) {
+      return { winner: scoreline.winner, loser: scoreline.loser, band: scoreline.band };
+    }
+  }
+
+  const fallback = BASE_SCORELINES[BASE_SCORELINES.length - 1];
+  return { winner: fallback.winner, loser: fallback.loser, band: fallback.band };
 }
 
 /**
@@ -195,25 +282,23 @@ export class Score {
       );
     }
 
-    // simulate final scores
-    const score = {
-      winner: SimulationResult.WIN,
-      loser: random(SimulationResult.LOSE_LOW, SimulationResult.LOSE_HIGH),
-    };
-
     // handle sim mode early since that won't
     // require any probability calculations
     switch (this.mode) {
-      case this.userTeamId && Constants.SimulationMode.LOSE:
+      case this.userTeamId && Constants.SimulationMode.LOSE: {
+        const forcedScore = sampleMapScoreline(0.5, true);
         return {
-          [home.id]: home.id === this.userTeamId ? score.loser : score.winner,
-          [away.id]: away.id === this.userTeamId ? score.loser : score.winner,
+          [home.id]: home.id === this.userTeamId ? forcedScore.loser : forcedScore.winner,
+          [away.id]: away.id === this.userTeamId ? forcedScore.loser : forcedScore.winner,
         };
-      case this.userTeamId && Constants.SimulationMode.WIN:
+      }
+      case this.userTeamId && Constants.SimulationMode.WIN: {
+        const forcedScore = sampleMapScoreline(0.5, true);
         return {
-          [home.id]: home.id === this.userTeamId ? score.winner : score.loser,
-          [away.id]: away.id === this.userTeamId ? score.winner : score.loser,
+          [home.id]: home.id === this.userTeamId ? forcedScore.winner : forcedScore.loser,
+          [away.id]: away.id === this.userTeamId ? forcedScore.winner : forcedScore.loser,
         };
+      }
     }
 
     // calculate probability weight for team
@@ -224,11 +309,7 @@ export class Score {
       awayRating,
       getSimScaleFactor() ?? Constants.Application.SIMULATION_SCALING_FACTOR,
     );
-    const winnerPbxWeight: Record<string | number, number> = {
-      [home.id]: homeWinPbx,
-      [away.id]: 1 - homeWinPbx,
-      [Constants.SimulationMode.DRAW]: 0,
-    };
+    let drawWeight = 0;
 
     // do we allow draws? if so, the chance to draw is
     // equal to the team with the lowest prestige
@@ -237,12 +318,15 @@ export class Score {
         (template) =>
           template.prestige === (home.prestige > away.prestige ? away.prestige : home.prestige),
       );
-      winnerPbxWeight[Constants.SimulationMode.DRAW] =
-        lowestPrestige.multiplier * Constants.Application.SQUAD_MIN_LENGTH;
+      drawWeight = lowestPrestige.multiplier * Constants.Application.SQUAD_MIN_LENGTH;
     }
 
-    // simulate a score
-    const winner = Chance.roll(winnerPbxWeight);
+    // Roll against the original floating-point weights. The previous generic
+    // probability helper floored them to integer percentages; its uncovered
+    // rounding gap could select the zero-weight draw entry.
+    const winnerRoll = Math.random() * (1 + drawWeight);
+    const winner =
+      winnerRoll < homeWinPbx ? home.id : winnerRoll < 1 ? away.id : Constants.SimulationMode.DRAW;
 
     // was it a draw?
     if (this.allowDraw && winner === Constants.SimulationMode.DRAW) {
@@ -253,23 +337,25 @@ export class Score {
     }
 
     if (this.userTeamId) {
-      const adjustedDistribution = Chance.rangeToDistribution(winnerPbxWeight);
       this.log.info(
         '%s win probability: %d% (raw: %d, total xp: %d)',
         home.name,
-        adjustedDistribution[home.id],
-        winnerPbxWeight[home.id],
+        homeWinPbx * 100,
+        homeWinPbx,
         homeRating,
       );
       this.log.info(
         '%s win probability: %d% (raw: %d, total xp: %d)',
         away.name,
-        adjustedDistribution[away.id],
-        winnerPbxWeight[away.id],
+        (1 - homeWinPbx) * 100,
+        1 - homeWinPbx,
         awayRating,
       );
       this.log.info('Winner: %s', Number(winner) === home.id ? home.name : away.name);
     }
+
+    const winnerIsHome = Number(winner) === home.id;
+    const score = sampleMapScoreline(homeWinPbx, winnerIsHome);
 
     // return the winner
     return {

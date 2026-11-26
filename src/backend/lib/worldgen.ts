@@ -716,6 +716,38 @@ function rollWeighted<T extends { performanceWeight: number }>(items: Array<T>) 
 }
 
 function getRoundWinnerIds(homeId: number, awayId: number, homeScore: number, awayScore: number) {
+  const winnerId = homeScore > awayScore ? homeId : awayId;
+  const loserId = winnerId === homeId ? awayId : homeId;
+  const winnerScore = Math.max(homeScore, awayScore);
+  const loserScore = Math.min(homeScore, awayScore);
+
+  // Regulation maps must end on the winning team's thirteenth round. Keeping
+  // that round last prevents shuffled event data from showing a map continue
+  // after one team has already won.
+  if (winnerScore === 13) {
+    return shuffle([
+      ...Array(winnerScore - 1).fill(winnerId),
+      ...Array(loserScore).fill(loserId),
+    ]).concat(winnerId);
+  }
+
+  // CS2 overtime is MR3: regulation reaches 12-12, tied OT periods add 3-3,
+  // and the deciding period ends when the winner takes four rounds.
+  if (winnerScore >= 16 && (winnerScore - 16) % 3 === 0) {
+    const tiedOvertimePeriods = (winnerScore - 16) / 3;
+    const regulation = shuffle([...Array(12).fill(homeId), ...Array(12).fill(awayId)]);
+    const tiedPeriods = Array.from({ length: tiedOvertimePeriods }).flatMap(() =>
+      shuffle([...Array(3).fill(homeId), ...Array(3).fill(awayId)]),
+    );
+    const decidingLoserRounds = Math.max(0, loserScore - (12 + tiedOvertimePeriods * 3));
+    const decidingPeriod = shuffle([
+      ...Array(3).fill(winnerId),
+      ...Array(decidingLoserRounds).fill(loserId),
+    ]).concat(winnerId);
+
+    return [...regulation, ...tiedPeriods, ...decidingPeriod];
+  }
+
   const winners = [...Array(homeScore).fill(homeId), ...Array(awayScore).fill(awayId)];
 
   return shuffle(winners);
