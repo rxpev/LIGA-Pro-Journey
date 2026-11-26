@@ -6797,7 +6797,8 @@ export async function generateAutomaticItems(date?: Date) {
 
   const publishedAt = date || profile?.date || new Date();
   const topTeamIds = await getTopTeamIds();
-  const topFiveTeamIds = await getTopTeamIds(5);
+  // Both rankings use the same Elo/id ordering within this generation pass.
+  const topFiveTeamIds = new Set([...topTeamIds].slice(0, 5));
   const transferShortTeamIds = await getTransferShortTeamIds();
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
 

@@ -427,13 +427,12 @@ export async function applyMatchXpFromSim(params: {
   const allIds = [...new Set([...Object.keys(homeDist), ...Object.keys(awayDist)].map(Number))];
   if (!allIds.length) return;
 
-  // Load current xp/age for just those players
-  const players = await prisma.player.findMany({
-    where: { id: { in: allIds } },
-    select: { id: true, xp: true, age: true },
-  });
-
-  const byId = new Map(players.map((p) => [p.id, p]));
+  // Both teams are loaded as part of the match snapshot. NPC batch segments
+  // have no repeated team, so these values are the same current values the
+  // former findMany query returned, without one extra round-trip per match.
+  const byId = new Map(
+    [...homeTeam.players, ...awayTeam.players].map((player) => [player.id, player]),
+  );
   const updates: Array<{ id: number; newXp: number; delta: number }> = [];
 
   for (const id of allIds) {
@@ -567,12 +566,9 @@ export async function applyMatchXpFromCompletedMatch(params: {
   const allIds = [...new Set([...Object.keys(homeDist), ...Object.keys(awayDist)].map(Number))];
   if (!allIds.length) return;
 
-  const players = await prisma.player.findMany({
-    where: { id: { in: allIds } },
-    select: { id: true, xp: true, age: true },
-  });
-
-  const byId = new Map(players.map((p) => [p.id, p]));
+  const byId = new Map(
+    [...homeC.team.players, ...awayC.team.players].map((player) => [player.id, player]),
+  );
   const updates: Array<{ id: number; newXp: number }> = [];
 
   for (const id of allIds) {

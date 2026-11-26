@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 
 const columns = {
+  Team: ['elo'],
+  Match: ['status'],
   Player: ['xp', 'elo'],
   CompetitionToTeam: ['position', 'win', 'loss', 'draw', 'seed', 'group'],
   GameToTeam: ['score', 'result'],

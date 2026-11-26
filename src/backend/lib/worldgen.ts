@@ -73,6 +73,7 @@ import {
 import * as LeagueStats from './leaguestats';
 import * as XpEconomy from '@liga/backend/lib/xp-economy';
 import { getNpcRetirementChance } from '@liga/backend/lib/retirement';
+import { readRetirementEvidence } from './retirement-evidence';
 import { backfillCompetitionLocations } from './competition-locations';
 import {
   getTrialExpiredResponse,
@@ -277,11 +278,15 @@ const NPC_MATCHDAY_INCLUDE = {
 } satisfies Prisma.MatchInclude;
 
 type NpcMatchdayRecord = Prisma.MatchGetPayload<{ include: typeof NPC_MATCHDAY_INCLUDE }>;
+type MatchWriteCollector = Map<
+  Parameters<typeof numericUpdateBatches>[0],
+  Parameters<typeof numericUpdateBatches>[1]
+>;
 type DeferredNpcMatchPersistence = {
   kind: 'deferred-npc-match-persistence';
   matchId: number;
   teamIds: number[];
-  createTransaction: () => Prisma.PrismaPromise<unknown>[];
+  createTransaction: (collector?: MatchWriteCollector) => Prisma.PrismaPromise<unknown>[];
 };
 
 function isDeferredNpcMatchPersistence(value: unknown): value is DeferredNpcMatchPersistence {
@@ -10165,6 +10170,47 @@ function findNpcBenchMarketVictim(team: NpcTransferTeam, incoming: any) {
   );
 }
 
+function prepareNpcBenchMarketBuyer(team: NpcTransferTeam) {
+  // The market already uses one immutable buyer snapshot for the whole pass.
+  // Index and sort its eligible starters once, preserving the old XP/id order.
+  const healthy = ensureTeamFloorAndSniper({ players: team.players as any });
+  const byRole = new Map<string, typeof team.players>();
+  const victimFit = new Map<number, number>();
+  if (healthy) {
+    for (const player of team.players) {
+      if (!player.starter || player.userControlled) continue;
+      const role = normalizeRole(player.role);
+      const players = byRole.get(role) ?? [];
+      players.push(player);
+      byRole.set(role, players);
+      victimFit.set(player.id, getNpcTransferCompatibilityScore(team, player));
+    }
+    for (const players of byRole.values()) {
+      players.sort((a, b) => (a.xp ?? 0) - (b.xp ?? 0) || a.id - b.id);
+    }
+  }
+  const tolerance = getNationalReplacementXpTolerance(team);
+  return {
+    team,
+    findVictim(incoming: NpcTransferTeam['players'][number]) {
+      const players = byRole.get(normalizeRole(incoming.role));
+      if (!players?.length || !isNpcTransferCompatible(team, incoming)) return null;
+      const incomingXp = incoming.xp ?? 0;
+      const incomingFit = getNpcTransferCompatibilityScore(team, incoming);
+      return (
+        players.find((victim) => {
+          const xp = victim.xp ?? 0;
+          return (
+            incomingXp > xp ||
+            (incomingFit > victimFit.get(victim.id)! && incomingXp >= xp - tolerance) ||
+            incomingXp + getAgeReplacementBonus(incoming, victim) > xp
+          );
+        }) ?? null
+      );
+    },
+  };
+}
+
 async function releaseLongBenchedNpc(params: { playerId: number; teamId: number; date: Date }) {
   const { playerId, teamId, date } = params;
   const prisma = DatabaseClient.prisma;
@@ -10376,6 +10422,7 @@ async function processLongBenchedNpcMarket(now: Date, options: NpcBenchMarketOpt
     orderBy: { id: 'asc' },
   });
   if (!buyers.length) return 0;
+  const preparedBuyers = buyers.map(prepareNpcBenchMarketBuyer);
 
   const recentBuyerStints = await prisma.careerStint.findMany({
     where: {
@@ -10414,10 +10461,10 @@ async function processLongBenchedNpcMarket(now: Date, options: NpcBenchMarketOpt
 
     const listedDays = Math.max(0, differenceInDays(now, benchStartedAt));
     const tierFloor = getNpcBenchMarketTierFloor(seller.tier ?? 0, listedDays);
-    const structuralMatches = buyers
-      .filter((buyer) => buyer.id !== seller.id)
-      .filter((buyer) => (buyer.tier ?? 0) >= tierFloor)
-      .map((buyer) => ({ buyer, victim: findNpcBenchMarketVictim(buyer, player) }))
+    const structuralMatches = preparedBuyers
+      .filter(({ team }) => team.id !== seller.id)
+      .filter(({ team }) => (team.tier ?? 0) >= tierFloor)
+      .map((prepared) => ({ buyer: prepared.team, victim: prepared.findVictim(player) }))
       .filter((match) => Boolean(match.victim))
       .map((match) => {
         const victim = match.victim!;
@@ -10495,33 +10542,42 @@ async function processLongBenchedNpcMarket(now: Date, options: NpcBenchMarketOpt
 // This is a fresh snapshot per sweep, not a cross-day cache: transfers, user
 // actions and expiring contracts are visible on the same day.
 async function loadNpcRosterHealth(npcOnly: boolean) {
-  const prisma = DatabaseClient.prisma;
-  const [teams, starters] = await Promise.all([
-    prisma.team.findMany({
-      where: npcOnly ? { profile: null } : {},
-      select: { id: true },
-      orderBy: { id: 'asc' },
-    }),
-    prisma.player.findMany({
-      where: { starter: true, teamId: { not: null } },
-      select: { teamId: true, role: true },
-    }),
-  ]);
-  const health = new Map(teams.map((team) => [team.id, { id: team.id, count: 0, snipers: 0 }]));
-  for (const player of starters) {
-    const team = health.get(player.teamId!);
-    if (!team) continue;
-    team.count += 1;
-    if (isSniperRole(player.role)) team.snipers += 1;
-  }
-  return [...health.values()];
+  // Let SQLite aggregate the flat starter table. The previous implementation
+  // hydrated every team and every starter into JS twice per calendar day.
+  // Keep the exact legacy-role normalization used by isSniperRole().
+  const rows = await DatabaseClient.prisma.$queryRaw<
+    Array<{ id: number; count: bigint; snipers: bigint }>
+  >(Prisma.sql`
+    SELECT
+      t."id" AS "id",
+      COUNT(p."id") AS "count",
+      COALESCE(SUM(
+        CASE WHEN UPPER(
+          REPLACE(REPLACE(REPLACE(TRIM(COALESCE(p."role", '')), ' ', ''), '_', ''), '-', '')
+        ) IN ('AWPER', 'AWP', 'SNIPER', 'SNIPERPLAYER') THEN 1 ELSE 0 END
+      ), 0) AS "snipers"
+    FROM "Team" t
+    LEFT JOIN "Player" p ON p."teamId" = t."id" AND p."starter" = 1
+    ${npcOnly ? Prisma.sql`WHERE NOT EXISTS (SELECT 1 FROM "Profile" pr WHERE pr."teamId" = t."id")` : Prisma.empty}
+    GROUP BY t."id"
+    ORDER BY t."id" ASC
+  `);
+  return rows.map((row) => ({
+    id: row.id,
+    count: Number(row.count),
+    snipers: Number(row.snipers),
+  }));
 }
 
-async function processNPCContractExtensions() {
-  const profile = await DatabaseClient.prisma.profile.findFirst();
-  if (!profile) return Promise.resolve();
-
-  const now = profile.date;
+async function processNPCContractExtensions(currentDate?: Date) {
+  const now =
+    currentDate ??
+    (
+      await DatabaseClient.prisma.profile.findFirst({
+        select: { date: true },
+      })
+    )?.date;
+  if (!now) return Promise.resolve();
   const prisma = DatabaseClient.prisma;
   const blockedRejoinByTeam = new Map<number, Set<number>>();
 
@@ -11402,11 +11458,13 @@ export async function sendNPCTransferOffer(
   measure: <T>(phase: string, callback: () => Promise<T>) => Promise<T> = (_phase, callback) =>
     callback(),
 ) {
-  await measure('npc-contracts-and-roster-repair', () => processNPCContractExtensions());
   const transferProfile = await DatabaseClient.prisma.profile.findFirst({
     select: { date: true, teamId: true },
   });
   const now = transferProfile?.date ?? new Date();
+  await measure('npc-contracts-and-roster-repair', () =>
+    transferProfile ? processNPCContractExtensions(now) : Promise.resolve(),
+  );
   await measure('user-academy-promotion', async () => {
     await processUserAcademyPromotion(now);
   });
@@ -11416,7 +11474,9 @@ export async function sendNPCTransferOffer(
   await measure('npc-stale-bench-market', async () => {
     await processLongBenchedNpcMarket(now);
   });
-  await measure('npc-retirement-scheduling', () => scheduleExistingNpcFreeAgentRetirementChecks());
+  await measure('npc-retirement-scheduling', () =>
+    transferProfile ? scheduleExistingNpcFreeAgentRetirementChecks(now) : Promise.resolve(),
+  );
 
   if (!Chance.rollD2(Constants.TransferSettings.PBX_NPC_CONSIDER)) {
     return Promise.resolve();
@@ -12419,11 +12479,8 @@ async function scheduleNpcRetirementCheck(playerId: number, fromDate: Date) {
   });
 }
 
-async function scheduleExistingNpcFreeAgentRetirementChecks() {
+async function scheduleExistingNpcFreeAgentRetirementChecks(now: Date) {
   const prisma = DatabaseClient.prisma;
-  const profile = await prisma.profile.findFirst();
-  if (!profile) return;
-
   const [freeAgents, scheduledChecks] = await Promise.all([
     prisma.player.findMany({
       where: {
@@ -12453,7 +12510,7 @@ async function scheduleExistingNpcFreeAgentRetirementChecks() {
   await Promise.all(
     freeAgents
       .filter((player) => !scheduledPlayerIds.has(player.id))
-      .map((player) => scheduleNpcRetirementCheck(player.id, profile.date)),
+      .map((player) => scheduleNpcRetirementCheck(player.id, now)),
   );
 }
 
@@ -13000,6 +13057,8 @@ export async function onNpcRegenIntake(_: Calendar) {
 // Kept private to normal game flows but exposed for deterministic integration
 // tests that exercise the real Prisma transaction and repair paths.
 export const __npcWorldgenTest = {
+  findNpcBenchMarketVictim,
+  prepareNpcBenchMarketBuyer,
   parseRegenNamePools,
   createMatchdays,
   getNpcBenchMarketListedDays,
@@ -13064,46 +13123,10 @@ async function evaluateNpcRetirement(params: {
     player.team?.tier ?? -1,
     ...player.careerStints.map((stint) => stint.tier ?? -1),
   );
-  const nationalTeams = await prisma.team.findMany({
-    where: { profile: null, countryId: player.countryId },
-    select: {
-      id: true,
-      tier: true,
-      players: {
-        where: { starter: true },
-        select: { xp: true },
-      },
-    },
-  });
-  const hasViableNationalContinuation = nationalTeams.some(
-    (team) =>
-      team.id !== player.teamId &&
-      team.tier <= peakTier &&
-      team.players.some((starter) => (starter.xp ?? 0) <= (player.xp ?? 0) - 5),
-  );
-  const trophyWins = await prisma.competitionToTeam.findMany({
-    where: {
-      position: 1,
-      teamId: { not: null },
-      competition: {
-        OR: [
-          { tier: { slug: { in: CAREER_COMPLETION_TIER_SLUGS } } },
-          { tier: { league: { slug: Constants.LeagueSlug.ESPORTS_PRO_LEAGUE } } },
-        ],
-        matches: {
-          some: {
-            players: {
-              some: { id: player.id },
-            },
-          },
-        },
-      },
-    },
-    select: { competition: { select: { tier: { select: { slug: true } } } } },
-  });
-  const careerTrophyPoints = trophyWins.reduce(
-    (total, win) => total + (win.competition.tier.slug === TierSlug.MAJOR_CHAMPIONS_STAGE ? 3 : 1),
-    0,
+  const { hasViableNationalContinuation, careerTrophyPoints } = await readRetirementEvidence(
+    player,
+    peakTier,
+    CAREER_COMPLETION_TIER_SLUGS,
   );
   const retirementChance = getNpcRetirementChance({
     ...player,
@@ -13636,6 +13659,9 @@ export async function onMatchdayNPC(
   options: {
     deferPersistence?: boolean;
     match?: NpcMatchdayRecord;
+    careerProfile?: Prisma.ProfileGetPayload<{
+      include: { player: { include: { country: true; careerStints: true } } };
+    }> | null;
     forcedSeriesScore?: { home: number; away: number };
     simulateMatchStats?: boolean;
     forcedPlayerStats?: { playerId: number; kills: number; deaths: number; assists: number };
@@ -13671,9 +13697,12 @@ export async function onMatchdayNPC(
 
   // load sim settings if this is a user matchday
   const simulator = new Simulator.Score();
-  const careerProfile = await DatabaseClient.prisma.profile.findFirst({
-    include: { player: { include: { country: true, careerStints: true } } },
-  });
+  const careerProfile =
+    'careerProfile' in options
+      ? options.careerProfile
+      : await DatabaseClient.prisma.profile.findFirst({
+          include: { player: { include: { country: true, careerStints: true } } },
+        });
   // A benched user remains contracted to their team, but their future fixtures
   // are deliberately converted to NPC matchdays. Those matches still need the
   // full simulation pipeline for the active roster; otherwise only the series
@@ -13857,30 +13886,54 @@ export async function onMatchdayNPC(
   phase('match-xp');
   const buildWrites = (
     client: Pick<typeof DatabaseClient.prisma, 'team' | 'match' | 'game' | '$executeRaw'>,
+    collector?: MatchWriteCollector,
   ) => {
-    const transaction: Prisma.PrismaPromise<unknown>[] = [
-      ...deltas.map((delta, teamIdx) =>
-        client.team.update({
-          where: {
-            id: match.competitors[teamIdx].team.id,
-          },
-          data: {
-            elo: Util.clampElo(match.competitors[teamIdx].team.elo + delta),
-          },
-        }),
-      ),
-      client.match.update({
-        where: {
-          id: Number(entry.payload),
-        },
-        data: {
-          status: Constants.MatchStatus.COMPLETED,
-        },
-      }),
-    ];
+    const numericWrites = (
+      table: Parameters<typeof numericUpdateBatches>[0],
+      rows: Parameters<typeof numericUpdateBatches>[1],
+    ) => {
+      if (collector) {
+        collector.set(table, [...(collector.get(table) ?? []), ...rows]);
+        return [];
+      }
+      return numericUpdateBatches(table, rows).map((statement) => client.$executeRaw(statement));
+    };
+    const transaction: Prisma.PrismaPromise<unknown>[] = collector
+      ? [
+          ...numericWrites(
+            'Team',
+            match.competitors.map((competitor, index) => ({
+              id: competitor.team.id,
+              data: { elo: Util.clampElo(competitor.team.elo + deltas[index]) },
+            })),
+          ),
+          ...numericWrites('Match', [
+            { id: match.id, data: { status: Constants.MatchStatus.COMPLETED } },
+          ]),
+        ]
+      : [
+          ...deltas.map((delta, teamIdx) =>
+            client.team.update({
+              where: {
+                id: match.competitors[teamIdx].team.id,
+              },
+              data: {
+                elo: Util.clampElo(match.competitors[teamIdx].team.elo + delta),
+              },
+            }),
+          ),
+          client.match.update({
+            where: {
+              id: Number(entry.payload),
+            },
+            data: {
+              status: Constants.MatchStatus.COMPLETED,
+            },
+          }),
+        ];
 
     transaction.push(
-      ...numericUpdateBatches(
+      ...numericWrites(
         'MatchToTeam',
         match.competitors.map((competitor) => ({
           id: competitor.id,
@@ -13889,7 +13942,7 @@ export async function onMatchdayNPC(
             result: Simulator.getMatchResult(competitor.team.id, simulationResult),
           },
         })),
-      ).map((statement) => client.$executeRaw(statement)),
+      ),
     );
     if (simulateNpcMatchStats) {
       transaction.push(
@@ -13906,7 +13959,7 @@ export async function onMatchdayNPC(
         }),
       );
       transaction.push(
-        ...numericUpdateBatches(
+        ...numericWrites(
           'GameToTeam',
           simulatedMaps.flatMap(({ game, score }) =>
             game.teams.map((team) => ({
@@ -13917,7 +13970,7 @@ export async function onMatchdayNPC(
               },
             })),
           ),
-        ).map((statement) => client.$executeRaw(statement)),
+        ),
       );
     }
 
@@ -13937,7 +13990,7 @@ export async function onMatchdayNPC(
       teamIds: match.competitors.flatMap((competitor) =>
         competitor.teamId == null ? [] : [competitor.teamId],
       ),
-      createTransaction: () => buildWrites(DatabaseClient.prisma).transaction,
+      createTransaction: (collector) => buildWrites(DatabaseClient.prisma, collector).transaction,
     };
     phase('match-build-writes');
     return deferred;
@@ -13999,10 +14052,15 @@ export async function onMatchdayNPCBatch(
   if (!entries.length) return Promise.resolve();
   const matchIds = entries.map((entry) => Number(entry.payload)).filter(Number.isFinite);
   const preflightStarted = performance.now();
-  const preflight = await DatabaseClient.prisma.match.findMany({
-    where: { id: { in: matchIds } },
-    select: { id: true, competitors: { select: { teamId: true } } },
-  });
+  const [preflight, careerProfile] = await Promise.all([
+    DatabaseClient.prisma.match.findMany({
+      where: { id: { in: matchIds } },
+      select: { id: true, competitors: { select: { teamId: true } } },
+    }),
+    DatabaseClient.prisma.profile.findFirst({
+      include: { player: { include: { country: true, careerStints: true } } },
+    }),
+  ]);
   report?.('match-batch-preflight', performance.now() - preflightStarted);
   const teamIdsByMatchId = new Map(
     preflight.map((match) => [
@@ -14045,6 +14103,7 @@ export async function onMatchdayNPCBatch(
       const result = await onMatchdayNPC(entry, report, {
         deferPersistence: true,
         match: matchesById.get(Number(entry.payload)),
+        careerProfile,
       });
       if (isDeferredNpcMatchPersistence(result)) deferred.push(result);
     }
@@ -14053,9 +14112,17 @@ export async function onMatchdayNPCBatch(
     for (const persistenceBatch of chunk(deferred, 25)) {
       const persistStarted = performance.now();
       try {
-        await DatabaseClient.prisma.$transaction(
-          persistenceBatch.flatMap((match) => match.createTransaction()),
+        // Teams are disjoint within this segment. Collect numeric writes across
+        // matches while retaining event insertion order and the existing atomic
+        // 25-match boundary. Dependent matches still read after this commit.
+        const collector: MatchWriteCollector = new Map();
+        const writes = persistenceBatch.flatMap((match) => match.createTransaction(collector));
+        const numericWrites = [...collector].flatMap(([table, rows]) =>
+          numericUpdateBatches(table, rows).map((statement) =>
+            DatabaseClient.prisma.$executeRaw(statement),
+          ),
         );
+        await DatabaseClient.prisma.$transaction([...numericWrites, ...writes]);
       } catch (error) {
         // The batch is atomic. Retry match-by-match so a malformed/stale row
         // keeps the former failure isolation rather than blocking unrelated

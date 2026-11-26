@@ -66,6 +66,31 @@ async function main() {
   try {
     await DatabaseClient.connect(0);
     prisma = DatabaseClient.prisma;
+    // Compare the prepared buyer index with the original per-candidate scan.
+    // Include XP ties, age bonuses and legacy role aliases as well as real
+    // national/affinity rosters from the packaged database.
+    const scoringTeams = await prisma.team.findMany({
+      include: TEAM_INCLUDE, orderBy: { id: 'asc' }, take: 80,
+    });
+    const incomingPlayers = scoringTeams.flatMap((team: any) => team.players).slice(0, 80)
+      .map((player: any, index: number) => ({
+        ...player,
+        xp: [0, 20, 50, 80, 100][index % 5],
+        age: [18, 25, 32, 38][index % 4],
+        role: index % 9 === 0 ? ' A_W-PER ' : player.role,
+      }));
+    const scoringStart = performance.now();
+    const expectedVictims = scoringTeams.map((team: any) => incomingPlayers.map((player: any) =>
+      worldgen.__npcWorldgenTest.findNpcBenchMarketVictim(team, player)?.id ?? null));
+    const referenceMs = performance.now() - scoringStart;
+    const preparedStart = performance.now();
+    const actualVictims = scoringTeams.map((team: any) => {
+      const prepared = worldgen.__npcWorldgenTest.prepareNpcBenchMarketBuyer(team);
+      return incomingPlayers.map((player: any) => prepared.findVictim(player)?.id ?? null);
+    });
+    const preparedMs = performance.now() - preparedStart;
+    assert.deepEqual(actualVictims, expectedVictims, 'prepared market buyers must select identical victims');
+    console.log(`Bench scoring equivalence: ${scoringTeams.length * incomingPlayers.length} pairs; old=${referenceMs.toFixed(1)}ms prepared=${preparedMs.toFixed(1)}ms`);
     const profile = await prisma.profile.findFirst({ select: { date: true } });
     assert.ok(profile?.date, 'temporary save should have a profile date');
     const date = new Date(profile.date);

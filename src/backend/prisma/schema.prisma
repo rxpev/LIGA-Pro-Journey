@@ -51,6 +51,8 @@ model Calendar {
   // a composite key helps uniquely identify
   // any duplicate calendar entries
   @@unique([date, type, payload])
+  @@index([type, completed, date])
+  @@index([type, completed, payload])
 }
 
 model Competition {
@@ -89,6 +91,8 @@ model CompetitionToTeam {
   competitionId Int
   team          Team?       @relation(fields: [teamId], references: [id])
   teamId        Int?
+
+  @@index([teamId, position])
 }
 
 /// A team's position in the global Elo table at the close of a calendar month.
@@ -455,6 +459,9 @@ model Player {
   teamId    Int?
 
   @@index([isRegen, generatedAt])
+  @@index([teamId, starter])
+  @@index([teamId, userControlled, contractEnd])
+  @@index([teamId, userControlled, retiredAt, age])
 }
 
 /// A FACEIT friendship belonging to this save. Each save has its own database,
@@ -633,6 +640,8 @@ model Transfer {
   teamIdTo   Int?
   target     Player @relation(fields: [playerId], references: [id])
   playerId   Int
+
+  @@index([playerId, status])
 }
 
 model Offer {
@@ -662,6 +671,9 @@ model Offer {
   // belongs to
   transfer   Transfer @relation(fields: [transferId], references: [id])
   transferId Int
+
+  @@index([transferId, offerType])
+  @@index([createdAt, transferId])
 }
 
 model CareerStint {
@@ -687,4 +699,6 @@ model CareerStint {
   @@index([playerId, starter, startedAt, endedAt])
   @@index([teamId, startedAt])
   @@index([tier, startedAt])
+  @@index([starter, endedAt, startedAt])
+  @@index([teamId, starter, isTrial, startedAt])
 }

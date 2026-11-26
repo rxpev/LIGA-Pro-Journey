@@ -76,6 +76,8 @@ async function main() {
 
     for (const [table, model, fields] of [
       ['Player', 'player', ['xp', 'elo']],
+      ['Team', 'team', ['elo']],
+      ['Match', 'match', ['status']],
       ['CompetitionToTeam', 'competitionToTeam', ['position', 'win', 'loss', 'draw']],
       ['MatchToTeam', 'matchToTeam', ['score', 'result']],
       ['GameToTeam', 'gameToTeam', ['score', 'result']],
@@ -87,7 +89,7 @@ async function main() {
       const updates = original.map((row: any, index: number) => ({
         id: row.id,
         data: Object.fromEntries(fields.map((field, column) => [field,
-          index % 7 === 0 ? undefined : table !== 'Player' && index % 11 === 0 ? null : (index + column) % 3,
+          index % 7 === 0 ? undefined : table !== 'Player' && table !== 'Match' && index % 11 === 0 ? null : (index + column) % 3,
         ])),
       }));
       const prismaStart = performance.now();
