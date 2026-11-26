@@ -850,12 +850,13 @@ function PureBrackets(props: React.ComponentProps<typeof Brackets>) {
   return React.useMemo(
     () => (
       <Brackets
+        qualificationSlots={props.qualificationSlots}
         matches={props.matches}
         onMatchClick={props.onMatchClick}
         onPartyClick={props.onPartyClick}
       />
     ),
-    [props.matches, props.onMatchClick, props.onPartyClick],
+    [props.matches, props.onMatchClick, props.onPartyClick, props.qualificationSlots],
   );
 }
 
@@ -905,6 +906,13 @@ export default function () {
   const hideSmallGroupPoints = Boolean(
     competition.tier.groupSize && competition.tier.groupSize <= 4,
   );
+  const openQualifierSlots =
+    competition.tier.slug.startsWith('major:') && competition.tier.slug.includes('open-qualifier')
+      ? Util.getTierAdvancementEnd(
+          competition.tier.slug as Constants.TierSlug,
+          competition.federation.slug as Constants.FederationSlug,
+        )
+      : undefined;
 
   // fetch matches when viewing bracket
   React.useEffect(() => {
@@ -1119,6 +1127,7 @@ export default function () {
     <section className="h-full w-full overflow-hidden">
       <PureBrackets
         key={`${competition.id}:${competition.tier.slug}`}
+        qualificationSlots={openQualifierSlots}
         matches={bracket}
         onMatchClick={(match, position) => {
           setPreviewMatchId(match.id);

@@ -20,6 +20,8 @@ interface Props {
   maxFitZoom?: number;
   fitZoomMultiplier?: number;
   minFitZoom?: number;
+  /** Stops a single-elimination bracket once this many teams have qualified. */
+  qualificationSlots?: number;
   matches: BracketMatches;
   onMatchClick?: (match: BracketMatches[number], position: { x: number; y: number }) => void;
   onPartyClick?: (party: ParticipantType, partyWon: boolean) => void;
@@ -405,6 +407,7 @@ function ManualBracket(props: {
   maxFitZoom?: number;
   fitZoomMultiplier?: number;
   minFitZoom?: number;
+  qualificationSlots?: number;
   matches: BracketDisplayMatch[];
   tourney: Tournament;
   onMatchClick?: Props['onMatchClick'];
@@ -428,6 +431,12 @@ function ManualBracket(props: {
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = React.useState({ height: 0, width: 0 });
   const skipUpperFinal = Boolean(props.tourney.iemGroup?.metadata().options.skipUpperFinal);
+  const qualificationRound = props.qualificationSlots
+    ? Util.getSingleEliminationQualificationRound(props.tourney.size, props.qualificationSlots)
+    : undefined;
+  const fullUpperRoundCount = props.tourney.brackets
+    .rounds()
+    .filter((round) => round[0]?.id.s === Constants.BracketIdentifier.UPPER).length;
   const [dragStart, setDragStart] = React.useState<{
     mouseX: number;
     mouseY: number;
@@ -827,6 +836,20 @@ function ManualBracket(props: {
       );
     }
 
+    if (
+      props.qualificationSlots &&
+      props.qualificationSlots > 1 &&
+      qualificationRound &&
+      qualificationRound < fullUpperRoundCount &&
+      round === qualificationRound
+    ) {
+      return 'Qualification matches';
+    }
+
+    if (props.qualificationSlots) {
+      return Util.parseCupRounds(round, fullUpperRoundCount);
+    }
+
     if (total === 3 && sections.some((section) => section.title === 'Lower Bracket')) {
       return ['Opening round', 'Upper semi-finals', 'Upper final'][roundIndex] || `Round ${round}`;
     }
@@ -927,7 +950,7 @@ function ManualBracket(props: {
  * @exports
  */
 export default function (props: Props) {
-  const displayMatches = React.useMemo(
+  const allDisplayMatches = React.useMemo(
     () =>
       props.matches.length
         ? props.matches
@@ -938,10 +961,21 @@ export default function (props: Props) {
   );
   const tourney = React.useMemo(
     () =>
-      displayMatches[0]
-        ? Tournament.restore(JSON.parse(displayMatches[0].competition.tournament))
+      allDisplayMatches[0]
+        ? Tournament.restore(JSON.parse(allDisplayMatches[0].competition.tournament))
         : undefined,
-    [displayMatches],
+    [allDisplayMatches],
+  );
+  const qualificationRound =
+    tourney && props.qualificationSlots
+      ? Util.getSingleEliminationQualificationRound(tourney.size, props.qualificationSlots)
+      : undefined;
+  const displayMatches = React.useMemo(
+    () =>
+      qualificationRound
+        ? allDisplayMatches.filter((match) => parseMatchId(match).r <= qualificationRound)
+        : allDisplayMatches,
+    [allDisplayMatches, qualificationRound],
   );
 
   if (!tourney?.brackets) {
@@ -957,6 +991,7 @@ export default function (props: Props) {
       fitZoomMultiplier={props.fitZoomMultiplier}
       maxFitZoom={props.maxFitZoom}
       minFitZoom={props.minFitZoom}
+      qualificationSlots={props.qualificationSlots}
       onMatchClick={props.onMatchClick}
       onPartyClick={props.onPartyClick}
       preview={props.preview}

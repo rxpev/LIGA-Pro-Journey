@@ -502,6 +502,10 @@ export default function () {
       ? `Winner to ${rmrOpenQualifier.destination}`
       : `Top ${rmrOpenQualifier.qualifiers} to ${rmrOpenQualifier.destination}`
     : '';
+  const rmrQualificationRoundLabel =
+    rmrOpenQualifier?.qualifiers && rmrOpenQualifier.qualifiers > 1
+      ? 'Qualification matches'
+      : 'Final';
   const rmrBracketDescription = rmrOpenQualifier
     ? `Single elimination · Bo1 through ${rmrOpenQualifier.openingThrough} · Bo3 from ${rmrOpenQualifier.finalFrom}`
     : '';
@@ -2851,10 +2855,10 @@ export default function () {
                           <FaSitemap />
                         </span>
                         <span className="min-w-0">
-                          <strong className="block truncate text-xs">Final bracket</strong>
+                          <strong className="block truncate text-xs">Qualification bracket</strong>
                           <small className="text-base-content/60 block leading-tight">
                             {isAsiaRmrOpenQualifier
-                              ? `${rmrOpenQualifier?.finalFrom} to Final · Bo3`
+                              ? `${rmrOpenQualifier?.finalFrom} to ${rmrQualificationRoundLabel} · Bo3`
                               : 'Round of 16 to Final · Best of 3'}
                           </small>
                         </span>
@@ -3188,6 +3192,7 @@ export default function () {
                       fitZoomMultiplier={isAsiaRmr ? 1.07 : undefined}
                       maxFitZoom={isCctOceaniaStyleGroupStage ? 1.1 : undefined}
                       minFitZoom={isAsiaRmr ? 0.45 : undefined}
+                      qualificationSlots={rmrOpenQualifier?.qualifiers}
                       matches={
                         shouldPreviewAsiaRmr ||
                         (isFixedBracketQualifier &&
@@ -3923,6 +3928,7 @@ export default function () {
             </header>
             <div className="min-h-0">
               <Brackets
+                qualificationSlots={rmrOpenQualifier?.qualifiers}
                 matches={
                   competition.status === Constants.CompetitionStatus.SCHEDULED
                     ? []

@@ -271,7 +271,7 @@ type MatchRoundLabelContext = {
 
 function parseTournamentRoundFlags(tournament?: string | null) {
   if (!tournament) {
-    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false };
+    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false, size: undefined };
   }
 
   try {
@@ -283,9 +283,15 @@ function parseTournamentRoundFlags(tournament?: string | null) {
         parsed?.iemGroup?.options?.last === Constants.BracketIdentifier.LOWER,
       isGroupSwiss: Boolean(parsed?.groupSwiss),
       isIemGroup: Boolean(parsed?.iemGroup),
+      size:
+        parsed?.brackets?.size ??
+        parsed?.iemGroup?.size ??
+        parsed?.groupSwiss?.size ??
+        parsed?.swiss?.size ??
+        parsed?.groups?.size,
     };
   } catch {
-    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false };
+    return { isDoubleElim: false, isGroupSwiss: false, isIemGroup: false, size: undefined };
   }
 }
 
@@ -312,9 +318,22 @@ export function getMatchRoundLabel(match: MatchRoundLabelContext, matchdayLabel 
   if (matchId?.type === Constants.ESEA_OCEANIA_RELEGATION_MATCH) {
     return 'Relegation Match';
   }
-  const { isDoubleElim, isGroupSwiss, isIemGroup } = parseTournamentRoundFlags(
+  const { isDoubleElim, isGroupSwiss, isIemGroup, size } = parseTournamentRoundFlags(
     match.competition?.tournament,
   );
+
+  const majorOpenQualifierSlots = tierSlug
+    ? getMajorOpenQualifierAdvancementEnd(tierSlug)
+    : undefined;
+  if (matchId?.r && size && majorOpenQualifierSlots && majorOpenQualifierSlots > 1) {
+    const qualificationRound = getSingleEliminationQualificationRound(
+      size,
+      majorOpenQualifierSlots,
+    );
+    if (matchId.r === qualificationRound) {
+      return 'Qualification matches';
+    }
+  }
 
   if (isIemGroup && matchId) {
     if (matchId.s === Constants.BracketIdentifier.LOWER) {
@@ -445,6 +464,28 @@ export function shouldShowStandingsZones(status: Constants.CompetitionStatus) {
 }
 
 /**
+ * Returns the number of RMR berths awarded by a Major open qualifier.
+ *
+ * @param tierSlug The tier slug.
+ * @function
+ */
+export function getMajorOpenQualifierAdvancementEnd(tierSlug: Constants.TierSlug) {
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1) return 2;
+  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2) return 2;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2) return 1;
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3) return 4;
+  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4) return 4;
+  return undefined;
+}
+
+/**
  * Returns the last advancing placement for knockout or ranking standings.
  *
  * @param tierSlug        The tier slug.
@@ -468,18 +509,8 @@ export function getTierAdvancementEnd(
     return leagueAdvancementEnd;
   }
 
-  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_1) return 2;
-  if (tierSlug === Constants.TierSlug.MAJOR_ASIA_OPEN_QUALIFIER_2) return 2;
-  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_1) return 1;
-  if (tierSlug === Constants.TierSlug.MAJOR_CHINA_OPEN_QUALIFIER_2) return 1;
-  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_1) return 1;
-  if (tierSlug === Constants.TierSlug.MAJOR_OCE_OPEN_QUALIFIER_2) return 1;
-  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_1) return 4;
-  if (tierSlug === Constants.TierSlug.MAJOR_AMERICAS_OPEN_QUALIFIER_2) return 4;
-  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_1) return 4;
-  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_2) return 4;
-  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_3) return 4;
-  if (tierSlug === Constants.TierSlug.MAJOR_EUROPE_OPEN_QUALIFIER_4) return 4;
+  const majorOpenQualifierAdvancementEnd = getMajorOpenQualifierAdvancementEnd(tierSlug);
+  if (majorOpenQualifierAdvancementEnd) return majorOpenQualifierAdvancementEnd;
 
   if (tierSlug === Constants.TierSlug.CCT_SERIES) return 8;
   if (tierSlug === Constants.TierSlug.CCT_OCE_SERIES) return 4;
@@ -506,6 +537,20 @@ export function getTierAdvancementEnd(
   if (tierSlug === Constants.TierSlug.MAJOR_LEGENDS_STAGE) return 8;
 
   return undefined;
+}
+
+/**
+ * Returns the final round that needs to be played in a single-elimination
+ * qualifier once the requested number of advancing teams has been decided.
+ *
+ * @param fieldSize       The number of teams in the bracket.
+ * @param advancingTeams  The number of teams that qualify.
+ * @function
+ */
+export function getSingleEliminationQualificationRound(fieldSize: number, advancingTeams: number) {
+  const totalRounds = Math.ceil(Math.log2(Math.max(2, fieldSize)));
+  const roundsAfterQualification = Math.ceil(Math.log2(Math.max(1, advancingTeams)));
+  return Math.max(1, totalRounds - roundsAfterQualification);
 }
 
 /**

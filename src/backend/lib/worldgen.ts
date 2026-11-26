@@ -2033,6 +2033,64 @@ const MAJOR_RMR_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.MAJOR_ASIA_RMR,
 ]);
 
+function getMajorOpenQualifierDecidingRound(
+  tierSlug: Constants.TierSlug,
+  federationSlug: Constants.FederationSlug,
+  fieldSize: number,
+) {
+  if (!tierSlug.startsWith('major:') || !tierSlug.includes('open-qualifier')) {
+    return undefined;
+  }
+
+  const advancingTeams = Util.getTierAdvancementEnd(tierSlug, federationSlug);
+  return advancingTeams
+    ? Util.getSingleEliminationQualificationRound(fieldSize, advancingTeams)
+    : undefined;
+}
+
+function hasCompletedQualificationRound(tournament: Tournament, decidingRound?: number) {
+  if (!decidingRound || !tournament.brackets) {
+    return false;
+  }
+
+  const decidingMatches = tournament.brackets
+    .rounds()
+    .find(
+      (round) =>
+        round[0]?.id.s === Constants.BracketIdentifier.UPPER && round[0]?.id.r === decidingRound,
+    );
+  return Boolean(decidingMatches?.length && decidingMatches.every((match) => Boolean(match.m)));
+}
+
+async function cancelMatchesAfterQualificationRound(competitionId: number, decidingRound: number) {
+  const futureMatches = (
+    await DatabaseClient.prisma.match.findMany({
+      where: {
+        competitionId,
+        status: { not: Constants.MatchStatus.COMPLETED },
+      },
+      select: { id: true, payload: true },
+    })
+  ).filter((match) => {
+    const matchId = JSON.parse(match.payload) as { r?: number };
+    return Number(matchId.r) > decidingRound;
+  });
+
+  if (!futureMatches.length) {
+    return;
+  }
+
+  await DatabaseClient.prisma.calendar.deleteMany({
+    where: {
+      completed: false,
+      payload: { in: futureMatches.map((match) => String(match.id)) },
+      type: {
+        in: [Constants.CalendarEntry.MATCHDAY_NPC, Constants.CalendarEntry.MATCHDAY_USER],
+      },
+    },
+  });
+}
+
 const ESEA_DIVISION_TIERS = new Set<Constants.TierSlug>([
   Constants.TierSlug.LEAGUE_OPEN,
   Constants.TierSlug.LEAGUE_INTERMEDIATE,
@@ -2781,15 +2839,27 @@ async function createMatchdays(
   return results;
 }
 
-async function syncCompetitionEndDate(competitionId: number, keepPending = false) {
-  const lastMatchDay = await DatabaseClient.prisma.match.findFirst({
-    where: {
-      competitionId,
-    },
-    orderBy: {
-      date: 'desc',
-    },
-  });
+async function syncCompetitionEndDate(
+  competitionId: number,
+  keepPending = false,
+  maxBracketRound?: number,
+) {
+  const lastMatchDay = maxBracketRound
+    ? (
+        await DatabaseClient.prisma.match.findMany({
+          where: { competitionId },
+          orderBy: { date: 'desc' },
+          select: { date: true, payload: true },
+        })
+      ).find((match) => {
+        const matchId = JSON.parse(match.payload) as { r?: number };
+        return Number(matchId.r) <= maxBracketRound;
+      })
+    : await DatabaseClient.prisma.match.findFirst({
+        where: { competitionId },
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      });
 
   if (!lastMatchDay) {
     return;
@@ -6550,6 +6620,19 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       });
       phase('results-score');
 
+      const qualifierDecidingRound = getMajorOpenQualifierDecidingRound(
+        competition.tier.slug as Constants.TierSlug,
+        competition.federation.slug as Constants.FederationSlug,
+        tournament.size,
+      );
+      const qualificationRoundComplete = hasCompletedQualificationRound(
+        tournament,
+        qualifierDecidingRound,
+      );
+      if (qualificationRoundComplete && qualifierDecidingRound) {
+        await cancelMatchesAfterQualificationRound(numericCompetitionId, qualifierDecidingRound);
+      }
+
       // check if a new cup round must be generated
       //
       // this is done by checking if all
@@ -6563,7 +6646,12 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
 
       let generatedNewMatches = false;
 
-      if (tournament.brackets && !tournament.iemGroup && upperRoundReady) {
+      if (
+        tournament.brackets &&
+        !tournament.iemGroup &&
+        upperRoundReady &&
+        !qualificationRoundComplete
+      ) {
         Engine.Runtime.Instance.log.info('Generating next round of upper bracket matches...');
         await createMatchdays(upperMatches, tournament, competition);
         generatedNewMatches = true;
@@ -6605,7 +6693,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         }
       }
 
-      const baseTournamentDone = tournament.$base.isDone();
+      const baseTournamentDone = qualificationRoundComplete || tournament.$base.isDone();
       const needsRelegationMatch = isEseaOceaniaAdvancedCompetition(competition);
       let relegationMatch = needsRelegationMatch
         ? await DatabaseClient.prisma.match.findFirst({
@@ -6631,7 +6719,11 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         (!needsRelegationMatch || relegationMatch?.status === Constants.MatchStatus.COMPLETED);
 
       if (generatedNewMatches || isCompetitionDone) {
-        await syncCompetitionEndDate(Number(competitionId), !isCompetitionDone);
+        await syncCompetitionEndDate(
+          Number(competitionId),
+          !isCompetitionDone,
+          qualificationRoundComplete ? qualifierDecidingRound : undefined,
+        );
       }
 
       // check if competition is done and a start date must
@@ -13374,6 +13466,12 @@ export async function onCompetitionStart(entry: Calendar) {
   tournament.addCompetitors(tournamentCompetitors.map((competitor) => competitor.id));
   tournament.start();
 
+  const qualifierDecidingRound = getMajorOpenQualifierDecidingRound(
+    competition.tier.slug as Constants.TierSlug,
+    competition.federation.slug as Constants.FederationSlug,
+    tournamentSize,
+  );
+
   // collect map pool
   const profile = await DatabaseClient.prisma.profile.findFirst();
   const mapPool = await DatabaseClient.prisma.mapPool.findMany({
@@ -13393,14 +13491,17 @@ export async function onCompetitionStart(entry: Calendar) {
 
   // register matches
   await Promise.all(
-    tournament.$base.rounds().map((round) => {
-      const randomRoundMap = sample(mapPool)?.gameMap.name || mapPool[0]?.gameMap.name;
-      const vetoPlaceholderMap = mapPool[0]?.gameMap.name || randomRoundMap;
-      return createMatchdays(round, tournament, competition, randomRoundMap, vetoPlaceholderMap);
-    }),
+    tournament.$base
+      .rounds()
+      .filter((round) => !qualifierDecidingRound || round[0]?.id.r <= qualifierDecidingRound)
+      .map((round) => {
+        const randomRoundMap = sample(mapPool)?.gameMap.name || mapPool[0]?.gameMap.name;
+        const vetoPlaceholderMap = mapPool[0]?.gameMap.name || randomRoundMap;
+        return createMatchdays(round, tournament, competition, randomRoundMap, vetoPlaceholderMap);
+      }),
   );
 
-  await syncCompetitionEndDate(competition.id);
+  await syncCompetitionEndDate(competition.id, false, qualifierDecidingRound);
 
   // Persist seed/group assignments in bulk with the tournament state.
   const result = await DatabaseClient.prisma.$transaction(async (tx) => {
