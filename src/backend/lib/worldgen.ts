@@ -135,6 +135,16 @@ import {
   getEseaCashCupCoachSubject,
 } from './esea-cash-cup-coach-messages';
 import {
+  getIemCologneQualifierCoachMessage,
+  getIemCologneQualifierCoachSubject,
+  IemCologneQualifierCoachOutcome,
+} from './iem-cologne-qualifier-coach-messages';
+import {
+  getIemKrakowQualifierCoachMessage,
+  getIemKrakowQualifierCoachSubject,
+  IemKrakowQualifierCoachOutcome,
+} from './iem-krakow-qualifier-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -6974,6 +6984,8 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendMajorLegendsCoachOutcome(competition, tournament, matches),
         sendMajorPlayoffsCoachOutcome(competition, matches),
         sendEseaCashCupCoachOutcome(competition, tournament, matches),
+        sendIemCologneQualifierCoachOutcome(competition, tournament, matches),
+        sendIemKrakowQualifierCoachOutcome(competition, tournament, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -7750,6 +7762,186 @@ async function sendEseaCashCupCoachOutcome(
   if (!eliminated && !winner) return null;
 
   return sendEseaCashCupCoachMessageEvent({
+    competitionId: competition.id,
+    tierSlug: competition.tier.slug,
+    federationSlug: competition.federation.slug,
+    season: competition.season ?? 0,
+    outcome: winner ? 'winner' : 'eliminated',
+  });
+}
+
+async function sendIemCologneQualifierCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  federationSlug: string;
+  season: number;
+  outcome: IemCologneQualifierCoachOutcome;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const content = getIemCologneQualifierCoachMessage({
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+  });
+  const subject = getIemCologneQualifierCoachSubject({
+    federationSlug: params.federationSlug,
+    season: params.season,
+  });
+  if (!content || !subject) return null;
+
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendIemCologneQualifierCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: true; federation: true };
+  }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.IEM_COLOGNE_OPEN_QUALIFIER) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+
+  const eliminated = userResults.some(
+    (competitor) => competitor.result === Constants.MatchResult.LOSS,
+  );
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const winner = tournament.$base.isDone() && (userStanding?.gpos || userStanding?.pos) === 1;
+  if (!eliminated && !winner) return null;
+
+  return sendIemCologneQualifierCoachMessageEvent({
+    competitionId: competition.id,
+    tierSlug: competition.tier.slug,
+    federationSlug: competition.federation.slug,
+    season: competition.season ?? 0,
+    outcome: winner ? 'winner' : 'eliminated',
+  });
+}
+
+async function sendIemKrakowQualifierCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  federationSlug: string;
+  season: number;
+  outcome: IemKrakowQualifierCoachOutcome;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const content = getIemKrakowQualifierCoachMessage({
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+  });
+  const subject = getIemKrakowQualifierCoachSubject({
+    federationSlug: params.federationSlug,
+    season: params.season,
+  });
+  if (!content || !subject) return null;
+
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendIemKrakowQualifierCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: true; federation: true };
+  }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.IEM_KRAKOW_OPEN_QUALIFIER) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+
+  const eliminated = userResults.some(
+    (competitor) => competitor.result === Constants.MatchResult.LOSS,
+  );
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const winner = tournament.$base.isDone() && (userStanding?.gpos || userStanding?.pos) === 1;
+  if (!eliminated && !winner) return null;
+
+  return sendIemKrakowQualifierCoachMessageEvent({
     competitionId: competition.id,
     tierSlug: competition.tier.slug,
     federationSlug: competition.federation.slug,
@@ -14116,6 +14308,20 @@ export async function onCompetitionStart(entry: Calendar) {
       outcome: 'start',
     }),
     sendEseaCashCupCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
+      season: competition.season ?? 0,
+      outcome: 'start',
+    }),
+    sendIemCologneQualifierCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
+      season: competition.season ?? 0,
+      outcome: 'start',
+    }),
+    sendIemKrakowQualifierCoachMessageEvent({
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
       federationSlug: competition.federation.slug,
