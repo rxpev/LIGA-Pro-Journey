@@ -171,6 +171,12 @@ import {
   getCctGlobalFinalsRegion,
 } from './cct-global-finals-coach-messages';
 import {
+  getIemKrakowCoachMessage,
+  getIemKrakowCoachSubject,
+  IemKrakowCoachOutcome,
+  IemKrakowGroupEliminationStage,
+} from './iem-krakow-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -7016,6 +7022,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendBlastFinalsCoachOutcome(competition, matches),
         sendEslChallengerCoachOutcome(competition, tournament, matches),
         sendCctGlobalFinalsCoachOutcome(competition, matches),
+        sendIemKrakowCoachOutcome(competition, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -8462,6 +8469,132 @@ async function sendCctGlobalFinalsCoachOutcome(
         season: competition.season ?? 0,
         location: competition.location,
         outcome,
+      }),
+    ),
+  );
+}
+
+async function sendIemKrakowCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  outcome: IemKrakowCoachOutcome;
+  eliminationStage?: IemKrakowGroupEliminationStage | null;
+}) {
+  const groupTiers = [
+    Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+    Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  ] as string[];
+  const relevantTier =
+    groupTiers.includes(params.tierSlug) ||
+    params.tierSlug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS;
+  if (!relevantTier || (params.outcome === 'start' && !groupTiers.includes(params.tierSlug))) {
+    return null;
+  }
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const content = getIemKrakowCoachMessage({
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+    eliminationStage: params.eliminationStage,
+  });
+  if (!content) return null;
+  const subject = getIemKrakowCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendIemKrakowCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  const groupTier = [
+    Constants.TierSlug.IEM_KRAKOW_GROUP_A,
+    Constants.TierSlug.IEM_KRAKOW_GROUP_B,
+  ].includes(competition.tier.slug as Constants.TierSlug);
+  const playoffTier = competition.tier.slug === Constants.TierSlug.IEM_KRAKOW_PLAYOFFS;
+  if (!groupTier && !playoffTier) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const events: Array<{
+    outcome: IemKrakowCoachOutcome;
+    eliminationStage: IemKrakowGroupEliminationStage | null;
+  }> = [];
+  for (const match of completedMatches) {
+    const result = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    if (!result) continue;
+    const id = JSON.parse(match.payload) as { s?: number; r?: number };
+    const won = result.result === Constants.MatchResult.WIN;
+    let outcome: IemKrakowCoachOutcome | null = null;
+    let eliminationStage: IemKrakowGroupEliminationStage | null = null;
+
+    if (groupTier) {
+      const lower = id.s === Constants.BracketIdentifier.LOWER;
+      const upper = id.s === Constants.BracketIdentifier.UPPER;
+      if (lower && !won) {
+        eliminationStage =
+          id.r === 1
+            ? 'lower_round_1'
+            : id.r === 2
+              ? 'lower_semifinal'
+              : id.r === 3
+                ? 'lower_final'
+                : null;
+        outcome = eliminationStage ? 'group_eliminated' : null;
+      } else if (upper && id.r === 3) {
+        outcome = won ? 'upper_final_win' : 'quarterfinal_qualified';
+      } else if (lower && id.r === 3 && won) {
+        outcome = 'quarterfinal_qualified';
+      }
+    } else if (!won && id.r === 1) {
+      outcome = 'quarterfinal_loss';
+    } else if (!won && id.r === 2) {
+      outcome = 'semifinal_loss';
+    } else if (id.r === 3) {
+      outcome = won ? 'champion' : 'final_loss';
+    }
+    if (outcome) events.push({ outcome, eliminationStage });
+  }
+
+  return Promise.all(
+    events.map((event) =>
+      sendIemKrakowCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        outcome: event.outcome,
+        eliminationStage: event.eliminationStage,
       }),
     ),
   );
@@ -14870,6 +15003,12 @@ export async function onCompetitionStart(entry: Calendar) {
       tierSlug: competition.tier.slug,
       season: competition.season ?? 0,
       location: competition.location,
+      outcome: 'start',
+    }),
+    sendIemKrakowCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
       outcome: 'start',
     }),
   ]);
