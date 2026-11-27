@@ -8,7 +8,14 @@ import ReactDOM from 'react-dom/client';
 import Routes from '@liga/frontend/routes';
 import { format as formatDate } from 'date-fns';
 import { Toast, Toaster, toast } from 'react-hot-toast';
-import { FaBars, FaCaretDown, FaExclamationTriangle, FaHome } from 'react-icons/fa';
+import {
+  FaBars,
+  FaCaretDown,
+  FaChevronRight,
+  FaExclamationTriangle,
+  FaHome,
+  FaRegEnvelope,
+} from 'react-icons/fa';
 import { Constants, Eagers, Util } from '@liga/shared';
 import { cx } from '@liga/frontend/lib';
 import { AppStateContext, AppStateProvider } from '@liga/frontend/redux';
@@ -193,14 +200,17 @@ const routes = createMemoryRouter([
  * @param props.email The email payload.
  * @function
  */
-function ToastEmail(props: Toast & { email: Parameters<typeof emailsUpdate>[number][number] }) {
+function ToastEmail(
+  props: Toast & {
+    email: Parameters<typeof emailsUpdate>[number][number];
+    onOpen: () => void;
+  },
+) {
   const teammateAvatar = props.email.from.role?.match(/\[avatar:([^\]]+)\]/)?.[1];
   const playerId = Number(props.email.from.role?.match(/\[player:(\d+)\]/)?.[1]);
   const fallbackAvatar = teammateAvatar
     ? decodeURIComponent(teammateAvatar)
-    : props.email.from.role === 'Management Board'
-      ? props.email.from.team?.blazon || 'resources://blazonry/noteam.svg'
-      : `resources://coaches/${props.email.from.name === 'T.c' ? 'tc' : props.email.from.name}.png`;
+    : `resources://coaches/${props.email.from.name === 'T.c' ? 'tc' : props.email.from.name}.png`;
   const [avatar, setAvatar] = React.useState(fallbackAvatar);
 
   React.useEffect(() => {
@@ -212,7 +222,7 @@ function ToastEmail(props: Toast & { email: Parameters<typeof emailsUpdate>[numb
   }, [playerId, teammateAvatar]);
 
   return (
-    <dialog className="new-message-toast">
+    <button type="button" className="new-message-toast" onClick={props.onOpen}>
       <figure className="new-message-toast__avatar">
         <img
           src={avatar}
@@ -223,10 +233,17 @@ function ToastEmail(props: Toast & { email: Parameters<typeof emailsUpdate>[numb
           }}
         />
       </figure>
-      <p>
-        New message from <em>{props.email.from.name}</em>
+      <span className="new-message-toast__divider" aria-hidden="true" />
+      <span className="new-message-toast__mail" aria-hidden="true">
+        <FaRegEnvelope />
+        <span />
+      </span>
+      <p className="new-message-toast__copy">
+        <strong>New message</strong>
+        <small>from {props.email.from.name}</small>
       </p>
-    </dialog>
+      <FaChevronRight className="new-message-toast__chevron" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -389,7 +406,22 @@ function Root() {
       const [dialogue] = email.dialogues.slice(-1);
 
       if (!/^(accepted|rejected)/gi.test(dialogue.content)) {
-        toast((data) => <ToastEmail {...data} email={email} />);
+        toast(
+          (data) => (
+            <ToastEmail
+              {...data}
+              email={email}
+              onOpen={() => {
+                navigate('/inbox', { state: { selectedFromId: email.fromId } });
+                toast.dismiss('latest-email-notification');
+              }}
+            />
+          ),
+          {
+            id: 'latest-email-notification',
+            duration: Infinity,
+          },
+        );
       }
     });
 
@@ -797,7 +829,7 @@ function Index() {
       <Toaster
         position="bottom-right"
         gutter={0}
-        containerStyle={{ right: 0, bottom: 0 }}
+        containerStyle={{ right: '1rem', bottom: '1rem' }}
         toastOptions={{
           className: 'react-hot-toast',
         }}

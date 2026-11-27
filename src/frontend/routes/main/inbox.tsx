@@ -324,6 +324,14 @@ export default function Inbox() {
   }, [location.state, state.emails]);
 
   React.useEffect(() => {
+    const selectedFromId = Number((location.state as any)?.selectedFromId);
+    if (Number.isInteger(selectedFromId) && selectedFromId > 0) {
+      setFolder('all');
+      setSelected(selectedFromId);
+    }
+  }, [location.state]);
+
+  React.useEffect(() => {
     if (!(location.state as any)?.refreshEmails) return;
     api.emails.all().then((emails) => dispatch(emailsUpdate(emails)));
   }, [location.state, dispatch]);

@@ -85,20 +85,8 @@ const TRIAL_REMINDER_RESPONSES: Record<string, string> = {
   absurd: `Just following up on the trial offer. I’m very interested in getting you in with the team, but I can only hold the offer for one more day. If I don’t hear back by then, I’ll need to reconsider and look at the other options.`,
 };
 
-const TRIAL_EXPIRED_RESPONSES: Record<string, string> = {
-  poor: `Since I haven’t heard back, the trial offer is no longer available. I’ve decided to move forward with other options. Best of luck going forward.`,
-  adequate: `The trial offer has now expired, so I’ll be moving ahead with other options. Thanks for your time, and best of luck with what comes next.`,
-  good: `Since I didn’t hear back in time, I’ve had to withdraw the trial offer and move forward with other options. I was interested to see how you’d perform with the team. Best of luck going forward.`,
-  excellent: `The trial offer is no longer available, as I’ve had to move forward with other options. I was very interested in seeing how you’d perform with the team, so it’s unfortunate we couldn’t make it happen. Best of luck going forward.`,
-  absurd: `I’ve had to withdraw the trial offer and move forward with other options. Your FACEIT performances really stood out to me, so I was genuinely interested in seeing how you’d perform with the team. Unfortunately, I couldn’t keep the offer open any longer. Best of luck going forward.`,
-};
-
 export function getTrialReminderResponse(band: string | null | undefined) {
   return TRIAL_REMINDER_RESPONSES[band ?? ''] ?? TRIAL_REMINDER_RESPONSES.poor;
-}
-
-export function getTrialExpiredResponse(band: string | null | undefined) {
-  return TRIAL_EXPIRED_RESPONSES[band ?? ''] ?? TRIAL_EXPIRED_RESPONSES.poor;
 }
 
 const TRIAL_FAILURE_RESPONSES = {

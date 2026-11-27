@@ -60,6 +60,7 @@ export default function ContractOffer() {
   );
   const [resolvedTeamId, setResolvedTeamId] = React.useState<number | null>(null);
   const deferredEmailId = React.useRef<number | null>(null);
+  const declineAudio = useAudioControls('button-riser-1s.wav');
   const signingAudio = useAudioControls('button-signature.wav');
 
   const closeModal = React.useCallback(
@@ -359,6 +360,8 @@ export default function ContractOffer() {
               className="btn-ghost"
               disabled={working}
               fillClassName="bg-error/20"
+              onHoldStart={declineAudio.play}
+              onHoldEnd={declineAudio.stop}
               onComplete={() => respond(false)}
             >
               <FaTimes className="size-4" /> Reject {state.isExtension ? 'extension' : 'offer'}
