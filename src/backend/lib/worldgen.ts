@@ -130,6 +130,11 @@ import {
   MajorPlayoffsCoachOutcome,
 } from './major-playoffs-coach-messages';
 import {
+  EseaCashCupCoachOutcome,
+  getEseaCashCupCoachMessage,
+  getEseaCashCupCoachSubject,
+} from './esea-cash-cup-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -6968,6 +6973,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendMajorChallengersCoachOutcome(competition, tournament, matches),
         sendMajorLegendsCoachOutcome(competition, tournament, matches),
         sendMajorPlayoffsCoachOutcome(competition, matches),
+        sendEseaCashCupCoachOutcome(competition, tournament, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -7659,6 +7665,97 @@ async function sendMajorPlayoffsCoachOutcome(
       }),
     ),
   );
+}
+
+async function sendEseaCashCupCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  federationSlug: string;
+  season: number;
+  outcome: EseaCashCupCoachOutcome;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.ESEA_CASH_CUP) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const content = getEseaCashCupCoachMessage({
+    federationSlug: params.federationSlug,
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+  });
+  const subject = getEseaCashCupCoachSubject({
+    federationSlug: params.federationSlug,
+    season: params.season,
+  });
+  if (!content || !subject) return null;
+
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendEseaCashCupCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: true; federation: true };
+  }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.ESEA_CASH_CUP) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+
+  const eliminated = userResults.some(
+    (competitor) => competitor.result === Constants.MatchResult.LOSS,
+  );
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const winner = tournament.$base.isDone() && (userStanding?.gpos || userStanding?.pos) === 1;
+  if (!eliminated && !winner) return null;
+
+  return sendEseaCashCupCoachMessageEvent({
+    competitionId: competition.id,
+    tierSlug: competition.tier.slug,
+    federationSlug: competition.federation.slug,
+    season: competition.season ?? 0,
+    outcome: winner ? 'winner' : 'eliminated',
+  });
 }
 
 async function sendMajorRmrCoachOutcome(
@@ -14016,6 +14113,13 @@ export async function onCompetitionStart(entry: Calendar) {
       tierSlug: competition.tier.slug,
       season: competition.season ?? 0,
       location: competition.location,
+      outcome: 'start',
+    }),
+    sendEseaCashCupCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
+      season: competition.season ?? 0,
       outcome: 'start',
     }),
   ]);
