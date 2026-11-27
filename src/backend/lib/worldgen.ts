@@ -165,6 +165,12 @@ import {
   getEslChallengerRegion,
 } from './esl-challenger-coach-messages';
 import {
+  CctGlobalFinalsCoachOutcome,
+  getCctGlobalFinalsCoachMessage,
+  getCctGlobalFinalsCoachSubject,
+  getCctGlobalFinalsRegion,
+} from './cct-global-finals-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -7009,6 +7015,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendIemCologneCoachOutcome(competition, matches),
         sendBlastFinalsCoachOutcome(competition, matches),
         sendEslChallengerCoachOutcome(competition, tournament, matches),
+        sendCctGlobalFinalsCoachOutcome(competition, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -8351,6 +8358,105 @@ async function sendEslChallengerCoachOutcome(
   return Promise.all(
     events.map((outcome) =>
       sendEslChallengerCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        location: competition.location,
+        outcome,
+      }),
+    ),
+  );
+}
+
+async function sendCctGlobalFinalsCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: CctGlobalFinalsCoachOutcome;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.CCT_GLOBAL_FINALS) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: {
+        select: {
+          starter: true,
+          country: { select: { continent: { select: { federation: { select: { slug: true } } } } } },
+        },
+      },
+      team: {
+        select: {
+          personas: true,
+          competitionFederation: { select: { slug: true } },
+        },
+      },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const region = getCctGlobalFinalsRegion(
+    profile.team.competitionFederation?.slug ??
+      profile.player.country?.continent?.federation?.slug,
+  );
+  if (!region) return null;
+
+  const content = getCctGlobalFinalsCoachMessage({
+    region,
+    outcome: params.outcome,
+    city: Util.getCompetitionHostingLocationCity(params.location) || 'the CCT Global Finals host city',
+  });
+  const subject = getCctGlobalFinalsCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendCctGlobalFinalsCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.CCT_GLOBAL_FINALS) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const events: CctGlobalFinalsCoachOutcome[] = [];
+  for (const match of completedMatches) {
+    const result = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    if (!result) continue;
+    const round = (JSON.parse(match.payload) as { r?: number }).r;
+    const won = result.result === Constants.MatchResult.WIN;
+    if (round === 1 && !won) events.push('quarterfinal_loss');
+    if (round === 2 && !won) events.push('semifinal_loss');
+    if (round === 3 && won) events.push('champion');
+  }
+
+  return Promise.all(
+    events.map((outcome) =>
+      sendCctGlobalFinalsCoachMessageEvent({
         competitionId: competition.id,
         tierSlug: competition.tier.slug,
         season: competition.season ?? 0,
@@ -14753,6 +14859,13 @@ export async function onCompetitionStart(entry: Calendar) {
       outcome: 'start',
     }),
     sendEslChallengerCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
+      outcome: 'start',
+    }),
+    sendCctGlobalFinalsCoachMessageEvent({
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
       season: competition.season ?? 0,
