@@ -158,6 +158,13 @@ import {
   getBlastFinalsOpeningRankFromConversation,
 } from './blast-finals-coach-messages';
 import {
+  EslChallengerCoachOutcome,
+  getEslChallengerCoachMessage,
+  getEslChallengerCoachSubject,
+  getEslChallengerGroupOutcome,
+  getEslChallengerRegion,
+} from './esl-challenger-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -7001,6 +7008,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendIemKrakowQualifierCoachOutcome(competition, tournament, matches),
         sendIemCologneCoachOutcome(competition, matches),
         sendBlastFinalsCoachOutcome(competition, matches),
+        sendEslChallengerCoachOutcome(competition, tournament, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -8207,6 +8215,147 @@ async function sendBlastFinalsCoachOutcome(
         location: competition.location,
         outcome: event.outcome,
         eliminationStage: event.eliminationStage,
+      }),
+    ),
+  );
+}
+
+async function sendEslChallengerCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: EslChallengerCoachOutcome;
+}) {
+  const relevantTier = [
+    Constants.TierSlug.ESL_CHALLENGER,
+    Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS,
+  ].includes(params.tierSlug as Constants.TierSlug);
+  if (
+    !relevantTier ||
+    (params.outcome === 'start' && params.tierSlug !== Constants.TierSlug.ESL_CHALLENGER)
+  ) {
+    return null;
+  }
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: {
+        select: {
+          starter: true,
+          country: { select: { continent: { select: { federation: { select: { slug: true } } } } } },
+        },
+      },
+      team: {
+        select: {
+          tier: true,
+          personas: true,
+          competitionFederation: { select: { slug: true } },
+        },
+      },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const region = getEslChallengerRegion(
+    profile.team.competitionFederation?.slug ??
+      profile.player.country?.continent?.federation?.slug,
+  );
+  if (!region) return null;
+
+  const content = getEslChallengerCoachMessage({
+    region,
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+    city: Util.getCompetitionHostingLocationCity(params.location) || 'the ESL Challenger host city',
+  });
+  if (!content) return null;
+
+  const subject = getEslChallengerCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendEslChallengerCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  tournament: Tournament,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  const groupStage = competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER;
+  const playoffs = competition.tier.slug === Constants.TierSlug.ESL_CHALLENGER_PLAYOFFS;
+  if (!groupStage && !playoffs) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userMatches = completedMatches.flatMap((match) => {
+    const result = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    return result ? [{ match, result }] : [];
+  });
+  if (!userMatches.length) return null;
+
+  if (groupStage) {
+    const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+    const standing = tournament.$base.results().find((entry) => entry.seed === userSeed);
+    const outcome = getEslChallengerGroupOutcome({
+      wins: standing?.wins,
+      losses: standing?.losses,
+      lostThisBatch: userMatches.some(
+        ({ result }) => result.result === Constants.MatchResult.LOSS,
+      ),
+    });
+    if (!outcome) return null;
+    return sendEslChallengerCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
+      outcome,
+    });
+  }
+
+  const events: EslChallengerCoachOutcome[] = [];
+  for (const { match, result } of userMatches) {
+    const round = (JSON.parse(match.payload) as { r?: number }).r;
+    const won = result.result === Constants.MatchResult.WIN;
+    if (round === 1 && !won) events.push('semifinal_loss');
+    if (round === 2) events.push(won ? 'champion' : 'final_loss');
+  }
+  return Promise.all(
+    events.map((outcome) =>
+      sendEslChallengerCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        location: competition.location,
+        outcome,
       }),
     ),
   );
@@ -14597,6 +14746,13 @@ export async function onCompetitionStart(entry: Calendar) {
       outcome: 'start',
     }),
     sendBlastFinalsCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
+      outcome: 'start',
+    }),
+    sendEslChallengerCoachMessageEvent({
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
       season: competition.season ?? 0,
