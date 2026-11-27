@@ -76,7 +76,6 @@ import { getNpcRetirementChance } from '@liga/backend/lib/retirement';
 import { readRetirementEvidence } from './retirement-evidence';
 import { backfillCompetitionLocations } from './competition-locations';
 import {
-  getTrialExpiredResponse,
   getTrialFailureResponse,
   getTrialIncomingContent,
   getTrialReminderResponse,
@@ -109,6 +108,27 @@ import {
   getMajorRmrConfig,
   MajorRmrCoachOutcome,
 } from './major-rmr-coach-messages';
+import {
+  getMajorChallengersCoachOutcome,
+  getMajorChallengersCoachOutcomeMessage,
+  getMajorChallengersCoachMessage,
+  getMajorChallengersCoachSubject,
+  getMajorChallengersRegion,
+  MajorChallengersCoachOutcome,
+} from './major-challengers-coach-messages';
+import {
+  getMajorLegendsCoachOutcome,
+  getMajorLegendsCoachSubject,
+  getMajorLegendsOutcomeMessage,
+  getMajorLegendsStartMessage,
+  MajorLegendsCoachOutcome,
+  MajorLegendsEntryPath,
+} from './major-legends-coach-messages';
+import {
+  getMajorPlayoffsCoachMessage,
+  getMajorPlayoffsCoachSubject,
+  MajorPlayoffsCoachOutcome,
+} from './major-playoffs-coach-messages';
 import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
@@ -6945,6 +6965,9 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
       await Promise.all([
         sendMajorOpenQualifierCoachOutcome(competition, tournament, matches),
         sendMajorRmrCoachOutcome(competition, tournament, matches),
+        sendMajorChallengersCoachOutcome(competition, tournament, matches),
+        sendMajorLegendsCoachOutcome(competition, tournament, matches),
+        sendMajorPlayoffsCoachOutcome(competition, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -7281,6 +7304,361 @@ async function sendMajorRmrCoachMessageEvent(params: {
   if (!coach) return null;
 
   return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorChallengersCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: MajorChallengersCoachOutcome;
+  wins?: number | null;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: {
+        select: {
+          starter: true,
+          country: {
+            select: { continent: { select: { federation: { select: { slug: true } } } } },
+          },
+        },
+      },
+      team: {
+        select: {
+          tier: true,
+          personas: true,
+          competitionFederation: { select: { slug: true } },
+        },
+      },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const federationSlug =
+    profile.team.competitionFederation?.slug ?? profile.player.country?.continent?.federation?.slug;
+  const region = getMajorChallengersRegion(federationSlug);
+  if (!region) return null;
+
+  const teamTierSlug = getCoachTierFromTeamTier(profile.team.tier);
+  const content =
+    params.outcome === 'start'
+      ? getMajorChallengersCoachMessage({
+          region,
+          teamTierSlug,
+          city: Util.getCompetitionHostingLocationCity(params.location) || 'the Major host city',
+        })
+      : getMajorChallengersCoachOutcomeMessage({
+          region,
+          teamTierSlug,
+          outcome: params.outcome,
+          wins: params.wins,
+        });
+  if (!content) return null;
+
+  const subject = getMajorChallengersCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorChallengersCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.MAJOR_CHALLENGERS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const outcome = getMajorChallengersCoachOutcome({
+    standing: userStanding,
+    lostThisBatch: userResults.some(
+      (competitor) => competitor.result === Constants.MatchResult.LOSS,
+    ),
+  });
+  if (!outcome) return null;
+
+  return sendMajorChallengersCoachMessageEvent({
+    competitionId: competition.id,
+    tierSlug: competition.tier.slug,
+    season: competition.season ?? 0,
+    location: competition.location,
+    outcome,
+    wins: userStanding?.wins,
+  });
+}
+
+async function sendMajorLegendsCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: MajorLegendsCoachOutcome;
+  entryPath?: MajorLegendsEntryPath;
+  wins?: number | null;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.MAJOR_LEGENDS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: {
+        select: {
+          starter: true,
+          country: {
+            select: { continent: { select: { federation: { select: { slug: true } } } } },
+          },
+        },
+      },
+      team: {
+        select: {
+          tier: true,
+          personas: true,
+          competitionFederation: { select: { slug: true } },
+        },
+      },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const region = getMajorChallengersRegion(
+    profile.team.competitionFederation?.slug ?? profile.player.country?.continent?.federation?.slug,
+  );
+  if (!region) return null;
+
+  const teamTierSlug = getCoachTierFromTeamTier(profile.team.tier);
+  const content =
+    params.outcome === 'start'
+      ? getMajorLegendsStartMessage({
+          region,
+          teamTierSlug,
+          entryPath: params.entryPath ?? 'promoted',
+          city: Util.getCompetitionHostingLocationCity(params.location) || 'the Major host city',
+        })
+      : getMajorLegendsOutcomeMessage({
+          region,
+          teamTierSlug,
+          outcome: params.outcome,
+          wins: params.wins,
+        });
+  if (!content) return null;
+
+  const subject = getMajorLegendsCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorLegendsCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  tournament: Tournament,
+  completedMatches: Array<{ competitors: Array<{ teamId: number | null; result: number | null }> }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.MAJOR_LEGENDS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userResults = completedMatches.flatMap((match) =>
+    match.competitors.filter((competitor) => competitor.teamId === profile.teamId),
+  );
+  if (!userResults.length) return null;
+
+  const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+  const userStanding = tournament.$base.results().find((standing) => standing.seed === userSeed);
+  const outcome = getMajorLegendsCoachOutcome({
+    standing: userStanding,
+    lostThisBatch: userResults.some(
+      (competitor) => competitor.result === Constants.MatchResult.LOSS,
+    ),
+  });
+  if (!outcome) return null;
+
+  return sendMajorLegendsCoachMessageEvent({
+    competitionId: competition.id,
+    tierSlug: competition.tier.slug,
+    season: competition.season ?? 0,
+    location: competition.location,
+    outcome,
+    wins: userStanding?.wins,
+  });
+}
+
+async function sendMajorPlayoffsCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: MajorPlayoffsCoachOutcome;
+  losingScore?: number | null;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: {
+        select: {
+          starter: true,
+          country: {
+            select: { continent: { select: { federation: { select: { slug: true } } } } },
+          },
+        },
+      },
+      team: {
+        select: {
+          tier: true,
+          personas: true,
+          competitionFederation: { select: { slug: true } },
+        },
+      },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const region = getMajorChallengersRegion(
+    profile.team.competitionFederation?.slug ?? profile.player.country?.continent?.federation?.slug,
+  );
+  if (!region) return null;
+
+  const content = getMajorPlayoffsCoachMessage({
+    region,
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+    losingScore: params.losingScore,
+    city: Util.getCompetitionHostingLocationCity(params.location) || 'the Major host city',
+  });
+  if (!content) return null;
+
+  const subject = getMajorPlayoffsCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendMajorPlayoffsCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{
+      teamId: number | null;
+      result: number | null;
+      score: number | null;
+    }>;
+  }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.MAJOR_CHAMPIONS_STAGE) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const events = completedMatches.flatMap((match) => {
+    const userResult = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    if (!userResult) return [];
+
+    const round = (JSON.parse(match.payload) as { r?: number }).r;
+    const won = userResult.result === Constants.MatchResult.WIN;
+    const outcome: MajorPlayoffsCoachOutcome | null =
+      round === 1 && !won
+        ? 'quarterfinal_loss'
+        : round === 2
+          ? won
+            ? 'semifinal_win'
+            : 'semifinal_loss'
+          : round === 3 && !won
+            ? 'final_loss'
+            : null;
+    return outcome ? [{ outcome, losingScore: userResult.score }] : [];
+  });
+
+  return Promise.all(
+    events.map((event) =>
+      sendMajorPlayoffsCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        location: competition.location,
+        outcome: event.outcome,
+        losingScore: event.losingScore,
+      }),
+    ),
+  );
 }
 
 async function sendMajorRmrCoachOutcome(
@@ -13603,6 +13981,43 @@ export async function onCompetitionStart(entry: Calendar) {
       rmrLocation: competition.location,
       outcome: 'start',
     }),
+    sendMajorChallengersCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
+      outcome: 'start',
+    }),
+    (async () => {
+      if (competition.tier.slug !== Constants.TierSlug.MAJOR_LEGENDS_STAGE) return null;
+      const profile = await DatabaseClient.prisma.profile.findFirst({ select: { teamId: true } });
+      if (!profile?.teamId) return null;
+      const challengersParticipant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+        where: {
+          teamId: profile.teamId,
+          competition: {
+            season: competition.season,
+            tier: { slug: Constants.TierSlug.MAJOR_CHALLENGERS_STAGE },
+          },
+        },
+        select: { id: true },
+      });
+      return sendMajorLegendsCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        location: competition.location,
+        outcome: 'start',
+        entryPath: challengersParticipant ? 'promoted' : 'direct',
+      });
+    })(),
+    sendMajorPlayoffsCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
+      outcome: 'start',
+    }),
   ]);
 
   return result;
@@ -14385,41 +14800,7 @@ export async function onTransferOfferExpiryCheck(entry: Calendar) {
     });
   }
 
-  const locale = getLocale(profile);
-
-  const persona =
-    transfer.from?.personas?.find(
-      (p) => p.role === Constants.PersonaRole.MANAGER || p.role === Constants.PersonaRole.ASSISTANT,
-    ) ?? transfer.from?.personas?.[0];
-
-  if (persona) {
-    const subject = isExtension
-      ? Sqrl.render((locale.templates as any).ContractExtensionOffer.SUBJECT, { profile, transfer })
-      : Sqrl.render(locale.templates.OfferIncoming.SUBJECT, { profile, transfer });
-
-    const content = isTrialOffer
-      ? getTrialExpiredResponse(pendingOffer.trialBand)
-      : isExtension
-        ? Sqrl.render((locale.templates as any).ContractExtensionExpired.CONTENT, {
-            profile,
-            transfer,
-          })
-        : Sqrl.render((locale.templates as any).OfferExpiredUser.CONTENT, { profile, transfer });
-
-    await sendEmail(
-      isTrialOffer ? `Trial Offer Expired from ${transfer.from.name}` : subject,
-      content,
-      persona,
-      now,
-      true,
-    );
-  }
-
   WindowManager.sendAll(Constants.IPCRoute.TRANSFER_UPDATE);
-  if (isTrialOffer) {
-    Engine.Runtime.Instance.stop();
-    return Promise.resolve(false);
-  }
   return Promise.resolve();
 }
 
