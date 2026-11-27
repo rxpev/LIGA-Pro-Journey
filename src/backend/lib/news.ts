@@ -1627,7 +1627,7 @@ export async function hasAutomaticItemsDue(date: Date) {
 
   const from = startOfDay(date);
   const to = endOfDay(date);
-  const [acceptedTransfer, expiredTransfer] = await Promise.all([
+  const [acceptedTransfer, expiredTransfer, eseaMainFinal] = await Promise.all([
     DatabaseClient.prisma.transfer.findFirst({
       where: {
         status: {
@@ -1652,9 +1652,21 @@ export async function hasAutomaticItemsDue(date: Date) {
       },
       select: { id: true },
     }),
+    DatabaseClient.prisma.match.findFirst({
+      where: {
+        date: { gte: from, lte: to },
+        status: Constants.MatchStatus.COMPLETED,
+        competition: {
+          status: Constants.CompetitionStatus.COMPLETED,
+          federation: { slug: Constants.FederationSlug.ESPORTS_EUROPA },
+          tier: { slug: Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS },
+        },
+      },
+      select: { id: true },
+    }),
   ]);
 
-  return Boolean(acceptedTransfer || expiredTransfer);
+  return Boolean(acceptedTransfer || expiredTransfer || eseaMainFinal);
 }
 
 function getTopPlayersOfYearEventWeight(tierSlug?: string | null, federationSlug?: string | null) {
@@ -4630,6 +4642,97 @@ async function buildQualifierDraft(
   };
 }
 
+function buildEseaMainEuropeWinnerDraft(match: MatchSeed, publishedAt: Date): NewsDraft | null {
+  const competition = match.competition;
+
+  if (
+    competition.status !== Constants.CompetitionStatus.COMPLETED ||
+    competition.tier.slug !== Constants.TierSlug.LEAGUE_MAIN_PLAYOFFS ||
+    competition.federation.slug !== Constants.FederationSlug.ESPORTS_EUROPA
+  ) {
+    return null;
+  }
+
+  const winner = match.competitors.find(
+    (competitor) => competitor.result === Constants.MatchResult.WIN,
+  );
+  const runnerUp = match.competitors.find(
+    (competitor) => competitor.result === Constants.MatchResult.LOSS,
+  );
+
+  if (!winner?.team || !runnerUp?.team) return null;
+
+  const placements = competition.competitors
+    .filter((competitor) => competitor.team && (competitor.position || 0) > 0)
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+  const champion = placements.find((competitor) => competitor.position === 1);
+  const secondPlace = placements.find((competitor) => competitor.position === 2);
+
+  if (champion?.teamId !== winner.teamId || secondPlace?.teamId !== runnerUp.teamId) return null;
+
+  const advancementEnd = Util.getTierAdvancementEnd(
+    competition.tier.slug as Constants.TierSlug,
+    competition.federation.slug as Constants.FederationSlug,
+  );
+  const promotedTeams = placements.filter(
+    (competitor) => (competitor.position || 0) <= advancementEnd,
+  );
+  const prizePool = Constants.PrizePool[competition.tier.slug];
+  const winnerScore = winner.score ?? 0;
+  const runnerUpScore = runnerUp.score ?? 0;
+  const score = `${winnerScore}-${runnerUpScore}`;
+  const resultVerb =
+    runnerUpScore === winnerScore - 1 ? 'edged out' : runnerUpScore === 0 ? 'stomped' : 'beaten';
+  const promotionLines = promotedTeams.map((competitor) => {
+    const position = competitor.position || 0;
+    const percentage = prizePool?.distribution[position - 1] || 0;
+    const prize = ((prizePool?.total || 0) * percentage) / 100;
+    const flagCode = toFlagCode(competitor.team.country?.code) || 'other';
+    const tiedTeams = promotedTeams.filter((entry) => entry.position === position);
+    const firstPlacement = promotedTeams.findIndex((entry) => entry.position === position) + 1;
+    const placementLabel =
+      tiedTeams.length > 1
+        ? `${firstPlacement}-${firstPlacement + tiedTeams.length - 1}th`
+        : `${firstPlacement}.`;
+
+    return `${placementLabel} :flag_${flagCode}: ${teamLink(competitor.team)} - ${Math.round(prize).toLocaleString('en-US')}$`;
+  });
+
+  return {
+    type: 'ARTICLE',
+    topic: 'COMPETITIONS',
+    headline: `${winner.team.name} win ESEA Main`,
+    summary: `${winner.team.name} beat ${runnerUp.team.name} ${score} in the grand final to win ESEA Main Europe.`,
+    body: [
+      `${teamLink(winner.team)} have ${resultVerb} ${teamLink(runnerUp.team)} ${score} in the grand final to win ${competitionLink(competition, 'ESEA Main')} in Europe.`,
+      '',
+      '::match-panel',
+      '',
+      'The following teams have secured promotion to **ESEA Advanced** next season:',
+      '',
+      ...promotionLines.flatMap((line) => [line, '']),
+    ].join('\n'),
+    image: getCompetitionLogo(competition),
+    priority: 70,
+    eventKey: `${AUTO_EVENT_PREFIX}:esea-main-europe-winner:${competition.id}`,
+    payload: {
+      competitionId: competition.id,
+      matchId: match.id,
+      showMatchPanel: true,
+      linkHeadlineToCompetition: true,
+      linkImageToCompetition: true,
+      flagCode: toFlagCode(winner.team.country?.code),
+      competitionLogo: getCompetitionLogo(competition),
+      hideArticleImage: true,
+      teamIds: promotedTeams.map((competitor) => competitor.teamId).filter(Boolean),
+      relatedTeams: promotedTeams
+        .map((competitor) => toRelatedTeam(competitor.team))
+        .filter(Boolean),
+    },
+    publishedAt,
+  };
+}
+
 async function buildCompetitionMvpDraft(
   mvp: CompetitionMvpSeed,
   allMvps: CompetitionMvpSeed[],
@@ -6801,6 +6904,7 @@ export async function generateAutomaticItems(date?: Date) {
   const topFiveTeamIds = new Set([...topTeamIds].slice(0, 5));
   const transferShortTeamIds = await getTransferShortTeamIds();
   const includeStatistics = Boolean(profile?.simulateNpcMatchStats);
+  const completedMatches = await getRecentCompletedMatches(publishedAt);
 
   const transfers = await getCompletedTransfersForNews();
   const allMvps = includeStatistics ? await findCompetitionMvps({}) : [];
@@ -6848,8 +6952,15 @@ export async function generateAutomaticItems(date?: Date) {
   const topPlayersOfYearDraft = includeStatistics
     ? await buildTopPlayersOfYearDraft(publishedAt, allMvps)
     : null;
+  const eseaMainWinnerDrafts = completedMatches
+    .map((match) => buildEseaMainEuropeWinnerDraft(match, publishedAt))
+    .filter(Boolean) as NewsDraft[];
 
-  return createDrafts([...transferDrafts, ...mvpDrafts, topPlayersOfYearDraft].filter(Boolean));
+  return createDrafts(
+    [...transferDrafts, ...mvpDrafts, ...eseaMainWinnerDrafts, topPlayersOfYearDraft].filter(
+      Boolean,
+    ),
+  );
 }
 
 export async function generatePrototypeItems() {

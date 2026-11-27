@@ -323,13 +323,14 @@ function getHistoricalCompetitorPlayers(
   const matchDate = new Date(match.date);
   const includedIds = new Set(additionalPlayerIds);
 
-  return match.players.filter((player) =>
-    includedIds.has(player.id) ||
-    player.careerStints?.some(
-      (stint) =>
-        stint.teamId === competitor.team.id &&
-        isWithinStint(matchDate, stint.startedAt, stint.endedAt),
-    ),
+  return match.players.filter(
+    (player) =>
+      includedIds.has(player.id) ||
+      player.careerStints?.some(
+        (stint) =>
+          stint.teamId === competitor.team.id &&
+          isWithinStint(matchDate, stint.startedAt, stint.endedAt),
+      ),
   );
 }
 
@@ -483,7 +484,7 @@ function getMatchFormatNotes(match: MatchInfoMatch, competitionMatches: SwissSib
 
 function MatchInfo(props: { competitionMatches: SwissSiblingMatch[]; match: MatchInfoMatch }) {
   return (
-    <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
+    <article className="postgame-match-info border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
       <header className="border-base-content/10 border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
         Match
       </header>
@@ -543,7 +544,7 @@ function PostgameScoreHeader(props: {
   const matchDateLabel = formatMatchDate(props.match.date);
 
   return (
-    <section className="border-base-content/10 bg-base-200 relative isolate grid h-32 grid-cols-[minmax(0,1fr)_7rem_15rem_7rem_minmax(0,1fr)] items-center overflow-hidden border-b">
+    <section className="postgame-score-header border-base-content/10 bg-base-200 relative isolate grid h-32 grid-cols-[minmax(0,1fr)_7rem_15rem_7rem_minmax(0,1fr)] items-center overflow-hidden border-b">
       {!!homeCountryCode && (
         <div
           className={cx(
@@ -654,7 +655,7 @@ function VetoSummary(props: {
   );
 
   return (
-    <section className="border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-t p-2">
+    <section className="postgame-veto-summary border-base-content/10 grid grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] gap-2 border-t p-2">
       <article className="border-base-content/10 bg-base-200/60 min-h-32 overflow-hidden rounded border">
         <header className="border-base-content/10 flex items-center justify-between border-b px-3 py-1.5 text-xs font-bold uppercase opacity-70">
           <span>Maps</span>
@@ -749,11 +750,7 @@ function VetoSummary(props: {
 function Scoreboard(props: ScoreboardProps) {
   const t = useTranslation('windows');
   const players = React.useMemo(() => {
-    return getHistoricalCompetitorPlayers(
-      props.match,
-      props.competitor,
-      props.additionalPlayerIds,
-    );
+    return getHistoricalCompetitorPlayers(props.match, props.competitor, props.additionalPlayerIds);
   }, [props.additionalPlayerIds, props.competitor, props.match]);
   const matchEvents = React.useMemo(
     () =>
@@ -772,7 +769,7 @@ function Scoreboard(props: ScoreboardProps) {
   );
 
   return (
-    <table className="table-xs table">
+    <table className="postgame-scoreboard table-xs table">
       <thead>
         <tr className="border-t-base-content/10 border-t">
           <th>
@@ -1180,17 +1177,18 @@ function isExhibitionPostgamePayload(payload: unknown): payload is ExhibitionPos
  *
  * @exports
  */
-export default function () {
+export default function (props: { embedded?: boolean; matchId?: number } = {}) {
   const location = useLocation();
   const t = useTranslation('windows');
   const { state } = React.useContext(AppStateContext);
   const exhibitionPayload = React.useMemo(
     () =>
-      isExhibitionPostgamePayload(location.state)
+      !props.matchId && isExhibitionPostgamePayload(location.state)
         ? (location.state as ExhibitionPostgamePayload)
         : null,
-    [location.state],
+    [location.state, props.matchId],
   );
+  const requestedMatchId = props.matchId || location.state;
   const [match, setMatch] = React.useState<Matches<typeof Eagers.matchEvents>[number]>();
   const [competitionMatches, setCompetitionMatches] = React.useState<SwissSiblingMatch[]>([]);
   const [matchGame, setMatchGame] = React.useState<MatchGame>();
@@ -1199,19 +1197,19 @@ export default function () {
 
   // grab match data
   React.useEffect(() => {
-    if (!location.state || exhibitionPayload) {
+    if (!requestedMatchId || exhibitionPayload) {
       return;
     }
 
     api.matches
       .all<typeof Eagers.matchEvents>({
         where: {
-          id: location.state,
+          id: requestedMatchId,
         },
         include: Eagers.matchEvents.include,
       })
       .then((matches) => setMatch(matches[0]));
-  }, [exhibitionPayload, location.state]);
+  }, [exhibitionPayload, requestedMatchId]);
 
   React.useEffect(() => {
     if (!match) {
@@ -1279,7 +1277,7 @@ export default function () {
 
   if (!state.profile || !match) {
     return (
-      <main className="h-screen w-screen">
+      <main className={props.embedded ? 'h-40 w-full' : 'h-screen w-screen'}>
         <section className="center h-full">
           <span className="loading loading-bars" />
         </section>
@@ -1288,9 +1286,15 @@ export default function () {
   }
 
   const competitionPath = `/competitions?federationId=${match.competition.federationId}&season=${match.competition.season}&tierId=${match.competition.tier.id}`;
+  const Root = props.embedded ? 'div' : 'main';
 
   return (
-    <main className="flex h-screen w-full flex-col">
+    <Root
+      className={cx(
+        'flex w-full flex-col',
+        props.embedded ? 'news-postgame-embed min-h-0' : 'h-screen',
+      )}
+    >
       <header className="breadcrumbs border-base-content/10 bg-base-200 sticky top-0 z-30 border-b px-2 text-sm">
         <ul>
           <li>
@@ -1442,6 +1446,6 @@ export default function () {
           {t('main.dashboard.play')}
         </button>
       )}
-    </main>
+    </Root>
   );
 }

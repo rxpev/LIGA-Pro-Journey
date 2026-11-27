@@ -12,6 +12,7 @@ import { cx } from '@liga/frontend/lib';
 import { useFormatAppDate } from '@liga/frontend/hooks/use-FormatAppDate';
 import { Pagination } from '@liga/frontend/components';
 import { FaBolt, FaClock, FaNewspaper } from 'react-icons/fa';
+import Postgame from '../modal/postgame';
 
 type NewsItem = Awaited<ReturnType<typeof api.news.all>>[number];
 type NewsTopic = NewsItem['topic'] | 'ALL' | 'SHORTS';
@@ -100,6 +101,7 @@ type MvpGraphic = {
 };
 type NewsPayload = Record<string, unknown> & {
   competitionId?: number | null;
+  competitionLogo?: string | null;
   flagCode?: string | null;
   goldenTransfer?: boolean;
   hideArticleImage?: boolean;
@@ -1336,6 +1338,10 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
             return <MapUsageChart key={`${index}__map_usage_chart`} item={props.item} />;
           }
 
+          if (block.trim() === '::match-panel') {
+            return <MatchPanel key={`${index}__match_panel`} item={props.item} embedded />;
+          }
+
           const allFlagLines = blockLines.every((line) =>
             /^- :flag_([a-z0-9_]+):\s+(.+)$/i.test(line),
           );
@@ -1381,6 +1387,24 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
             );
           }
 
+          const placementFlagLine = block.match(
+            /^([\d-]+(?:st|nd|rd|th)?\.?) :flag_([a-z0-9_]+):\s+(.+)$/i,
+          );
+          if (placementFlagLine) {
+            return (
+              <p key={`${index}__placement_flag_line`} className="flex items-center gap-2">
+                <span>{placementFlagLine[1]}</span>
+                <Flag code={placementFlagLine[2]} className="opacity-100" />
+                <ReactMarkdown
+                  components={inlineMarkdownComponents}
+                  transformLinkUri={preserveMarkdownUri}
+                >
+                  {normalizeBodyMarkdown(placementFlagLine[3])}
+                </ReactMarkdown>
+              </p>
+            );
+          }
+
           const isRosterHeading = /^\*\*.+\*\* are now:$/i.test(block.trim());
           return (
             <div key={`${index}__markdown_block`} className={cx(isRosterHeading && 'pt-1')}>
@@ -1397,92 +1421,21 @@ function NewsBody(props: { body: string; headline: string; item?: NewsItem }) {
   );
 }
 
-function MatchPanel(props: { item: NewsItem }) {
+function MatchPanel(props: { embedded?: boolean; item: NewsItem }) {
   const payload = parsePayload(props.item);
   const matchId = typeof payload.matchId === 'number' ? payload.matchId : null;
   const showMatchPanel = payload.showMatchPanel === true;
-  const [match, setMatch] = React.useState<
-    Awaited<ReturnType<typeof api.matches.all<typeof Eagers.matchEvents>>>[number] | null
-  >(null);
-
-  React.useEffect(() => {
-    if (!showMatchPanel || !matchId) {
-      setMatch(null);
-      return;
-    }
-
-    api.matches
-      .all<typeof Eagers.matchEvents>({
-        include: Eagers.matchEvents.include,
-        where: {
-          id: matchId,
-        },
-      })
-      .then((matches) => setMatch(matches[0] || null));
-  }, [matchId, showMatchPanel]);
-
-  if (!showMatchPanel || !matchId || !match) {
+  if (
+    (!props.embedded && props.item.body.includes('::match-panel')) ||
+    !showMatchPanel ||
+    !matchId
+  ) {
     return null;
   }
 
-  const [home, away] = match.competitors;
-  const mapRows = match.games.map((game) => {
-    const [homeGame, awayGame] = game.teams;
-    return {
-      map: Util.convertMapPool(game.map, Constants.Game.CSGO),
-      score: `${homeGame?.score ?? 0}:${awayGame?.score ?? 0}`,
-    };
-  });
-
   return (
-    <article className="border-base-content/10 bg-base-200/60 my-6 overflow-hidden border">
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 p-4">
-        <section className="flex items-center gap-3">
-          <img src={home.team.blazon} className="size-12 object-contain" />
-          <p className="truncate font-black">{home.team.name}</p>
-        </section>
-        <section className="text-center">
-          <p className="text-4xl font-black">
-            <span className={cx((home.score || 0) > (away.score || 0) && 'text-success')}>
-              {home.score ?? 0}
-            </span>
-            <span className="text-base-content/40 px-3">:</span>
-            <span className={cx((away.score || 0) > (home.score || 0) && 'text-success')}>
-              {away.score ?? 0}
-            </span>
-          </p>
-          <p className="text-base-content/60 text-xs font-bold uppercase">
-            Best of {match.games.length}
-          </p>
-        </section>
-        <section className="flex items-center justify-end gap-3">
-          <p className="truncate text-right font-black">{away.team.name}</p>
-          <img src={away.team.blazon} className="size-12 object-contain" />
-        </section>
-      </header>
-      {!!mapRows.length && (
-        <section className="border-base-content/10 grid grid-cols-3 gap-2 border-t p-3">
-          {mapRows.map((row) => (
-            <article key={`${match.id}_${row.map}`} className="bg-base-100 p-2 text-sm">
-              <p className="font-bold">{row.map}</p>
-              <p className="text-base-content/60">{row.score}</p>
-            </article>
-          ))}
-        </section>
-      )}
-      <footer className="border-base-content/10 flex justify-end border-t p-3">
-        <button
-          className="btn btn-sm"
-          onClick={() =>
-            api.window.send<ModalRequest>(Constants.WindowIdentifier.Modal, {
-              target: '/postgame',
-              payload: match.id,
-            })
-          }
-        >
-          Match details
-        </button>
-      </footer>
+    <article className="border-base-content/10 bg-base-100 my-6 overflow-hidden border">
+      <Postgame matchId={matchId} embedded />
     </article>
   );
 }
@@ -1738,7 +1691,9 @@ export default function () {
   );
   const selectedCompetitionId =
     typeof selectedPayload.competitionId === 'number' ? selectedPayload.competitionId : null;
-  const selectedMvpLogo = selectedMvpGraphic?.tournamentLogo || null;
+  const selectedMvpLogo =
+    selectedMvpGraphic?.tournamentLogo ||
+    (typeof selectedPayload.competitionLogo === 'string' ? selectedPayload.competitionLogo : null);
   const selectedHasTopPlayerRanking =
     Array.isArray(selectedPayload.ranking) && selectedPayload.ranking.length > 0;
   const selectedWelcomeBody = React.useMemo(
@@ -1883,7 +1838,21 @@ export default function () {
                         {fmtDate(toDate(selected.publishedAt))}
                       </span>
                     </div>
-                    <h1 className="mb-2 text-3xl leading-tight font-black">{selected.headline}</h1>
+                    <h1 className="mb-2 text-3xl leading-tight font-black">
+                      {selectedPayload.linkHeadlineToCompetition === true &&
+                      selectedCompetitionId ? (
+                        <CompetitionHoverCard competitionId={selectedCompetitionId}>
+                          <Link
+                            to={`/competitions?competitionId=${selectedCompetitionId}`}
+                            className="link-hover"
+                          >
+                            {selected.headline}
+                          </Link>
+                        </CompetitionHoverCard>
+                      ) : (
+                        selected.headline
+                      )}
+                    </h1>
                     <p className="max-w-4xl text-base opacity-70">{selected.summary}</p>
                   </div>
                 </div>
@@ -1924,6 +1893,13 @@ export default function () {
                     <aside className="pt-1">
                       {selectedMvpGraphic ? (
                         <MvpArticleImage graphic={selectedMvpGraphic} image={selected.image} />
+                      ) : selectedPayload.linkImageToCompetition === true &&
+                        selectedCompetitionId ? (
+                        <CompetitionHoverCard competitionId={selectedCompetitionId}>
+                          <Link to={`/competitions?competitionId=${selectedCompetitionId}`}>
+                            <ArticlePlayerImageFrame src={selected.image} />
+                          </Link>
+                        </CompetitionHoverCard>
                       ) : (
                         <ArticlePlayerImageFrame src={selected.image} />
                       )}

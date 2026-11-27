@@ -2180,6 +2180,45 @@ meter::-webkit-meter-bar {
   }
 }
 
+/* The postmatch view keeps its full information inside news articles, but uses
+ * denser spacing than the standalone modal so it does not dominate the story. */
+.news-postgame-embed .postgame-score-header {
+  height: 5.75rem;
+  grid-template-columns: minmax(0, 1fr) 5rem 10rem 5rem minmax(0, 1fr);
+}
+
+.news-postgame-embed .postgame-score-header > p {
+  font-size: 2.5rem;
+}
+
+.news-postgame-embed .postgame-score-header button img {
+  max-height: 3.75rem;
+}
+
+.news-postgame-embed .postgame-score-header button > div {
+  gap: 0;
+}
+
+.news-postgame-embed .postgame-veto-summary > article,
+.news-postgame-embed .postgame-match-info {
+  min-height: 6rem;
+}
+
+.news-postgame-embed .postgame-veto-summary > article > section {
+  height: 5.25rem;
+}
+
+.news-postgame-embed .postgame-match-info > section {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  row-gap: 0.5rem;
+}
+
+.news-postgame-embed .postgame-scoreboard :where(th, td) {
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+
 /* Squad Hub */
 .squad-hub {
   @apply bg-base-100 text-base-content grid h-full min-h-0 grid-cols-[24rem_minmax(0,1fr)] overflow-hidden;
