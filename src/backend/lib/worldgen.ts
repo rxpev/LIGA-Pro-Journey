@@ -151,6 +151,13 @@ import {
   IemCologneGroupEliminationStage,
 } from './iem-cologne-coach-messages';
 import {
+  BlastFinalsCoachOutcome,
+  BlastFinalsEliminationStage,
+  getBlastFinalsCoachMessage,
+  getBlastFinalsCoachSubject,
+  getBlastFinalsOpeningRankFromConversation,
+} from './blast-finals-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -6993,6 +7000,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendIemCologneQualifierCoachOutcome(competition, tournament, matches),
         sendIemKrakowQualifierCoachOutcome(competition, tournament, matches),
         sendIemCologneCoachOutcome(competition, matches),
+        sendBlastFinalsCoachOutcome(competition, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -8078,6 +8086,125 @@ async function sendIemCologneCoachOutcome(
         competitionId: competition.id,
         tierSlug: competition.tier.slug,
         season: competition.season ?? 0,
+        outcome: event.outcome,
+        eliminationStage: event.eliminationStage,
+      }),
+    ),
+  );
+}
+
+async function sendBlastFinalsCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  season: number;
+  location?: string | null;
+  outcome: BlastFinalsCoachOutcome;
+  eliminationStage?: BlastFinalsEliminationStage | null;
+}) {
+  if (params.tierSlug !== Constants.TierSlug.BLAST_FINALS) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const subject = getBlastFinalsCoachSubject(params.season);
+  const city = Util.getCompetitionHostingLocationCity(params.location) || 'the BLAST Finals host city';
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  const openingWorldRank =
+    params.outcome === 'start'
+      ? await DatabaseClient.prisma.team.getWorldRanking(profile.teamId)
+      : getBlastFinalsOpeningRankFromConversation({
+          dialogueContents:
+            existingConversation?.dialogues.map((dialogue) => dialogue.content) ?? [],
+          city,
+        });
+  const content = getBlastFinalsCoachMessage({
+    openingWorldRank,
+    outcome: params.outcome,
+    eliminationStage: params.eliminationStage,
+    city,
+  });
+  if (!content) return null;
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendBlastFinalsCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{ include: { competitors: true; tier: true } }>,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  if (competition.tier.slug !== Constants.TierSlug.BLAST_FINALS) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+
+  const events: Array<{
+    outcome: Extract<BlastFinalsCoachOutcome, 'eliminated' | 'champion'>;
+    eliminationStage: BlastFinalsEliminationStage | null;
+  }> = [];
+  for (const match of completedMatches) {
+    const userResult = match.competitors.find(
+      (competitor) => competitor.teamId === profile.teamId,
+    );
+    if (!userResult) continue;
+
+    const id = JSON.parse(match.payload) as { s?: number; r?: number };
+    if (id.s !== Constants.BracketIdentifier.LOWER) continue;
+    const won = userResult.result === Constants.MatchResult.WIN;
+    if (id.r === 5 && won) {
+      events.push({ outcome: 'champion', eliminationStage: null });
+      continue;
+    }
+    if (won) continue;
+
+    const eliminationStage: BlastFinalsEliminationStage | null =
+      id.r === 1
+        ? 'lower_round_1'
+        : id.r === 2
+          ? 'lower_round_2'
+          : id.r === 3
+            ? 'lower_semifinal'
+            : id.r === 4
+              ? 'lower_final'
+              : id.r === 5
+                ? 'grand_final'
+                : null;
+    if (eliminationStage) events.push({ outcome: 'eliminated', eliminationStage });
+  }
+
+  return Promise.all(
+    events.map((event) =>
+      sendBlastFinalsCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        season: competition.season ?? 0,
+        location: competition.location,
         outcome: event.outcome,
         eliminationStage: event.eliminationStage,
       }),
@@ -14467,6 +14594,13 @@ export async function onCompetitionStart(entry: Calendar) {
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
       season: competition.season ?? 0,
+      outcome: 'start',
+    }),
+    sendBlastFinalsCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      location: competition.location,
       outcome: 'start',
     }),
   ]);
