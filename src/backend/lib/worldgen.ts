@@ -177,6 +177,14 @@ import {
   IemKrakowGroupEliminationStage,
 } from './iem-krakow-coach-messages';
 import {
+  CctSeriesCoachOutcome,
+  getCctOceaniaGroupOutcome,
+  getCctSeriesCoachMessage,
+  getCctSeriesCoachSubject,
+  getCctSeriesRegion,
+  getCctSeriesSwissOutcome,
+} from './cct-series-coach-messages';
+import {
   filterNpcTransferCompatibleCandidates,
   getLowerLeaguePromotionCandidateScore,
   getNpcTransferCompatibilityScore,
@@ -7023,6 +7031,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendEslChallengerCoachOutcome(competition, tournament, matches),
         sendCctGlobalFinalsCoachOutcome(competition, matches),
         sendIemKrakowCoachOutcome(competition, matches),
+        sendCctSeriesCoachOutcome(competition, tournament, matches),
         isCompetitionDone ? sendUserAward(competition, tournament) : Promise.resolve(),
         isCompetitionDone ? distributePrizePool(competition, tournament) : Promise.resolve(),
         isCompetitionDone
@@ -8595,6 +8604,159 @@ async function sendIemKrakowCoachOutcome(
         season: competition.season ?? 0,
         outcome: event.outcome,
         eliminationStage: event.eliminationStage,
+      }),
+    ),
+  );
+}
+
+async function sendCctSeriesCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  federationSlug: string;
+  season: number;
+  outcome: CctSeriesCoachOutcome;
+  wins?: number | null;
+}) {
+  const relevantTier = [
+    Constants.TierSlug.CCT_SERIES,
+    Constants.TierSlug.CCT_SERIES_PLAYOFFS,
+    Constants.TierSlug.CCT_OCE_SERIES,
+    Constants.TierSlug.CCT_OCE_PLAYOFFS,
+  ].includes(params.tierSlug as Constants.TierSlug);
+  if (
+    !relevantTier ||
+    (params.outcome === 'start' &&
+      ![Constants.TierSlug.CCT_SERIES, Constants.TierSlug.CCT_OCE_SERIES].includes(
+        params.tierSlug as Constants.TierSlug,
+      ))
+  ) {
+    return null;
+  }
+  const region = getCctSeriesRegion(params.federationSlug);
+  if (!region) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { tier: true, personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const globalFinal = await DatabaseClient.prisma.competition.findFirst({
+    where: { season: params.season, tier: { slug: Constants.TierSlug.CCT_GLOBAL_FINALS } },
+    select: { location: true },
+  });
+  const content = getCctSeriesCoachMessage({
+    region,
+    teamTierSlug: getCoachTierFromTeamTier(profile.team.tier),
+    outcome: params.outcome,
+    wins: params.wins,
+    city:
+      Util.getCompetitionHostingLocationCity(globalFinal?.location) ||
+      'the CCT Global Finals host city',
+  });
+  if (!content) return null;
+
+  const subject = getCctSeriesCoachSubject({ region, season: params.season });
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendCctSeriesCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: true; federation: true };
+  }>,
+  tournament: Tournament,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  const swiss = competition.tier.slug === Constants.TierSlug.CCT_SERIES;
+  const playoffs = competition.tier.slug === Constants.TierSlug.CCT_SERIES_PLAYOFFS;
+  const oceaniaGroup = competition.tier.slug === Constants.TierSlug.CCT_OCE_SERIES;
+  const oceaniaPlayoffs = competition.tier.slug === Constants.TierSlug.CCT_OCE_PLAYOFFS;
+  if (!swiss && !playoffs && !oceaniaGroup && !oceaniaPlayoffs) return null;
+  if (!getCctSeriesRegion(competition.federation.slug)) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+
+  const userMatches = completedMatches.flatMap((match) => {
+    const result = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    return result ? [{ match, result }] : [];
+  });
+  if (!userMatches.length) return null;
+
+  if (swiss || oceaniaGroup) {
+    const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+    const standing = tournament.$base.results().find((entry) => entry.seed === userSeed);
+    const groupResult = {
+      wins: standing?.wins,
+      losses: standing?.losses,
+      lostThisBatch: userMatches.some(
+        ({ result }) => result.result === Constants.MatchResult.LOSS,
+      ),
+    };
+    const outcome = oceaniaGroup
+      ? getCctOceaniaGroupOutcome(groupResult)
+      : getCctSeriesSwissOutcome(groupResult);
+    if (!outcome) return null;
+    return sendCctSeriesCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
+      season: competition.season ?? 0,
+      outcome,
+      wins: standing?.wins,
+    });
+  }
+
+  const events: CctSeriesCoachOutcome[] = [];
+  for (const { match, result } of userMatches) {
+    const round = (JSON.parse(match.payload) as { r?: number }).r;
+    const won = result.result === Constants.MatchResult.WIN;
+    if (oceaniaPlayoffs) {
+      if (round === 1 && !won) events.push('semifinal_loss');
+      if (round === 2) events.push(won ? 'champion' : 'final_loss');
+    } else {
+      if (round === 1 && !won) events.push('quarterfinal_loss');
+      if (round === 2 && !won) events.push('semifinal_loss');
+      if (round === 3) events.push(won ? 'champion' : 'final_loss');
+    }
+  }
+  return Promise.all(
+    events.map((outcome) =>
+      sendCctSeriesCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        federationSlug: competition.federation.slug,
+        season: competition.season ?? 0,
+        outcome,
       }),
     ),
   );
@@ -15008,6 +15170,13 @@ export async function onCompetitionStart(entry: Calendar) {
     sendIemKrakowCoachMessageEvent({
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
+      season: competition.season ?? 0,
+      outcome: 'start',
+    }),
+    sendCctSeriesCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
       season: competition.season ?? 0,
       outcome: 'start',
     }),
