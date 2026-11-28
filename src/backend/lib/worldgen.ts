@@ -136,6 +136,11 @@ import {
   getEseaCashCupCoachSubject,
 } from './esea-cash-cup-coach-messages';
 import {
+  EseaOceaniaCoachOutcome,
+  getEseaOceaniaCoachMessage,
+  getEseaOceaniaCoachSubject,
+} from './esea-oceania-coach-messages';
+import {
   getIemCologneQualifierCoachMessage,
   getIemCologneQualifierCoachSubject,
   IemCologneQualifierCoachOutcome,
@@ -6997,6 +7002,7 @@ export async function recordMatchResults(report?: (phase: string, elapsedMs: num
         sendMajorLegendsCoachOutcome(competition, tournament, matches),
         sendMajorPlayoffsCoachOutcome(competition, matches),
         sendEseaCashCupCoachOutcome(competition, tournament, matches),
+        sendEseaOceaniaCoachOutcome(competition, tournament, matches),
         sendIemCologneQualifierCoachOutcome(competition, tournament, matches),
         sendIemKrakowQualifierCoachOutcome(competition, tournament, matches),
         sendIemCologneCoachOutcome(competition, matches),
@@ -8733,6 +8739,179 @@ async function sendCctSeriesCoachOutcome(
       }),
     ),
   );
+}
+
+async function sendEseaOceaniaCoachMessageEvent(params: {
+  competitionId: number;
+  tierSlug: string;
+  federationSlug: string;
+  season: number;
+  outcome: EseaOceaniaCoachOutcome;
+}) {
+  const relevantTier = [
+    Constants.TierSlug.LEAGUE_OPEN,
+    Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS,
+    Constants.TierSlug.LEAGUE_ADVANCED,
+    Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS,
+  ].includes(params.tierSlug as Constants.TierSlug);
+  if (!relevantTier || params.federationSlug !== Constants.FederationSlug.ESPORTS_OCE) return null;
+  if (
+    params.outcome === 'start' &&
+    ![Constants.TierSlug.LEAGUE_OPEN, Constants.TierSlug.LEAGUE_ADVANCED].includes(
+      params.tierSlug as Constants.TierSlug,
+    )
+  ) {
+    return null;
+  }
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: {
+      date: true,
+      teamId: true,
+      player: { select: { starter: true } },
+      team: { select: { personas: true } },
+    },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true || !profile.team) return null;
+  const participant = await DatabaseClient.prisma.competitionToTeam.findFirst({
+    where: { competitionId: params.competitionId, teamId: profile.teamId },
+    select: { id: true },
+  });
+  if (!participant) return null;
+
+  const eslChallenger =
+    params.outcome === 'champion' && params.tierSlug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS
+      ? await DatabaseClient.prisma.competition.findFirst({
+          where: {
+            season: params.season,
+            tier: { slug: Constants.TierSlug.ESL_CHALLENGER },
+          },
+          select: { location: true },
+        })
+      : null;
+  const content = getEseaOceaniaCoachMessage({
+    tierSlug: params.tierSlug,
+    outcome: params.outcome,
+    city:
+      Util.getCompetitionHostingLocationCity(eslChallenger?.location) ||
+      'the ESL Challenger host city',
+  });
+  if (!content) return null;
+
+  const subject = getEseaOceaniaCoachSubject(params.season);
+  const existingConversation = await DatabaseClient.prisma.email.findUnique({
+    where: { subject },
+    select: { dialogues: { select: { content: true } } },
+  });
+  if (existingConversation?.dialogues.some((dialogue) => dialogue.content === content)) return null;
+
+  const coach =
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.MANAGER) ??
+    profile.team.personas.find((persona) => persona.role === Constants.PersonaRole.ASSISTANT) ??
+    profile.team.personas[0];
+  if (!coach) return null;
+  return sendEmail(subject, content, coach, profile.date);
+}
+
+async function sendEseaOceaniaCoachOutcome(
+  competition: Prisma.CompetitionGetPayload<{
+    include: { competitors: true; tier: true; federation: true };
+  }>,
+  tournament: Tournament,
+  completedMatches: Array<{
+    payload: string;
+    competitors: Array<{ teamId: number | null; result: number | null }>;
+  }>,
+) {
+  if (competition.federation.slug !== Constants.FederationSlug.ESPORTS_OCE) return null;
+  const regularOpen = competition.tier.slug === Constants.TierSlug.LEAGUE_OPEN;
+  const playoffOpen = competition.tier.slug === Constants.TierSlug.LEAGUE_OPEN_PLAYOFFS;
+  const regularAdvanced = competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED;
+  const playoffAdvanced = competition.tier.slug === Constants.TierSlug.LEAGUE_ADVANCED_PLAYOFFS;
+  if (!regularOpen && !playoffOpen && !regularAdvanced && !playoffAdvanced) return null;
+
+  const profile = await DatabaseClient.prisma.profile.findFirst({
+    select: { teamId: true, player: { select: { starter: true } } },
+  });
+  if (!profile?.teamId || profile.player?.starter !== true) return null;
+  const userCompetitor = competition.competitors.find(
+    (competitor) => competitor.teamId === profile.teamId,
+  );
+  if (!userCompetitor) return null;
+  const userMatches = completedMatches.flatMap((match) => {
+    const result = match.competitors.find((competitor) => competitor.teamId === profile.teamId);
+    return result ? [{ match, result }] : [];
+  });
+
+  let outcome: EseaOceaniaCoachOutcome | null = null;
+  if (regularOpen || regularAdvanced) {
+    if (!tournament.$base.isDone()) return null;
+    const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+    const standing = tournament.$base.results().find((entry) => entry.seed === userSeed);
+    const position = standing?.gpos || standing?.pos || Number.MAX_SAFE_INTEGER;
+    if (position <= 8) {
+      outcome = 'playoff_qualified';
+    } else if (regularOpen) {
+      outcome = 'regular_eliminated';
+    } else {
+      const relegationMatch = await DatabaseClient.prisma.match.findFirst({
+        where: {
+          competitionId: competition.id,
+          payload: ESEA_OCEANIA_RELEGATION_PAYLOAD,
+        },
+        include: { competitors: true },
+      });
+      const relegationCompetitor = relegationMatch?.competitors.find(
+        (competitor) => competitor.teamId === profile.teamId,
+      );
+      const completedRelegation = userMatches.find(({ match }) =>
+        isEseaOceaniaRelegationPayload(match.payload),
+      );
+      outcome = completedRelegation
+        ? completedRelegation.result.result === Constants.MatchResult.WIN
+          ? 'relegation_won'
+          : 'relegated'
+        : relegationCompetitor
+          ? 'relegation_required'
+          : 'regular_eliminated';
+    }
+  } else {
+    if (!userMatches.length) return null;
+    const events: EseaOceaniaCoachOutcome[] = [];
+    const userSeed = tournament.getSeedByCompetitorId(userCompetitor.id);
+    const standing = tournament.$base.results().find((entry) => entry.seed === userSeed);
+    const position = standing?.gpos || standing?.pos || Number.MAX_SAFE_INTEGER;
+    for (const { match, result } of userMatches) {
+      const round = (JSON.parse(match.payload) as { r?: number }).r;
+      const won = result.result === Constants.MatchResult.WIN;
+      if (round === 1 && !won) {
+        events.push(playoffAdvanced && position <= 6 ? 'quarterfinal_loss_cct' : 'quarterfinal_loss');
+      }
+      if (round === 2 && !won) events.push('semifinal_loss');
+      if (round === 3) events.push(won ? 'champion' : 'final_loss');
+    }
+    return Promise.all(
+      events.map((event) =>
+        sendEseaOceaniaCoachMessageEvent({
+          competitionId: competition.id,
+          tierSlug: competition.tier.slug,
+          federationSlug: competition.federation.slug,
+          season: competition.season ?? 0,
+          outcome: event,
+        }),
+      ),
+    );
+  }
+
+  return outcome
+    ? sendEseaOceaniaCoachMessageEvent({
+        competitionId: competition.id,
+        tierSlug: competition.tier.slug,
+        federationSlug: competition.federation.slug,
+        season: competition.season ?? 0,
+        outcome,
+      })
+    : null;
 }
 
 async function sendMajorRmrCoachOutcome(
@@ -15093,6 +15272,13 @@ export async function onCompetitionStart(entry: Calendar) {
       outcome: 'start',
     }),
     sendEseaCashCupCoachMessageEvent({
+      competitionId: competition.id,
+      tierSlug: competition.tier.slug,
+      federationSlug: competition.federation.slug,
+      season: competition.season ?? 0,
+      outcome: 'start',
+    }),
+    sendEseaOceaniaCoachMessageEvent({
       competitionId: competition.id,
       tierSlug: competition.tier.slug,
       federationSlug: competition.federation.slug,
