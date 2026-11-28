@@ -59,6 +59,7 @@ import {
 } from '@liga/shared';
 import { computeLifetimeStats } from './faceitstats';
 import { FACEIT_LEVEL_TEN_MIN_ELO } from './levels';
+import { seedGroupsByWorldRanking } from './world-ranking-group-seeding';
 import {
   applyCareerPeakTierFloor,
   FaceitRecruitmentPlan,
@@ -2266,38 +2267,6 @@ function sortCompetitorsByWorldRanking<T extends TournamentCompetitor>(competito
   ]);
 }
 
-function seedGroupsByWorldRanking<T extends TournamentCompetitor>(
-  competitors: T[],
-  groupSize: number,
-): T[] {
-  const rankedCompetitors = sortCompetitorsByWorldRanking(competitors);
-  const groupCount = Math.max(1, Math.ceil(rankedCompetitors.length / groupSize));
-  const groups: T[][] = Array.from({ length: groupCount }, (): T[] => []);
-
-  rankedCompetitors.forEach((competitor, index) => {
-    const row = Math.floor(index / groupCount);
-    const column = index % groupCount;
-    const groupIndex = row % 2 === 0 ? column : groupCount - 1 - column;
-    groups[groupIndex].push(competitor);
-  });
-
-  // groupstage applies its own snake pattern to seed slots. Fill those actual
-  // slots from our ranking-balanced groups so the persisted groups retain the
-  // intended 1/4/5/8 vs 2/3/6/7 distribution instead of being snaked twice.
-  const layout = new Tournament(rankedCompetitors.length, {
-    groupSize: Math.min(groupSize, rankedCompetitors.length),
-    meetTwice: false,
-  });
-  const placeholderIds = rankedCompetitors.map((_, index) => index + 1);
-  layout.addCompetitors(placeholderIds);
-  layout.start();
-
-  return placeholderIds.map((id) => {
-    const groupIndex = layout.getGroupByCompetitorId(id) - 1;
-    return groups[groupIndex].shift();
-  });
-}
-
 function seedIemPlayoffCompetitors<T extends TournamentCompetitor>(competitors: T[]): T[] {
   if (competitors.length !== 6) {
     return competitors;
@@ -2420,7 +2389,11 @@ function seedTournamentCompetitors<T extends TournamentCompetitor>(
     tierSlug === Constants.TierSlug.LEAGUE_PRO ||
     ESEA_REGULAR_SEASON_TIERS.has(tierSlug)
   ) {
-    return seedGroupsByWorldRanking(competitors, competition.tier.groupSize || competitors.length);
+    return seedGroupsByWorldRanking(
+      competitors,
+      competition.tier.groupSize || competitors.length,
+      GROUP_SWISS_TIERS.has(tierSlug),
+    );
   }
 
   if (

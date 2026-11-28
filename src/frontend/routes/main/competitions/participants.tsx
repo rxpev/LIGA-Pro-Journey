@@ -1980,7 +1980,7 @@ export default function () {
                   {rankingLoading ? '…' : `#${ranking}`}
                 </span>
               )}
-              {participantGroupCount > 1 && participantGroup > 0 && (
+              {!isExpanded && participantGroupCount > 1 && participantGroup > 0 && (
                 <span className="badge badge-sm border-base-content/10 bg-base-300/70 absolute top-3 right-3">
                   Group {Util.toAlpha(String(participantGroup))}
                 </span>
